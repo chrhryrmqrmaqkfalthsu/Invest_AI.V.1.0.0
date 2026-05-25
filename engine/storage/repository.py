@@ -168,49 +168,96 @@ def save_fitness_history(ticker: str, history: list) -> Path:
     return p
 
 
-# ---------- 시드 패턴 ----------
-def load_seed_rulebooks(top_n: int = 5) -> list[Rulebook]:
-    """과거 우수 룰북들 (다른 종목 학습 시 시드로 사용)"""
+# ---------- 시드 패턴 (방향별 격리) ----------
+def _load_seed_data() -> dict:
+    """seed_patterns.json 로드 (구조: {long:[...], short:[...]})"""
     p = seed_patterns_path()
     if not p.exists():
-        return []
+        return {"long": [], "short": []}
     try:
         with open(p, "r", encoding="utf-8") as f:
             data = json.load(f)
-        items = data.get("patterns", [])
-        # fitness 내림차순 정렬 후 top_n
-        items.sort(key=lambda x: x.get("fitness", 0), reverse=True)
-        return [Rulebook.from_dict(it.get("rulebook", {})) for it in items[:top_n]]
+        # 구버전 호환: {"patterns": [...]} → 방향별로 분류
+        if "patterns" in data and "long" not in data and "short" not in data:
+            migrated = {"long": [], "short": []}
+            for it in data["patterns"]:
+                rb_d = it.get("rulebook", {})
+                direction = rb_d.get("direction", "long")
+                migrated.setdefault(direction, []).append(it)
+            log.info(f"seed_patterns migrated: long={len(migrated['long'])}, short={len(migrated['short'])}")
+            return migrated
+        # 정상 구조
+        data.setdefault("long", [])
+        data.setdefault("short", [])
+        return data
     except Exception as e:
-        log.warning(f"load_seed_rulebooks failed: {e}")
-        return []
+        log.warning(f"load seed data failed: {e}")
+        return {"long": [], "short": []}
 
 
-def add_seed_rulebook(rb: Rulebook, min_fitness: float = 30.0) -> bool:
-    """학습 결과가 충분히 좋으면 시드 풀에 추가"""
-    if rb.fitness < min_fitness:
-        return False
+def _save_seed_data(data: dict) -> None:
     p = seed_patterns_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    if p.exists():
-        with open(p, "r", encoding="utf-8") as f:
-            data = json.load(f)
+    tmp = p.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    tmp.replace(p)
+
+
+
+
+
+
+
+
+
+
+def load_seed_rulebooks(top_n: int = 5, direction: Optional[str] = None) -> list[Rulebook]:
+    """
+    과거 우수 룰북을 시드로 로드.
+    Args:
+        top_n: 상위 N개
+        direction: "long" | "short" | None(=양쪽 모두)
+    """
+    data = _load_seed_data()
+    if direction in ("long", "short"):
+        pool = list(data.get(direction, []))
     else:
-        data = {"patterns": []}
-    data["patterns"].append({
+        pool = list(data.get("long", [])) + list(data.get("short", []))
+    if not pool:
+        return []
+    pool.sort(key=lambda x: x.get("fitness", 0), reverse=True)
+    out = []
+    for it in pool[:top_n]:
+        try:
+            out.append(Rulebook.from_dict(it.get("rulebook", {})))
+        except Exception as e:
+            log.warning(f"seed rulebook parse failed: {e}")
+    return out
+
+
+def add_seed_rulebook(rb: Rulebook, min_fitness: float = 30.0, max_per_direction: int = 25) -> bool:
+    """
+    학습 결과가 충분히 좋으면 시드 풀에 추가 (방향별 격리).
+    """
+    if rb.fitness < min_fitness:
+        return False
+    direction = getattr(rb, "direction", "long") or "long"
+    if direction not in ("long", "short"):
+        direction = "long"
+    data = _load_seed_data()
+    bucket = data.setdefault(direction, [])
+    bucket.append({
         "added_at": datetime.now().isoformat(),
         "source_ticker": rb.ticker,
         "fitness": rb.fitness,
         "rulebook": rb.to_dict(),
     })
-    # 최대 50개 유지 (fitness 상위)
-    data["patterns"].sort(key=lambda x: x.get("fitness", 0), reverse=True)
-    data["patterns"] = data["patterns"][:50]
-    tmp = p.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    tmp.replace(p)
-    log.info(f"seed rulebook added (fitness={rb.fitness:.2f}, source={rb.ticker})")
+    # 방향별로 fitness 상위 max_per_direction 유지
+    bucket.sort(key=lambda x: x.get("fitness", 0), reverse=True)
+    data[direction] = bucket[:max_per_direction]
+    _save_seed_data(data)
+    log.info(f"seed rulebook added (direction={direction}, fitness={rb.fitness:.2f}, source={rb.ticker})")
     return True
 
 

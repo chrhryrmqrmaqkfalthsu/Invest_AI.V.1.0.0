@@ -231,6 +231,136 @@ def _from_dict(d: dict) -> MarketContext:
 def get_market_context() -> MarketContext:
     """캐시 우선 반환 (편의 함수)"""
     return build_market_context(force_refresh=False)
+# =====================================================================
+# 과거 시장 시계열 빌더 (백테스트용)
+# =====================================================================
+def _market_history_cache_path():
+    return config.system_dir() / "market_history.csv"
+
+
+def build_market_history(years: int = 6, force_refresh: bool = False) -> pd.DataFrame:
+    """
+    과거 N년 일별 시장 컨텍스트 시계열을 빌드.
+    각 날짜마다 60일 트렌드 기반 score, regime, sector_strength, vix_level 계산.
+    캐시: data/_system/market_history.parquet
+    """
+    cache_path = _market_history_cache_path()
+
+    # 캐시 유효성 확인 (마지막 날짜가 어제 이후면 재사용)
+    if not force_refresh and cache_path.exists():
+        try:
+            df = pd.read_csv(cache_path, index_col=0, parse_dates=True)
+
+            last_date = pd.Timestamp(df.index[-1]).normalize()
+            today = pd.Timestamp.now().normalize()
+            # 캐시가 1일 이내면 그대로 사용
+            if (today - last_date).days <= 1:
+                log.info(f"market_history loaded from cache: {len(df)} rows "
+                         f"({df.index[0].date()} ~ {df.index[-1].date()})")
+                return df
+        except Exception as e:
+            log.warning(f"market_history cache read failed: {e}")
+
+    log.info(f"building market_history ({years}y)...")
+    period = f"{years}y"
+
+    # 1) 지수 데이터 일괄 다운로드
+    kospi = _fetch_index("^KS11", period=period)
+    sp500 = _fetch_index("^GSPC", period=period)
+    vix = _fetch_index("^VIX", period=period)
+    sectors_etf = {
+        "tech": _fetch_index("XLK", period=period),
+        "finance": _fetch_index("XLF", period=period),
+        "energy": _fetch_index("XLE", period=period),
+        "healthcare": _fetch_index("XLV", period=period),
+        "consumer": _fetch_index("XLY", period=period),
+        "industrials": _fetch_index("XLI", period=period),
+    }
+
+    if kospi is None or sp500 is None or vix is None:
+        raise RuntimeError("failed to fetch index data for market_history")
+
+    # 2) 공통 인덱스(KOSPI 영업일 기준)
+    idx = kospi.index
+
+    # 3) 각 날짜에 대해 시장 점수 계산
+    records = []
+    for d in idx:
+        # 해당 시점까지 데이터만 사용 (lookahead bias 방지)
+        kospi_slice = kospi.loc[:d]["Close"]
+        sp500_slice = sp500.loc[:d]["Close"] if d in sp500.index or d > sp500.index[0] else None
+        vix_slice = vix.loc[:d]["Close"] if d in vix.index or d > vix.index[0] else None
+
+        if sp500_slice is None or vix_slice is None or len(sp500_slice) == 0 or len(vix_slice) == 0:
+            continue
+
+        kospi_60d = _safe_pct_change(kospi_slice, 60)
+        sp500_60d = _safe_pct_change(sp500_slice, 60)
+        vix_level = float(vix_slice.iloc[-1])
+
+        score, regime = _score_from_trends(kospi_60d, sp500_60d, vix_level)
+
+        rec = {
+            "date": d,
+            "score": score,
+            "regime": regime,
+            "kospi_60d": kospi_60d,
+            "sp500_60d": sp500_60d,
+            "vix": vix_level,
+        }
+        # 섹터별 60일 트렌드 → 0~100 점수
+        for name, etf_df in sectors_etf.items():
+            if etf_df is None:
+                rec[f"sector_{name}"] = 50.0
+                continue
+            try:
+                etf_slice = etf_df.loc[:d]["Close"]
+                if len(etf_slice) < 60:
+                    rec[f"sector_{name}"] = 50.0
+                    continue
+                trend = _safe_pct_change(etf_slice, 60)
+                # -10% ~ +10% 범위를 0~100으로 매핑
+                rec[f"sector_{name}"] = max(0, min(100, 50 + trend * 5))
+            except Exception:
+                rec[f"sector_{name}"] = 50.0
+        records.append(rec)
+
+    df = pd.DataFrame(records).set_index("date")
+    df.index = pd.to_datetime(df.index)
+
+    # 4) 캐시 저장
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(cache_path)
+    log.info(f"market_history built: {len(df)} rows ({df.index[0].date()} ~ {df.index[-1].date()}), "
+             f"cached at {cache_path}")
+    return df
+
+
+def get_market_history(years: int = 6) -> pd.DataFrame:
+    """캐시 활용 래퍼"""
+    return build_market_history(years=years, force_refresh=False)
+
+
+def lookup_market_at(history_df, date) -> dict:
+    """
+    특정 날짜의 시장 상태 조회. 빠른 forward-fill 룩업.
+    history_df.index가 정렬된 DatetimeIndex라고 가정.
+    """
+    if history_df is None or len(history_df) == 0:
+        return {"score": 50.0, "vix": 18.0,
+                "sector_tech": 50.0, "sector_finance": 50.0,
+                "sector_energy": 50.0, "sector_healthcare": 50.0,
+                "sector_consumer": 50.0, "sector_industrials": 50.0}
+    ts = pd.Timestamp(date)
+    # searchsorted로 O(log n) 룩업
+    idx_arr = history_df.index
+    pos = idx_arr.searchsorted(ts, side="right") - 1
+    if pos < 0:
+        pos = 0
+    if pos >= len(history_df):
+        pos = len(history_df) - 1
+    return history_df.iloc[pos].to_dict()
+
 
 
 if __name__ == "__main__":

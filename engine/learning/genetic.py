@@ -137,9 +137,16 @@ def run_ga(
     if seed_rulebooks:
         for sr in seed_rulebooks[:seed_count]:
             rb = copy.deepcopy(sr)
+            # 시드는 다른 종목 출신 — 종목 메타는 base_rulebook으로 덮어씀
+            rb.ticker = base_rulebook.ticker
+            rb.asset_type = base_rulebook.asset_type
+            rb.direction = base_rulebook.direction
+            rb.sector_name = base_rulebook.sector_name
             # 약간의 변이를 주어 다양성 확보
             rb = mutate(rb, mutation_rate=0.1, strength=0.1)
             population.append(rb)
+
+
 
     while len(population) < cfg.population:
         population.append(random_rulebook(base_rulebook))

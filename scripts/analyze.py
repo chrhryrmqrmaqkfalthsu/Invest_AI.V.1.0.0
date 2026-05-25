@@ -83,7 +83,7 @@ def analyze(ticker: str, quick: bool = False, position_limit_krw: float = 120000
         ga_cfg = GAConfig(population=20, generations=10, elite_ratio=0.2,
                           mutation_rate=0.15,random_seed=42)
         print(f"     (표준 모드: pop=20, gen=10)")
-    seed_rbs = repo.load_seed_rulebooks(top_n=3)
+    seed_rbs = repo.load_seed_rulebooks(top_n=3, direction=meta.direction)
     if seed_rbs:
         print(f"     시드 패턴 {len(seed_rbs)}개 활용")
     t_learn = time.time()

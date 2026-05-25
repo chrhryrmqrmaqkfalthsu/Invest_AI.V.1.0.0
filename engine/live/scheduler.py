@@ -217,6 +217,33 @@ class Scheduler:
 # ==========================================================
 # 단위 테스트: 가짜 콜백 등록 + 짧은 인터벌로 트리거 검증
 # ==========================================================
+
+    def add_interval_job(
+        self,
+        func,
+        interval_sec: int,
+        job_id: str = None,
+        name: str = None,
+    ) -> str:
+        """
+        시장과 무관하게 N초마다 실행되는 잡.
+        헬스체크, 백그라운드 작업 등에 사용.
+        """
+        job_id = job_id or f"interval_{name or func.__name__}_{len(self._sched.get_jobs())}"
+        self._sched.add_job(
+            func=func,
+            trigger="interval",
+            seconds=interval_sec,
+            id=job_id,
+            name=name or func.__name__,
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+        log.info(f"interval job 등록: {job_id} ({interval_sec}s)")
+        return job_id
+
+
 if __name__ == "__main__":
     import time
     from .market_clock import KrxMarketClock, CryptoMarketClock

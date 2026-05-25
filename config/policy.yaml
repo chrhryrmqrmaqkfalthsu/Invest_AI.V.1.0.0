@@ -24,6 +24,7 @@ small_amount_safety:
   max_total_invested_krw: 100000      # 전체 누적 투자금 (10종목 × 1만원)
   max_orders_per_day: 5               # 일일 최대 주문 횟수
   require_first_order_approval: true  # 봇 첫 주문은 텔레그램 승인 필요  
+  daily_loss_limit_krw: 50000         # 일일 누적 손실 절대금액 상한 (KRW)
 
 # 리스크 관리
 risk:

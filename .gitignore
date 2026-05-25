@@ -31,3 +31,9 @@ Thumbs.db
 
 # 시장 컨텍스트 캐시 (런타임 생성)
 data/_system/
+
+# 학습 결과 및 시스템 데이터
+data/symbols/
+data/_system/
+data/logs/
+data/backups/

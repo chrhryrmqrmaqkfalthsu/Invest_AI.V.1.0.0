@@ -28,3 +28,6 @@ Thumbs.db
 # 임시
 *.tmp
 *.bak
+
+# 시장 컨텍스트 캐시 (런타임 생성)
+data/_system/

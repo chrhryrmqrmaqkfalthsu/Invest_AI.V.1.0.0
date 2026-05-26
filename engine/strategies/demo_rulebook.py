@@ -41,7 +41,7 @@ class RuleBook(ABC):
     """룰북 추상 베이스. 학습된 GA 룰북도 이걸 상속."""
 
     @abstractmethod
-    def evaluate(self, ticker: str, price: float) -> SignalResult:
+    def evaluate(self, ticker: str, price: float, df=None) -> SignalResult:
         """현재가 받아서 BUY/SELL/HOLD 판단"""
         ...
 
@@ -81,7 +81,7 @@ class DemoRuleBook(RuleBook):
             return None
         return sum(h) / len(h)
 
-    def evaluate(self, ticker: str, price: float) -> SignalResult:
+    def evaluate(self, ticker: str, price: float, df=None) -> SignalResult:
         self._push(ticker, price)
         sma = self._sma(ticker)
 

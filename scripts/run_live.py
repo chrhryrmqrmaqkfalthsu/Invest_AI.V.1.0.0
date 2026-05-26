@@ -37,6 +37,7 @@ from engine.live.safety.layer import SafetyLayer
 from engine.live.scheduler import Scheduler
 from engine.live.telegram.notifier import TelegramNotifier
 from engine.strategies.demo_rulebook import DemoRuleBook
+from engine.strategies.learned_rulebook import LearnedRuleBook
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +76,8 @@ def main():
                         help="DemoRuleBook 손절률. 기본 0.03")
     parser.add_argument("--summary-hour", type=int, default=16,
                         help="일일 요약 시각(시). 기본 16")
+    parser.add_argument("--rulebook", choices=["learned", "demo"], default="learned",
+                        help="룰북 선택. learned=학습된 룰북(기본), demo=SMA20 데모")
     parser.add_argument("--summary-minute", type=int, default=0,
                         help="일일 요약 시각(분). 기본 0")
     args = parser.parse_args()
@@ -98,7 +101,11 @@ def main():
     notifier = TelegramNotifier()
     safety = SafetyLayer(broker=broker)
     clock = KrxMarketClock()
-    rulebook = DemoRuleBook(window=args.sma_window, stop_loss_pct=args.stop_loss)
+    if args.rulebook == "learned":
+        rulebook = LearnedRuleBook()
+    else:
+        rulebook = DemoRuleBook(window=args.sma_window, stop_loss_pct=args.stop_loss)
+    logger.info(f"RuleBook: {rulebook.name()}")
 
     # 4) Runner
     runner = Runner(

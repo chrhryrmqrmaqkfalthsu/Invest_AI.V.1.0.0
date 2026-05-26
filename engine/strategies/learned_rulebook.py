@@ -60,6 +60,9 @@ class LearnedRuleBook(RuleBook):
             f"LearnedRuleBook 초기화: lookback={ohlcv_lookback_years}y, "
             f"cache_ttl={ohlcv_cache_ttl_sec}s"
         )
+        # PositionManager 연동용 캐시
+        self._last_atr: dict[str, float] = {}
+        self._rulebook_by_ticker: dict[str, LearnedRule] = {}
 
     def name(self) -> str:
         return "LearnedRuleBook(parameters.json + MarketContext)"
@@ -159,6 +162,14 @@ class LearnedRuleBook(RuleBook):
         # 2) OHLCV (df 인자로 받으면 그것 사용, 아니면 어댑터로 조달)
         if df is None:
             df = self._get_ohlcv(ticker)
+        # ATR / rulebook 캐시 (PositionManager가 매수 후 조회)
+        try:
+            if df is not None and "ATR" in df.columns and len(df) > 0:
+                self._last_atr[ticker] = float(df["ATR"].iloc[-1])
+            self._rulebook_by_ticker[ticker] = rb
+        except Exception as _e:
+            log.warning(f"{ticker} ATR 캐시 실패: {_e}")
+
         if df is None or len(df) < 60:
             return SignalResult(
                 ticker=ticker, signal=Signal.HOLD, price=price,
@@ -218,6 +229,18 @@ class LearnedRuleBook(RuleBook):
 # ==========================================================
 # 단위 테스트
 # ==========================================================
+
+    # ==========================================================
+    # PositionManager 연동 헬퍼
+    # ==========================================================
+    def get_last_atr(self, ticker: str):
+        """가장 최근 evaluate 호출 시점의 ATR. 없으면 None."""
+        return self._last_atr.get(ticker)
+
+    def get_rulebook(self, ticker: str):
+        """ticker의 학습된 Rulebook 객체. 없으면 None."""
+        return self._rulebook_by_ticker.get(ticker)
+
 if __name__ == "__main__":
     import logging as _lg
     _lg.basicConfig(

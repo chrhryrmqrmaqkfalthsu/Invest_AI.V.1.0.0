@@ -33,6 +33,7 @@ from zoneinfo import ZoneInfo
 from engine.live.broker.base import Broker, Order, OrderType, OrderStatus
 from engine.live.market_clock import MarketClock
 from engine.live.safety.layer import SafetyLayer
+from engine.live.position_manager import PositionManager
 from engine.live.telegram.notifier import TelegramNotifier
 from engine.strategies.demo_rulebook import RuleBook, Signal
 
@@ -94,6 +95,7 @@ class Runner:
             f"Runner 초기화: mode={broker.mode} symbols={len(self.symbols)}개 "
             f"rulebook={rulebook.name()}"
         )
+        self.position_manager = PositionManager()
 
     # ==========================================================
     # 콜백 1: 가동 점검
@@ -139,6 +141,14 @@ class Runner:
     # ==========================================================
     def tick_market(self) -> None:
         """장중 매 분. 시그널 평가 → 안전체크 → 주문."""
+        # 1) 보유 포지션 자동 청산 체크 (손절/익절/트레일링/만기)
+        try:
+            exited = self.position_manager.check_exits(self.broker, self.notifier)
+            if exited:
+                logger.info(f"자동 청산 {len(exited)}건 완료")
+        except Exception as e:
+            self._handle_error("position_manager.check_exits", e)
+
         self.stats.market_ticks += 1
         try:
             logger.debug(f"tick_market #{self.stats.market_ticks}")
@@ -197,6 +207,21 @@ class Runner:
 
             if order.status == OrderStatus.FILLED:
                 self.stats.orders_filled += 1
+
+                # BUY 체결 시 PositionManager에 진입 등록 (자동 손절/익절)
+                if side == "BUY" and hasattr(self.rulebook, "get_last_atr"):
+                    try:
+                        atr = self.rulebook.get_last_atr(ticker)
+                        rb = self.rulebook.get_rulebook(ticker)
+                        fill_price = order.filled_avg_price or price
+                        if atr and rb:
+                            self.position_manager.register_entry(
+                                ticker, fill_price, self.order_shares, rb, atr
+                            )
+                        else:
+                            logger.warning(f"{ticker} register_entry 스킵: atr={atr} rb={rb}")
+                    except Exception as e:
+                        logger.error(f"{ticker} register_entry 실패: {e}")
 
             self.notifier.send_order(order)
             logger.info(f"{ticker} {side} 발주 완료: id={order.order_id} status={order.status.value}")

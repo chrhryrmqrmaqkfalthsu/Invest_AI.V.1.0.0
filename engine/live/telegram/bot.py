@@ -24,6 +24,12 @@ from ..broker.base import Broker
 from ..safety.layer import SafetyLayer, KILL_SWITCH_PATH
 from ..safety import state as state_mod
 
+# AI 비서 (optional - 로드 실패해도 봇은 동작)
+try:
+    from engine.ai.assistant import AIAssistant
+except Exception as _e:
+    AIAssistant = None
+
 ENV_PATH = Path.home() / "kingmaker" / ".env"
 API_BASE = "https://api.telegram.org"
 
@@ -67,6 +73,20 @@ class TelegramBot:
         self.position_manager = position_manager
         self.approval_manager = approval_manager
         self.rulebook    = rulebook
+
+        # AI 비서 (slash 명령 외 자유 텍스트 처리)
+        self.ai = None
+        if AIAssistant is not None:
+            try:
+                self.ai = AIAssistant(
+                    broker=self.broker,
+                    position_manager=self.position_manager,
+                    approval_manager=self.approval_manager,
+                    rulebook=self.rulebook,
+                )
+                log.info("AIAssistant 연결 완료")
+            except Exception as e:
+                log.warning(f"AIAssistant 초기화 실패: {e} (자유 텍스트는 무시됨)")
         self.poll_interval = poll_interval
 
         if not self.token or not self.allowed_id:
@@ -137,7 +157,23 @@ class TelegramBot:
             return
 
         text = (msg.get("text") or "").strip()
+        if not text:
+            return
+        # 슬래시 아닌 자유 텍스트 → AI 비서로 라우팅
         if not text.startswith("/"):
+            if self.ai is None:
+                self.notifier.send("ℹ️ AI 비서가 활성화되지 않았습니다. /help 로 명령어 확인하세요.")
+                return
+            progress_id = self.notifier.send_progress("🤖 AI 분석 중...")
+            try:
+                answer = self.ai.ask(text)
+            except Exception as e:
+                log.exception(f"AI 비서 처리 예외: {e}")
+                answer = f"❌ AI 처리 중 오류: {type(e).__name__}: {e}"
+            if progress_id:
+                self.notifier.edit_message(progress_id, answer, parse_mode="Markdown")
+            else:
+                self.notifier.send(answer, parse_mode="Markdown")
             return
 
         # /command @botname 형식도 처리

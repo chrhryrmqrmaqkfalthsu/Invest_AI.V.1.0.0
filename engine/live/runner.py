@@ -34,6 +34,7 @@ from engine.live.broker.base import Broker, Order, OrderType, OrderStatus
 from engine.live.market_clock import MarketClock
 from engine.live.safety.layer import SafetyLayer
 from engine.live.position_manager import PositionManager
+from engine.market.context import build_market_context
 from engine.live.telegram.notifier import TelegramNotifier
 from engine.strategies.demo_rulebook import RuleBook, Signal
 
@@ -51,6 +52,8 @@ class RunnerStats:
     orders_attempted: int = 0
     orders_filled: int = 0
     orders_blocked: int = 0
+    market_refreshes: int = 0
+    last_regime: str = ""
     last_error: str = ""
     started_at: Optional[datetime] = None
 
@@ -235,14 +238,39 @@ class Runner:
     # 콜백 3: 장외 60분 tick
     # ==========================================================
     def tick_offmarket(self) -> None:
-        """장외시간. 헬스체크 + 시세 캐싱."""
+        """장외시간 또는 60분 간격. 헬스체크 + 시장 컨텍스트 갱신."""
         self.stats.offmarket_ticks += 1
         try:
             logger.debug(f"tick_offmarket #{self.stats.offmarket_ticks}")
-            # 헬스체크만 (장외에는 시세 변화 거의 없음)
+            # 1) 브로커 헬스체크
             ok = self.broker.health_check()
             if not ok:
-                self.notifier.send_error("브로커 health_check 실패 (장외)")
+                self.notifier.send_error("브로커 health_check 실패")
+
+            # 2) MarketContext 갱신 (KOSPI/SP500/VIX/섹터/이벤트)
+            try:
+                ctx = build_market_context(force_refresh=True)
+                self.stats.market_refreshes += 1
+                logger.info(
+                    f"MarketContext 갱신: score={ctx.score:.1f} "
+                    f"regime={ctx.regime} buy_mult={ctx.buy_multiplier:.2f}"
+                )
+                # regime 변동 시 텔레그램 알림
+                prev = self.stats.last_regime
+                if prev and prev != ctx.regime:
+                    try:
+                        self.notifier.send(
+                            f"📈 시장 국면 변경\n"
+                            f"  {prev} → {ctx.regime}\n"
+                            f"  score: {ctx.score:.1f}\n"
+                            f"  buy_multiplier: {ctx.buy_multiplier:.2f}"
+                        )
+                    except Exception as ne:
+                        logger.warning(f"regime 변경 알림 실패: {ne}")
+                self.stats.last_regime = ctx.regime
+            except Exception as me:
+                logger.error(f"MarketContext 갱신 실패: {me}")
+
         except Exception as e:
             self._handle_error("tick_offmarket", e)
 

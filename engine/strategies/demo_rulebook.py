@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, Optional
 
@@ -27,6 +27,12 @@ class SignalResult:
     signal: Signal
     price: float
     reason: str = ""
+    # 강한 시그널 분류용 (Phase E)
+    score: float = 0.0
+    raw_score: float = 0.0
+    threshold: float = 0.0
+    market_adjustment: float = 1.0
+    reasons: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -34,6 +40,11 @@ class SignalResult:
             "signal": self.signal.value,
             "price": self.price,
             "reason": self.reason,
+            "score": self.score,
+            "raw_score": self.raw_score,
+            "threshold": self.threshold,
+            "market_adjustment": self.market_adjustment,
+            "reasons": list(self.reasons),
         }
 
 

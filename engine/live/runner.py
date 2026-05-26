@@ -34,6 +34,9 @@ from engine.live.broker.base import Broker, Order, OrderType, OrderStatus
 from engine.live.market_clock import MarketClock
 from engine.live.safety.layer import SafetyLayer
 from engine.live.position_manager import PositionManager
+from engine.live.approval_manager import (
+    ApprovalManager, classify_strength, SignalStrength
+)
 from engine.market.context import build_market_context
 from engine.live.telegram.notifier import TelegramNotifier
 from engine.strategies.demo_rulebook import RuleBook, Signal
@@ -99,10 +102,18 @@ class Runner:
             f"rulebook={rulebook.name()}"
         )
         self.position_manager = PositionManager()
+        self.approval_manager = ApprovalManager()
 
     # ==========================================================
     # 콜백 1: 가동 점검
     # ==========================================================
+    def attach_bot(self, bot) -> None:
+        """TelegramBot에 PositionManager/ApprovalManager/Rulebook 주입."""
+        bot.position_manager = self.position_manager
+        bot.approval_manager = self.approval_manager
+        bot.rulebook = self.rulebook
+        logger.info("TelegramBot에 PositionManager/ApprovalManager/Rulebook 주입 완료")
+
     def startup_check(self) -> None:
         """봇 가동시 1회. 모든 의존성 살아있는지 확인 후 텔레그램에 보고."""
         try:
@@ -152,6 +163,12 @@ class Runner:
         except Exception as e:
             self._handle_error("position_manager.check_exits", e)
 
+        # 2) 사용자 승인된 추가매수 요청 처리 + 재평가
+        try:
+            self._process_pending_approvals()
+        except Exception as e:
+            self._handle_error("_process_pending_approvals", e)
+
         self.stats.market_ticks += 1
         try:
             logger.debug(f"tick_market #{self.stats.market_ticks}")
@@ -168,19 +185,252 @@ class Runner:
             logger.warning(f"{ticker} 현재가 조회 실패")
             return
 
+        # 1.5) 이미 보유 + 강한 시그널 유지 → 1시간마다 재알림
+        self._maybe_reconfirm_existing(ticker, price)
+
         # 2) 시그널 평가
         sig = self.rulebook.evaluate(ticker, price)
         if sig.signal == Signal.BUY:
             self.stats.signals_buy += 1
-            self._try_order("BUY", ticker, price, sig.reason)
+            self._try_order("BUY", ticker, price, sig.reason, signal_result=sig)
         elif sig.signal == Signal.SELL:
             self.stats.signals_sell += 1
-            self._try_order("SELL", ticker, price, sig.reason)
+            self._try_order("SELL", ticker, price, sig.reason, signal_result=sig)
         else:
             self.stats.signals_hold += 1
             logger.debug(f"{ticker} HOLD: {sig.reason}")
 
-    def _try_order(self, side: str, ticker: str, price: float, reason: str) -> None:
+    def _process_pending_approvals(self) -> None:
+        """매 tick: approved 요청 실행 + reevaluating 요청 재평가."""
+        if not self.approval_manager:
+            return
+        # status별로 처리 (approved 먼저, reevaluating 다음)
+        all_reqs = list(self.approval_manager._requests.values())
+        for req in all_reqs:
+            if req.status == "approved":
+                self._execute_approved(req)
+            elif req.status == "reevaluating":
+                self._reevaluate_request(req)
+
+    def _execute_approved(self, req) -> None:
+        """승인된 요청 → 한도 일시 상향 → 추가 매수 → add_to_position."""
+        ticker = req.ticker
+        amount = req.approved_krw
+        if amount <= 0:
+            req.status = "rejected"
+            self.approval_manager._save()
+            return
+
+        try:
+            price = self.broker.get_current_price(ticker)
+            if price is None or price <= 0:
+                logger.warning(f"[APPROVAL-EXEC] {ticker} 현재가 조회 실패")
+                return
+            shares = max(1, int(amount / price))
+
+            # SafetyLayer 한도 일시 상향 (max_krw + max_shares + max_total_invested)
+            original_max_krw      = getattr(self.safety, "max_krw", None)
+            original_max_shares   = getattr(self.safety, "max_shares", None)
+            original_max_total    = getattr(self.safety, "max_total_invested", None)
+            try:
+                if original_max_krw is not None:
+                    self.safety.max_krw = max(float(original_max_krw), float(amount) + price * 2)
+                if original_max_shares is not None:
+                    self.safety.max_shares = max(int(original_max_shares), int(shares))
+                if original_max_total is not None:
+                    # 추가 매수분만큼 누적한도 임시 상향 (현 한도 + 이번 주문액 + 여유)
+                    self.safety.max_total_invested = float(original_max_total) + float(amount) + price * 2
+                # 안전 체크
+                check = self.safety.check_order("BUY", ticker, shares, price)
+                if not check.allowed:
+                    logger.warning(f"[APPROVAL-EXEC] {ticker} 안전체크 차단: [{check.code}] {check.reason}")
+                    self.notifier.send(f"⛔ `{ticker}` 추가매수 차단: [{check.code}] {check.reason}", parse_mode="Markdown")
+                    req.status = "rejected"
+                    self.approval_manager._save()
+                    return
+
+                # 매수 발주
+                order = self.broker.place_buy(ticker, shares, OrderType.MARKET)
+                self.safety.record_order(order, "BUY")
+
+                if order.status == OrderStatus.FILLED:
+                    self.stats.orders_filled += 1
+                    fill_price = order.filled_avg_price or price
+                    # add_to_position으로 평균가/stop/target 재계산
+                    atr = self.rulebook.get_last_atr(ticker) if hasattr(self.rulebook, "get_last_atr") else None
+                    rb = self.rulebook.get_rulebook(ticker) if hasattr(self.rulebook, "get_rulebook") else None
+                    if atr and rb:
+                        self.position_manager.add_to_position(ticker, fill_price, shares, rb, atr)
+                    self.notifier.send(
+                        f"✅ `{ticker}` 추가매수 체결: {shares}주 @ {fill_price:,.0f} (req={req.request_id[:8]})",
+                        parse_mode="Markdown",
+                    )
+                    logger.info(f"[APPROVAL-EXEC] {ticker} 추가매수 체결 {shares}주 @ {fill_price:,.0f}")
+                else:
+                    self.notifier.send(f"⚠️ `{ticker}` 추가매수 미체결: status={order.status.value}", parse_mode="Markdown")
+            finally:
+                if original_max_krw is not None:
+                    self.safety.max_krw = original_max_krw
+                if original_max_shares is not None:
+                    self.safety.max_shares = original_max_shares
+                if original_max_total is not None:
+                    self.safety.max_total_invested = original_max_total
+
+            # 요청 완료 처리
+            req.status = "executed"
+            self.approval_manager._save()
+
+        except Exception as e:
+            logger.error(f"[APPROVAL-EXEC] {ticker} 실행 예외: {e}")
+            self.notifier.send(f"❌ `{ticker}` 추가매수 실행 실패: {e}", parse_mode="Markdown")
+            req.status = "rejected"
+            self.approval_manager._save()
+
+    def _reevaluate_request(self, req) -> None:
+        """60초 초과 승인 요청 → 현재 시그널 재평가."""
+        ticker = req.ticker
+        try:
+            price = self.broker.get_current_price(ticker)
+            if price is None:
+                return
+            sig = self.rulebook.evaluate(ticker, price)
+            if sig is None:
+                return
+            score = float(getattr(sig, "score", 0.0) or 0.0)
+            threshold = float(getattr(sig, "threshold", 0.0) or 0.0)
+            still_strong = (threshold > 0) and (score >= threshold * 1.2)
+
+            if still_strong:
+                # 통과 → 사용자가 마지막에 요청한 금액으로 진행
+                ok, msg_text, _ = self.approval_manager.confirm_after_reeval(
+                    req.request_id, req.approved_krw or req.options_krw[0], new_signal_ok=True
+                )
+                if ok:
+                    self.notifier.send(
+                        f"⏱ `{ticker}` 재평가 통과 → 추가매수 진행 (score={score:.2f}/{threshold:.2f})",
+                        parse_mode="Markdown",
+                    )
+                    self._execute_approved(req)
+            else:
+                self.approval_manager.confirm_after_reeval(req.request_id, 0, new_signal_ok=False)
+                self.notifier.send(
+                    f"🔻 `{ticker}` 재평가 결과 시그널 약화 → 추가매수 취소 (score={score:.2f}/{threshold:.2f})",
+                    parse_mode="Markdown",
+                )
+        except Exception as e:
+            logger.error(f"[APPROVAL-REEVAL] {ticker} 예외: {e}")
+
+    def _maybe_reconfirm_existing(self, ticker: str, price: float) -> None:
+        """보유 중 + 강한 시그널 유지 → 1시간마다 추가매수 의사 재확인."""
+        if not self.position_manager.get(ticker):
+            return
+        if not self.approval_manager.should_reconfirm(ticker):
+            return
+        try:
+            sig = self.rulebook.evaluate(ticker, price)
+            if sig is None:
+                return
+            rb = self.rulebook.get_rulebook(ticker) if hasattr(self.rulebook, "get_rulebook") else None
+            if rb is None:
+                return
+            score = float(getattr(sig, "score", 0.0) or 0.0)
+            threshold = float(getattr(sig, "threshold", 0.0) or 0.0)
+            win_rate = float(getattr(rb, "win_rate", 0.0) or 0.0)
+
+            # MarketContext
+            try:
+                from engine.market.context import get_market_context
+                ctx = get_market_context()
+                regime = ctx.regime
+                sector_score = ctx.sector_strength.get(getattr(rb, "sector_name", ""), 50.0)
+            except Exception:
+                regime, sector_score = "neutral", 50.0
+
+            strength = classify_strength(
+                score=score, threshold=threshold,
+                win_rate=win_rate, regime=regime, sector_score=sector_score,
+            )
+            if strength is None:
+                return  # 더 이상 강한 시그널 아님
+
+            # 1시간 재알림 발급
+            self._maybe_request_approval(ticker, price, rb, sig)
+            self.approval_manager.mark_reconfirmed(ticker)
+            logger.info(f"[RECONFIRM] {ticker} 1시간 재알림 발급 ({strength.value})")
+        except Exception as e:
+            logger.warning(f"{ticker} _maybe_reconfirm_existing 예외: {e}")
+
+    def _maybe_request_approval(self, ticker, fill_price, rb, sig) -> None:
+        """매수 직후 강한 시그널이면 ApprovalRequest 생성 + 텔레그램 알림."""
+        if sig is None:
+            return
+        try:
+            # MarketContext 가져오기
+            try:
+                from engine.market.context import get_market_context
+                ctx = get_market_context()
+                market_score = ctx.score
+                market_regime = ctx.regime
+                sector_score = ctx.sector_strength.get(getattr(rb, "sector_name", ""), 50.0)
+                buy_mult = ctx.buy_multiplier
+            except Exception:
+                market_score, market_regime, sector_score, buy_mult = 50.0, "neutral", 50.0, 1.0
+
+            win_rate = float(getattr(rb, "win_rate", 0.0) or 0.0)
+            score = float(getattr(sig, "score", 0.0) or 0.0)
+            threshold = float(getattr(sig, "threshold", 0.0) or 0.0)
+
+            strength = classify_strength(
+                score=score, threshold=threshold,
+                win_rate=win_rate, regime=market_regime, sector_score=sector_score,
+            )
+            if strength is None:
+                logger.debug(f"{ticker} 강한 시그널 아님 (score={score:.2f}/{threshold:.2f})")
+                return
+
+            # 시그널 reasons 추출
+            reasons = []
+            try:
+                # SignalResult.reason은 "score=... reasons=[...]" 형태
+                r_str = getattr(sig, "reason", "") or ""
+                if "reasons=" in r_str:
+                    raw = r_str.split("reasons=")[-1].strip("[]")
+                    reasons = [s.strip(" '\"") for s in raw.split(",") if s.strip()]
+            except Exception:
+                pass
+
+            # PositionEntry에서 target/stop/trailing/max_holding 조회
+            pos = self.position_manager.get(ticker)
+            if pos is None:
+                logger.warning(f"{ticker} ApprovalRequest 생성 실패: PositionEntry 없음")
+                return
+
+            req = self.approval_manager.create_request(
+                ticker=ticker, strength=strength, current_price=fill_price,
+                signal_score=score, signal_threshold=threshold, signal_reasons=reasons,
+                win_rate=win_rate, fitness=float(getattr(rb, "fitness", 0.0) or 0.0),
+                target_price=pos.target_price, stop_price=pos.stop_price,
+                trailing_stop=pos.trailing_stop, max_holding_days=pos.max_holding_days,
+                market_score=market_score, market_regime=market_regime,
+                sector_score=sector_score, buy_multiplier=buy_mult,
+            )
+
+            # PositionEntry에 진입 시그널 정보 기록
+            pos.signal_score_at_entry = score
+            pos.signal_threshold_at_entry = threshold
+            self.position_manager._save()
+
+            # 텔레그램 알림
+            try:
+                self.notifier.send_approval_request(req)
+                logger.info(f"[APPROVAL] {ticker} {strength.value} 알림 발송 (req={req.request_id[:8]})")
+            except Exception as ne:
+                logger.warning(f"{ticker} approval 알림 발송 실패: {ne}")
+
+        except Exception as e:
+            logger.error(f"{ticker} _maybe_request_approval 예외: {e}")
+
+    def _try_order(self, side: str, ticker: str, price: float, reason: str, signal_result=None) -> None:
         """안전체크 통과시 주문 실행."""
         self.stats.orders_attempted += 1
 
@@ -220,6 +470,10 @@ class Runner:
                         if atr and rb:
                             self.position_manager.register_entry(
                                 ticker, fill_price, self.order_shares, rb, atr
+                            )
+                            # 강한 시그널이면 추가 매수 승인 요청 발송
+                            self._maybe_request_approval(
+                                ticker, fill_price, rb, signal_result
                             )
                         else:
                             logger.warning(f"{ticker} register_entry 스킵: atr={atr} rb={rb}")

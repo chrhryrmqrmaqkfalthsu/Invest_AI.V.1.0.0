@@ -30,6 +30,22 @@ API_BASE = "https://api.telegram.org"
 log = logging.getLogger("telegram.bot")
 
 
+# 명령별 로딩 placeholder 텍스트
+PROGRESS_TEXT = {
+    "/start":     "👋 시작 처리 중...",
+    "/help":      "📚 도움말 준비 중...",
+    "/status":    "📊 계좌 상태 조회 중...",
+    "/positions": "📦 보유 종목 + 수익률/달성률/확률 계산 중...",
+    "/pause":     "⏸ 일시정지 처리 중...",
+    "/resume":    "▶️ 재개 처리 중...",
+    "/approve":   "✅ 첫 주문 승인 처리 중...",
+    "/reject":    "❌ 거부 처리 중...",
+    "/kill":      "🛑 정지 처리 중...",
+}
+PROGRESS_APPROVE_AMOUNT = "💰 추가매수 승인 처리 중 (시그널 재평가 가능성)..."
+PROGRESS_DEFAULT = "⏳ 처리 중..."
+
+
 class TelegramBot:
 
     def __init__(
@@ -37,6 +53,9 @@ class TelegramBot:
         broker: Optional[Broker] = None,
         safety: Optional[SafetyLayer] = None,
         notifier: Optional[TelegramNotifier] = None,
+        position_manager=None,
+        approval_manager=None,
+        rulebook=None,
         poll_interval: float = 2.0,
     ):
         env = dotenv_values(str(ENV_PATH))
@@ -45,6 +64,9 @@ class TelegramBot:
         self.broker      = broker
         self.safety      = safety
         self.notifier    = notifier or TelegramNotifier()
+        self.position_manager = position_manager
+        self.approval_manager = approval_manager
+        self.rulebook    = rulebook
         self.poll_interval = poll_interval
 
         if not self.token or not self.allowed_id:
@@ -63,6 +85,7 @@ class TelegramBot:
             "/pause":     self._cmd_pause,
             "/resume":    self._cmd_resume,
             "/approve":   self._cmd_approve,
+            "/reject":    self._cmd_reject,
             "/kill":      self._cmd_kill,
         }
 
@@ -119,15 +142,34 @@ class TelegramBot:
 
         # /command @botname 형식도 처리
         cmd = text.split()[0].split("@")[0].lower()
+
+        # /approve_NNk → 동적 매칭 (prefix)
+        if cmd.startswith("/approve_"):
+            progress_id = self.notifier.send_progress(PROGRESS_APPROVE_AMOUNT)
+            try:
+                reply = self._cmd_approve_amount(cmd, msg)
+            except Exception as e:
+                reply = f"❌ 예외: {e}"
+            if reply:
+                self.notifier.edit_message(progress_id, reply, parse_mode="Markdown")
+            return
+
         handler = self.commands.get(cmd)
         if not handler:
             self.notifier.send(f"알 수 없는 명령: `{cmd}`\n/help 로 목록 확인")
             return
 
+        progress_text = PROGRESS_TEXT.get(cmd, PROGRESS_DEFAULT)
+        progress_id = self.notifier.send_progress(progress_text)
         try:
             reply = handler(msg)
             if reply:
-                self.notifier.send(reply)
+                # Markdown 사용 명령은 parse_mode 지정 (positions/approve 등)
+                use_md = cmd in ("/positions", "/status")
+                self.notifier.edit_message(
+                    progress_id, reply,
+                    parse_mode="Markdown" if use_md else ""
+                )
         except Exception as e:
             log.exception(f"명령 처리 실패: {cmd}")
             self.notifier.send_error(f"{cmd} 처리 실패: {e}")
@@ -142,13 +184,25 @@ class TelegramBot:
 
     def _cmd_help(self, msg: dict) -> str:
         return (
-            "*명령어*\n"
+            "📚 명령어\n\n"
+            "[조회]\n"
             "/status — 잔고/손익 요약\n"
-            "/positions — 보유 종목 상세\n"
-            "/approve — 오늘 첫 주문 승인 ⚠️\n"
+            "/positions — 보유 종목 상세 (수익률·달성률·확률)\n\n"
+            "[제어]\n"
             "/pause — 봇 일시정지 (KILL_SWITCH)\n"
             "/resume — 재개\n"
-            "/kill — 긴급 정지 (보유 청산은 별도 확인)\n"
+            "/kill — 긴급 정지\n\n"
+            "[승인]\n"
+            "/approve — 오늘 첫 매수 승인\n"
+            "/approve_20k — 추가매수 2만원\n"
+            "/approve_30k — 추가매수 3만원\n"
+            "/approve_50k — 추가매수 5만원\n"
+            "/approve_100k — 추가매수 10만원\n"
+            "/approve_200k — 추가매수 20만원\n"
+            "/approve_500k — 추가매수 50만원\n"
+            "/reject — 현재 대기중인 추가매수 거부\n\n"
+            "💡 강한 시그널 감지 시 추가매수 옵션을 알려드립니다.\n"
+            "60초 이내 응답 시 즉시, 초과 시 재평가 후 진행됩니다."
         )
 
     def _cmd_status(self, msg: dict) -> str:
@@ -169,19 +223,131 @@ class TelegramBot:
         )
 
     def _cmd_positions(self, msg: dict) -> str:
+        """강화된 포지션 대시보드: 수익률 + 달성률 + 확률 재계산."""
         if not self.broker:
             return "broker 미연결"
         holdings = self.broker.get_holdings()
         if not holdings:
             return "보유 종목 없음"
-        lines = ["📦 *보유 종목*"]
+
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        KST = ZoneInfo("Asia/Seoul")
+
+        lines = ["📦 *보유 종목 대시보드*"]
         for h in holdings:
-            lines.append(
-                f"`{h.ticker}` {h.shares}주 @ {h.avg_cost:,.0f}\n"
-                f"  현재 {h.current_price:,.0f} ({h.unrealized_pnl_pct:+.2f}%, "
-                f"{h.unrealized_pnl:+,.0f}원)"
-            )
+            cur = h.current_price
+            avg = h.avg_cost
+            pnl_pct = h.unrealized_pnl_pct
+            pnl_emoji = "🟢" if pnl_pct >= 0 else "🔴"
+
+            block = [
+                f"\n▸ `{h.ticker}` ({h.shares}주)",
+                f"  매수 {avg:,.0f} → 현재 {cur:,.0f} ({pnl_pct:+.2f}%) {pnl_emoji}",
+                f"  평가금: {h.market_value:,.0f}원 ({h.unrealized_pnl:+,.0f}원)",
+            ]
+
+            # PositionManager 메타 (있으면 강화)
+            pos = self.position_manager.get(h.ticker) if self.position_manager else None
+            if pos:
+                # 목표/손절
+                try:
+                    target_pct = (pos.target_price / avg - 1) * 100
+                    stop_pct = (pos.stop_price / avg - 1) * 100
+                    achieve = (cur - avg) / (pos.target_price - avg) * 100 if pos.target_price > avg else 0.0
+                    achieve = max(0.0, min(100.0, achieve))
+                except Exception:
+                    target_pct = stop_pct = achieve = 0.0
+                block.append(f"  🎯 목표 {pos.target_price:,.0f} ({target_pct:+.2f}%) | 달성률 {achieve:.0f}%")
+                block.append(f"  🛑 손절 {pos.stop_price:,.0f} ({stop_pct:+.2f}%) | 트레일 {pos.trailing_stop:,.0f}")
+
+                # 보유일 / 남은일
+                try:
+                    entry_dt = datetime.fromisoformat(pos.entry_date)
+                    if entry_dt.tzinfo is None:
+                        entry_dt = entry_dt.replace(tzinfo=KST)
+                    held_days = (datetime.now(KST) - entry_dt).days
+                except Exception:
+                    held_days = 0
+                remain = max(0, pos.max_holding_days - held_days)
+                block.append(f"  ⏱ 보유 {held_days}일 / 남은 {remain}일")
+
+                # 목표 달성 확률 재계산
+                prob = self._estimate_probability(
+                    ticker=h.ticker,
+                    pos=pos,
+                    current_price=cur,
+                    held_days=held_days,
+                )
+                if prob is not None:
+                    base = pos.win_rate_at_entry * 100
+                    block.append(f"  📊 달성 확률: {prob*100:.0f}% (진입 시 {base:.0f}%)")
+            else:
+                block.append("  (PositionManager 메타 없음)")
+
+            lines.extend(block)
+
         return "\n".join(lines)
+
+    def _estimate_probability(self, ticker, pos, current_price, held_days):
+        """목표 달성 확률 재계산.
+
+        prob = win_rate_at_entry × time_factor × distance_factor × signal_factor × market_factor
+
+        - time_factor: 보유일/max 비율로 감소 (오래 들고 있을수록 ↓)
+        - distance_factor: 목표까지 거리 (멀수록 ↓)
+        - signal_factor: 현재 시그널 재평가
+        - market_factor: regime 가중치
+        """
+        try:
+            base = pos.win_rate_at_entry
+            if base <= 0:
+                return None
+
+            # 1) time_factor
+            mh = max(1, pos.max_holding_days)
+            time_factor = max(0.3, 1.0 - (held_days / mh))
+
+            # 2) distance_factor
+            if pos.target_price > pos.entry_price:
+                progress = (current_price - pos.entry_price) / (pos.target_price - pos.entry_price)
+                progress = max(0.0, min(1.0, progress))
+                distance_factor = 0.5 + 0.5 * progress  # 0% 진행 → 0.5, 100% → 1.0
+            else:
+                distance_factor = 0.7
+
+            # 3) signal_factor (rulebook 호출, 실패 시 1.0)
+            signal_factor = 1.0
+            try:
+                if self.rulebook and hasattr(self.rulebook, "evaluate"):
+                    res = self.rulebook.evaluate(ticker, current_price)
+                    if res and getattr(res, "threshold", 0) > 0:
+                        ratio = res.score / res.threshold
+                        # 0.5~1.5 → 0.5~1.2 정규화
+                        signal_factor = max(0.5, min(1.2, 0.5 + 0.7 * (ratio - 0.5)))
+            except Exception:
+                pass
+
+            # 4) market_factor
+            market_factor = 1.0
+            try:
+                from engine.market.context import get_market_context
+                ctx = get_market_context()
+                regime = getattr(ctx, "regime", "neutral")
+                if regime == "bull":
+                    market_factor = 1.0
+                elif regime == "neutral":
+                    market_factor = 0.7
+                else:
+                    market_factor = 0.5
+            except Exception:
+                pass
+
+            prob = base * time_factor * distance_factor * signal_factor * market_factor
+            return max(0.0, min(1.0, prob))
+        except Exception as e:
+            log.warning(f"{ticker} 확률 재계산 실패: {e}")
+            return None
 
     def _cmd_pause(self, msg: dict) -> str:
         KILL_SWITCH_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -199,6 +365,82 @@ class TelegramBot:
             return "SafetyLayer 미연결"
         self.safety.approve_first_order()
         return "✅ 오늘 첫 주문 승인됨. 다음 매수 시도 시 발사됩니다."
+
+    def _cmd_reject(self, msg: dict) -> str:
+        """가장 최근 pending 또는 reevaluating 요청 거부."""
+        if not self.approval_manager:
+            return "approval_manager 미연결"
+        pending = self.approval_manager.all_pending()
+        # reevaluating 상태도 포함
+        from engine.live.approval_manager import ApprovalManager
+        all_active = [
+            r for r in self.approval_manager._requests.values()
+            if r.status in ("pending", "reevaluating")
+        ]
+        if not all_active:
+            return "거부할 요청 없음"
+        # 가장 최근 것 거부 (단순화)
+        all_active.sort(key=lambda r: r.created_at, reverse=True)
+        target = all_active[0]
+        ok, msg_text = self.approval_manager.reject(target.request_id)
+        return f"{'✅' if ok else '❌'} `{target.ticker}` {msg_text}"
+
+    def _cmd_approve_amount(self, cmd: str, msg: dict) -> str:
+        """`/approve_50k` 같은 명령 처리.
+
+        - 가장 최근 pending 요청을 찾아 그 금액으로 승인
+        - 60초 초과면 재평가 트리거 → 즉시 답변하고 Runner가 처리
+        """
+        if not self.approval_manager:
+            return "approval_manager 미연결"
+
+        # 1) 금액 파싱: /approve_50k → 50000
+        try:
+            amount_str = cmd.replace("/approve_", "").rstrip("k")
+            amount_krw = int(amount_str) * 1000
+        except Exception:
+            return f"⚠️ 금액 파싱 실패: `{cmd}` (예: `/approve_50k`)"
+
+        if amount_krw <= 0:
+            return f"⚠️ 잘못된 금액: {amount_krw}"
+
+        # 2) 가장 최근 pending 또는 reevaluating 요청
+        active = [
+            r for r in self.approval_manager._requests.values()
+            if r.status in ("pending", "reevaluating")
+        ]
+        if not active:
+            return "활성화된 승인 요청이 없습니다"
+        active.sort(key=lambda r: r.created_at, reverse=True)
+        target = active[0]
+
+        # 3) 옵션에 없는 금액이면 경고
+        if amount_krw not in target.options_krw:
+            return (
+                f"⚠️ `{target.ticker}` 요청의 옵션이 아님: {amount_krw:,}원\n"
+                f"  유효 옵션: {target.options_krw}"
+            )
+
+        # 4) 승인 시도 (60초 이내면 즉시, 초과면 재평가 라우팅)
+        if target.status == "pending":
+            ok, msg_text, req = self.approval_manager.approve(target.request_id, amount_krw)
+            if ok:
+                return (
+                    f"✅ `{target.ticker}` 추가매수 승인: {amount_krw:,}원\n"
+                    f"Runner가 다음 tick에 실행합니다."
+                )
+            # 재평가 라우팅
+            return (
+                f"⏱ `{target.ticker}` {msg_text}\n"
+                f"Runner가 현재 시그널 재평가 후 자동 진행/거부합니다.\n"
+                f"  요청 금액: {amount_krw:,}원"
+            )
+        else:  # reevaluating 상태 — 이미 재평가 대기 중
+            return (
+                f"⏱ `{target.ticker}` 이미 재평가 대기 중\n"
+                f"  요청 금액: {amount_krw:,}원\n"
+                f"  Runner가 다음 tick에 처리합니다."
+            )
 
     def _cmd_kill(self, msg: dict) -> str:
         KILL_SWITCH_PATH.parent.mkdir(parents=True, exist_ok=True)

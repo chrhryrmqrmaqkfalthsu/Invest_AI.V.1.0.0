@@ -49,6 +49,11 @@ class PositionEntry:
     exit_strategy: str
     max_holding_days: int
     rulebook_direction: str
+    # 대시보드용 (default로 기존 JSON 호환)
+    win_rate_at_entry: float = 0.0
+    signal_score_at_entry: float = 0.0
+    signal_threshold_at_entry: float = 0.0
+    total_invested_krw: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -120,6 +125,9 @@ class PositionManager:
             max_holding_days=int(rulebook.max_holding_days),
             rulebook_direction=rulebook.direction,
         )
+        # 대시보드용 메타
+        entry.win_rate_at_entry = float(getattr(rulebook, "win_rate", 0.0) or 0.0)
+        entry.total_invested_krw = float(entry_price * shares)
         self._positions[ticker] = entry
         self._save()
         log.info(
@@ -129,6 +137,54 @@ class PositionManager:
             f"strategy={rulebook.direction}/{rulebook.exit_strategy}"
         )
         return entry
+
+    def add_to_position(
+        self,
+        ticker: str,
+        add_price: float,
+        add_shares: int,
+        rulebook,
+        atr_value: float,
+    ) -> Optional[PositionEntry]:
+        """추가 매수 시 평균가/stop/target/trailing 재계산.
+
+        - 새 평균가 기준으로 stop/target 재산정
+        - trailing_stop은 기존값과 새 계산값 중 큰 쪽 (보수적)
+        - entry_date / win_rate_at_entry 등 진입 메타는 유지
+        """
+        pos = self._positions.get(ticker)
+        if pos is None:
+            log.warning(f"{ticker} add_to_position: 기존 포지션 없음 → register_entry로 위임")
+            return self.register_entry(ticker, add_price, add_shares, rulebook, atr_value)
+
+        old_shares = pos.shares
+        old_invested = pos.entry_price * old_shares
+        new_shares = old_shares + add_shares
+        new_invested = old_invested + add_price * add_shares
+        new_avg = new_invested / new_shares if new_shares > 0 else add_price
+
+        stop = new_avg - rulebook.stop_loss_atr * atr_value
+        target = new_avg + rulebook.take_profit_atr * atr_value
+        trail_dist = rulebook.trailing_atr * atr_value
+        new_trailing = new_avg - trail_dist
+
+        pos.shares = new_shares
+        pos.entry_price = new_avg
+        pos.atr_at_entry = atr_value
+        pos.stop_price = stop
+        pos.target_price = target
+        pos.trailing_distance = trail_dist
+        pos.trailing_stop = max(pos.trailing_stop, new_trailing)
+        pos.highest_price = max(pos.highest_price, add_price)
+        pos.total_invested_krw = float(new_invested)
+        self._save()
+
+        log.info(
+            f"[ADD-BUY] {ticker} +{add_shares}주 @ {add_price:,.0f} → "
+            f"총 {new_shares}주 평균 {new_avg:,.0f}, "
+            f"stop={stop:,.0f} target={target:,.0f} trail={pos.trailing_stop:,.0f}"
+        )
+        return pos
 
     def unregister(self, ticker: str) -> None:
         if ticker in self._positions:

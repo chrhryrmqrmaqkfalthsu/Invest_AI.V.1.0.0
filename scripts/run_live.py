@@ -36,6 +36,7 @@ from engine.live.runner import Runner
 from engine.live.safety.layer import SafetyLayer
 from engine.live.scheduler import Scheduler
 from engine.live.telegram.notifier import TelegramNotifier
+from engine.live.telegram.bot import TelegramBot
 from engine.strategies.demo_rulebook import DemoRuleBook
 from engine.strategies.learned_rulebook import LearnedRuleBook
 
@@ -118,6 +119,16 @@ def main():
         order_shares=1,
     )
 
+    # 4.5) TelegramBot 폴링 (사용자 명령 수신: /positions, /approve_50k 등)
+    try:
+        bot = TelegramBot(broker=broker, safety=safety, notifier=notifier)
+        runner.attach_bot(bot)
+        bot.start_polling(blocking=False)
+        logger.info("TelegramBot 폴링 시작")
+    except Exception as e:
+        logger.error(f"TelegramBot 시작 실패 (계속 진행): {e}")
+        bot = None
+
     # 5) Scheduler에 잡 등록
     scheduler = Scheduler(default_timezone="Asia/Seoul")
 
@@ -158,6 +169,12 @@ def main():
             notifier.send("🛑 Kingmaker 종료 중...")
         except Exception:
             pass
+        try:
+            if bot is not None:
+                bot.stop()
+                logger.info("TelegramBot 폴링 종료")
+        except Exception as e:
+            logger.warning(f"TelegramBot 종료 예외: {e}")
         scheduler.shutdown(wait=True)
         logger.info("Scheduler shutdown 완료")
         sys.exit(0)

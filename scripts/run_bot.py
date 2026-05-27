@@ -15,6 +15,7 @@ from engine.live.broker.factory import make_broker
 from engine.live.safety.layer import SafetyLayer
 from engine.live.telegram.bot import TelegramBot
 from engine.live.telegram.notifier import TelegramNotifier
+from engine.ai.training import get_training_manager
 
 # 로깅 설정
 logging.basicConfig(
@@ -34,6 +35,14 @@ def main():
     log.info("TelegramBot 초기화...")
     notifier = TelegramNotifier()
     bot = TelegramBot(broker=broker, safety=safety, notifier=notifier)
+
+    # TrainingManager에 notifier 연결 (학습 진행률/완료 알림용)
+    try:
+        tm = get_training_manager()
+        tm.attach(notifier=notifier, runner=None)  # Runner는 별도 구동
+        log.info("TrainingManager에 notifier 연결 완료")
+    except Exception as e:
+        log.warning(f"TrainingManager attach 실패: {e}")
 
     notifier.send(
         "🚀 *Kingmaker 봇 가동* (paper 모드, 라이브 테스트)\n"

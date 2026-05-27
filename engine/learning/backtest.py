@@ -66,6 +66,8 @@ def run_backtest(
     warmup: int = 200,
     market_history_df: Optional[pd.DataFrame] = None,
     sector_name: str = "tech",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> BacktestResult:
     """
     전체 기간을 순회하며 신호 발생 시 진입 → 청산 시뮬레이션 → 다음 진입.
@@ -82,19 +84,51 @@ def run_backtest(
         sector_name: market_history_df에서 조회할 섹터명 (tech/finance/energy/...)
     """
     trades: list = []
+    # walk-forward: 날짜 범위 (df는 그대로 — 지표 안정성 유지, 루프 내에서 필터)
+    _start_ts = pd.Timestamp(start_date) if start_date else None
+    _end_ts = pd.Timestamp(end_date) if end_date else None
+
+    # 날짜 시리즈 준비 (날짜별 체크용)
+    if 'date' in df.columns:
+        _date_series = pd.to_datetime(df['date'])
+    elif isinstance(df.index, pd.DatetimeIndex):
+        _date_series = pd.Series(df.index, index=df.index)
+    else:
+        _date_series = None
+
     i = max(warmup, 0)
     n = len(df)
 
     while i < n:
+        # walk-forward 날짜 필터: start 이전이면 skip, end 이후면 break
+        if _date_series is not None:
+            try:
+                cur_d = _date_series.iloc[i] if hasattr(_date_series, 'iloc') else _date_series[i]
+                cur_ts = pd.Timestamp(cur_d)
+                if _start_ts is not None and cur_ts < _start_ts:
+                    i += 1
+                    continue
+                if _end_ts is not None and cur_ts > _end_ts:
+                    break
+            except Exception:
+                pass
+
         sub_df = df.iloc[: i + 1]
 
         # 시점별 시장 컨텍스트 조회 (시계열이 있으면 사용, 없으면 고정값)
+        cur_event_flags = {}
         if market_history_df is not None:
             cur_date = df.index[i]
             mkt = lookup_market_at(market_history_df, cur_date)
             cur_market = float(mkt.get("score", market_score))
             cur_sector = float(mkt.get(f"sector_{sector_name}", sector_score))
             cur_vix = float(mkt.get("vix", vix_level))
+            # v5: 11개 이벤트 플래그 추출
+            for key in ("has_war", "has_rate_hike", "has_rate_cut", "has_geopolitical",
+                        "has_tariff", "has_export_ban", "has_earnings_shock",
+                        "has_oil_surge", "has_banking_crisis", "has_inflation",
+                        "has_fed_statement"):
+                cur_event_flags[key] = int(mkt.get(key, 0) or 0)
         else:
             cur_market = market_score
             cur_sector = sector_score
@@ -106,6 +140,7 @@ def run_backtest(
             sector_score=cur_sector,
             vix_level=cur_vix,
             news_sentiment=0.0,
+            event_flags=cur_event_flags,  # v5
         )
         if not sig.should_buy:
             i += 1
@@ -120,7 +155,10 @@ def run_backtest(
             continue
 
         trade_obj = simulate_exit(
-            rb, df, i, shares, position_limit_krw, commission_rate=commission_rate
+            rb, df, i, shares, position_limit_krw,
+            commission_rate=commission_rate,
+            cur_market_score=cur_market,  # v5: 동적 손절익절용
+            cur_vix_level=cur_vix,
         )
         if trade_obj is None:
             break

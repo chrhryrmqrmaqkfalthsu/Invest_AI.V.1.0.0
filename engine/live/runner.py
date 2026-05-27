@@ -105,6 +105,42 @@ class Runner:
         self.approval_manager = ApprovalManager()
 
     # ==========================================================
+    # Hot-reload: 학습 완료 후 신규 종목 동적 편입
+    # ==========================================================
+    def reload_symbols(self) -> dict:
+        """
+        data/symbols/ 디렉토리 재스캔 → 신규 종목을 self.symbols 에 추가.
+        Rulebook 의 None 캐시도 invalidate 해서 다음 tick 부터 학습 결과 사용 가능.
+
+        Returns:
+            {"added": [신규 ticker 리스트], "total": 현재 추적 종목 수}
+        """
+        from pathlib import Path as _P
+        symbols_dir = _P("data/symbols")
+        if not symbols_dir.exists():
+            return {"added": [], "total": len(self.symbols)}
+
+        current = set(self.symbols)
+        on_disk = {d.name for d in symbols_dir.iterdir() if d.is_dir()}
+        # parameters.json 이 실제로 존재하는 종목만 (빈 디렉토리 제외)
+        valid = {t for t in on_disk if (symbols_dir / t / "parameters.json").exists()}
+        added = sorted(valid - current)
+
+        if added:
+            self.symbols.extend(added)
+            # Rulebook 캐시 invalidate (None 으로 저장된 미학습 항목들)
+            try:
+                cache = getattr(self.rulebook, "_rulebook_cache", None)
+                if isinstance(cache, dict):
+                    for t in added:
+                        cache.pop(t, None)
+                logger.info(f"[HOT-RELOAD] 신규 종목 편입: {added} (총 {len(self.symbols)}개)")
+            except Exception as e:
+                logger.warning(f"[HOT-RELOAD] rulebook 캐시 invalidate 실패: {e}")
+
+        return {"added": added, "total": len(self.symbols)}
+
+    # ==========================================================
     # 콜백 1: 가동 점검
     # ==========================================================
     def attach_bot(self, bot) -> None:

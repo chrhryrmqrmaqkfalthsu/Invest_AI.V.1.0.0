@@ -20,9 +20,9 @@ capital:
 small_amount_safety:
   enabled: true                       # 활성화 시 아래 한도 모두 강제
   max_shares_per_order: 1             # 주문당 최대 수량
-  max_krw_per_order: 10000            # 주문당 최대 금액 (KRW)
-  max_total_invested_krw: 100000      # 전체 누적 투자금 (10종목 × 1만원)
-  max_orders_per_day: 5               # 일일 최대 주문 횟수
+  max_krw_per_order: 30000            # 주문당 최대 금액 (KRW)
+  max_total_invested_krw: 60000      # 전체 누적 투자금 (10종목 × 1만원)
+  max_orders_per_day: 3               # 일일 최대 주문 횟수
   require_first_order_approval: true  # 봇 첫 주문은 텔레그램 승인 필요  
   daily_loss_limit_krw: 50000         # 일일 누적 손실 절대금액 상한 (KRW)
 
@@ -77,9 +77,9 @@ learning:
 
 # 안전 플래그
 safety:
-  kill_switch: false              # /kill 명령으로 true 변경
+  kill_switch: true              # /kill 명령으로 true 변경
   paper_first_days: 0             # 실전 시작 전 페이퍼 강제일수
-  initial_manual_approval: false  # 영구 자동 (사용자 확정)
+  initial_manual_approval: true  # 영구 자동 (사용자 확정)
   max_api_errors_per_hour: 5      # 초과 시 일시 정지
 
 # 알림 (텔레그램)

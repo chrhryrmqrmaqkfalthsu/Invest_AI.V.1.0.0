@@ -29,6 +29,7 @@ from engine.core.indicators import calc_indicators
 from engine.market.context import get_market_context, MarketContext
 from engine.strategies.demo_rulebook import RuleBook, Signal, SignalResult
 from engine.strategies.evaluator import evaluate_signal
+from engine.live.per_ticker_news import get_news_score
 from engine.strategies.rulebook import Rulebook as LearnedRule
 
 log = logging.getLogger("learned_rulebook")
@@ -190,14 +191,30 @@ class LearnedRuleBook(RuleBook):
         else:
             market_score, sector_score, vix_level = 50.0, 50.0, 18.0
 
-        # 4) evaluate_signal 호출 (Rulebook + 시장보정 통합)
+        # 4-pre) 종목별 뉴스 sentiment 조회 (6h 캐시, 비용 최소)
+        news_normalized = 0.0
+        news_samples = []
+        try:
+            meta = getattr(self, 'meta', None)
+            news_data = get_news_score(ticker, meta=meta)
+            news_normalized = news_data.get("normalized_score", 0.0)
+            news_samples = news_data.get("samples", [])[:3]
+            log.info(
+                f"{ticker} 뉴스 sentiment: raw={news_data.get('sentiment_score', 0):+.2f}, "
+                f"normalized={news_normalized:+.3f} "
+                f"(호재 {news_data.get('bullish_count', 0)}/악재 {news_data.get('bearish_count', 0)})"
+            )
+        except Exception as e:
+            log.warning(f"{ticker} 뉴스 점수 조회 실패 (중립 0.0 사용): {e}")
+
+        # 4) evaluate_signal 호출 (Rulebook + 시장보정 + 종목뉴스 통합)
         try:
             res = evaluate_signal(
                 rb=rb, df=df,
                 market_score=market_score,
                 sector_score=sector_score,
                 vix_level=vix_level,
-                news_sentiment=0.0,   # 뉴스 감성 분석은 후속 작업
+                news_sentiment=news_normalized,   # ✅ 종목별 뉴스 sentiment (-1~+1)
             )
         except Exception as e:
             log.error(f"{ticker} evaluate_signal 실패: {e}")
@@ -207,9 +224,14 @@ class LearnedRuleBook(RuleBook):
             )
 
         # 5) RuleBook 인터페이스로 변환
+        news_tag = ""
+        if abs(news_normalized) >= 0.1:
+            kind = "호재" if news_normalized > 0 else "악재"
+            news_tag = f" 뉴스{kind}({news_normalized:+.2f})"
+
         reason_str = (
             f"score={res.score:.2f}/threshold={res.threshold:.2f} "
-            f"raw={res.raw_score:.2f} mkt_adj×{res.market_adjustment:.2f} "
+            f"raw={res.raw_score:.2f} mkt_adj×{res.market_adjustment:.2f}{news_tag} "
             f"reasons=[{', '.join(res.reasons[:4])}]"
         )
 

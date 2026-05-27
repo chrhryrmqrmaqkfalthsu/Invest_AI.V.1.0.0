@@ -60,6 +60,8 @@ def simulate_exit(
     initial_shares: int,
     initial_budget_krw: float,
     commission_rate: float = 0.0005,
+    cur_market_score: float = 50.0,
+    cur_vix_level: float = 18.0,
 ) -> Optional[Trade]:
     """
     entry_idx 시점에 진입했다고 가정하고 청산까지 시뮬레이션.
@@ -71,6 +73,8 @@ def simulate_exit(
         initial_shares: 초기 매수 주수
         initial_budget_krw: 한도 (추가매수도 이 안에서)
         commission_rate: 왕복 수수료 비율
+        cur_market_score: 진입 시점 시장 점수 (v5: 동적 손절익절용)
+        cur_vix_level: 진입 시점 VIX (v5: 동적 손절익절용)
 
     Returns:
         Trade 또는 None (데이터 부족 시)
@@ -88,13 +92,19 @@ def simulate_exit(
     if pd.isna(atr) or atr <= 0:
         atr = entry_price * 0.02
 
+    # 동적 손절익절 ATR (v5 신규): 진입 시점 시장 상태에 따라
+    from engine.strategies.evaluator import get_dynamic_exit_params
+    dyn_sl_atr, dyn_tp_atr, dyn_trail_atr = get_dynamic_exit_params(
+        rb, market_score=cur_market_score, vix_level=cur_vix_level
+    )
+
     # 손절/익절 가격 (방향 따라 부호 반전)
     if not is_short:
-        stop_loss = entry_price - atr * rb.stop_loss_atr
-        take_profit = entry_price + atr * rb.take_profit_atr
+        stop_loss = entry_price - atr * dyn_sl_atr
+        take_profit = entry_price + atr * dyn_tp_atr
     else:
-        stop_loss = entry_price + atr * rb.stop_loss_atr        # 인버스: 위로 손절
-        take_profit = entry_price - atr * rb.take_profit_atr     # 인버스: 아래로 익절
+        stop_loss = entry_price + atr * dyn_sl_atr       # 인버스: 위로 손절
+        take_profit = entry_price - atr * dyn_tp_atr     # 인버스: 아래로 익절
 
     # 트레일링용 최고점 (long) / 최저점 (short)
     extreme = entry_price
@@ -117,11 +127,11 @@ def simulate_exit(
         if not is_short:
             current_pnl_pct = (close - avg_cost) / avg_cost * 100
             extreme = max(extreme, high)
-            trailing_stop = extreme - atr * rb.trailing_atr
+            trailing_stop = extreme - atr * dyn_trail_atr
         else:
             current_pnl_pct = (avg_cost - close) / avg_cost * 100
             extreme = min(extreme, low)
-            trailing_stop = extreme + atr * rb.trailing_atr
+            trailing_stop = extreme + atr * dyn_trail_atr
 
         # ----- 추가매수 체크 -----
         if (
@@ -143,11 +153,11 @@ def simulate_exit(
                     used_krw += add_price * add_shares
                     # 추가매수 후 손절가 재계산 (avg_cost 기준)
                     if not is_short:
-                        stop_loss = avg_cost - atr * rb.stop_loss_atr
-                        take_profit = avg_cost + atr * rb.take_profit_atr
+                        stop_loss = avg_cost - atr * dyn_sl_atr
+                        take_profit = avg_cost + atr * dyn_tp_atr
                     else:
-                        stop_loss = avg_cost + atr * rb.stop_loss_atr
-                        take_profit = avg_cost - atr * rb.take_profit_atr
+                        stop_loss = avg_cost + atr * dyn_sl_atr
+                        take_profit = avg_cost - atr * dyn_tp_atr
 
         # ----- 청산 조건 체크 (우선순위: 손절 > 익절 > 트레일링) -----
         exit_price: Optional[float] = None

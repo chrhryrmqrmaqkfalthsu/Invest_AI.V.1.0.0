@@ -34,6 +34,7 @@ def evaluate_signal(
     sector_score: float = 50.0,
     vix_level: float = 18.0,
     news_sentiment: float = 0.0,  # -1 ~ +1
+    event_flags: dict = None,  # v5: {'has_war': 1, 'has_rate_hike': 0, ...}
 ) -> SignalResult:
     """
     가장 최근 봉(df의 마지막 행)에 대해 신호 평가.
@@ -45,6 +46,7 @@ def evaluate_signal(
         sector_score: 0~100 (섹터 강도)
         vix_level: 변동성 지수
         news_sentiment: -1.0 ~ +1.0
+        event_flags: 11개 이벤트 카테고리 활성 여부 (v5)
 
     Returns:
         SignalResult
@@ -125,15 +127,48 @@ def evaluate_signal(
     if s_vol > 0:
         reasons.append(f"거래량×{row.get('Volume_ratio', 0):.1f}(+{s_vol:.2f})")
 
-    # ---------- 6) 뉴스 감성 ----------
+    # ---------- 6) 뉴스 감성 (호재/악재 모두 반영, ×weight) ----------
+    # news_sentiment: -1.0 ~ +1.0 (per_ticker_news에서 /5.0 정규화)
+    # short ETF는 부호 반전 (시장 호재 → 인버스에는 악재)
     eff_sent = -news_sentiment if is_short else news_sentiment
-    s_news = rb.weight_news_sentiment * max(0.0, eff_sent)
+    s_news = rb.weight_news_sentiment * eff_sent  # 호재(+)면 신호 강화, 악재(-)면 신호 약화
     components["news"] = s_news
-    if s_news > 0:
-        reasons.append(f"뉴스({eff_sent:+.2f})(+{s_news:.2f})")
+    if abs(s_news) > 0.01:
+        tag = "호재" if s_news > 0 else "악재"
+        reasons.append(f"뉴스{tag}({eff_sent:+.2f})({s_news:+.2f})")
 
     # ---------- 합산 ----------
     raw_score = sum(components.values())
+
+    # ---------- 이벤트 반응 (v5 신규) ----------
+    # 11개 이벤트 카테고리별 종목 반응 계수 적용
+    event_adj = 0.0
+    if event_flags:
+        event_adj += event_flags.get("has_war", 0) * rb.event_response_war
+        event_adj += event_flags.get("has_rate_hike", 0) * rb.event_response_rate_hike
+        event_adj += event_flags.get("has_rate_cut", 0) * rb.event_response_rate_cut
+        event_adj += event_flags.get("has_geopolitical", 0) * rb.event_response_geopolitical
+        event_adj += event_flags.get("has_tariff", 0) * rb.event_response_tariff
+        event_adj += event_flags.get("has_export_ban", 0) * rb.event_response_export_ban
+        event_adj += event_flags.get("has_earnings_shock", 0) * rb.event_response_earnings_shock
+        event_adj += event_flags.get("has_oil_surge", 0) * rb.event_response_oil_surge
+        event_adj += event_flags.get("has_banking_crisis", 0) * rb.event_response_banking_crisis
+        event_adj += event_flags.get("has_inflation", 0) * rb.event_response_inflation
+        event_adj += event_flags.get("has_fed_statement", 0) * rb.event_response_fed_statement
+        # 종목별 이벤트 강도 배수
+        event_adj *= rb.event_strength_multiplier
+
+    components["events"] = event_adj
+    raw_score += event_adj
+    if abs(event_adj) > 0.1:
+        reasons.append(f"이벤트반응({event_adj:+.2f})")
+
+    # ---------- 폭락장 매수 보너스 (v5 신규) ----------
+    # 금/안전자산 종목이 폭락장에서 매수하도록 학습 가능
+    if rb.crash_buy_enabled and market_score <= rb.crash_threshold_score:
+        crash_bonus = 2.0
+        raw_score += crash_bonus
+        reasons.append(f"폭락매수+{crash_bonus:.1f}(score={market_score:.0f})")
 
     # ---------- 시장 연관성 보정 ----------
     # market_score 0~100 → -1~+1로 정규화 (50 기준)
@@ -146,8 +181,9 @@ def evaluate_signal(
         + sector_norm * rb.sector_strength_weight
         + vix_norm * rb.vix_sensitivity
     )
-    # 보정 강도 제한 ±30%
-    market_adjustment = 1.0 + max(min(correlation_adj * 0.3, 0.3), -0.3)
+    # 보정 한도 학습 가능 (v5: 기존 고정 0.3 → rb.market_adjustment_strength)
+    strength = max(0.0, min(1.0, rb.market_adjustment_strength))
+    market_adjustment = 1.0 + max(min(correlation_adj * strength, strength), -strength)
 
     final_score = raw_score * market_adjustment
 
@@ -165,6 +201,40 @@ def evaluate_signal(
         market_adjustment=market_adjustment,
         components=components,
     )
+
+
+# ---------- 동적 손절익절 (v5 신규) ----------
+def get_dynamic_exit_params(rb, market_score: float = 50.0, vix_level: float = 18.0) -> tuple:
+    """
+    시장 상태별 동적 손절익절 ATR 반환.
+
+    Args:
+        rb: Rulebook
+        market_score: 0~100
+        vix_level: 변동성 지수
+
+    Returns:
+        (stop_loss_atr, take_profit_atr, trailing_atr)
+    """
+    # 약세장(score<40)이면 손절 강화
+    if market_score < 40:
+        sl = rb.stop_loss_atr_bear
+    else:
+        sl = rb.stop_loss_atr
+
+    # 강세장(score>=70)이면 익절 멀리
+    if market_score >= 70:
+        tp = rb.take_profit_atr_bull
+    else:
+        tp = rb.take_profit_atr
+
+    # 고변동성(vix>25)이면 트레일링 멀리
+    if vix_level > 25:
+        trail = rb.trailing_atr_volatile
+    else:
+        trail = rb.trailing_atr
+
+    return float(sl), float(tp), float(trail)
 
 
 # ---------- 포지션 크기 계산 ----------

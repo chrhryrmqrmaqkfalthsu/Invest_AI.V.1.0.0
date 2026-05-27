@@ -39,3 +39,8 @@ data/logs/
 data/backups/
 .env.backup
 .env*
+
+# 수동 백업 파일
+*.before_*
+*.bak*
+*_old.py

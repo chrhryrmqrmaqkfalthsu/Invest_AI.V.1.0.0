@@ -13,7 +13,7 @@ class Rulebook:
     ticker: str = ""
     asset_type: str = ""              # 'korean_etf' 등
     direction: str = "long"           # 'long' | 'short'
-    version: str = "v4"
+    version: str = "v5"
     generated_at: str = ""
 
     # ===== 신호 가중치 (기본 16개) =====
@@ -22,7 +22,7 @@ class Rulebook:
     weight_rsi_zone: float = 1.0       # RSI 적정 구간
     weight_bb_near_lower: float = 1.0  # 볼린저 하단 근접
     weight_volume_surge: float = 1.0   # 거래량 급증
-    weight_news_sentiment: float = 0.5 # 뉴스 감성
+    weight_news_sentiment: float = 2.0 # 뉴스 감성 (개별주 강화, ×2.0)
 
     # ===== 지표 임계값 =====
     rsi_low: float = 30.0
@@ -59,6 +59,31 @@ class Rulebook:
     sector_name: str = "tech"          # 어느 섹터에 연동되는지
     vix_sensitivity: float = 0.0       # +1: 변동성 유리, -1: 변동성 불리
 
+    # ===== 이벤트 반응 (v5 신규: 11개 카테고리별 종목 반응) =====
+    # -2.0 = 강한 악재, 0 = 무관, +2.0 = 강한 호재
+    event_response_war: float = 0.0
+    event_response_rate_hike: float = 0.0
+    event_response_rate_cut: float = 0.0
+    event_response_geopolitical: float = 0.0
+    event_response_tariff: float = 0.0
+    event_response_export_ban: float = 0.0
+    event_response_earnings_shock: float = 0.0
+    event_response_oil_surge: float = 0.0
+    event_response_banking_crisis: float = 0.0
+    event_response_inflation: float = 0.0
+    event_response_fed_statement: float = 0.0
+
+    # ===== 이벤트 강도 & 시장 보정 한도 (v5 신규) =====
+    event_strength_multiplier: float = 1.0   # 이벤트 영향 전체 강도
+    market_adjustment_strength: float = 0.3  # 시장보정 한도 (기존 고정 0.3 → 학습 가능)
+
+    # ===== 동적 손절익절 (v5 신규) =====
+    stop_loss_atr_bear: float = 2.0          # 약세장(score<40)에서 손절 ATR
+    take_profit_atr_bull: float = 3.5        # 강세장(score>=70)에서 익절 ATR
+    trailing_atr_volatile: float = 2.0       # 고변동성(vix>25) 트레일링
+    crash_buy_enabled: bool = False          # 폭락장 매수 활성화 (금/안전자산용)
+    crash_threshold_score: float = 25.0      # 폭락 판단 점수 (이하면 폭락)
+
     # ===== 개별주 전용 (asset_type 'korean_stock' / 'us_stock'만 활성) =====
     earnings_blackout_days: int = 0    # 어닝 전후 N일 거래 회피
     disclosure_weight: float = 0.0     # 공시 영향력
@@ -91,7 +116,7 @@ PARAM_RANGES = {
     "weight_rsi_zone":        (0.0, 2.0),
     "weight_bb_near_lower":   (0.0, 2.0),
     "weight_volume_surge":    (0.0, 2.0),
-    "weight_news_sentiment":  (0.0, 1.5),
+    "weight_news_sentiment":  (1.0, 3.0),  # 개별주 뉴스 강화
 
     # 임계값
     "rsi_low":                (20.0, 40.0),
@@ -124,6 +149,29 @@ PARAM_RANGES = {
     "sector_strength_weight": (-1.0, 1.0),
     "vix_sensitivity":        (-1.0, 1.0),
 
+    # 이벤트 반응 (v5 신규, -2.0 ~ +2.0)
+    "event_response_war":               (-2.0, 2.0),
+    "event_response_rate_hike":         (-2.0, 2.0),
+    "event_response_rate_cut":          (-2.0, 2.0),
+    "event_response_geopolitical":      (-2.0, 2.0),
+    "event_response_tariff":            (-2.0, 2.0),
+    "event_response_export_ban":        (-2.0, 2.0),
+    "event_response_earnings_shock":    (-2.0, 2.0),
+    "event_response_oil_surge":         (-2.0, 2.0),
+    "event_response_banking_crisis":    (-2.0, 2.0),
+    "event_response_inflation":         (-2.0, 2.0),
+    "event_response_fed_statement":     (-2.0, 2.0),
+
+    # 이벤트 강도 & 시장 보정 한도 (v5 신규)
+    "event_strength_multiplier":  (0.5, 3.0),
+    "market_adjustment_strength": (0.0, 1.0),
+
+    # 동적 손절익절 (v5 신규)
+    "stop_loss_atr_bear":     (1.0, 5.0),
+    "take_profit_atr_bull":   (1.5, 6.0),
+    "trailing_atr_volatile":  (1.0, 4.0),
+    "crash_threshold_score":  (10.0, 40.0),
+
     # 개별주 전용
     "earnings_blackout_days": (0, 3),
     "disclosure_weight":      (0.0, 2.0),
@@ -134,6 +182,7 @@ CATEGORICAL_PARAMS = {
     "exit_strategy":             ["fixed", "trailing", "hybrid"],
     "position_sizing_strategy":  ["fixed", "signal_scaled", "kelly_lite"],
     "add_buy_enabled":           [False, True],
+    "crash_buy_enabled":         [False, True],  # v5 신규
 }
 
 

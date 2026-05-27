@@ -27,6 +27,7 @@ from ..safety import state as state_mod
 # AI 비서 (optional - 로드 실패해도 봇은 동작)
 try:
     from engine.ai.assistant import AIAssistant
+    from engine.ai.training import get_training_manager
 except Exception as _e:
     AIAssistant = None
 
@@ -78,11 +79,19 @@ class TelegramBot:
         self.ai = None
         if AIAssistant is not None:
             try:
+                # TrainingManager 가져오기 (싱글톤)
+                try:
+                    self.training_manager = get_training_manager()
+                except Exception as e:
+                    log.warning(f"TrainingManager 초기화 실패: {e}")
+                    self.training_manager = None
+
                 self.ai = AIAssistant(
                     broker=self.broker,
                     position_manager=self.position_manager,
                     approval_manager=self.approval_manager,
                     rulebook=self.rulebook,
+                    training_manager=self.training_manager,
                 )
                 log.info("AIAssistant 연결 완료")
             except Exception as e:
@@ -98,15 +107,18 @@ class TelegramBot:
 
         # 명령 라우팅 테이블
         self.commands: Dict[str, Callable[[dict], str]] = {
-            "/start":     self._cmd_start,
-            "/help":      self._cmd_help,
-            "/status":    self._cmd_status,
-            "/positions": self._cmd_positions,
-            "/pause":     self._cmd_pause,
-            "/resume":    self._cmd_resume,
-            "/approve":   self._cmd_approve,
-            "/reject":    self._cmd_reject,
-            "/kill":      self._cmd_kill,
+            "/start":         self._cmd_start,
+            "/help":          self._cmd_help,
+            "/status":        self._cmd_status,
+            "/positions":     self._cmd_positions,
+            "/pause":         self._cmd_pause,
+            "/resume":        self._cmd_resume,
+            "/approve":       self._cmd_approve,
+            "/reject":        self._cmd_reject,
+            "/kill":          self._cmd_kill,
+            "/learn":         self._cmd_learn,
+            "/training":      self._cmd_training_status,
+            "/cancel_train":  self._cmd_cancel_training,
         }
 
     # ---------- polling ----------
@@ -228,6 +240,11 @@ class TelegramBot:
             "/pause — 봇 일시정지 (KILL_SWITCH)\n"
             "/resume — 재개\n"
             "/kill — 긴급 정지\n\n"
+            "[학습]\n"
+            "/learn <종목> — 학습 시작 (예: /learn 069500 또는 /learn 코덱스200)\n"
+            "/training — 진행 중인 학습 상태\n"
+            "/cancel_train — 학습 취소\n"
+            "💡 자유 텍스트도 가능: '코덱스200 학습해'\n\n"
             "[승인]\n"
             "/approve — 오늘 첫 매수 승인\n"
             "/approve_20k — 추가매수 2만원\n"
@@ -488,6 +505,74 @@ class TelegramBot:
             "/resume 으로 해제"
         )
 
+    # ---------- 학습 명령 (v6 신규) ----------
+    def _cmd_learn(self, msg: dict) -> str:
+        if not self.training_manager:
+            return "❌ TrainingManager 미연결"
+        text = (msg.get("text") or "").strip()
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            return (
+                "사용법: `/learn <종목>`\n"
+                "예: `/learn 069500`, `/learn 코덱스200`"
+            )
+        query = parts[1].strip()
+
+        from engine.ai.ticker_resolver import resolve_ticker, get_ticker_name
+        if query.isdigit() and len(query) == 6:
+            ticker = query
+            name = get_ticker_name(ticker) or ticker
+        else:
+            r = resolve_ticker(query, limit=5)
+            candidates = r.get("candidates", [])
+            if not candidates:
+                return f"❌ '{query}'에 해당하는 종목을 찾지 못했습니다"
+            if len(candidates) > 1 and not r.get("exact_match"):
+                lines = [f"❓ '{query}' 후보가 여러개입니다:"]
+                for c in candidates[:5]:
+                    lines.append(f"  • `{c['ticker']}` {c['name']}")
+                lines.append("\n정확한 티커로 다시 지정해주세요.")
+                return "\n".join(lines)
+            top = candidates[0]
+            ticker = top["ticker"]
+            name = top["name"]
+
+        result = self.training_manager.start(ticker=ticker, ticker_name=name)
+        if result.get("started"):
+            return f"📊 *{name}* (`{ticker}`) 학습 시작\n진행률은 별도 메시지로 갱신됩니다."
+        cur = result.get("current", {})
+        return (
+            f"⚠ 학습 시작 거부: {result.get('reason','')}\n"
+            f"진행 중: `{cur.get('ticker','?')}` "
+            f"(Gen {cur.get('current_gen',0)}/{cur.get('total_gen','?')})"
+        )
+
+    def _cmd_training_status(self, msg: dict) -> str:
+        if not self.training_manager:
+            return "❌ TrainingManager 미연결"
+        s = self.training_manager.status()
+        if not s.get("running"):
+            return "💤 진행 중인 학습이 없습니다"
+        return (
+            f"📊 *학습 진행중*\n"
+            f"종목: {s['ticker_name']} (`{s['ticker']}`)\n"
+            f"세대: {s['current_gen']}/{s['total_gen']} ({s['progress_pct']}%)\n"
+            f"경과: {s['elapsed_sec']}초\n"
+            f"Best fitness: {s['best_fitness']}\n"
+            f"Avg fitness: {s['avg_fitness']}"
+        )
+
+    def _cmd_cancel_training(self, msg: dict) -> str:
+        if not self.training_manager:
+            return "❌ TrainingManager 미연결"
+        r = self.training_manager.cancel()
+        if r.get("cancelled"):
+            return (
+                f"🛑 학습 취소 요청: `{r['ticker']}` "
+                f"(Gen {r['stopped_at_gen']}에서 중단)"
+            )
+        return f"⚠ {r.get('reason', '취소 실패')}"
+
 
 # ==================================================
 # 단독 실행: 명령 라우팅 단위 테스트 (실제 polling X)
@@ -520,6 +605,7 @@ if __name__ == "__main__":
     print(f"allowed_chat_id={bot.allowed_id}, commands={len(bot.commands)}개\n")
 
     # 화이트리스트 chat_id로 모의 메시지 만들기
+
     def fake_msg(text: str) -> dict:
         return {"chat": {"id": int(bot.allowed_id)}, "text": text}
 

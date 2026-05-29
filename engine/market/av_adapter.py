@@ -53,17 +53,56 @@ def parse_av_date(time_published):
 
 def load_all_cached_articles():
     """
-    모든 월별 캐시 파일을 읽어 콜랩 형식 article 리스트 반환
+    모든 캐시 파일을 읽어 콜랩 형식 article 리스트 반환
+    - 우선순위: daily/ 폴더 (일별, 잘림 없음)
+    - fallback: 월별 av_market_YYYYMM.json (limit 1000에 잘림 가능)
+    - 같은 날짜에 둘 다 있으면 일별 사용 (월별 무시)
     """
-    cache_files = sorted(CACHE_DIR.glob("av_market_*.json"))
-    all_articles = []
+    daily_dir = CACHE_DIR / "daily"
+    daily_files = sorted(daily_dir.glob("av_market_*.json")) if daily_dir.exists() else []
     
-    for cf in cache_files:
-        data = json.loads(cf.read_text(encoding='utf-8'))
+    all_articles = []
+    covered_dates = set()
+    
+    # 1) 일별 파일 (우선)
+    for cf in daily_files:
+        try:
+            data = json.loads(cf.read_text(encoding='utf-8'))
+        except Exception as e:
+            print(f"  ⚠️ {cf.name} 로드 실패: {e}")
+            continue
         feed = data.get("feed", [])
+        # 파일명에서 날짜 추출: av_market_20200601.json → 2020-06-01
+        try:
+            stem = cf.stem.replace("av_market_", "")
+            file_date = datetime.strptime(stem, "%Y%m%d").date()
+            covered_dates.add(file_date)
+        except:
+            file_date = None
         for item in feed:
             article = av_item_to_article(item)
             all_articles.append(article)
+    
+    # 2) 월별 파일 (일별로 커버 안 된 날짜만)
+    monthly_files = sorted(CACHE_DIR.glob("av_market_*.json"))
+    for cf in monthly_files:
+        # 월별 파일명은 av_market_YYYYMM (6자리), 일별은 YYYYMMDD (8자리)
+        stem = cf.stem.replace("av_market_", "")
+        if len(stem) != 6:  # 일별 파일이 아닌, 월별만 처리
+            continue
+        try:
+            data = json.loads(cf.read_text(encoding='utf-8'))
+        except:
+            continue
+        feed = data.get("feed", [])
+        added = 0
+        for item in feed:
+            d = parse_av_date(item.get("time_published", ""))
+            if d and d in covered_dates:
+                continue  # 일별로 이미 커버됨, skip
+            article = av_item_to_article(item)
+            all_articles.append(article)
+            added += 1
     
     return all_articles
 
@@ -155,3 +194,58 @@ if __name__ == "__main__":
     
     print("\n" + "=" * 60)
     print("✅ 어댑터 검증 완료")
+
+
+def list_available_dates():
+    """
+    캐시된 모든 날짜 리스트 반환 (정렬됨)
+    - daily/ 파일명에서 직접 추출 (메모리 효율)
+    - 월별 파일은 무시 (일별이 우선)
+    """
+    daily_dir = CACHE_DIR / "daily"
+    if not daily_dir.exists():
+        return []
+    
+    dates = set()
+    for cf in daily_dir.glob("av_market_*.json"):
+        stem = cf.stem.replace("av_market_", "")
+        if len(stem) == 8:  # YYYYMMDD
+            try:
+                d = datetime.strptime(stem, "%Y%m%d").date()
+                dates.add(d)
+            except:
+                pass
+    return sorted(dates)
+
+
+def load_articles_for_date(d):
+    """
+    특정 날짜 하나의 article만 로드 (스트리밍)
+    - 일별 파일 우선
+    - 없으면 월별 파일에서 해당 날짜만 필터링
+    """
+    daily_path = CACHE_DIR / "daily" / f"av_market_{d.year:04d}{d.month:02d}{d.day:02d}.json"
+    if daily_path.exists():
+        try:
+            data = json.loads(daily_path.read_text(encoding='utf-8'))
+            return [av_item_to_article(item) for item in data.get("feed", [])]
+        except Exception as e:
+            print(f"  ⚠️ {daily_path.name} 로드 실패: {e}")
+            return []
+    
+    # fallback: 월별 파일에서 해당 날짜 추출
+    monthly_path = CACHE_DIR / f"av_market_{d.year:04d}{d.month:02d}.json"
+    if monthly_path.exists():
+        try:
+            data = json.loads(monthly_path.read_text(encoding='utf-8'))
+            articles = []
+            for item in data.get("feed", []):
+                art_date = parse_av_date(item.get("time_published", ""))
+                if art_date == d:
+                    articles.append(av_item_to_article(item))
+            return articles
+        except:
+            return []
+    
+    return []
+

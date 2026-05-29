@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections import deque
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -62,6 +63,8 @@ class TrainingManager:
         self.runner = runner
         self._current: Optional[TrainingJob] = None
         self._lock = threading.Lock()
+        # 학습 대기열 (FIFO): [{"ticker": ..., "ticker_name": ..., "years": ..., "position_limit_krw": ...}, ...]
+        self._queue: deque = deque()
 
     def attach(self, notifier=None, runner=None) -> None:
         """런타임에 의존성 주입 (TelegramBot 초기화 후)."""
@@ -77,7 +80,11 @@ class TrainingManager:
         with self._lock:
             j = self._current
             if j is None or not j.is_alive():
-                return {"running": False}
+                return {
+                    "running": False,
+                    "queue_size": len(self._queue),
+                    "queue": [{"ticker": q["ticker"], "ticker_name": q["ticker_name"]} for q in self._queue],
+                }
             return {
                 "running": True,
                 "ticker": j.ticker,
@@ -89,6 +96,8 @@ class TrainingManager:
                 "progress_pct": round(j.current_gen / max(j.total_gen, 1) * 100, 1),
                 "best_fitness": round(j.best_fitness, 2),
                 "avg_fitness": round(j.avg_fitness, 2),
+                "queue_size": len(self._queue),
+                "queue": [{"ticker": q["ticker"], "ticker_name": q["ticker_name"]} for q in self._queue],
             }
 
     # --------------------------------------------------------
@@ -108,6 +117,45 @@ class TrainingManager:
                 "stopped_at_gen": j.current_gen,
             }
 
+    def clear_queue(self) -> dict:
+        """대기열 전체 비우기 (진행 중 학습은 그대로)."""
+        with self._lock:
+            cleared = list(self._queue)
+            self._queue.clear()
+        return {
+            "cleared_count": len(cleared),
+            "items": [{"ticker": q["ticker"], "ticker_name": q["ticker_name"]} for q in cleared],
+        }
+
+    def enqueue_many(self, items: list, years: int = 5, position_limit_krw: float = 120000.0) -> dict:
+        """
+        여러 종목을 한 번에 큐 등록.
+        items: [{"ticker": "069500", "ticker_name": "KODEX 200"}, ...]
+        첫 항목은 진행중 없으면 즉시 시작, 나머지는 큐로.
+        """
+        if not items:
+            return {"started": 0, "queued": 0, "items": []}
+
+        results = []
+        for idx, it in enumerate(items):
+            r = self.start(
+                ticker=it["ticker"],
+                ticker_name=it["ticker_name"],
+                years=years,
+                position_limit_krw=position_limit_krw,
+                queue_if_busy=True,
+            )
+            results.append({
+                "ticker": it["ticker"],
+                "ticker_name": it["ticker_name"],
+                "started": bool(r.get("started")),
+                "queued": bool(r.get("queued")),
+                "queue_position": r.get("queue_position"),
+            })
+        started_n = sum(1 for r in results if r["started"])
+        queued_n = sum(1 for r in results if r["queued"])
+        return {"started": started_n, "queued": queued_n, "items": results}
+
     # --------------------------------------------------------
     # 학습 시작
     # --------------------------------------------------------
@@ -119,6 +167,7 @@ class TrainingManager:
         years: int = 5,
         position_limit_krw: float = 120000.0,
         force: bool = False,
+        queue_if_busy: bool = False,
     ) -> dict:
         """
         학습 시작. 이미 진행 중이면 force=True 가 아닌 한 거부.
@@ -128,6 +177,30 @@ class TrainingManager:
         with self._lock:
             # 진행 중 잡 확인
             if self._current is not None and self._current.is_alive():
+                if queue_if_busy:
+                    # 대기열에 추가
+                    self._queue.append({
+                        "ticker": ticker,
+                        "ticker_name": ticker_name,
+                        "years": years,
+                        "position_limit_krw": position_limit_krw,
+                        "chat_id": chat_id,
+                    })
+                    queue_pos = len(self._queue)
+                    log.info(f"[QUEUE] {ticker} ({ticker_name}) 대기열 추가 (위치 #{queue_pos})")
+                    return {
+                        "started": False,
+                        "queued": True,
+                        "ticker": ticker,
+                        "ticker_name": ticker_name,
+                        "queue_position": queue_pos,
+                        "current": {
+                            "ticker": self._current.ticker,
+                            "ticker_name": self._current.ticker_name,
+                            "current_gen": self._current.current_gen,
+                            "total_gen": self._current.total_gen,
+                        },
+                    }
                 if not force:
                     return {
                         "started": False,
@@ -282,10 +355,40 @@ class TrainingManager:
             self._notify_error(job, e)
 
         finally:
-            # 잡 슬롯 해제 (다음 학습 가능하게)
+            # 잡 슬롯 해제 + 다음 큐 항목 자동 시작
+            next_item = None
             with self._lock:
                 if self._current is job:
                     pass  # _current 는 유지(상태 조회용), 다음 start() 가 덮어씀
+                if self._queue:
+                    next_item = self._queue.popleft()
+            if next_item is not None:
+                log.info(f"[QUEUE] 다음 학습 자동 시작: {next_item['ticker']} ({next_item['ticker_name']})")
+                # 워커가 아직 finally 안에 있으므로 self._current.is_alive()가 True
+                # → force=True로 자기 자신 덮어쓰기 (어차피 자기 워커가 끝나는 중)
+                try:
+                    r = self.start(
+                        ticker=next_item["ticker"],
+                        ticker_name=next_item["ticker_name"],
+                        chat_id=next_item.get("chat_id"),
+                        years=next_item.get("years", 5),
+                        position_limit_krw=next_item.get("position_limit_krw", 120000.0),
+                        force=True,
+                    )
+                    if not r.get("started"):
+                        log.error(f"[QUEUE] 자동 시작 실패: {r}")
+                        if self.notifier is not None:
+                            try:
+                                self.notifier.send_error(f"⚠ 큐 자동 시작 실패: {next_item['ticker']}\n{r.get('reason','')}")
+                            except Exception:
+                                pass
+                except Exception as e:
+                    log.exception(f"큐 자동 시작 실패: {e}")
+                    if self.notifier is not None:
+                        try:
+                            self.notifier.send_error(f"큐 자동 시작 실패: {next_item['ticker']} - {e}")
+                        except Exception:
+                            pass
 
     # --------------------------------------------------------
     # 알림 헬퍼

@@ -102,9 +102,14 @@ def learn(
     base_rb = default_rulebook(ticker, asset_type=meta.asset_type, direction=meta.direction)
     base_rb.sector_name = sector_name
 
-    # 5) GA 평가 함수 (TRAIN 구간만 사용 → 과적합 방지)
+    # 5) GA 평가 함수 (walk-forward: train + test 가중 결합)
+    # - train만 보면 과적합 (test에서 안 통하는 cherry-pick 룰북 양산)
+    # - test 가중치를 높여서 GA가 "OOS에서도 통하는 룰"을 찾도록 유도
+    TRAIN_WEIGHT = 0.4
+    TEST_WEIGHT = 0.6
+
     def evaluate_fn(rb: Rulebook) -> float:
-        result = run_backtest(
+        train_r = run_backtest(
             rb, df,
             position_limit_krw=position_limit_krw,
             market_history_df=market_hist,
@@ -112,7 +117,18 @@ def learn(
             start_date=train_start,
             end_date=train_end,
         )
-        return result.fitness
+        # test 구간이 없는 경우(데이터 짧음) fallback
+        if not test_start or not test_end:
+            return train_r.fitness
+        test_r = run_backtest(
+            rb, df,
+            position_limit_krw=position_limit_krw,
+            market_history_df=market_hist,
+            sector_name=sector_name,
+            start_date=test_start,
+            end_date=test_end,
+        )
+        return train_r.fitness * TRAIN_WEIGHT + test_r.fitness * TEST_WEIGHT
 
     # 6) GA 실행
     ga_cfg = ga_config or GAConfig()

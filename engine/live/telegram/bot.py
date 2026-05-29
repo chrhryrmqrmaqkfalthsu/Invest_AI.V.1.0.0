@@ -119,6 +119,9 @@ class TelegramBot:
             "/learn":         self._cmd_learn,
             "/training":      self._cmd_training_status,
             "/cancel_train":  self._cmd_cancel_training,
+            "/learn_queue":   self._cmd_learn_queue,
+            "/queue":         self._cmd_queue_status,
+            "/clear_queue":   self._cmd_clear_queue,
         }
 
     # ---------- polling ----------
@@ -242,9 +245,12 @@ class TelegramBot:
             "/kill — 긴급 정지\n\n"
             "[학습]\n"
             "/learn <종목> — 학습 시작 (예: /learn 069500 또는 /learn 코덱스200)\n"
+            "/learn_queue <종목1> <종목2> ... — 여러 종목 큐 등록\n"
             "/training — 진행 중인 학습 상태\n"
-            "/cancel_train — 학습 취소\n"
-            "💡 자유 텍스트도 가능: '코덱스200 학습해'\n\n"
+            "/queue — 대기열 확인\n"
+            "/cancel_train — 현재 학습 취소\n"
+            "/clear_queue — 대기열 비우기\n"
+            "💡 자유 텍스트도 가능: '코덱스200, 나스닥100 학습해'\n\n"
             "[승인]\n"
             "/approve — 오늘 첫 매수 승인\n"
             "/approve_20k — 추가매수 2만원\n"
@@ -524,17 +530,19 @@ class TelegramBot:
             name = get_ticker_name(ticker) or ticker
         else:
             r = resolve_ticker(query, limit=5)
-            candidates = r.get("candidates", [])
+            exact = r.get("exact", [])
+            partial = r.get("partial", [])
+            candidates = exact + partial
             if not candidates:
                 return f"❌ '{query}'에 해당하는 종목을 찾지 못했습니다"
-            if len(candidates) > 1 and not r.get("exact_match"):
+            if len(exact) == 0 and len(partial) > 1:
                 lines = [f"❓ '{query}' 후보가 여러개입니다:"]
-                for c in candidates[:5]:
-                    lines.append(f"  • `{c['ticker']}` {c['name']}")
+                for c in partial[:5]:
+                    lines.append(f"  • `{c['code']}` {c['name']}")
                 lines.append("\n정확한 티커로 다시 지정해주세요.")
                 return "\n".join(lines)
             top = candidates[0]
-            ticker = top["ticker"]
+            ticker = top["code"]
             name = top["name"]
 
         result = self.training_manager.start(ticker=ticker, ticker_name=name)
@@ -572,6 +580,90 @@ class TelegramBot:
                 f"(Gen {r['stopped_at_gen']}에서 중단)"
             )
         return f"⚠ {r.get('reason', '취소 실패')}"
+
+    # ---------- 큐 명령 ----------
+    def _resolve_query(self, query: str):
+        from engine.ai.ticker_resolver import resolve_ticker, get_ticker_name
+        q = query.strip()
+        if q.isdigit() and len(q) == 6:
+            return q, get_ticker_name(q) or q
+        r = resolve_ticker(q, limit=5)
+        exact = r.get("exact", [])
+        partial = r.get("partial", [])
+        candidates = exact + partial
+        if not candidates:
+            return None, f"❌ '{q}' 종목 못 찾음"
+        if len(exact) == 0 and len(partial) > 1:
+            return None, f"❌ '{q}' 후보 여러개 ({len(partial)}개)"
+        return candidates[0]["code"], candidates[0]["name"]
+
+    def _cmd_learn_queue(self, msg: dict) -> str:
+        if not self.training_manager:
+            return "❌ TrainingManager 미연결"
+        text = (msg.get("text") or "").strip()
+        parts = text.split()[1:]
+        if not parts:
+            return (
+                "사용법: `/learn_queue <종목1> <종목2> ...`\n"
+                "예: `/learn_queue 069500 367380 379800`"
+            )
+        items = []
+        errors = []
+        for q in parts:
+            ticker, name = self._resolve_query(q)
+            if ticker is None:
+                errors.append(name)
+            else:
+                items.append({"ticker": ticker, "ticker_name": name})
+        if not items:
+            return "❌ 등록할 종목 없음:\n" + "\n".join(errors)
+        result = self.training_manager.enqueue_many(items)
+        lines = [f"📋 *큐 등록 결과*"]
+        lines.append(f"즉시 시작: {result['started']}개")
+        lines.append(f"대기열 추가: {result['queued']}개\n")
+        for r in result["items"]:
+            if r["started"]:
+                lines.append(f"▶️ `{r['ticker']}` {r['ticker_name']} (시작)")
+            elif r["queued"]:
+                lines.append(f"⏳ `{r['ticker']}` {r['ticker_name']} (#{r['queue_position']})")
+        if errors:
+            lines.append("\n*제외된 항목:*")
+            for e in errors:
+                lines.append(f"  • {e}")
+        return "\n".join(lines)
+
+    def _cmd_queue_status(self, msg: dict) -> str:
+        if not self.training_manager:
+            return "❌ TrainingManager 미연결"
+        s = self.training_manager.status()
+        lines = []
+        if s.get("running"):
+            lines.append(
+                f"📊 *진행중*: {s['ticker_name']} (`{s['ticker']}`)\n"
+                f"   Gen {s['current_gen']}/{s['total_gen']} ({s['progress_pct']}%) fitness={s['best_fitness']}"
+            )
+        else:
+            lines.append("💤 진행 중인 학습 없음")
+        q = s.get("queue", [])
+        if q:
+            lines.append(f"\n⏳ *대기열* ({len(q)}개)")
+            for i, item in enumerate(q, 1):
+                lines.append(f"  {i}. `{item['ticker']}` {item['ticker_name']}")
+        else:
+            lines.append("\n대기열 비어있음")
+        return "\n".join(lines)
+
+    def _cmd_clear_queue(self, msg: dict) -> str:
+        if not self.training_manager:
+            return "❌ TrainingManager 미연결"
+        r = self.training_manager.clear_queue()
+        n = r["cleared_count"]
+        if n == 0:
+            return "대기열이 이미 비어있습니다"
+        lines = [f"🗑 대기열 {n}개 삭제됨:"]
+        for it in r["items"]:
+            lines.append(f"  • `{it['ticker']}` {it['ticker_name']}")
+        return "\n".join(lines)
 
 
 # ==================================================

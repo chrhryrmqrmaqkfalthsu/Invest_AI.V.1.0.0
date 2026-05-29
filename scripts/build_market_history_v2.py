@@ -14,7 +14,7 @@ from pathlib import Path
 from datetime import datetime
 from openai import OpenAI
 
-from engine.market.av_adapter import load_articles_by_date
+from engine.market.av_adapter import load_articles_by_date, list_available_dates, load_articles_for_date
 from engine.market.colab_v32 import (
     CONFIG, keyword_filter, deduplicate_articles, filter_trusted,
     interpret_news_with_gpt, aggregate_events,
@@ -157,13 +157,14 @@ def main():
     print(f"실행 시각: {datetime.now()}")
     print("=" * 70)
     
-    # 데이터 로드
-    print("\n[1/4] AlphaVantage 캐시 로드...")
-    by_date = load_articles_by_date()
-    sorted_dates = sorted(by_date.keys())
-    print(f"  커버 일수: {len(sorted_dates)}")
-    print(f"  기간: {sorted_dates[0]} ~ {sorted_dates[-1]}")
-    print(f"  총 article: {sum(len(a) for a in by_date.values()):,}건")
+    # 데이터 로드 (스트리밍: 파일명만 스캔, article은 그때그때)
+    print("\n[1/4] AlphaVantage 캐시 스캔...", flush=True)
+    sorted_dates = list_available_dates()
+    if not sorted_dates:
+        print("❌ 캐시 파일 없음")
+        return
+    print(f"  커버 일수: {len(sorted_dates)}", flush=True)
+    print(f"  기간: {sorted_dates[0]} ~ {sorted_dates[-1]}", flush=True)
     
     # GPT 캐시 로드
     print("\n[2/4] GPT 캐시 로드...")
@@ -192,8 +193,9 @@ def main():
         if d_str in done_dates:
             continue
         
-        articles = by_date[d]
+        articles = load_articles_for_date(d)
         row, gpt_calls = process_day(d, articles, client, gpt_cache)
+        del articles  # 메모리 즉시 해제
         rows.append(row)
         total_gpt_calls += gpt_calls
         
@@ -207,7 +209,7 @@ def main():
               f"art={row['news_count']:3d}, 후보={row['candidates_count']:2d}, "
               f"GPT신규={gpt_calls:2d}, 이벤트={row['active_events_count']}, "
               f"adj={row['event_adjustment']:+.1f} "
-              f"| 누적GPT={total_gpt_calls}, ETA={remaining/60:.1f}분")
+              f"| 누적GPT={total_gpt_calls}, ETA={remaining/60:.1f}분", flush=True)
         
         # 주기적 저장 (50일마다)
         if (i + 1) % 50 == 0:

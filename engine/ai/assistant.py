@@ -151,6 +151,40 @@ TOOLS_SCHEMA = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "enqueue_training",
+            "description": "여러 종목을 한 번에 학습 큐에 등록. 첫 항목은 즉시 시작, 나머지는 대기. '여러개 학습해', 'A, B, C 학습해' 같은 요청에 사용.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tickers_or_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "종목명 또는 티커 리스트",
+                    },
+                },
+                "required": ["tickers_or_names"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_queue",
+            "description": "현재 학습 대기열 + 진행 상태 조회.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "clear_queue",
+            "description": "학습 대기열 비우기 (진행 중인 학습은 유지).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
 ]
 
 
@@ -382,18 +416,20 @@ def tool_start_training(ticker_or_name: str, force: bool = False, training_manag
         name = get_ticker_name(ticker) or ticker
     else:
         r = resolve_ticker(q, limit=5)
-        candidates = r.get("candidates", [])
+        exact = r.get("exact", [])
+        partial = r.get("partial", [])
+        candidates = exact + partial
         if not candidates:
             return {"error": f"'{q}'에 해당하는 종목을 찾지 못했습니다"}
-        if len(candidates) > 1 and not r.get("exact_match"):
+        if len(exact) == 0 and len(partial) > 1:
             return {
                 "ambiguous": True,
                 "query": q,
-                "candidates": [{"ticker": c["ticker"], "name": c["name"]} for c in candidates[:5]],
+                "candidates": [{"ticker": c["code"], "name": c["name"]} for c in partial[:5]],
                 "message": "여러 후보가 있습니다. 정확한 종목명이나 티커를 지정해주세요.",
             }
         top = candidates[0]
-        ticker = top["ticker"]
+        ticker = top["code"]
         name = top["name"]
 
     result = training_manager.start(
@@ -426,6 +462,50 @@ def tool_resolve_ticker(query: str) -> dict:
     return resolve_ticker(query, limit=5)
 
 
+def tool_enqueue_training(tickers_or_names: list, training_manager=None) -> dict:
+    if training_manager is None:
+        return {"error": "training_manager 미연결"}
+    if not tickers_or_names:
+        return {"error": "종목 리스트 비어있음"}
+    from engine.ai.ticker_resolver import resolve_ticker, get_ticker_name
+    items = []
+    errors = []
+    for q in tickers_or_names:
+        q = (q or "").strip()
+        if not q:
+            continue
+        if q.isdigit() and len(q) == 6:
+            items.append({"ticker": q, "ticker_name": get_ticker_name(q) or q})
+            continue
+        r = resolve_ticker(q, limit=5)
+        exact = r.get("exact", [])
+        partial = r.get("partial", [])
+        cands = exact + partial
+        if not cands:
+            errors.append(f"'{q}' 못 찾음")
+        elif len(exact) == 0 and len(partial) > 1:
+            errors.append(f"'{q}' 모호함 (후보 {len(partial)}개)")
+        else:
+            items.append({"ticker": cands[0]["code"], "ticker_name": cands[0]["name"]})
+    if not items:
+        return {"error": "등록 가능 종목 없음", "details": errors}
+    result = training_manager.enqueue_many(items)
+    result["errors"] = errors
+    return result
+
+
+def tool_get_queue(training_manager=None) -> dict:
+    if training_manager is None:
+        return {"error": "training_manager 미연결"}
+    return training_manager.status()
+
+
+def tool_clear_queue(training_manager=None) -> dict:
+    if training_manager is None:
+        return {"error": "training_manager 미연결"}
+    return training_manager.clear_queue()
+
+
 
 TOOL_DISPATCH = {
     "get_trade_log":         lambda args, ctx: tool_get_trade_log(**args),
@@ -438,6 +518,9 @@ TOOL_DISPATCH = {
     "get_training_status":   lambda args, ctx: tool_get_training_status(training_manager=ctx.get("training_manager")),
     "cancel_training":       lambda args, ctx: tool_cancel_training(training_manager=ctx.get("training_manager")),
     "resolve_ticker":        lambda args, ctx: tool_resolve_ticker(**args),
+    "enqueue_training":      lambda args, ctx: tool_enqueue_training(training_manager=ctx.get("training_manager"), **args),
+    "get_queue":             lambda args, ctx: tool_get_queue(training_manager=ctx.get("training_manager")),
+    "clear_queue":           lambda args, ctx: tool_clear_queue(training_manager=ctx.get("training_manager")),
 }
 
 

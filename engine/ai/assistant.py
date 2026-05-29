@@ -266,7 +266,7 @@ def tool_get_positions(broker=None, position_manager=None) -> dict:
                 result["positions"].append({
                     "ticker": h.ticker,
                     "shares": h.shares,
-                    "avg_price": float(h.avg_price),
+                    "avg_cost": float(h.avg_cost),
                     "current_price": float(h.current_price),
                     "market_value": float(h.market_value),
                     "unrealized_pnl": float(h.unrealized_pnl),

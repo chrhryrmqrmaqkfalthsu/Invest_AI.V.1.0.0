@@ -1,2 +1,19 @@
-apscheduler
+# Core
+pandas>=2.0
+numpy>=1.24
+requests>=2.31
+python-dotenv>=1.0
+PyYAML>=6.0
+
+# Scheduling
+APScheduler>=3.10
+
+# Market data
+FinanceDataReader>=0.9.50
+yfinance>=0.2.40
+pykrx>=1.0.45
+
+# AI
 openai>=1.0
+
+# Note: Telegram은 requests로 직접 호출 (python-telegram-bot 미사용)

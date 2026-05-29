@@ -324,8 +324,8 @@ class TrainingManager:
                 bt_payload["test_period"] = list(result.test_period)
                 bt_payload["overfit_ratio"] = result.overfit_ratio
             repo.save_backtest(ticker, bt_payload)
-            if result.ga_result and hasattr(result.ga_result, "history"):
-                repo.save_fitness_history(ticker, result.ga_result.history)
+            if result.ga_result and hasattr(result.ga_result, "fitness_history"):
+                repo.save_fitness_history(ticker, result.ga_result.fitness_history)
             seed_added = False
             if bt.fitness >= SEED_FITNESS_THRESHOLD:
                 try:

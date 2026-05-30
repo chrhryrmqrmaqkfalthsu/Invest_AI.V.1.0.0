@@ -209,12 +209,30 @@ class LearnedRuleBook(RuleBook):
 
         # 4) evaluate_signal 호출 (Rulebook + 시장보정 + 종목뉴스 통합)
         try:
+            _active = getattr(ctx, "active_events", {}) or {}
+            try:
+                _event_flags = {
+                    "has_war": int("전쟁" in _active),
+                    "has_rate_hike": int("금리정책_인상" in _active),
+                    "has_rate_cut": int("금리정책_인하" in _active),
+                    "has_geopolitical": int("지정학_긴장" in _active),
+                    "has_tariff": int("관세" in _active),
+                    "has_export_ban": int("수출규제" in _active),
+                    "has_earnings_shock": int("실적쇼크" in _active),
+                    "has_oil_surge": int("유가급등" in _active),
+                    "has_banking_crisis": int("은행위기" in _active),
+                    "has_inflation": int("인플레이션" in _active),
+                    "has_fed_statement": int("연준발언" in _active),
+                }
+            except Exception:
+                _event_flags = None
             res = evaluate_signal(
                 rb=rb, df=df,
                 market_score=market_score,
                 sector_score=sector_score,
                 vix_level=vix_level,
                 news_sentiment=news_normalized,   # ✅ 종목별 뉴스 sentiment (-1~+1)
+                event_flags=_event_flags,
             )
         except Exception as e:
             log.error(f"{ticker} evaluate_signal 실패: {e}")

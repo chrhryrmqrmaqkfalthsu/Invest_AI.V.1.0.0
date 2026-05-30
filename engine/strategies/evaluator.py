@@ -35,6 +35,7 @@ def evaluate_signal(
     vix_level: float = 18.0,
     news_sentiment: float = 0.0,  # -1 ~ +1
     event_flags: dict = None,  # v5: {'has_war': 1, 'has_rate_hike': 0, ...}
+    topic_features: dict = None,  # v6: {topic: z*conf}  (news_features 산출)
 ) -> SignalResult:
     """
     가장 최근 봉(df의 마지막 행)에 대해 신호 평가.
@@ -134,8 +135,38 @@ def evaluate_signal(
     s_news = rb.weight_news_sentiment * eff_sent  # 호재(+)면 신호 강화, 악재(-)면 신호 약화
     components["news"] = s_news
     if abs(s_news) > 0.01:
-        tag = "호재" if s_news > 0 else "악재"
-        reasons.append(f"뉴스{tag}({eff_sent:+.2f})({s_news:+.2f})")
+        reasons.append(f"전체톤({eff_sent:+.2f})({s_news:+.2f})")
+
+    # ---------- 6b) v6: 토픽별 뉴스 z-score (개별주 정밀 반응) ----------
+    # topic_features[topic] = zscore(과거W일) * confidence  (이미 정규화/신뢰도 반영됨)
+    # score_t = weight_news_<topic> * feat   /  short는 부호 반전
+    # 합계는 rb.news_block_cap 으로 clamp (뉴스 폭주 방지)
+    _TOPICS = [
+        "blockchain", "earnings", "ipo", "mergers_and_acquisitions",
+        "financial_markets", "economy_fiscal", "economy_monetary",
+        "economy_macro", "energy_transportation", "finance",
+        "life_sciences", "manufacturing", "real_estate",
+        "retail_wholesale", "technology",
+    ]
+    topic_news = 0.0
+    if topic_features:
+        for _t in _TOPICS:
+            _feat = topic_features.get(_t, 0.0)
+            if _feat == 0.0:
+                continue
+            _w = getattr(rb, "weight_news_" + _t, 0.0)
+            _s = _w * _feat
+            if is_short:
+                _s = -_s
+            topic_news += _s
+        _cap = getattr(rb, "news_block_cap", 4.0)
+        if topic_news > _cap:
+            topic_news = _cap
+        elif topic_news < -_cap:
+            topic_news = -_cap
+    components["news_topics"] = topic_news
+    if abs(topic_news) > 0.01:
+        reasons.append(f"토픽뉴스({topic_news:+.2f})")
 
     # ---------- 합산 ----------
     raw_score = sum(components.values())

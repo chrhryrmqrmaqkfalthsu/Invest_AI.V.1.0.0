@@ -24,6 +24,27 @@ class Rulebook:
     weight_volume_surge: float = 1.0   # 거래량 급증
     weight_news_sentiment: float = 2.0 # 뉴스 감성 (개별주 강화, ×2.0)
 
+    # ===== v6: 토픽별 뉴스 감성 가중치 (15개, z-score 정규화 입력) =====
+    weight_news_blockchain: float = 0.0
+    weight_news_earnings: float = 0.0
+    weight_news_ipo: float = 0.0
+    weight_news_mergers_and_acquisitions: float = 0.0
+    weight_news_financial_markets: float = 0.0
+    weight_news_economy_fiscal: float = 0.0
+    weight_news_economy_monetary: float = 0.0
+    weight_news_economy_macro: float = 0.0
+    weight_news_energy_transportation: float = 0.0
+    weight_news_finance: float = 0.0
+    weight_news_life_sciences: float = 0.0
+    weight_news_manufacturing: float = 0.0
+    weight_news_real_estate: float = 0.0
+    weight_news_retail_wholesale: float = 0.0
+    weight_news_technology: float = 0.0
+
+    # ===== v6: 뉴스 z-score 윈도우 & 블록 상한 =====
+    news_zscore_window: int = 60
+    news_block_cap: float = 4.0
+
     # ===== 지표 임계값 =====
     rsi_low: float = 30.0
     rsi_high: float = 70.0
@@ -116,7 +137,28 @@ PARAM_RANGES = {
     "weight_rsi_zone":        (0.0, 2.0),
     "weight_bb_near_lower":   (0.0, 2.0),
     "weight_volume_surge":    (0.0, 2.0),
-    "weight_news_sentiment":  (1.0, 3.0),  # 개별주 뉴스 강화
+    "weight_news_sentiment":  (0.0, 1.5),  # v6: 전체톤 보조신호로 축소
+
+    # v6: 토픽별 뉴스 가중치 (z-score 입력, -3~+3)
+    "weight_news_blockchain": (-3.0, 3.0),
+    "weight_news_earnings": (-3.0, 3.0),
+    "weight_news_ipo": (-3.0, 3.0),
+    "weight_news_mergers_and_acquisitions": (-3.0, 3.0),
+    "weight_news_financial_markets": (-3.0, 3.0),
+    "weight_news_economy_fiscal": (-3.0, 3.0),
+    "weight_news_economy_monetary": (-3.0, 3.0),
+    "weight_news_economy_macro": (-3.0, 3.0),
+    "weight_news_energy_transportation": (-3.0, 3.0),
+    "weight_news_finance": (-3.0, 3.0),
+    "weight_news_life_sciences": (-3.0, 3.0),
+    "weight_news_manufacturing": (-3.0, 3.0),
+    "weight_news_real_estate": (-3.0, 3.0),
+    "weight_news_retail_wholesale": (-3.0, 3.0),
+    "weight_news_technology": (-3.0, 3.0),
+
+    # v6: z-score 윈도우 & 블록상한
+    "news_zscore_window":     (20, 120),
+    "news_block_cap":         (2.0, 6.0),
 
     # 임계값
     "rsi_low":                (20.0, 40.0),

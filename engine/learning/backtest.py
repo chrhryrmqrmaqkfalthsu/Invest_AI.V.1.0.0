@@ -68,6 +68,7 @@ def run_backtest(
     sector_name: str = "tech",
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    ticker_sentiment: Optional[dict] = None,
 ) -> BacktestResult:
     """
     전체 기간을 순회하며 신호 발생 시 진입 → 청산 시뮬레이션 → 다음 진입.
@@ -134,12 +135,23 @@ def run_backtest(
             cur_sector = sector_score
             cur_vix = vix_level
 
+        # v6: 종목별 뉴스 감성 조회 (CSV 없으면 0.0 폴백)
+        cur_sentiment = 0.0
+        if ticker_sentiment:
+            try:
+                _date_key = pd.Timestamp(df.index[i]).strftime('%Y-%m-%d')
+                _s = ticker_sentiment.get(_date_key)
+                if _s:
+                    cur_sentiment = float(_s.get('sentiment_avg', 0.0))
+            except Exception:
+                cur_sentiment = 0.0
+
         sig = evaluate_signal(
             rb, sub_df,
             market_score=cur_market,
             sector_score=cur_sector,
             vix_level=cur_vix,
-            news_sentiment=0.0,
+            news_sentiment=cur_sentiment,
             event_flags=cur_event_flags,  # v5
         )
         if not sig.should_buy:

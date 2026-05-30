@@ -9,9 +9,8 @@ PyYAML>=6.0
 APScheduler>=3.10
 
 # Market data
-FinanceDataReader>=0.9.50
+finance-datareader>=0.9.50
 yfinance>=0.2.40
-pykrx>=1.0.45
 
 # AI
 openai>=1.0

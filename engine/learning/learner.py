@@ -12,6 +12,7 @@ from engine.adapters.factory import get_adapter
 from engine.market.context import get_market_context, get_market_history
 from engine.strategies.rulebook import Rulebook, default_rulebook
 from engine.learning.backtest import run_backtest, BacktestResult
+from engine.market.ticker_sentiment import load_csv as load_ticker_sentiment
 from engine.learning.genetic import run_ga, GAConfig, GAResult
 
 log = get_logger("learner")
@@ -98,6 +99,13 @@ def learn(
     log.info(f"시장 컨텍스트: score={ctx.score:.1f} ({ctx.regime}), sector={sector_name}, vix={ctx.vix_level:.1f}")
     log.info(f"시장 시계열: {len(market_hist)} rows, sector_col=sector_{sector_name}")
 
+    # v6: 종목 뉴스 감성 (CSV 1회 로드, 학습 전체에서 재사용)
+    ticker_sentiment = load_ticker_sentiment(ticker)
+    if ticker_sentiment:
+        log.info(f"종목 감성 CSV 로드: {len(ticker_sentiment)} days")
+    else:
+        log.info(f"종목 감성 CSV 없음 (news_sentiment=0.0 폴백)")
+
     # 4) 기본 룰북
     base_rb = default_rulebook(ticker, asset_type=meta.asset_type, direction=meta.direction)
     base_rb.sector_name = sector_name
@@ -116,6 +124,7 @@ def learn(
             sector_name=sector_name,
             start_date=train_start,
             end_date=train_end,
+            ticker_sentiment=ticker_sentiment,
         )
         # test 구간이 없는 경우(데이터 짧음) fallback
         if not test_start or not test_end:
@@ -127,6 +136,7 @@ def learn(
             sector_name=sector_name,
             start_date=test_start,
             end_date=test_end,
+            ticker_sentiment=ticker_sentiment,
         )
         return train_r.fitness * TRAIN_WEIGHT + test_r.fitness * TEST_WEIGHT
 
@@ -154,6 +164,7 @@ def learn(
         sector_name=sector_name,
         start_date=train_start,
         end_date=train_end,
+        ticker_sentiment=ticker_sentiment,
     )
 
     test_result = run_backtest(
@@ -163,6 +174,7 @@ def learn(
         sector_name=sector_name,
         start_date=test_start,
         end_date=test_end,
+        ticker_sentiment=ticker_sentiment,
     )
 
     # 과적합 비율: test_fitness / train_fitness (1.0 근처면 양호, 0.5 이하면 과적합 의심)

@@ -58,7 +58,7 @@ def learn(
     ga_config: Optional[GAConfig] = None,
     seed_rulebooks: Optional[list] = None,
     on_generation: Optional[Callable] = None,
-    test_months: int = 6,
+    test_months: int = 24,
 ) -> LearnResult:
     t0 = time.time()
 

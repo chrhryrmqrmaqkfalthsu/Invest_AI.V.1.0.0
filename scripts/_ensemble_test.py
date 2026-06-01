@@ -37,7 +37,7 @@ test_end = end_date.strftime('%Y-%m-%d')
 
 market_hist = get_market_history(years=max(YEARS + 1, 6))
 sector_name = _detect_sector_name(meta.name)
-ticker_sentiment = load_csv(TICKER)
+ticker_sentiment = load_ticker_sentiment(TICKER)
 
 dump = json.load(open(f"data/_system/ga_population_dump_{TICKER}.json"))
 best_rb = Rulebook.from_dict(dump[0])

@@ -6,6 +6,7 @@
 - 일별 호출로 1000 limit 회피
 """
 import os, sys, json, time, signal
+from dotenv import load_dotenv as _load_dotenv; _load_dotenv()
 from pathlib import Path
 from datetime import datetime, date, timedelta
 import urllib.request
@@ -21,7 +22,7 @@ BASE_URL = "https://www.alphavantage.co/query"
 REQ_INTERVAL = 0.86
 
 START_DATE = date(2020, 6, 1)
-END_DATE = date(2025, 5, 31)
+END_DATE = date.today() - timedelta(days=1)  # 어제까지 자동
 
 STOP = False
 def handle_sig(s, f):

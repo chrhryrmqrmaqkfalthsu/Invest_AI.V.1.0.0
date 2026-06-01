@@ -6,6 +6,7 @@ AlphaVantage 시장 전체 뉴스 다운로드 (tickers 파라미터 없음)
 - 저장: data/_system/news_cache/av_market_YYYYMM.json (gzip 없음, 기존 포맷 유지)
 """
 import os, sys, json, time
+from dotenv import load_dotenv as _load_dotenv; _load_dotenv()
 from pathlib import Path
 from datetime import datetime
 import urllib.request
@@ -21,10 +22,14 @@ if not API_KEY:
 BASE_URL = "https://www.alphavantage.co/query"
 REQ_INTERVAL = 0.86  # 70 req/min
 
+from datetime import date as _date
+_TODAY = _date.today()
 MONTHS = []
-for y in range(2020, 2026):
+for y in range(2020, _TODAY.year + 1):
     for m in range(1, 13):
-        if (y == 2020 and m < 6) or (y == 2025 and m > 5) or y > 2025:
+        if (y == 2020 and m < 6):
+            continue
+        if (y == _TODAY.year and m > _TODAY.month) or y > _TODAY.year:
             continue
         MONTHS.append((y, m))
 

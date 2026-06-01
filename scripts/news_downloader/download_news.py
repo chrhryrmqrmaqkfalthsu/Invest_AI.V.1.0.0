@@ -7,6 +7,7 @@ AlphaVantage 뉴스 일괄 다운로드
 - 재개: data/_system/download_progress.json
 """
 import os, sys, json, gzip, time, signal
+from dotenv import load_dotenv as _load_dotenv; _load_dotenv()
 from pathlib import Path
 from datetime import datetime
 import urllib.request
@@ -30,10 +31,14 @@ MAX_RETRY = 3
 RETRY_WAIT = 30
 
 # 기간: 2020-06 ~ 2025-05 (60개월)
+from datetime import date as _date
+_TODAY = _date.today()
 MONTHS = []
-for y in range(2020, 2026):
+for y in range(2020, _TODAY.year + 1):
     for m in range(1, 13):
-        if (y == 2020 and m < 6) or (y == 2025 and m > 5) or y > 2025:
+        if (y == 2020 and m < 6):
+            continue
+        if (y == _TODAY.year and m > _TODAY.month) or y > _TODAY.year:
             continue
         MONTHS.append((y, m))
 

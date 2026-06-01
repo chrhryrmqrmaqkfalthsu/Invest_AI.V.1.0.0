@@ -54,6 +54,11 @@ class BacktestResult:
 	        }
 
 
+# spread fitness 캐시 (GA 수명 동안 재사용)
+_SPREAD_CTX_CACHE: dict = {}   # key: (id(df), start, end) -> list[(cm,cs,cv,ef,snt,px,sh)]
+_SPREAD_RET_CACHE: dict = {}   # key: (id(df), start, end, exit_param_tuple) -> dict{j: pnl}
+
+
 def run_backtest(
     rb: Rulebook,
     df: pd.DataFrame,
@@ -69,6 +74,7 @@ def run_backtest(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     ticker_sentiment: Optional[dict] = None,
+    fitness_mode: str = "legacy",
 ) -> BacktestResult:
     """
     전체 기간을 순회하며 신호 발생 시 진입 → 청산 시뮬레이션 → 다음 진입.
@@ -99,6 +105,102 @@ def run_backtest(
 
     i = max(warmup, 0)
     n = len(df)
+    _all_scores: list = []
+    _all_rets: list = []
+
+    # === spread fitness: 거래 루프와 독립적으로 "모든 날" 신호점수+실현수익 수집 (캐시 적용) ===
+    if fitness_mode == "spread":
+        _ck = (id(df), start_date, end_date)
+        # 1) 시장 컨텍스트 캐시 (GA 전체 불변) — 1회만 계산
+        if _ck not in _SPREAD_CTX_CACHE:
+            _ctx_list = []
+            for j in range(max(warmup, 0), n):
+                if _date_series is not None:
+                    try:
+                        _cts = pd.Timestamp(_date_series.iloc[j] if hasattr(_date_series, 'iloc') else _date_series[j])
+                        if _start_ts is not None and _cts < _start_ts:
+                            _ctx_list.append(None); continue
+                        if _end_ts is not None and _cts > _end_ts:
+                            _ctx_list.append("BREAK"); break
+                    except Exception:
+                        pass
+                _ef = {}
+                if market_history_df is not None:
+                    _m = lookup_market_at(market_history_df, df.index[j])
+                    _cm = float(_m.get("score", market_score))
+                    _cs = float(_m.get(f"sector_{sector_name}", sector_score))
+                    _cv = float(_m.get("vix", vix_level))
+                    for _k in ("has_war", "has_rate_hike", "has_rate_cut", "has_geopolitical",
+                               "has_tariff", "has_export_ban", "has_earnings_shock",
+                               "has_oil_surge", "has_banking_crisis", "has_inflation",
+                               "has_fed_statement"):
+                        _ef[_k] = int(_m.get(_k, 0) or 0)
+                else:
+                    _cm, _cs, _cv = market_score, sector_score, vix_level
+                _snt = 0.0
+                if ticker_sentiment:
+                    try:
+                        _dk = pd.Timestamp(df.index[j]).strftime('%Y-%m-%d')
+                        _sv = ticker_sentiment.get(_dk)
+                        if _sv:
+                            _snt = float(_sv.get('sentiment_avg', 0.0))
+                    except Exception:
+                        _snt = 0.0
+                _px = float(df.iloc[j]["Close"])
+                _sh = int(position_limit_krw / _px) if _px > 0 else 0
+                _ctx_list.append((j, _cm, _cs, _cv, _ef, _snt, _px, _sh))
+            _SPREAD_CTX_CACHE[_ck] = _ctx_list
+        _ctx_list = _SPREAD_CTX_CACHE[_ck]
+
+        # 2) 실현수익 캐시 — exit 파라미터 튜플에만 의존
+        _exit_key = (
+            getattr(rb, "direction", "long"),
+            getattr(rb, "exit_strategy", "hybrid"),
+            round(float(getattr(rb, "stop_loss_atr", 0) or 0), 4),
+            round(float(getattr(rb, "take_profit_atr", 0) or 0), 4),
+            round(float(getattr(rb, "trailing_atr", 0) or 0), 4),
+            int(getattr(rb, "max_holding_days", 0) or 0),
+            bool(getattr(rb, "add_buy_enabled", False)),
+            int(getattr(rb, "add_buy_max_count", 0) or 0),
+            round(float(getattr(rb, "add_buy_trigger_profit_pct", 0) or 0), 4),
+            round(float(getattr(rb, "add_buy_size_ratio", 0) or 0), 4),
+        )
+        _rk = (_ck, _exit_key)
+        _ret_map = _SPREAD_RET_CACHE.get(_rk)
+        if _ret_map is None:
+            _ret_map = {}
+            for _item in _ctx_list:
+                if _item is None or _item == "BREAK":
+                    continue
+                j, _cm, _cs, _cv, _ef, _snt, _px, _sh = _item
+                if _sh <= 0:
+                    continue
+                _tr = simulate_exit(rb, df, j, _sh, position_limit_krw,
+                                    commission_rate=commission_rate,
+                                    cur_market_score=_cm, cur_vix_level=_cv)
+                if _tr is None:
+                    continue
+                _d = asdict(_tr) if hasattr(_tr, "__dataclass_fields__") else _tr
+                _pnl = _d.get("pnl_pct") if isinstance(_d, dict) else getattr(_tr, "pnl_pct", None)
+                if _pnl is not None:
+                    _ret_map[j] = float(_pnl)
+            _SPREAD_RET_CACHE[_rk] = _ret_map
+
+        # 3) 신호점수는 entry 가중치마다 변하므로 매번 계산 (캐시 불가)
+        for _item in _ctx_list:
+            if _item is None:
+                continue
+            if _item == "BREAK":
+                break
+            j, _cm, _cs, _cv, _ef, _snt, _px, _sh = _item
+            if j not in _ret_map:
+                continue
+            _sig = evaluate_signal(rb, df.iloc[:j + 1], market_score=_cm,
+                                   sector_score=_cs, vix_level=_cv,
+                                   news_sentiment=_snt, event_flags=_ef)
+            _all_scores.append(float(_sig.score))
+            _all_rets.append(_ret_map[j])
+    # === end spread 수집 루프 ===
 
     while i < n:
         # walk-forward 날짜 필터: start 이전이면 skip, end 이후면 break
@@ -191,7 +293,11 @@ def run_backtest(
             exit_idx = i + 1
         i = max(exit_idx + 1 + cooldown_days, i + 1)
 
-    return _summarize(rb, trades)
+    _res = _summarize(rb, trades)
+    if fitness_mode == "spread":
+        _res.fitness = _calc_fitness_spread(_all_scores, _all_rets)
+        rb.fitness = _res.fitness
+    return _res
 
 
 def _summarize(rb: Rulebook, trades: list) -> BacktestResult:
@@ -364,3 +470,40 @@ if __name__ == "__main__":
         print(f"  진입 {t.get('entry_date')} @ {t.get('entry_price'):.0f} ({t.get('shares')}주)")
         print(f"  청산 {t.get('exit_date')} @ {t.get('exit_price'):.2f} ({t.get('exit_reason')})")
         print(f"  PnL: {t.get('pnl_pct'):+.3f}% ({t.get('pnl_krw'):+.0f} KRW)")
+
+
+def _calc_fitness_spread(scores: list, rets: list) -> float:
+    """
+    전체 날 기준 fitness: 신호점수 상위30% 실현수익 - 하위30% 실현수익(SPREAD).
+    표본수 보정(sample_factor)으로 강신호 날이 너무 적으면 패널티.
+    """
+    import numpy as _np
+    if not scores or len(scores) < 10:
+        return -1.0
+    sc = _np.array(scores, dtype=float)
+    rt = _np.array(rets, dtype=float)
+    order = _np.argsort(sc)
+    k = max(1, int(len(sc) * 0.3))
+    lo = float(rt[order[:k]].mean())
+    hi = float(rt[order[-k:]].mean())
+    spread = hi - lo
+
+    # 강신호(상위30%) 표본수 보정
+    if k < 5:
+        sf = 0.3
+    elif k < 10:
+        sf = 0.6
+    elif k < 30:
+        sf = 0.85
+    else:
+        sf = 1.0
+
+    # 순위상관 보조항 (약하게 반영)
+    try:
+        from scipy.stats import spearmanr as _sr
+        rho, _ = _sr(sc, rt)
+        rho = 0.0 if rho != rho else float(rho)
+    except Exception:
+        rho = 0.0
+
+    return float(spread * sf + rho * 1.0)

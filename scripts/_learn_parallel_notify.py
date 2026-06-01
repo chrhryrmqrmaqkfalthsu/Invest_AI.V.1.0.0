@@ -5,7 +5,8 @@
 ----
 1) 새 병렬 학습 실행:
    venv/bin/python scripts/_learn_parallel_notify.py AAPL MSFT NVDA JPM KO XOM \
-     --title "TEST 제거 + spread fitness 기준선"
+     --title "TEST 제거 + spread fitness 기준선" \
+     --fitness-mode spread
 
 2) 이미 실행 중인 병렬 학습 감시만 붙이기:
    venv/bin/python scripts/_learn_parallel_notify.py AAPL MSFT NVDA JPM KO XOM \
@@ -130,7 +131,15 @@ def _format_metric(m: Optional[tuple]) -> str:
     return f"fit {float(fit):+.2f}, 거래 {int(trades)}회, exp {float(exp):+.2f}%"
 
 
-def _build_message(title: str, tickers: list[str], job_dir: Path, generations: int, started_at: datetime, final: bool = False) -> str:
+def _build_message(
+    title: str,
+    tickers: list[str],
+    job_dir: Path,
+    generations: int,
+    started_at: datetime,
+    fitness_mode: str,
+    final: bool = False,
+) -> str:
     done = _parse_done(job_dir / "done.log")
     logs_dir = job_dir / "logs"
     rows = [_latest_status(t, logs_dir / f"{t}.log", done, generations) for t in tickers]
@@ -143,6 +152,7 @@ def _build_message(title: str, tickers: list[str], job_dir: Path, generations: i
     lines = [
         f"{header_icon} *병렬 개별주 학습 {'완료' if final else '진행'}*",
         f"실험: {title}",
+        f"fitness_mode: `{fitness_mode}`",
         f"경과: {elapsed // 3600}h {(elapsed % 3600) // 60}m {elapsed % 60}s",
         f"상태: 완료 {done_n}/{len(rows)}, 진행 {running_n}, 오류 {err_n}",
         "",
@@ -191,9 +201,11 @@ def _copy_final_dumps(tickers: list[str], dump_dir: Path) -> None:
             shutil.copy2(src, dump_dir / src.name)
 
 
-def _launch_jobs(tickers: list[str], job_dir: Path, parallel: int) -> list[subprocess.Popen]:
+def _launch_jobs(tickers: list[str], job_dir: Path, parallel: int, fitness_mode: str) -> list[subprocess.Popen]:
     logs_dir = job_dir / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env["FITNESS_MODE"] = fitness_mode
     procs: list[subprocess.Popen] = []
     for ticker in tickers:
         log_f = (logs_dir / f"{ticker}.log").open("w")
@@ -203,6 +215,7 @@ def _launch_jobs(tickers: list[str], job_dir: Path, parallel: int) -> list[subpr
             stdout=log_f,
             stderr=subprocess.STDOUT,
             text=True,
+            env=env,
         )
         procs.append(p)
         if len(procs) >= parallel:
@@ -210,7 +223,7 @@ def _launch_jobs(tickers: list[str], job_dir: Path, parallel: int) -> list[subpr
     return procs
 
 
-def _run_queue(tickers: list[str], job_dir: Path, parallel: int) -> None:
+def _run_queue(tickers: list[str], job_dir: Path, parallel: int, fitness_mode: str = "spread") -> None:
     """간단한 병렬 큐 실행. done.log를 기존 xargs 형식으로 남긴다."""
     pending = list(tickers)
     running: dict[str, tuple[subprocess.Popen, object]] = {}
@@ -218,6 +231,8 @@ def _run_queue(tickers: list[str], job_dir: Path, parallel: int) -> None:
     logs_dir.mkdir(parents=True, exist_ok=True)
     done_path = job_dir / "done.log"
     done_path.write_text("")
+    env = os.environ.copy()
+    env["FITNESS_MODE"] = fitness_mode
 
     while pending or running:
         while pending and len(running) < parallel:
@@ -229,6 +244,7 @@ def _run_queue(tickers: list[str], job_dir: Path, parallel: int) -> None:
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
                 text=True,
+                env=env,
             )
             running[ticker] = (proc, log_f)
         time.sleep(2)
@@ -250,14 +266,18 @@ def main() -> int:
     ap.add_argument("--parallel", type=int, default=6, help="동시 실행 개수")
     ap.add_argument("--interval", type=int, default=90, help="텔레그램 갱신 간격 초")
     ap.add_argument("--generations", type=int, default=50, help="진행률 계산용 GA 세대 수")
+    ap.add_argument("--fitness-mode", default=os.environ.get("FITNESS_MODE", "spread"), help="자식 학습 프로세스에 전달할 FITNESS_MODE")
     ap.add_argument("--backup-dumps", action="store_true", help="시작 전 기존 dump 백업")
     args = ap.parse_args()
 
     os.chdir(ROOT)
+    fitness_mode = (args.fitness_mode or "spread").strip().lower()
+    os.environ["FITNESS_MODE"] = fitness_mode
     job_dir = (ROOT / args.job_dir).resolve() if not Path(args.job_dir).is_absolute() else Path(args.job_dir)
     job_dir.mkdir(parents=True, exist_ok=True)
     (job_dir / "logs").mkdir(parents=True, exist_ok=True)
     (job_dir / "tickers.txt").write_text("\n".join(args.tickers) + "\n")
+    (job_dir / "fitness_mode.txt").write_text(fitness_mode + "\n")
     started_at = datetime.now()
     notifier = TelegramNotifier()
 
@@ -266,21 +286,24 @@ def main() -> int:
         _backup_existing_dumps(args.tickers, backup_dir)
         (job_dir / "backup_path.txt").write_text(str(backup_dir) + "\n")
 
-    msg_id = notifier.send_progress(_build_message(args.title, args.tickers, job_dir, args.generations, started_at))
+    msg_id = notifier.send_progress(_build_message(args.title, args.tickers, job_dir, args.generations, started_at, fitness_mode))
 
     runner: Optional[subprocess.Popen] = None
     if not args.watch_existing:
         # 같은 프로세스에서 큐 실행하면 모니터 루프가 막히므로 하위 프로세스로 자기 자신의 큐 함수 대신 bash-free 파이썬 명령을 띄운다.
         runner_code = (
-            "import sys; "
+            "import os, sys; "
             "from pathlib import Path; "
             f"sys.path.insert(0, {str(ROOT)!r}); "
             "from scripts._learn_parallel_notify import _run_queue, _copy_final_dumps; "
             f"tickers={args.tickers!r}; job_dir=Path({str(job_dir)!r}); "
-            f"_run_queue(tickers, job_dir, {args.parallel}); "
+            f"fitness_mode={fitness_mode!r}; os.environ['FITNESS_MODE']=fitness_mode; "
+            f"_run_queue(tickers, job_dir, {args.parallel}, fitness_mode); "
             "_copy_final_dumps(tickers, job_dir/'dumps')"
         )
-        runner = subprocess.Popen([str(ROOT / "venv" / "bin" / "python"), "-c", runner_code], cwd=str(ROOT))
+        env = os.environ.copy()
+        env["FITNESS_MODE"] = fitness_mode
+        runner = subprocess.Popen([str(ROOT / "venv" / "bin" / "python"), "-c", runner_code], cwd=str(ROOT), env=env)
 
     try:
         while True:
@@ -290,13 +313,13 @@ def main() -> int:
                 _copy_final_dumps(args.tickers, job_dir / "dumps")
                 notifier.edit_message(
                     msg_id,
-                    _build_message(args.title, args.tickers, job_dir, args.generations, started_at, final=True),
+                    _build_message(args.title, args.tickers, job_dir, args.generations, started_at, fitness_mode, final=True),
                     parse_mode="Markdown",
                 )
                 break
             notifier.edit_message(
                 msg_id,
-                _build_message(args.title, args.tickers, job_dir, args.generations, started_at),
+                _build_message(args.title, args.tickers, job_dir, args.generations, started_at, fitness_mode),
                 parse_mode="Markdown",
             )
             time.sleep(max(10, args.interval))

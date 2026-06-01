@@ -9,15 +9,17 @@ from engine.learning.genetic import GAConfig
 import engine.learning.backtest as bt
 
 T = sys.argv[1]
+FITNESS_MODE = os.environ.get("FITNESS_MODE", "spread").strip().lower() or "spread"
+
 bt._SPREAD_CTX_CACHE.clear(); bt._SPREAD_RET_CACHE.clear()
 cfg = GAConfig(population=40, generations=50, elite_ratio=0.2,
                early_stop_no_improve=10, random_seed=42)
 t0 = time.time()
 res = learn(T, years=6, position_limit_krw=10_000_000,
-            ga_config=cfg, test_months=24, fitness_mode="spread")
+            ga_config=cfg, test_months=24, fitness_mode=FITNESS_MODE)
 el = time.time() - t0
 tr, te = res.train_result, res.test_result
-print(f"=== {T} 완료 ({el:.0f}s) ===")
+print(f"=== {T} 완료 ({el:.0f}s, fitness_mode={FITNESS_MODE}) ===")
 print(f"[TRAIN] fit={tr.fitness:+.3f} 거래={tr.trade_count} 승률={tr.win_rate:.0f}% exp={tr.avg_return_pct:+.2f}%")
 print(f"[TEST]  fit={te.fitness:+.3f} 거래={te.trade_count} 승률={te.win_rate:.0f}% exp={te.avg_return_pct:+.2f}%")
 print(f"overfit_ratio={res.overfit_ratio:.2f}")

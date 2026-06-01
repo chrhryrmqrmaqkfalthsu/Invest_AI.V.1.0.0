@@ -231,10 +231,15 @@ class TrainingManager:
         if self.notifier is not None:
             try:
                 msg = (
-                    f"📊 *학습 시작*\n"
-                    f"종목: {ticker_name} (`{ticker}`)\n"
-                    f"예상 시간: 약 5~10분\n"
-                    f"_진행 상황은 이 메시지가 갱신됩니다._"
+                    f"🧬 *개별주 학습 시작*\n"
+                    f"종목: *{ticker_name}* (`{ticker}`)\n"
+                    f"상태: 초기화 중\n\n"
+                    f"🔒 *학습 원칙*\n"
+                    f"• GA selection: TRAIN 구간만 사용\n"
+                    f"• TEST 구간: 학습 후 1회 검증 전용\n"
+                    f"• 완료 등급: diagnostic(미검증) 참고값\n"
+                    f"• 최종 운용 등급: true-WF(`validated=true`) 기준\n\n"
+                    f"📌 진행률은 이 메시지가 갱신됩니다."
                 )
                 msg_id = self.notifier.send_progress(msg)
                 job.progress_msg_id = msg_id if msg_id else None
@@ -403,12 +408,14 @@ class TrainingManager:
         filled = int(bar_len * pct / 100)
         bar = "█" * filled + "░" * (bar_len - filled)
         text = (
-            f"📊 *학습 중*\n"
-            f"종목: {job.ticker_name} (`{job.ticker}`)\n"
+            f"📊 *개별주 학습 중*\n"
+            f"종목: *{job.ticker_name}* (`{job.ticker}`)\n"
             f"`[{bar}]` {pct:.0f}%\n"
             f"세대: {job.current_gen}/{job.total_gen}\n"
             f"best fitness: *{job.best_fitness:.2f}*\n"
-            f"avg fitness: {job.avg_fitness:.2f}"
+            f"avg fitness: {job.avg_fitness:.2f}\n\n"
+            f"🔒 GA selection은 TRAIN만 사용 중\n"
+            f"🧪 TEST는 완료 후 검증 전용"
         )
         try:
             self.notifier.edit_message(job.progress_msg_id, text, parse_mode="Markdown")
@@ -420,17 +427,19 @@ class TrainingManager:
             return
         added = reload_info.get("added", [])
         added_str = "✅ 거래 후보 즉시 편입" if job.ticker in added else "ℹ️ 이미 추적 중"
+        train_period = getattr(learn_result, "train_period", ("?", "?")) if learn_result is not None else ("?", "?")
 
         text = (
-            f"✅ *학습 완료*\n"
-            f"종목: {job.ticker_name} (`{job.ticker}`)\n"
+            f"✅ *개별주 학습 완료*\n"
+            f"종목: *{job.ticker_name}* (`{job.ticker}`)\n"
             f"소요: {int(elapsed)}초\n\n"
-            f"📈 *결과*\n"
-            f"• 적합도: *{bt.fitness:.2f}*\n"
-            f"• 승률: *{bt.win_rate:.1f}%* ({bt.win_count}승 / {bt.loss_count}패)\n"
+            f"🧬 *GA 학습 결과* — TRAIN selection 기준\n"
+            f"기간: {train_period[0]}~{train_period[1]}\n"
+            f"• fitness: *{bt.fitness:.2f}*\n"
+            f"• 거래 수: *{bt.trade_count}회*\n"
+            f"• 기대수익: *{bt.expectancy_pct:+.3f}%*\n"
             f"• 평균 수익률: {bt.avg_return_pct:+.2f}%\n"
-            f"• 기대값: {bt.expectancy_pct:+.3f}%\n"
-            f"• 거래 수: {bt.trade_count}회\n"
+            f"• 승률: {bt.win_rate:.1f}% ({bt.win_count}승 / {bt.loss_count}패)\n"
             f"• MDD: {bt.max_drawdown_pct:.2f}%\n"
             f"• Profit Factor: {bt.profit_factor:.2f}\n"
         )
@@ -452,11 +461,13 @@ class TrainingManager:
                     verdict = "🚨 과적합 의심"
             tp = getattr(learn_result, "test_period", ("?", "?"))
             text += (
-                f"\n🧪 *Out-of-Sample 검증* ({tp[0]}~{tp[1]})\n"
-                f"• 적합도: {tr.fitness:.2f}\n"
+                f"\n🧪 *TEST 검증* — GA selection 미사용\n"
+                f"기간: {tp[0]}~{tp[1]}\n"
+                f"• fitness: {tr.fitness:.2f}\n"
+                f"• 거래 수: *{tr.trade_count}회*\n"
+                f"• 기대수익: *{tr.expectancy_pct:+.3f}%*\n"
+                f"• 평균 수익률: {tr.avg_return_pct:+.2f}%\n"
                 f"• 승률: {tr.win_rate:.1f}% ({tr.win_count}승 / {tr.loss_count}패)\n"
-                f"• 기대값: {tr.expectancy_pct:+.3f}%\n"
-                f"• 거래 수: {tr.trade_count}회\n"
                 f"• test/train: {ov_str} → {verdict}\n"
             )
 
@@ -475,14 +486,14 @@ class TrainingManager:
             text += (
                 f"\n🏷️ *스윙 운용 등급* ({validation_label})\n"
                 f"• 등급: *{sg.get('grade')}* ({sg.get('mode')})\n"
-                f"• 권장 비중: {float(alloc.get('weight_ratio', 0.0)) * 100:.0f}% ({alloc.get('tier', '-')})\n"
+                f"• 권장 비중: *{float(alloc.get('weight_ratio', 0.0)) * 100:.0f}%* ({alloc.get('tier', '-')})\n"
                 f"• PASS/WEAK: {sm.get('pass_count', 0)}/{sm.get('weak_count', 0)} "
                 f"of {sm.get('periods', 0)}개 구간\n"
                 f"• 평균 기대값: {sm.get('avg_expectancy_pct', 0):+.2f}%\n"
                 f"{period_text}\n"
             )
             if not sg.get("validated"):
-                text += "⚠️ *미검증 진단 등급입니다.* 실제 운용 등급은 true-WF(`validated=true`) 결과로 확정하세요.\n"
+                text += "⚠️ *미검증 diagnostic 등급입니다.* 실전 편입/비중 확정은 true-WF(`validated=true`) 기준으로 하세요.\n"
 
         text += f"\n{added_str}"
         if seed_added:

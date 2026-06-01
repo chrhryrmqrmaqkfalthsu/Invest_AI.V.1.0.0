@@ -12,6 +12,7 @@ from engine.adapters.factory import get_adapter
 from engine.market.context import get_market_context, get_market_history
 from engine.strategies.rulebook import Rulebook, default_rulebook
 from engine.learning.backtest import run_backtest, BacktestResult
+from engine.learning.stock_grade import evaluate_swing_stock_grade
 from engine.market.ticker_sentiment import load_csv as load_ticker_sentiment
 from engine.learning.genetic import run_ga, GAConfig, GAResult
 
@@ -31,6 +32,7 @@ class LearnResult:
     train_period: Optional[tuple] = None           # (start_date, end_date)
     test_period: Optional[tuple] = None
     overfit_ratio: Optional[float] = None          # test_fitness / train_fitness
+    stock_grade: Optional[dict] = None             # 스윙 단타용 종목 등급
 
 
 def _detect_sector_name(meta_name: str) -> str:
@@ -135,6 +137,27 @@ def learn(
     except Exception as _e:
         log.warning(f"final_population 덤프 실패(학습은 계속 진행): {_e}")
 
+    stock_grade = None
+    try:
+        stock_grade = evaluate_swing_stock_grade(
+            ticker=ticker,
+            population=ga_result.final_population,
+            df=df,
+            position_limit_krw=position_limit_krw,
+            market_history_df=market_hist,
+            sector_name=sector_name,
+            ticker_sentiment=ticker_sentiment,
+            fitness_mode=fitness_mode,
+        )
+        _summary = stock_grade.get("summary", {})
+        log.info(
+            f"[SWING 등급] {stock_grade.get('grade')} ({stock_grade.get('mode')}) "
+            f"pass={_summary.get('pass_count')}/{_summary.get('periods')}, "
+            f"weak={_summary.get('weak_count')}, avg_exp={_summary.get('avg_expectancy_pct', 0):+.2f}%"
+        )
+    except Exception as _e:
+        log.warning(f"스윙 종목 등급 산정 실패(학습은 계속 진행): {_e}")
+
     best_rb = ga_result.best
     best_rb.ticker = ticker
     best_rb.asset_type = meta.asset_type
@@ -156,4 +179,17 @@ def learn(
         log.info(f"[과적합 비율] test/train = {overfit_ratio:.2f} → {verdict}")
     log.info(f"학습 완료: {ticker}, elapsed={elapsed:.1f}s")
 
-    return LearnResult(ticker=ticker, best_rulebook=best_rb, backtest=train_result, ga_result=ga_result, elapsed_sec=elapsed, asset_meta=meta.to_dict(), train_result=train_result, test_result=test_result, train_period=(train_start, train_end), test_period=(test_start, test_end), overfit_ratio=overfit_ratio)
+    return LearnResult(
+        ticker=ticker,
+        best_rulebook=best_rb,
+        backtest=train_result,
+        ga_result=ga_result,
+        elapsed_sec=elapsed,
+        asset_meta=meta.to_dict(),
+        train_result=train_result,
+        test_result=test_result,
+        train_period=(train_start, train_end),
+        test_period=(test_start, test_end),
+        overfit_ratio=overfit_ratio,
+        stock_grade=stock_grade,
+    )

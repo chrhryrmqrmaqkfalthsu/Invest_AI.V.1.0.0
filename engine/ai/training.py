@@ -137,7 +137,7 @@ class TrainingManager:
             return {"started": 0, "queued": 0, "items": []}
 
         results = []
-        for idx, it in enumerate(items):
+        for it in items:
             r = self.start(
                 ticker=it["ticker"],
                 ticker_name=it["ticker_name"],
@@ -316,13 +316,15 @@ class TrainingManager:
 
             repo.add_symbol(ticker, meta)
             repo.save_rulebook(rb, meta)
-            # backtest.json에 train + test + overfit_ratio 모두 저장
+            # backtest.json에 train + test + overfit_ratio + swing stock grade 모두 저장
             bt_payload = bt.to_dict()
             if getattr(result, "test_result", None) is not None:
                 bt_payload["test_result"] = result.test_result.to_dict()
                 bt_payload["train_period"] = list(result.train_period)
                 bt_payload["test_period"] = list(result.test_period)
                 bt_payload["overfit_ratio"] = result.overfit_ratio
+            if getattr(result, "stock_grade", None) is not None:
+                bt_payload["stock_grade"] = result.stock_grade
             repo.save_backtest(ticker, bt_payload)
             if result.ga_result and hasattr(result.ga_result, "fitness_history"):
                 repo.save_fitness_history(ticker, result.ga_result.fitness_history)
@@ -456,6 +458,25 @@ class TrainingManager:
                 f"• 기대값: {tr.expectancy_pct:+.3f}%\n"
                 f"• 거래 수: {tr.trade_count}회\n"
                 f"• test/train: {ov_str} → {verdict}\n"
+            )
+
+        if learn_result is not None and getattr(learn_result, "stock_grade", None) is not None:
+            sg = learn_result.stock_grade
+            sm = sg.get("summary", {})
+            periods = sg.get("periods", [])
+            period_bits = []
+            for p in periods[-3:]:
+                period_bits.append(
+                    f"{p.get('year')}: {p.get('status')} / {p.get('trades')}회 / {p.get('expectancy_pct', 0):+.2f}%"
+                )
+            period_text = "\n".join(f"• {x}" for x in period_bits)
+            text += (
+                f"\n🏷️ *스윙 운용 등급*\n"
+                f"• 등급: *{sg.get('grade')}* ({sg.get('mode')})\n"
+                f"• PASS/WEAK: {sm.get('pass_count', 0)}/{sm.get('weak_count', 0)} "
+                f"of {sm.get('periods', 0)}개 구간\n"
+                f"• 평균 기대값: {sm.get('avg_expectancy_pct', 0):+.2f}%\n"
+                f"{period_text}\n"
             )
 
         text += f"\n{added_str}"

@@ -175,10 +175,13 @@ def evaluate_swing_stock_grade(
 
     return {
         "ticker": ticker,
+        "type": "diagnostic",
+        "validated": False,
         "method": "swing_score_wf_v1",
         "grade": grade,
         "mode": mode,
         "criteria": {
+            "note": "Diagnostic grade: reuses the current GA final_population; not a true walk-forward retrain.",
             "score": "max(0, train_avg_return_pct) * log1p(train_trade_count)",
             "min_valid_rules": min_valid_rules,
             "top_n": top_n,

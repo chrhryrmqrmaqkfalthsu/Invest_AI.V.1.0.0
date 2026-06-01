@@ -104,15 +104,23 @@ def learn(
     base_rb = default_rulebook(ticker, asset_type=meta.asset_type, direction=meta.direction)
     base_rb.sector_name = sector_name
 
-    TRAIN_WEIGHT = 0.4
-    TEST_WEIGHT = 0.6
-
     def evaluate_fn(rb: Rulebook) -> float:
-        train_r = run_backtest(rb, df, position_limit_krw=position_limit_krw, market_history_df=market_hist, sector_name=sector_name, start_date=train_start, end_date=train_end, ticker_sentiment=ticker_sentiment, fitness_mode=fitness_mode)
-        if not test_start or not test_end:
-            return train_r.fitness
-        test_r = run_backtest(rb, df, position_limit_krw=position_limit_krw, market_history_df=market_hist, sector_name=sector_name, start_date=test_start, end_date=test_end, ticker_sentiment=ticker_sentiment, fitness_mode=fitness_mode)
-        return train_r.fitness * TRAIN_WEIGHT + test_r.fitness * TEST_WEIGHT
+        """GA selection은 TRAIN 구간만 사용한다.
+
+        TEST 구간은 아래 학습 종료 후 best_rb 검증에서만 평가한다.
+        """
+        train_r = run_backtest(
+            rb,
+            df,
+            position_limit_krw=position_limit_krw,
+            market_history_df=market_hist,
+            sector_name=sector_name,
+            start_date=train_start,
+            end_date=train_end,
+            ticker_sentiment=ticker_sentiment,
+            fitness_mode=fitness_mode,
+        )
+        return train_r.fitness
 
     ga_cfg = ga_config or GAConfig()
     ga_result = run_ga(base_rulebook=base_rb, evaluate_fn=evaluate_fn, ga_config=ga_cfg, seed_rulebooks=seed_rulebooks, on_generation=on_generation)

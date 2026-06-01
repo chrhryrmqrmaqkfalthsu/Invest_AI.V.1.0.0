@@ -297,6 +297,16 @@ def run_backtest(
     if fitness_mode == "spread":
         _res.fitness = _calc_fitness_spread(_all_scores, _all_rets)
         rb.fitness = _res.fitness
+    elif fitness_mode == "swing":
+        _res.fitness = _calc_fitness_swing(
+            expectancy_pct=_res.expectancy_pct,
+            win_rate=_res.win_rate,
+            profit_factor=_res.profit_factor,
+            max_drawdown_pct=_res.max_drawdown_pct,
+            trade_count=_res.trade_count,
+            loss_count=_res.loss_count,
+        )
+        rb.fitness = _res.fitness
     return _res
 
 
@@ -368,6 +378,74 @@ def _summarize(rb: Rulebook, trades: list) -> BacktestResult:
     rb.trade_count = trade_count
 
     return res
+
+
+def _clamp(x: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, x))
+
+
+def _calc_fitness_swing(
+    *,
+    expectancy_pct: float,
+    win_rate: float,
+    profit_factor: float,
+    max_drawdown_pct: float,
+    trade_count: int,
+    loss_count: int,
+) -> float:
+    """스윙 단타용 TRAIN-only fitness.
+
+    원칙:
+    - 비용 차감 expectancy가 0 이하이면 거래수와 무관하게 탈락시킨다.
+    - 거래수 부족은 강하게 감점한다.
+    - Profit Factor는 손실 0건일 때 원화 gross_profit으로 들어오는 기존 구조를 보수적으로 방어한다.
+    - 승률은 보조 지표로만 약하게 사용한다.
+    - TEST/연도별 안정성/true-WF 결과는 절대 사용하지 않는다.
+    """
+    if trade_count <= 0:
+        return -100.0
+
+    exp = float(expectancy_pct or 0.0)
+    if exp <= 0.0:
+        return -100.0 + max(exp * 10.0, -50.0)
+
+    try:
+        pf = float(profit_factor or 0.0)
+    except Exception:
+        pf = 1.0
+    if not np.isfinite(pf):
+        pf = 1.0
+    if loss_count == 0:
+        pf = 1.5 if trade_count >= 10 else 1.0
+    pf = max(0.0, min(pf, 4.0))
+
+    wr = float(win_rate or 0.0)
+    mdd_abs = abs(float(max_drawdown_pct or 0.0))
+
+    exp_score = _clamp((exp / 2.0) * 60.0, 0.0, 120.0)
+    if exp < 0.5:
+        exp_score -= 25.0
+    elif exp < 1.0:
+        exp_score -= 10.0
+
+    pf_score = _clamp((pf - 1.0) * 15.0, -20.0, 35.0)
+    wr_score = _clamp((wr - 50.0) / 50.0 * 8.0, -8.0, 8.0)
+    mdd_penalty = -_clamp(mdd_abs * 0.8, 0.0, 40.0)
+
+    base = exp_score + pf_score + wr_score + mdd_penalty
+
+    if trade_count < 5:
+        trade_factor = 0.10
+    elif trade_count < 10:
+        trade_factor = 0.35
+    elif trade_count < 20:
+        trade_factor = 0.70
+    elif trade_count <= 80:
+        trade_factor = 1.00
+    else:
+        trade_factor = max(0.65, 1.0 - (trade_count - 80) / 250.0)
+
+    return float(base * trade_factor)
 
 
 def _calc_fitness(

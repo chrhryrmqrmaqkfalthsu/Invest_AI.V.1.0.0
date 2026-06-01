@@ -10,7 +10,12 @@ from engine.learning.backtest import run_backtest
 from engine.learning.ensemble_backtest import run_ensemble_backtest
 from engine.learning.genetic import GAConfig, run_ga
 from engine.learning.learner import _detect_sector_name
-from engine.learning.stock_grade import _grade_from_counts, _period_status
+from engine.learning.stock_grade import (
+    DEFAULT_MIN_POSITIVE_TRADES,
+    _allocation_hint,
+    _grade_from_counts,
+    _period_status,
+)
 from engine.market.context import get_market_history
 from engine.market.ticker_sentiment import load_csv as load_ticker_sentiment
 from engine.strategies.rulebook import default_rulebook
@@ -42,11 +47,6 @@ def _cut_by_date(df, end_ts):
     if isinstance(df.index, pd.DatetimeIndex):
         return df.loc[df.index <= end_ts].copy()
     return df
-
-
-def _range_df(df, dates, start_ts, end_ts):
-    mask = (dates >= pd.Timestamp(start_ts)) & (dates <= pd.Timestamp(end_ts))
-    return df.loc[mask].copy()
 
 
 def _score_from_train_result(r):
@@ -178,7 +178,7 @@ def _evaluate_ticker(ticker):
             pass_count += 1
         elif status == 'WEAK':
             weak_count += 1
-        if exp_pct > 0:
+        if exp_pct > 0 and trades >= DEFAULT_MIN_POSITIVE_TRADES:
             positive_count += 1
 
         period = {
@@ -201,6 +201,17 @@ def _evaluate_ticker(ticker):
     grade, mode = _grade_from_counts(pass_count, weak_count, positive_count)
     avg_exp = sum(p['expectancy_pct'] for p in periods) / total if total else 0.0
     avg_trades = sum(p['trades'] for p in periods) / total if total else 0.0
+    allocation = _allocation_hint(
+        grade=grade,
+        mode=mode,
+        pass_count=pass_count,
+        weak_count=weak_count,
+        positive_count=positive_count,
+        total=total,
+        avg_exp=avg_exp,
+        avg_trades=avg_trades,
+        validated=True,
+    )
 
     result = {
         'ticker': ticker,
@@ -209,12 +220,14 @@ def _evaluate_ticker(ticker):
         'method': 'true_wf_ga_score_v1',
         'grade': grade,
         'mode': mode,
+        'allocation': allocation,
         'seed': BASE_SEED,
         'criteria': {
             'train_window': 'expanding',
             'ga_seed': 'BASE_SEED + test_year',
             'score': 'max(0, train_avg_return_pct) * log1p(train_trade_count)',
             'min_valid_rules': MIN_VALID_RULES,
+            'min_positive_trades': DEFAULT_MIN_POSITIVE_TRADES,
             'top_n': TOP_N,
             'note': 'GA is retrained separately for each test year using only data before that year.',
         },
@@ -228,7 +241,7 @@ def _evaluate_ticker(ticker):
         },
         'periods': periods,
     }
-    print(f'GRADE={grade} mode={mode} pass={pass_count}/{total} weak={weak_count} avg_exp={avg_exp:+.2f}% avg_trades={avg_trades:.1f}')
+    print(f'GRADE={grade} mode={mode} pass={pass_count}/{total} weak={weak_count} positive={positive_count} avg_exp={avg_exp:+.2f}% avg_trades={avg_trades:.1f} weight={allocation["weight_ratio"]:.2f}')
     return result
 
 

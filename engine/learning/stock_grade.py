@@ -17,6 +17,7 @@ from engine.strategies.rulebook import Rulebook
 
 DEFAULT_MIN_VALID_RULES = 3
 DEFAULT_MIN_TEST_TRADES = 10
+DEFAULT_MIN_POSITIVE_TRADES = 5
 DEFAULT_PASS_EXP_PCT = 1.0
 DEFAULT_WEAK_EXP_PCT = 0.5
 
@@ -39,7 +40,7 @@ def _period_status(trades: int, exp_pct: float) -> str:
     if trades >= DEFAULT_MIN_TEST_TRADES and exp_pct >= DEFAULT_PASS_EXP_PCT:
         return "PASS"
     if (trades >= DEFAULT_MIN_TEST_TRADES and exp_pct >= DEFAULT_WEAK_EXP_PCT) or (
-        trades >= 5 and exp_pct >= DEFAULT_PASS_EXP_PCT
+        trades >= DEFAULT_MIN_POSITIVE_TRADES and exp_pct >= DEFAULT_PASS_EXP_PCT
     ):
         return "WEAK"
     if trades == 0:
@@ -58,6 +59,44 @@ def _grade_from_counts(pass_count: int, weak_count: int, positive_count: int) ->
     return "D", "no_trade"
 
 
+def _allocation_hint(*, grade: str, mode: str, pass_count: int, weak_count: int,
+                     positive_count: int, total: int, avg_exp: float, avg_trades: float,
+                     validated: bool) -> dict:
+    """등급 내 비중 차등을 위한 보수적 운용 힌트.
+
+    true-WF(validated=True)는 실제 운용 비중 산정에 쓸 수 있고,
+    diagnostic(validated=False)은 악화 감지/참고용이므로 최대 비중을 낮게 제한한다.
+    """
+    fail_count = max(0, total - pass_count - weak_count)
+    if grade == "A":
+        if pass_count == total and avg_trades >= 30 and avg_exp >= 1.5:
+            ratio, tier, reason = 1.00, "core", "전 구간 PASS + 거래수 충분 + 기대값 안정"
+        elif fail_count == 0 and weak_count >= 1:
+            ratio, tier, reason = 0.50, "main_half", "PASS 우세지만 최근/일부 구간 WEAK 포함"
+        elif fail_count >= 1:
+            ratio, tier, reason = 0.40, "small_main", "A등급이나 FAIL 구간 존재"
+        else:
+            ratio, tier, reason = 0.70, "main", "A등급이나 core 조건 미달"
+    elif grade == "B":
+        ratio, tier, reason = 0.25, "small", "일부 구간만 재현되어 소액 운용"
+    elif grade == "C":
+        ratio, tier, reason = 0.00, "watch", "관찰 전용: 자동 진입 비중 없음"
+    else:
+        ratio, tier, reason = 0.00, "no_trade", "거래 부적합"
+
+    if not validated:
+        ratio = min(ratio, 0.25)
+        reason = f"진단용 미검증 등급: {reason}"
+
+    return {
+        "tier": tier,
+        "weight_ratio": ratio,
+        "reason": reason,
+        "validated_required_for_main": not validated,
+        "min_positive_trades": DEFAULT_MIN_POSITIVE_TRADES,
+    }
+
+
 def evaluate_swing_stock_grade(
     *,
     ticker: str,
@@ -72,15 +111,13 @@ def evaluate_swing_stock_grade(
     top_n: int = 5,
     min_valid_rules: int = DEFAULT_MIN_VALID_RULES,
 ) -> dict:
-    """GA 개체군을 이용해 비중복 연도별 스윙 단타 등급을 산정한다.
+    """GA 개체군을 이용해 비중복 연도별 스윙 단타 진단 등급을 산정한다.
 
-    각 연도별로 그 이전 데이터만 TRAIN으로 사용해 score_topN을 고르고,
-    해당 연도 TEST에서 거래수/expectancy 재현성을 본다.
+    현재 학습에서 나온 final_population을 재사용하므로 true-WF가 아니라 diagnostic이다.
     score가 0인 개체는 후보에서 제외해 fitness_topN으로 퇴행하는 것을 막는다.
     """
     dates = _date_series(df)
     data_min = pd.Timestamp(dates.min())
-    data_max = pd.Timestamp(dates.max())
     years = _recent_complete_years(dates, n=3)
 
     sorted_population = sorted(
@@ -104,7 +141,7 @@ def evaluate_swing_stock_grade(
 
     for year in years:
         test_start_ts = max(pd.Timestamp(f"{year}-01-01"), data_min)
-        test_end_ts = min(pd.Timestamp(f"{year}-12-31"), data_max)
+        test_end_ts = pd.Timestamp(f"{year}-12-31")
         train_start_ts = data_min
         train_end_ts = test_start_ts - pd.Timedelta(days=1)
         if train_end_ts <= train_start_ts or test_end_ts <= test_start_ts:
@@ -151,7 +188,7 @@ def evaluate_swing_stock_grade(
             pass_count += 1
         elif status == "WEAK":
             weak_count += 1
-        if exp_pct > 0:
+        if exp_pct > 0 and trades >= DEFAULT_MIN_POSITIVE_TRADES:
             positive_count += 1
 
         periods.append(
@@ -172,6 +209,17 @@ def evaluate_swing_stock_grade(
     grade, mode = _grade_from_counts(pass_count, weak_count, positive_count)
     avg_exp = sum(p["expectancy_pct"] for p in periods) / total if total else 0.0
     avg_trades = sum(p["trades"] for p in periods) / total if total else 0.0
+    allocation = _allocation_hint(
+        grade=grade,
+        mode=mode,
+        pass_count=pass_count,
+        weak_count=weak_count,
+        positive_count=positive_count,
+        total=total,
+        avg_exp=avg_exp,
+        avg_trades=avg_trades,
+        validated=False,
+    )
 
     return {
         "ticker": ticker,
@@ -180,13 +228,15 @@ def evaluate_swing_stock_grade(
         "method": "swing_score_wf_v1",
         "grade": grade,
         "mode": mode,
+        "allocation": allocation,
         "criteria": {
             "note": "Diagnostic grade: reuses the current GA final_population; not a true walk-forward retrain.",
             "score": "max(0, train_avg_return_pct) * log1p(train_trade_count)",
             "min_valid_rules": min_valid_rules,
+            "min_positive_trades": DEFAULT_MIN_POSITIVE_TRADES,
             "top_n": top_n,
             "pass": f"trades >= {DEFAULT_MIN_TEST_TRADES} and expectancy_pct >= {DEFAULT_PASS_EXP_PCT}",
-            "weak": f"(trades >= {DEFAULT_MIN_TEST_TRADES} and expectancy_pct >= {DEFAULT_WEAK_EXP_PCT}) or (trades >= 5 and expectancy_pct >= {DEFAULT_PASS_EXP_PCT})",
+            "weak": f"(trades >= {DEFAULT_MIN_TEST_TRADES} and expectancy_pct >= {DEFAULT_WEAK_EXP_PCT}) or (trades >= {DEFAULT_MIN_POSITIVE_TRADES} and expectancy_pct >= {DEFAULT_PASS_EXP_PCT})",
         },
         "summary": {
             "periods": total,

@@ -463,7 +463,9 @@ class TrainingManager:
         if learn_result is not None and getattr(learn_result, "stock_grade", None) is not None:
             sg = learn_result.stock_grade
             sm = sg.get("summary", {})
+            alloc = sg.get("allocation", {})
             periods = sg.get("periods", [])
+            validation_label = "validated" if sg.get("validated") else "diagnostic"
             period_bits = []
             for p in periods[-3:]:
                 period_bits.append(
@@ -471,13 +473,16 @@ class TrainingManager:
                 )
             period_text = "\n".join(f"• {x}" for x in period_bits)
             text += (
-                f"\n🏷️ *스윙 운용 등급*\n"
+                f"\n🏷️ *스윙 운용 등급* ({validation_label})\n"
                 f"• 등급: *{sg.get('grade')}* ({sg.get('mode')})\n"
+                f"• 권장 비중: {float(alloc.get('weight_ratio', 0.0)) * 100:.0f}% ({alloc.get('tier', '-')})\n"
                 f"• PASS/WEAK: {sm.get('pass_count', 0)}/{sm.get('weak_count', 0)} "
                 f"of {sm.get('periods', 0)}개 구간\n"
                 f"• 평균 기대값: {sm.get('avg_expectancy_pct', 0):+.2f}%\n"
                 f"{period_text}\n"
             )
+            if not sg.get("validated"):
+                text += "⚠️ *미검증 진단 등급입니다.* 실제 운용 등급은 true-WF(`validated=true`) 결과로 확정하세요.\n"
 
         text += f"\n{added_str}"
         if seed_added:

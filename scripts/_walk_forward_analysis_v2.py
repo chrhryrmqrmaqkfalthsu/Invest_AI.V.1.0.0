@@ -9,7 +9,7 @@ from engine.learning.ensemble_backtest import run_ensemble_backtest
 from engine.market.ticker_sentiment import load_csv as load_ticker_sentiment
 from engine.learning.learner import _detect_sector_name
 
-TICKERS = ['AAPL', 'MSFT', 'NVDA', 'JPM', 'KO', 'XOM']
+TICKERS = sys.argv[1:] or ['AAPL', 'MSFT', 'NVDA', 'JPM', 'KO', 'XOM']
 POS_LIMIT = 10_000_000
 FITNESS_MODE = 'spread'
 YEARS = 6

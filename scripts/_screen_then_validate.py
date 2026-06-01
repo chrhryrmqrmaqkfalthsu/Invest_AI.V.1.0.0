@@ -11,6 +11,8 @@ from engine.learning.learner import _detect_sector_name
 
 TICKER = sys.argv[1]
 YEARS = 6; TEST_MONTHS = 24; POS_LIMIT = 10_000_000; FITNESS_MODE = "spread"
+EXP_MIN = float(os.environ.get("EXP_MIN", "0.5"))
+TR_MIN = int(os.environ.get("TR_MIN", "10"))
 
 adapter = get_adapter(TICKER); meta = adapter.meta
 df = adapter.load_history(years=YEARS)
@@ -32,7 +34,7 @@ passed = []
 for x in dump:
     rb = Rulebook.from_dict(x)
     r = run_backtest(rb, df, start_date=train_start, end_date=train_end, **base)
-    if r.avg_return_pct >= 0.5 and r.trade_count >= 10 and 40.0 <= r.win_rate <= 95.0:
+    if r.avg_return_pct >= EXP_MIN and r.trade_count >= TR_MIN and 40.0 <= r.win_rate <= 95.0:
         passed.append(rb)
 
 best_rb = Rulebook.from_dict(dump[0])

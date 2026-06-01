@@ -1,4 +1,9 @@
-import sys, time
+import sys, os, time
+# 프로젝트 루트를 import 경로에 추가 (scripts/ 에서 실행돼도 engine 찾도록)
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
 from engine.learning.learner import learn
 from engine.learning.genetic import GAConfig
 import engine.learning.backtest as bt

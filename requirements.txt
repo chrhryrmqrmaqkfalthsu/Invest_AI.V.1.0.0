@@ -12,6 +12,9 @@ APScheduler>=3.10
 finance-datareader>=0.9.50
 yfinance>=0.2.40
 
+# Brokers
+alpaca-py>=0.43.4
+
 # AI
 openai>=1.0
 

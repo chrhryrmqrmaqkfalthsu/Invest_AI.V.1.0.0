@@ -1,7 +1,13 @@
 """
 KisBroker - 한국투자증권 OpenAPI 연동 (실전/모의)
 Part 1: 토큰 + 잔고 + 현재가 (읽기 전용)
-Part 2: 주문/취소/조회 (별도 작성)
+Part 2: 주문/취소/조회
+
+주의
+----
+- 기존 place_buy/place_sell은 국내주식 order-cash 경로를 유지한다.
+- 해외주식 주문은 실주문 방지를 위해 VTS/dry-run preview 메서드만 제공한다.
+  실제 해외주식 주문 POST는 별도 검증 후 명시적으로 연결해야 한다.
 """
 from __future__ import annotations
 
@@ -32,6 +38,27 @@ TR_ID = {
     "order_cash_buy":   {"real": "TTTC0802U", "vts": "VTTC0802U"},
     "order_cash_sell":  {"real": "TTTC0801U", "vts": "VTTC0801U"},
     "inquire_ccld":     {"real": "TTTC8001R", "vts": "VTTC8001R"},
+    # 해외주식 일반 주문. 현재 코드는 실주문에 연결하지 않고 preview/dry-run 검증에만 사용한다.
+    "overseas_order_buy":  {"real": "TTTT1002U", "vts": "VTTT1002U"},
+    "overseas_order_sell": {"real": "TTTT1006U", "vts": "VTTT1006U"},
+}
+
+OVERSEAS_ORDER_PATH = "/uapi/overseas-stock/v1/trading/order"
+TICKER_UNIVERSE_PATH = Path.home() / "kingmaker" / "data" / "_system" / "ticker_universe.json"
+
+# KIS 해외주식 거래소 코드. ticker_universe.json의 exchange 필드를 이 코드로 변환한다.
+# BATS/Cboe 계열 ETF는 KIS 일반 미국주식 주문에서 별도 거래소 코드가 불명확하므로 AMEX로 보수 매핑한다.
+OVERSEAS_EXCHANGE_MAP = {
+    "NASDAQ": "NASD",
+    "NASD": "NASD",
+    "NYSE": "NYSE",
+    "NEW YORK STOCK EXCHANGE": "NYSE",
+    "AMEX": "AMEX",
+    "NYSE AMERICAN": "AMEX",
+    "NYSE ARCA": "AMEX",
+    "ARCA": "AMEX",
+    "BATS": "AMEX",
+    "CBOE": "AMEX",
 }
 
 TOKEN_CACHE_PATH = Path.home() / "kingmaker" / "data" / "_system" / "kis_token.json"
@@ -47,6 +74,7 @@ def _get_logger() -> logging.Logger:
         fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
         lg.addHandler(fh)
     return lg
+
 
 log = _get_logger()
 
@@ -69,7 +97,7 @@ class KisBroker(Broker):
         if not self.app_secret:
             raise BrokerError("KIS_APP_SECRET 누락")
         if not (self.cano.isdigit() and len(self.cano) == 8):
-            raise BrokerError(f"KIS_ACCOUNT_NO 형식 이상")
+            raise BrokerError("KIS_ACCOUNT_NO 형식 이상")
 
         self.host = HOSTS[self._mode]
         self.dry_run = dry_run
@@ -87,6 +115,12 @@ class KisBroker(Broker):
     def _tr(self, key: str) -> str:
         """tr_id 분기 (live는 real과 동일)"""
         m = "real" if self._mode in ("real", "live") else "vts"
+        return TR_ID[key][m]
+
+    def _tr_for_mode(self, key: str, mode: Optional[str] = None) -> str:
+        """특정 mode 기준 tr_id 조회. 해외주식 preview에서 VTS 강제용으로 사용."""
+        m0 = (mode or self._mode).strip().lower()
+        m = "real" if m0 in ("real", "live") else "vts"
         return TR_ID[key][m]
 
     # ---------- 토큰 ----------
@@ -316,7 +350,7 @@ class KisBroker(Broker):
         order_type: OrderType,
         price: float,
     ) -> Dict[str, Any]:
-        """주문 body 공통 구성"""
+        """국내주식 주문 body 구성."""
         ord_dvsn = "01" if order_type == OrderType.MARKET else "00"  # 01=시장가, 00=지정가
         ord_unpr = "0" if order_type == OrderType.MARKET else str(int(round(price)))
         return {
@@ -328,6 +362,149 @@ class KisBroker(Broker):
             "ORD_UNPR": ord_unpr,
         }
 
+    def _resolve_overseas_exchange_code(self, ticker: str, exchange_code: Optional[str] = None) -> str:
+        """미국주식 거래소 코드를 KIS OVRS_EXCG_CD로 변환.
+
+        explicit exchange_code가 있으면 그 값을 우선한다.
+        없으면 data/_system/ticker_universe.json의 exchange를 읽어 NASD/NYSE/AMEX로 매핑한다.
+        """
+        if exchange_code:
+            code = exchange_code.strip().upper()
+            return OVERSEAS_EXCHANGE_MAP.get(code, code)
+
+        ticker_u = str(ticker).strip().upper()
+        try:
+            data = json.loads(TICKER_UNIVERSE_PATH.read_text(encoding="utf-8"))
+            for item in data:
+                if str(item.get("symbol", "")).strip().upper() == ticker_u:
+                    exch = str(item.get("exchange", "")).strip().upper()
+                    if exch in OVERSEAS_EXCHANGE_MAP:
+                        return OVERSEAS_EXCHANGE_MAP[exch]
+                    raise BrokerError(f"{ticker_u} 거래소 {exch!r}를 OVRS_EXCG_CD로 매핑할 수 없음")
+        except BrokerError:
+            raise
+        except Exception as e:
+            raise BrokerError(f"{ticker_u} 거래소 매핑 조회 실패: {e}") from e
+        raise BrokerError(f"{ticker_u}를 ticker_universe.json에서 찾을 수 없음")
+
+    def _build_overseas_order_body(
+        self,
+        ticker: str,
+        shares: int,
+        order_type: OrderType,
+        price: float,
+        exchange_code: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """해외주식 일반 주문 body 구성.
+
+        소수점 주문은 지원하지 않는다. shares는 정수주로 강제한다.
+        현재 이 body는 preview/dry-run 검증용이며 실제 POST에는 연결하지 않는다.
+        """
+        qty = int(shares)
+        if qty <= 0:
+            raise BrokerError(f"overseas shares must be positive integer (got {shares})")
+        if float(shares) != float(qty):
+            raise BrokerError(f"overseas fractional shares are not supported (got {shares})")
+        if order_type == OrderType.LIMIT and price <= 0:
+            raise BrokerError("해외주식 지정가 주문에는 price > 0 필요")
+
+        ovrs_excg_cd = self._resolve_overseas_exchange_code(ticker, exchange_code)
+        # KIS 해외주식 일반 주문 샘플은 ORD_DVSN=00(지정가)을 기본으로 사용한다.
+        # 시장가 주문 지원 여부는 거래소/시간대별 차이가 있어 preview에서는 00 + 가격 0으로만 표현한다.
+        ord_dvsn = "00"
+        ovrs_ord_unpr = "0" if order_type == OrderType.MARKET else f"{float(price):.2f}"
+        return {
+            "CANO": self.cano,
+            "ACNT_PRDT_CD": self.prdt_code,
+            "OVRS_EXCG_CD": ovrs_excg_cd,
+            "PDNO": str(ticker).strip().upper(),
+            "ORD_DVSN": ord_dvsn,
+            "ORD_QTY": str(qty),
+            "OVRS_ORD_UNPR": ovrs_ord_unpr,
+        }
+
+    def build_overseas_order_preview(
+        self,
+        side: OrderSide,
+        ticker: str,
+        shares: int,
+        order_type: OrderType = OrderType.LIMIT,
+        price: float = 0.0,
+        exchange_code: Optional[str] = None,
+        force_vts: bool = True,
+    ) -> Dict[str, Any]:
+        """해외주식 주문 요청 preview.
+
+        실제 주문을 보내지 않고 endpoint/tr_id/body만 반환한다.
+        force_vts=True가 기본이라 실계좌 TR_ID를 실수로 쓰지 않는다.
+        """
+        side_enum = side if isinstance(side, OrderSide) else OrderSide(str(side).lower())
+        tr_key = "overseas_order_buy" if side_enum == OrderSide.BUY else "overseas_order_sell"
+        mode_for_tr = "vts" if force_vts else self._mode
+        tr_id = self._tr_for_mode(tr_key, mode_for_tr)
+        host = HOSTS["vts"] if force_vts else self.host
+        body = self._build_overseas_order_body(ticker, shares, order_type, price, exchange_code)
+        return {
+            "dry_run_only": True,
+            "force_vts": bool(force_vts),
+            "host": host,
+            "endpoint": OVERSEAS_ORDER_PATH,
+            "url": f"{host}{OVERSEAS_ORDER_PATH}",
+            "tr_id": tr_id,
+            "side": side_enum.value,
+            "order_type": order_type.value if isinstance(order_type, OrderType) else str(order_type),
+            "body": body,
+            "note": "Preview only. No network order request is sent by this method.",
+        }
+
+    def place_overseas_buy_dry_run(
+        self,
+        ticker: str,
+        shares: int,
+        order_type: OrderType = OrderType.LIMIT,
+        price: float = 0.0,
+        exchange_code: Optional[str] = None,
+    ) -> Order:
+        """해외주식 VTS 주문 preview를 Order 형태로 반환. 실제 주문 금지."""
+        preview = self.build_overseas_order_preview(
+            OrderSide.BUY, ticker, shares, order_type, price, exchange_code, force_vts=True
+        )
+        return Order(
+            order_id="DRY-OVERSEAS-BUY",
+            ticker=str(ticker).strip().upper(),
+            side=OrderSide.BUY,
+            order_type=order_type,
+            shares=int(shares),
+            price=price,
+            status=OrderStatus.PENDING,
+            submitted_at=datetime.now().isoformat(),
+            message=json.dumps(preview, ensure_ascii=False),
+        )
+
+    def place_overseas_sell_dry_run(
+        self,
+        ticker: str,
+        shares: int,
+        order_type: OrderType = OrderType.LIMIT,
+        price: float = 0.0,
+        exchange_code: Optional[str] = None,
+    ) -> Order:
+        """해외주식 VTS 주문 preview를 Order 형태로 반환. 실제 주문 금지."""
+        preview = self.build_overseas_order_preview(
+            OrderSide.SELL, ticker, shares, order_type, price, exchange_code, force_vts=True
+        )
+        return Order(
+            order_id="DRY-OVERSEAS-SELL",
+            ticker=str(ticker).strip().upper(),
+            side=OrderSide.SELL,
+            order_type=order_type,
+            shares=int(shares),
+            price=price,
+            status=OrderStatus.PENDING,
+            submitted_at=datetime.now().isoformat(),
+            message=json.dumps(preview, ensure_ascii=False),
+        )
+
     def _send_order(
         self,
         side: OrderSide,
@@ -336,7 +513,7 @@ class KisBroker(Broker):
         order_type: OrderType,
         price: float,
     ) -> Order:
-        """매수/매도 공통 발사 로직"""
+        """국내주식 매수/매도 공통 발사 로직"""
         if shares <= 0:
             raise BrokerError(f"shares must be > 0 (got {shares})")
         if order_type == OrderType.LIMIT and price <= 0:
@@ -513,42 +690,21 @@ class KisBroker(Broker):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("KisBroker Part 1 검증")
+    print("KisBroker 해외주식 주문 preview 검증 (네트워크 주문 없음)")
     print("=" * 60)
 
-    broker = KisBroker()
-    print(f"[설정] kis_mode={broker.kis_mode}, host={broker.host}, "
-          f"CANO={broker.cano}, PRDT={broker.prdt_code}")
+    broker = object.__new__(KisBroker)
+    broker.app_key = ""  # preview에는 토큰/키 불필요
+    broker.app_secret = ""
+    broker.cano = "00000000"
+    broker.prdt_code = "01"
+    broker._mode = "vts"
+    broker.host = HOSTS["vts"]
+    broker.dry_run = True
+    broker._token = None
+    broker._token_expiry = None
 
-    print("\n[1] 토큰 발급...")
-    t1 = broker._get_token()
-    print(f"  토큰 길이: {len(t1)}자 (앞 8자: {t1[:8]}...)")
-    print(f"  만료: {broker._token_expiry.isoformat()}")
-    print(f"  캐시 저장: {TOKEN_CACHE_PATH.exists()}")
-
-    print("\n[2] 토큰 캐시 재사용 (새 인스턴스)...")
-    broker2 = KisBroker()
-    t2 = broker2._get_token()
-    print(f"  같은 토큰?: {t1 == t2}")
-
-    print("\n[3] 잔고 조회...")
-    bal = broker.get_balance()
-    print(f"  가용현금:   {bal.cash_krw:>15,.0f} 원")
-    print(f"  매수원금:   {bal.invested_krw:>15,.0f} 원")
-    print(f"  총평가금:   {bal.total_value_krw:>15,.0f} 원")
-    print(f"  보유종목수: {len(bal.holdings)} 건")
-    for h in bal.holdings:
-        print(f"     - {h.ticker}: {h.shares}주 @ {h.avg_cost:,.0f} "
-              f"(현재가 {h.current_price:,.0f}, 손익 {h.unrealized_pnl:+,.0f} / {h.unrealized_pnl_pct:+.2f}%)")
-
-    print("\n[4] 현재가 조회 (379800)...")
-    p = broker.get_current_price("379800")
-    print(f"  379800 현재가: {p:,.0f} 원" if p else "  ❌ 조회 실패")
-
-    print("\n[5] 잘못된 종목코드 (999999)...")
-    p2 = broker.get_current_price("999999")
-    print(f"  결과: {p2}")
-
-    print("\n" + "=" * 60)
-    print("Part 1 검증 완료")
-    print("=" * 60)
+    preview = broker.build_overseas_order_preview(
+        OrderSide.BUY, "AAPL", 1, OrderType.LIMIT, 190.12, force_vts=True
+    )
+    print(json.dumps(preview, ensure_ascii=False, indent=2))

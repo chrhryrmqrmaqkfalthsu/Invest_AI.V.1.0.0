@@ -1,3 +1,4 @@
+import argparse
 import sys, os, json, math
 from pathlib import Path
 
@@ -20,10 +21,24 @@ from engine.market.context import get_market_history
 from engine.market.ticker_sentiment import load_csv as load_ticker_sentiment
 from engine.strategies.rulebook import default_rulebook
 
-TICKERS = sys.argv[1:] or ['AAPL', 'MSFT', 'NVDA', 'JPM', 'KO', 'XOM']
+
+def _parse_args():
+    p = argparse.ArgumentParser(description='true walk-forward stock grade retrain')
+    p.add_argument('tickers', nargs='*', help='평가할 티커 목록')
+    p.add_argument(
+        '--fitness-mode',
+        default=os.environ.get('FITNESS_MODE', 'spread'),
+        help='run_backtest fitness_mode (spread/swing/legacy 등). 기본값: FITNESS_MODE env 또는 spread',
+    )
+    return p.parse_args()
+
+
+_ARGS = _parse_args()
+TICKERS = _ARGS.tickers or ['AAPL', 'MSFT', 'NVDA', 'JPM', 'KO', 'XOM']
 YEARS = 6
 POSITION_LIMIT_KRW = 10_000_000
-FITNESS_MODE = 'spread'
+FITNESS_MODE = (_ARGS.fitness_mode or 'spread').strip().lower()
+FITNESS_MODE_SAFE = ''.join(c if c.isalnum() or c in ('-', '_') else '_' for c in FITNESS_MODE)
 BASE_SEED = 4242
 MIN_VALID_RULES = 3
 TOP_N = 5
@@ -69,7 +84,7 @@ def _evaluate_ticker(ticker):
     weak_count = 0
     positive_count = 0
 
-    print(f'\n===== {ticker} TRUE-WF GRADE =====')
+    print(f'\n===== {ticker} TRUE-WF GRADE ({FITNESS_MODE}) =====')
     print('year|grade_status|valid|used|trades|exp%|pnl%|ga_best|ga_gen')
 
     for year in TEST_YEARS:
@@ -217,7 +232,8 @@ def _evaluate_ticker(ticker):
         'ticker': ticker,
         'type': 'true_walk_forward',
         'validated': True,
-        'method': 'true_wf_ga_score_v1',
+        'method': f'true_wf_ga_score_v1_{FITNESS_MODE_SAFE}',
+        'fitness_mode': FITNESS_MODE,
         'grade': grade,
         'mode': mode,
         'allocation': allocation,
@@ -226,6 +242,7 @@ def _evaluate_ticker(ticker):
             'train_window': 'expanding',
             'ga_seed': 'BASE_SEED + test_year',
             'score': 'max(0, train_avg_return_pct) * log1p(train_trade_count)',
+            'fitness_mode': FITNESS_MODE,
             'min_valid_rules': MIN_VALID_RULES,
             'min_positive_trades': DEFAULT_MIN_POSITIVE_TRADES,
             'top_n': TOP_N,
@@ -249,7 +266,7 @@ out_dir = Path('data/_system')
 out_dir.mkdir(parents=True, exist_ok=True)
 for ticker in TICKERS:
     result = _evaluate_ticker(ticker)
-    out_path = out_dir / f'true_wf_grade_{ticker}.json'
+    out_path = out_dir / f'true_wf_grade_{ticker}_{FITNESS_MODE_SAFE}.json'
     with open(out_path, 'w') as f:
         json.dump(result, f, indent=2, default=str)
     print(f'saved: {out_path}')

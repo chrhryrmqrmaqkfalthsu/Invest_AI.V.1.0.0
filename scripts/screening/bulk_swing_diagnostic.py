@@ -30,6 +30,8 @@ PROGRESS_PATH = OUTPUT_ROOT / "_progress.json"
 SUMMARY_PATH = OUTPUT_ROOT / "_summary.csv"
 POS_PATH = OUTPUT_ROOT / "_candidates_pos.csv"
 UNCERTAIN_PATH = OUTPUT_ROOT / "_candidates_uncertain.csv"
+RESCUED_NEG_PATH = OUTPUT_ROOT / "_candidates_rescued_neg.csv"
+TRUE_WF_PATH = OUTPUT_ROOT / "_candidates_true_wf.csv"
 ERRORS_PATH = OUTPUT_ROOT / "_errors.csv"
 WORKER_PATH = ROOT / "scripts" / "screening" / "_bulk_swing_worker.py"
 SENTIMENT_DIR = ROOT / "data" / "_system" / "ticker_sentiment"
@@ -51,6 +53,25 @@ SUMMARY_FIELDS = [
     "elapsed_sec",
     "error",
 ]
+
+CANDIDATE_FIELDS = [
+    "ticker",
+    "candidate_group",
+    "status",
+    "priority_score",
+    "train_trades",
+    "train_exp",
+    "test_trades",
+    "test_exp",
+    "elapsed_sec",
+    "error",
+]
+
+RESCUED_NEG_MIN_TRAIN_TRADES = 10
+RESCUED_NEG_MIN_TRAIN_EXP = 3.0
+RESCUED_NEG_MIN_TEST_EXP = -1.5
+
+GROUP_ORDER = {"POS": 0, "UNCERTAIN": 1, "RESCUED_NEG": 2, "ERROR": 9}
 
 
 def _now_iso() -> str:
@@ -113,6 +134,17 @@ def _to_float(value: Any) -> float:
         return v
     except Exception:
         return 0.0
+
+
+def _to_int(value: Any) -> int:
+    try:
+        if value is None:
+            return 0
+        if isinstance(value, str) and not value.strip():
+            return 0
+        return int(float(value))
+    except Exception:
+        return 0
 
 
 def _sentiment_value(row: dict[str, Any]) -> float:
@@ -280,6 +312,19 @@ def _load_worker_result(ticker: str) -> dict[str, Any]:
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+def _load_all_results() -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    if not RESULT_DIR.exists():
+        return results
+    for path in sorted(RESULT_DIR.glob("*.json")):
+        try:
+            results.append(json.loads(path.read_text(encoding="utf-8")))
+        except Exception as e:
+            ticker = path.stem.upper()
+            results.append(_make_error_result(ticker, f"result json parse error: {type(e).__name__}: {e}"))
+    return results
+
+
 def _summary_row(result: dict[str, Any]) -> dict[str, Any]:
     train = result.get("train") or {}
     test = result.get("test") or {}
@@ -296,13 +341,29 @@ def _summary_row(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+def _candidate_row(row: dict[str, Any], candidate_group: str) -> dict[str, Any]:
+    out = dict(row)
+    out["candidate_group"] = candidate_group
+    return out
+
+
+def _is_rescued_neg(row: dict[str, Any]) -> bool:
+    return (
+        row.get("status") == "NEG"
+        and _to_int(row.get("train_trades")) >= RESCUED_NEG_MIN_TRAIN_TRADES
+        and _to_float(row.get("train_exp")) >= RESCUED_NEG_MIN_TRAIN_EXP
+        and _to_float(row.get("test_exp")) >= RESCUED_NEG_MIN_TEST_EXP
+    )
+
+
+def _write_csv(path: Path, rows: list[dict[str, Any]], fields: list[str] | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = fields or SUMMARY_FIELDS
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=SUMMARY_FIELDS)
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
-            writer.writerow({k: row.get(k, "") for k in SUMMARY_FIELDS})
+            writer.writerow({k: row.get(k, "") for k in fieldnames})
 
 
 def _write_outputs(results: list[dict[str, Any]]) -> None:
@@ -312,15 +373,34 @@ def _write_outputs(results: list[dict[str, Any]]) -> None:
 
     pos = [r for r in rows if r.get("status") == "POS"]
     uncertain = [r for r in rows if r.get("status") == "UNCERTAIN"]
+    rescued_neg = [r for r in rows if _is_rescued_neg(r)]
     errors = [r for r in rows if r.get("status") == "ERROR"]
 
     pos.sort(key=lambda r: float(r.get("priority_score") or 0.0), reverse=True)
     uncertain.sort(key=lambda r: float(r.get("priority_score") or 0.0), reverse=True)
+    rescued_neg.sort(key=lambda r: float(r.get("priority_score") or 0.0), reverse=True)
     errors.sort(key=lambda r: str(r.get("ticker") or ""))
 
     _write_csv(POS_PATH, pos)
     _write_csv(UNCERTAIN_PATH, uncertain)
     _write_csv(ERRORS_PATH, errors)
+
+    rescued_rows = [_candidate_row(r, "RESCUED_NEG") for r in rescued_neg]
+    _write_csv(RESCUED_NEG_PATH, rescued_rows, CANDIDATE_FIELDS)
+
+    true_wf_rows = (
+        [_candidate_row(r, "POS") for r in pos]
+        + [_candidate_row(r, "UNCERTAIN") for r in uncertain]
+        + rescued_rows
+    )
+    true_wf_rows.sort(
+        key=lambda r: (
+            GROUP_ORDER.get(str(r.get("candidate_group")), 9),
+            -float(r.get("priority_score") or 0.0),
+            str(r.get("ticker") or ""),
+        )
+    )
+    _write_csv(TRUE_WF_PATH, true_wf_rows, CANDIDATE_FIELDS)
 
 
 def _make_error_result(ticker: str, reason: str, elapsed_sec: float | None = None) -> dict[str, Any]:
@@ -516,6 +596,18 @@ def run_batch(args: argparse.Namespace, universe: list[dict[str, Any]]) -> None:
     print("SUMMARY", counts)
 
 
+def rebuild_csv_only() -> None:
+    results = _load_all_results()
+    _write_outputs(results)
+    counts: dict[str, int] = {}
+    for result in results:
+        counts[result.get("status", "ERROR")] = counts.get(result.get("status", "ERROR"), 0) + 1
+    rows = [_summary_row(r) for r in results]
+    rescued_count = sum(1 for row in rows if _is_rescued_neg(row))
+    true_wf_count = sum(1 for row in rows if row.get("status") in {"POS", "UNCERTAIN"}) + rescued_count
+    print(f"rebuild_csv_only: results={len(results)} counts={counts} rescued_neg={rescued_count} true_wf={true_wf_count}")
+
+
 def print_dry_run(universe: list[dict[str, Any]]) -> None:
     print("ticker,sentiment_days,last_date,has_recent,abs_sentiment_sum")
     for item in universe:
@@ -538,6 +630,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--resume", action="store_true")
     p.add_argument("--retry-failed", action="store_true")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--rebuild-csv-only", action="store_true", help="기존 results/*.json만 읽어 CSV를 재생성하고 종료")
     return p.parse_args()
 
 
@@ -552,6 +645,10 @@ def main() -> int:
         raise SystemExit("--parallel must be positive")
     if args.timeout_sec <= 0:
         raise SystemExit("--timeout-sec must be positive")
+
+    if args.rebuild_csv_only:
+        rebuild_csv_only()
+        return 0
 
     tickers_file = Path(args.tickers_file) if args.tickers_file else None
     universe = build_universe(limit=args.limit, tickers_file=tickers_file)

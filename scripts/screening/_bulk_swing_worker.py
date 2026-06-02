@@ -71,6 +71,19 @@ def _date_series(df: pd.DataFrame):
     return None
 
 
+def _cut_df_end_date(df: pd.DataFrame, end_date: str | None) -> pd.DataFrame:
+    """재현성 검증용 end_date 컷. 기본 bulk 실행에서는 쓰지 않는다."""
+    if not end_date:
+        return df
+    end_ts = pd.Timestamp(end_date)
+    if "date" in df.columns:
+        dates = pd.to_datetime(df["date"])
+        return df.loc[dates <= end_ts].copy()
+    if isinstance(df.index, pd.DatetimeIndex):
+        return df.loc[df.index <= end_ts].copy()
+    return df
+
+
 def _split_dates(df: pd.DataFrame, test_months: int) -> dict[str, str | None]:
     dates = _date_series(df)
     if dates is None or len(dates) == 0:
@@ -139,6 +152,7 @@ def run_one(
     position_limit_krw: float = DEFAULT_POSITION_LIMIT_KRW,
     fitness_mode: str = DEFAULT_FITNESS_MODE,
     seed: int | None = DEFAULT_SEED,
+    end_date: str | None = None,
 ) -> dict[str, Any]:
     t0 = time.time()
     ticker = ticker.upper().strip()
@@ -147,6 +161,7 @@ def run_one(
     adapter = get_adapter(ticker)
     meta = adapter.meta
     df = adapter.load_history(years=years)
+    df = _cut_df_end_date(df, end_date)
     periods = _split_dates(df, test_months)
     if not periods["train_start"] or not periods["test_start"]:
         raise RuntimeError("date information unavailable; cannot split train/test")
@@ -182,6 +197,7 @@ def run_one(
     ga_result = run_ga(base_rulebook=base_rb, evaluate_fn=evaluate_fn, ga_config=ga_cfg)
 
     best_rb = ga_result.best
+    ga_best_fitness = float(getattr(best_rb, "fitness", 0.0) or 0.0)
     best_rb.ticker = ticker
     best_rb.asset_type = meta.asset_type
     best_rb.direction = meta.direction
@@ -227,6 +243,8 @@ def run_one(
         "status": status,
         "priority_score": score,
         "elapsed_sec": elapsed,
+        "data_rows": int(len(df)),
+        "data_end_date": periods["test_end"],
         "train_period": [periods["train_start"], periods["train_end"]],
         "test_period": [periods["test_start"], periods["test_end"]],
         "train": _bt_summary(train_result),
@@ -236,7 +254,7 @@ def run_one(
             "generations": DEFAULT_GENERATIONS,
             "seed": seed,
             "generations_run": int(ga_result.generations_run or 0),
-            "best_fitness": float(getattr(ga_result.best, "fitness", 0.0) or 0.0),
+            "best_fitness": ga_best_fitness,
         },
         "asset_meta": meta.to_dict(),
         "note": "Diagnostic only. Not validated. Must pass true-WF before trading.",
@@ -259,6 +277,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--position-limit-krw", type=float, default=DEFAULT_POSITION_LIMIT_KRW)
     p.add_argument("--fitness-mode", default=DEFAULT_FITNESS_MODE)
     p.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    p.add_argument("--end-date", default=None, help="재현성 검증용 데이터 컷오프 YYYY-MM-DD. 기본 bulk 실행에서는 미사용")
     return p.parse_args()
 
 
@@ -273,6 +292,7 @@ def main() -> int:
             position_limit_krw=args.position_limit_krw,
             fitness_mode=args.fitness_mode,
             seed=args.seed,
+            end_date=args.end_date,
         )
         tr = result["train"]
         te = result["test"]

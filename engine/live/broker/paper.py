@@ -12,6 +12,7 @@ from typing import Optional, List, Dict
 
 from engine.core.logger import get_logger
 from engine.core import config as config_mod
+from engine.core.data_loader import get_current_price_with_source
 from engine.adapters.factory import get_adapter
 from engine.live.broker.base import (
     Broker, Order, Holding, Balance,
@@ -23,10 +24,16 @@ log = get_logger("paper_broker")
 DEFAULT_INITIAL_CASH = 1_000_000.0   # 100만원
 COMMISSION_RATE = 0.00015            # 0.015% (KIS 모의/실전 동일 수준)
 SLIPPAGE_RATE = 0.0002               # 0.02% 슬리피지
+PRICE_SANITY_LO = 0.80
+PRICE_SANITY_HI = 1.20
 
 
 def _state_path() -> Path:
     return config_mod.PROJECT_ROOT / "data" / "_system" / "paper_state.json"
+
+
+def _audit_log_path() -> Path:
+    return config_mod.PROJECT_ROOT / "data" / "_system" / "paper_trade_audit.jsonl"
 
 
 class PaperBroker(Broker):
@@ -70,15 +77,83 @@ class PaperBroker(Broker):
 
     # ---------- 시세 ----------
     def get_current_price(self, ticker: str) -> Optional[float]:
+        """기존 Broker 인터페이스 호환용: 가격 숫자만 반환."""
+        q = get_current_price_with_source(ticker)
+        if not q:
+            return None
+        price = q.get("price")
+        if price is None or float(price) <= 0:
+            return None
+        return float(price)
+
+    def _get_current_price_quote(self, ticker: str) -> Optional[dict]:
+        """주문 감사용 현재가 + 소스 + 가격 sanity 정보를 반환한다."""
+        q = get_current_price_with_source(ticker)
+        if not q:
+            return None
+        price = q.get("price")
+        if price is None or float(price) <= 0:
+            return None
+        quote_price = float(price)
+        norm = q.get("normalized") or {}
+
+        audit = {
+            "audit_schema_version": 1,
+            "quote_price": quote_price,
+            "quote_source": q.get("source"),
+            "quote_date": q.get("quote_date"),
+            "quote_pykrx_error": q.get("pykrx_error"),
+            "normalized_raw_ticker": norm.get("raw"),
+            "normalized_krx_ticker": norm.get("krx"),
+            "normalized_yf_ticker": norm.get("yf"),
+            "normalized_is_kr": norm.get("is_kr"),
+            "adapter_type": None,
+            "history_last_close": None,
+            "history_last_date": None,
+            "price_sanity_ratio": None,
+            "price_sanity_ok": None,
+            "price_sanity_range": [PRICE_SANITY_LO, PRICE_SANITY_HI],
+        }
+
         try:
             adapter = get_adapter(ticker)
-            price = adapter.current_price()
-            if price is None or price <= 0:
-                return None
-            return float(price)
+            audit["adapter_type"] = type(adapter).__name__
+            hist = adapter.load_history(years=1)
+            if hist is not None and not hist.empty and "Close" in hist.columns:
+                last = hist.iloc[-1]
+                last_close = float(last["Close"])
+                if last_close > 0:
+                    audit["history_last_close"] = last_close
+                    try:
+                        audit["history_last_date"] = hist.index[-1].strftime("%Y-%m-%d")
+                    except Exception:
+                        audit["history_last_date"] = str(hist.index[-1])
+                    ratio = quote_price / last_close
+                    audit["price_sanity_ratio"] = ratio
+                    audit["price_sanity_ok"] = bool(PRICE_SANITY_LO <= ratio <= PRICE_SANITY_HI)
         except Exception as e:
-            log.warning(f"get_current_price({ticker}) failed: {e}")
-            return None
+            audit["history_error"] = f"{type(e).__name__}: {e}"
+
+        if audit.get("price_sanity_ok") is False:
+            log.warning(
+                f"[PAPER][PRICE_SANITY] {ticker} quote={quote_price:,.4f} "
+                f"history_last={audit.get('history_last_close')}@{audit.get('history_last_date')} "
+                f"ratio={audit.get('price_sanity_ratio'):.4f} source={audit.get('quote_source')} "
+                f"yf={audit.get('normalized_yf_ticker')} krx={audit.get('normalized_krx_ticker')}"
+            )
+        return audit
+
+    def _append_audit_log(self, record: dict) -> None:
+        """append-only 감사 로그. 실패해도 주문 자체는 막지 않는다."""
+        try:
+            p = _audit_log_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            out = dict(record)
+            out.setdefault("audit_logged_at", datetime.now().isoformat())
+            with open(p, "a", encoding="utf-8") as f:
+                f.write(json.dumps(out, ensure_ascii=False, default=str) + "\n")
+        except Exception as e:
+            log.warning(f"paper audit log append failed: {e}")
 
     def is_market_open(self, ticker: Optional[str] = None) -> bool:
         # ticker 주면 해당 종목 거래소 기준, 없으면 한국 ETF 기준 (KRX)
@@ -133,16 +208,25 @@ class PaperBroker(Broker):
             submitted_at=datetime.now().isoformat(),
         )
 
+    def _store_order(self, order: Order, audit: Optional[dict] = None) -> dict:
+        d = order.to_dict()
+        if audit:
+            d.update(audit)
+        self._state.setdefault("orders", []).append(d)
+        self._append_audit_log(d)
+        return d
+
     def place_buy(self, ticker: str, shares: int,
                   order_type: OrderType = OrderType.MARKET,
                   price: float = 0.0) -> Order:
         if shares <= 0:
             return self._reject(ticker, OrderSide.BUY, shares, order_type, price,
                                 "shares must be > 0")
-        cur = self.get_current_price(ticker)
-        if cur is None:
+        quote = self._get_current_price_quote(ticker)
+        if not quote:
             return self._reject(ticker, OrderSide.BUY, shares, order_type, price,
                                 "current price unavailable")
+        cur = float(quote["quote_price"])
         # 체결가: 시장가는 슬리피지 가산, 지정가는 그대로
         fill_price = cur * (1 + SLIPPAGE_RATE) if order_type == OrderType.MARKET else price
         notional = fill_price * shares
@@ -172,7 +256,15 @@ class PaperBroker(Broker):
         order.commission = commission
         order.filled_at = datetime.now().isoformat()
 
-        self._state.setdefault("orders", []).append(order.to_dict())
+        quote.update({
+            "side": OrderSide.BUY.value,
+            "fill_price": fill_price,
+            "slippage_rate": SLIPPAGE_RATE if order_type == OrderType.MARKET else 0.0,
+            "notional": notional,
+            "cash_before": cash,
+            "cash_after": self._state["cash"],
+        })
+        self._store_order(order, quote)
         self._save_state()
         log.info(f"[PAPER] BUY {ticker} {shares}주 @ {fill_price:,.0f} "
                  f"(수수료 {commission:.0f}, 잔고 {self._state['cash']:,.0f})")
@@ -190,17 +282,19 @@ class PaperBroker(Broker):
             held = int(pos.get("shares", 0)) if pos else 0
             return self._reject(ticker, OrderSide.SELL, shares, order_type, price,
                                 f"insufficient position: need {shares}, have {held}")
-        cur = self.get_current_price(ticker)
-        if cur is None:
+        quote = self._get_current_price_quote(ticker)
+        if not quote:
             return self._reject(ticker, OrderSide.SELL, shares, order_type, price,
                                 "current price unavailable")
+        cur = float(quote["quote_price"])
         fill_price = cur * (1 - SLIPPAGE_RATE) if order_type == OrderType.MARKET else price
         notional = fill_price * shares
         commission = notional * COMMISSION_RATE
         proceeds = notional - commission
 
         # 잔고 + 포지션 반영
-        self._state["cash"] = float(self._state.get("cash", 0)) + proceeds
+        cash_before = float(self._state.get("cash", 0))
+        self._state["cash"] = cash_before + proceeds
         new_shares = int(pos["shares"]) - shares
         if new_shares <= 0:
             holdings.pop(ticker, None)
@@ -215,7 +309,15 @@ class PaperBroker(Broker):
         order.commission = commission
         order.filled_at = datetime.now().isoformat()
 
-        self._state.setdefault("orders", []).append(order.to_dict())
+        quote.update({
+            "side": OrderSide.SELL.value,
+            "fill_price": fill_price,
+            "slippage_rate": SLIPPAGE_RATE if order_type == OrderType.MARKET else 0.0,
+            "notional": notional,
+            "cash_before": cash_before,
+            "cash_after": self._state["cash"],
+        })
+        self._store_order(order, quote)
         self._save_state()
         log.info(f"[PAPER] SELL {ticker} {shares}주 @ {fill_price:,.0f} "
                  f"(수수료 {commission:.0f}, 잔고 {self._state['cash']:,.0f})")
@@ -226,7 +328,7 @@ class PaperBroker(Broker):
         order = self._make_order(side, ticker, shares, order_type, price)
         order.status = OrderStatus.REJECTED
         order.message = msg
-        self._state.setdefault("orders", []).append(order.to_dict())
+        self._store_order(order)
         self._save_state()
         log.warning(f"[PAPER] REJECT {side.value.upper()} {ticker} {shares}주: {msg}")
         return order

@@ -7,7 +7,7 @@
 """
 import time
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Any
 
 import pandas as pd
 import yfinance as yf
@@ -212,26 +212,70 @@ def load_ohlcv(
 
 
 # ---------- 현재가 (실시간) ----------
+def get_current_price_with_source(ticker: str) -> Optional[dict[str, Any]]:
+    """현재가와 조회 소스 정보를 함께 반환한다.
+
+    기존 get_current_price() 호환성을 깨지 않기 위해 새 함수로 분리한다.
+    PaperBroker 감사 로그에서 pykrx/yfinance fallback 여부를 확인하는 데 사용한다.
+    """
+    norm = normalize_ticker(ticker)
+    pykrx_error = None
+    try:
+        if norm["is_kr"] and PYKRX_AVAILABLE:
+            today = datetime.now().strftime("%Y%m%d")
+            try:
+                df = pykrx_stock.get_market_ohlcv(today, today, norm["krx"])
+                if df is not None and not df.empty:
+                    price = float(df["종가"].iloc[-1])
+                    quote_date = None
+                    try:
+                        quote_date = pd.Timestamp(df.index[-1]).strftime("%Y-%m-%d")
+                    except Exception:
+                        quote_date = datetime.now().strftime("%Y-%m-%d")
+                    return {
+                        "price": price,
+                        "source": "pykrx_today_ohlcv",
+                        "quote_date": quote_date,
+                        "normalized": norm,
+                    }
+            except Exception as e:
+                pykrx_error = str(e)
+                log.debug(f"pykrx current price failed for {ticker}: {e}")
+
+        # fallback yfinance
+        t = yf.Ticker(norm["yf"])
+        hist = t.history(period="2d")
+        if hist is not None and not hist.empty:
+            price = float(hist["Close"].iloc[-1])
+            quote_date = None
+            try:
+                quote_date = pd.Timestamp(hist.index[-1]).strftime("%Y-%m-%d")
+            except Exception:
+                quote_date = None
+            return {
+                "price": price,
+                "source": "yfinance_2d_fallback" if norm["is_kr"] else "yfinance_2d",
+                "quote_date": quote_date,
+                "normalized": norm,
+                "pykrx_error": pykrx_error,
+            }
+    except Exception as e:
+        log.warning(f"get_current_price_with_source failed for {ticker}: {e}")
+    return None
+
+
 def get_current_price(ticker: str) -> Optional[float]:
     """
     가장 최근 종가 / 현재가를 반환.
     KIS API 미연동 상태에서는 yfinance 또는 pykrx로 일봉 마지막 가격 사용.
     """
-    norm = normalize_ticker(ticker)
-    try:
-        if norm["is_kr"] and PYKRX_AVAILABLE:
-            today = datetime.now().strftime("%Y%m%d")
-            df = pykrx_stock.get_market_ohlcv(today, today, norm["krx"])
-            if df is not None and not df.empty:
-                return float(df["종가"].iloc[-1])
-        # fallback yfinance
-        t = yf.Ticker(norm["yf"])
-        hist = t.history(period="2d")
-        if hist is not None and not hist.empty:
-            return float(hist["Close"].iloc[-1])
-    except Exception as e:
-        log.warning(f"get_current_price failed for {ticker}: {e}")
-    return None
+    q = get_current_price_with_source(ticker)
+    if not q:
+        return None
+    price = q.get("price")
+    if price is None or float(price) <= 0:
+        return None
+    return float(price)
 
 
 # ---------- 캐시 무효화 ----------
@@ -252,5 +296,6 @@ if __name__ == "__main__":
             print(f"\n✅ {tk}: {len(df)} rows")
             print(f"  기간: {df.index[0].date()} ~ {df.index[-1].date()}")
             print(f"  최종가: {df['Close'].iloc[-1]:.2f}")
+            print(f"  현재가: {get_current_price_with_source(tk)}")
         except Exception as e:
             print(f"\n❌ {tk} 실패: {e}")

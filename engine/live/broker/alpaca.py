@@ -1,10 +1,10 @@
 """
 AlpacaBroker - Alpaca paper trading broker adapter.
 
-1단계 목표
----------
-- 기존 Broker 인터페이스(shares=int)를 유지한 채 Alpaca paper 연결을 검증한다.
-- 소수점 주문/금액 기반 주문/통화 단위 재설계는 다음 단계로 미룬다.
+목표
+----
+- 기존 Broker 인터페이스에 맞춰 Alpaca paper 계좌를 연결한다.
+- shares는 float를 허용한다. Alpaca fractional 주문은 market + DAY 조건에서만 허용한다.
 - 인증 정보는 환경변수 또는 프로젝트 루트 .env에서만 읽는다. 키 값을 코드에 넣지 않는다.
 
 필수 설정
@@ -44,14 +44,15 @@ log = logging.getLogger("alpaca_broker")
 
 DEFAULT_ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
 ENV_PATH = Path.home() / "kingmaker" / ".env"
+SHARE_ROUND_DIGITS = 6
+SHARE_EPS = 10 ** (-SHARE_ROUND_DIGITS)
 
 
 class AlpacaBroker(Broker):
     """Alpaca paper broker implementation.
 
-    현재 단계에서는 정수주 주문만 허용한다. Alpaca 자체는 fractional qty를 지원하지만,
-    Kingmaker의 공통 Broker 인터페이스와 Runner/SafetyLayer가 아직 int shares 전제이므로
-    여기서 float 수량 주문을 차단한다.
+    Alpaca fractional qty를 지원한다. 단, stage 4/4 정책상 fractional 주문은
+    market order + DAY time-in-force로만 허용한다. 정수 qty는 market/limit 모두 허용한다.
     """
 
     def __init__(
@@ -105,16 +106,18 @@ class AlpacaBroker(Broker):
             return default
 
     @staticmethod
-    def _require_whole_shares(shares: int | float) -> int:
-        qty_f = float(shares)
-        qty_i = int(qty_f)
-        if qty_i <= 0:
-            raise BrokerError(f"shares must be positive integer (got {shares})")
-        if qty_f != float(qty_i):
-            raise BrokerError(
-                f"Alpaca fractional shares are intentionally disabled in stage 1 (got {shares})"
-            )
-        return qty_i
+    def _normalize_qty(shares: int | float) -> float:
+        try:
+            qty = round(float(shares), SHARE_ROUND_DIGITS)
+        except Exception as e:
+            raise BrokerError(f"shares must be numeric (got {shares!r})") from e
+        if qty <= SHARE_EPS:
+            raise BrokerError(f"shares must be positive (got {shares})")
+        return qty
+
+    @staticmethod
+    def _is_fractional_qty(qty: float) -> bool:
+        return abs(qty - round(qty)) > SHARE_EPS
 
     @staticmethod
     def _map_status(status: Any) -> OrderStatus:
@@ -158,7 +161,6 @@ class AlpacaBroker(Broker):
             ticker=ticker,
             side=side,
             order_type=order_type,
-            # dataclass annotation은 int지만 stage 1에서 Alpaca 응답 보호를 위해 float도 보존 가능.
             shares=qty,
             price=limit_price,
             status=self._map_status(getattr(o, "status", "")),
@@ -246,21 +248,27 @@ class AlpacaBroker(Broker):
         self,
         side: OrderSide,
         ticker: str,
-        shares: int,
+        shares: float,
         order_type: OrderType,
         price: float,
     ) -> Order:
-        qty = self._require_whole_shares(shares)
+        qty = self._normalize_qty(shares)
         ticker_u = str(ticker).strip().upper()
         alpaca_side = AlpacaOrderSide.BUY if side == OrderSide.BUY else AlpacaOrderSide.SELL
+        is_fractional = self._is_fractional_qty(qty)
 
         try:
+            if is_fractional and order_type != OrderType.MARKET:
+                raise BrokerError(
+                    f"Alpaca fractional qty requires market order + DAY TIF (ticker={ticker_u}, qty={qty:g})"
+                )
+
             if order_type == OrderType.LIMIT:
                 if price <= 0:
                     raise BrokerError("limit order requires price > 0")
                 req = LimitOrderRequest(
                     symbol=ticker_u,
-                    qty=float(qty),
+                    qty=qty,
                     side=alpaca_side,
                     time_in_force=TimeInForce.DAY,
                     limit_price=float(price),
@@ -268,7 +276,7 @@ class AlpacaBroker(Broker):
             else:
                 req = MarketOrderRequest(
                     symbol=ticker_u,
-                    qty=float(qty),
+                    qty=qty,
                     side=alpaca_side,
                     time_in_force=TimeInForce.DAY,
                 )
@@ -277,12 +285,12 @@ class AlpacaBroker(Broker):
         except BrokerError:
             raise
         except Exception as e:
-            raise BrokerError(f"Alpaca submit_order 실패 {side.value} {ticker_u} {qty}: {e}") from e
+            raise BrokerError(f"Alpaca submit_order 실패 {side.value} {ticker_u} {qty:g}: {e}") from e
 
     def place_buy(
         self,
         ticker: str,
-        shares: int,
+        shares: float,
         order_type: OrderType = OrderType.MARKET,
         price: float = 0.0,
     ) -> Order:
@@ -291,7 +299,7 @@ class AlpacaBroker(Broker):
     def place_sell(
         self,
         ticker: str,
-        shares: int,
+        shares: float,
         order_type: OrderType = OrderType.MARKET,
         price: float = 0.0,
     ) -> Order:

@@ -10,7 +10,7 @@ Scheduler가 시계라면, Runner는 그 시계 신호 받아서 실제로 일�
   - daily_summary()    : 매일 16:00. 손익/체결 요약 전송.
 
 의존성:
-  - broker        : PaperBroker | KisBroker
+  - broker        : PaperBroker | KisBroker | AlpacaBroker
   - safety        : SafetyLayer
   - notifier      : TelegramNotifier
   - clock         : MarketClock (KrxMarketClock 등)
@@ -42,6 +42,14 @@ from engine.live.telegram.notifier import TelegramNotifier
 from engine.strategies.demo_rulebook import RuleBook, Signal
 
 logger = logging.getLogger("runner")
+
+SHARE_ROUND_DIGITS = 6
+SHARE_EPS = 10 ** (-SHARE_ROUND_DIGITS)
+
+
+def _normalize_shares(value: float) -> float:
+    v = round(float(value), SHARE_ROUND_DIGITS)
+    return 0.0 if abs(v) <= SHARE_EPS else v
 
 
 @dataclass
@@ -87,7 +95,8 @@ class Runner:
         clock: MarketClock,
         rulebook: RuleBook,
         symbols: List[str],
-        order_shares: int = 1,
+        order_shares: float = 1.0,
+        order_notional: Optional[float] = None,
     ):
         self.broker = broker
         self.safety = safety
@@ -95,14 +104,68 @@ class Runner:
         self.clock = clock
         self.rulebook = rulebook
         self.symbols = list(symbols)
-        self.order_shares = order_shares
+        self.order_shares = float(order_shares)
+        self.order_notional = float(order_notional) if order_notional and float(order_notional) > 0 else None
         self.stats = RunnerStats(started_at=datetime.now(ZoneInfo("Asia/Seoul")))
+        order_mode = f"notional={self.order_notional:g}" if self.order_notional else f"shares={self.order_shares:g}"
         logger.info(
             f"Runner 초기화: mode={broker.mode} symbols={len(self.symbols)}개 "
-            f"rulebook={rulebook.name()}"
+            f"rulebook={rulebook.name()} order_mode={order_mode}"
         )
         self.position_manager = PositionManager()
         self.approval_manager = ApprovalManager()
+
+    # ==========================================================
+    # 주문 수량 계산: shares 기반 하위호환 + notional 기반 신규 통로
+    # ==========================================================
+    def _supports_fractional_shares(self) -> bool:
+        """PaperBroker/AlpacaBroker는 float 수량 허용. KIS는 정수주 유지."""
+        mode = str(getattr(self.broker, "mode", "") or "").lower()
+        cls = type(self.broker).__name__.lower()
+        return mode == "paper" or "alpaca" in mode or "alpaca" in cls
+
+    def _calc_shares_from_notional(self, target_notional: float, price: float) -> float:
+        if price <= 0 or target_notional <= 0:
+            return 0.0
+        raw = float(target_notional) / float(price)
+        if self._supports_fractional_shares():
+            return _normalize_shares(raw)
+        # KIS/정수주 브로커는 기존 방식 유지. 1주 미만 금액이면 1주 시도 후 SafetyLayer가 금액 한도로 막을 수 있다.
+        return float(max(1, int(raw)))
+
+    def _resolve_order_shares(
+        self,
+        side: str,
+        ticker: str,
+        price: float,
+        target_notional: Optional[float] = None,
+    ) -> float:
+        """주문 수량 결정.
+
+        - target_notional이 있으면 금액 기반: shares = target_notional / price
+        - 없으면 기존 order_shares 사용
+        - KIS/정수주 브로커는 int 수량으로 하위호환
+        - SELL은 보유 수량을 넘지 않도록 cap
+        """
+        side_u = str(side).upper()
+        target = float(target_notional) if target_notional and float(target_notional) > 0 else self.order_notional
+        if target and target > 0:
+            shares = self._calc_shares_from_notional(target, price)
+        else:
+            raw = float(self.order_shares)
+            shares = _normalize_shares(raw) if self._supports_fractional_shares() else float(max(1, int(raw)))
+
+        if side_u == "SELL":
+            try:
+                holdings = {h.ticker: h for h in self.broker.get_holdings()}
+                held = float(getattr(holdings.get(ticker), "shares", 0.0) or 0.0)
+                if held <= SHARE_EPS:
+                    return 0.0
+                shares = min(shares, held)
+            except Exception:
+                pass
+
+        return _normalize_shares(shares)
 
     # ==========================================================
     # Hot-reload: 학습 완료 후 신규 종목 동적 편입
@@ -262,20 +325,33 @@ class Runner:
             if price is None or price <= 0:
                 logger.warning(f"[APPROVAL-EXEC] {ticker} 현재가 조회 실패")
                 return
-            shares = max(1, int(amount / price))
+            shares = self._resolve_order_shares("BUY", ticker, price, target_notional=amount)
+            if shares <= SHARE_EPS:
+                logger.warning(f"[APPROVAL-EXEC] {ticker} 주문 수량 계산 실패: amount={amount}, price={price}")
+                req.status = "rejected"
+                self.approval_manager._save()
+                return
 
-            # SafetyLayer 한도 일시 상향 (max_krw + max_shares + max_total_invested)
-            original_max_krw      = getattr(self.safety, "max_krw", None)
-            original_max_shares   = getattr(self.safety, "max_shares", None)
-            original_max_total    = getattr(self.safety, "max_total_invested", None)
+            # SafetyLayer 한도 일시 상향 (notional + shares + total)
+            original_max_krw       = getattr(self.safety, "max_krw", None)
+            original_max_notional  = getattr(self.safety, "max_notional_per_order", None)
+            original_max_shares    = getattr(self.safety, "max_shares", None)
+            original_max_total     = getattr(self.safety, "max_total_invested", None)
+            original_max_total_ntl = getattr(self.safety, "max_total_notional", None)
             try:
+                temporary_notional_limit = float(amount) + price * max(2.0, shares * 0.02)
                 if original_max_krw is not None:
-                    self.safety.max_krw = max(float(original_max_krw), float(amount) + price * 2)
+                    self.safety.max_krw = max(float(original_max_krw), temporary_notional_limit)
+                if original_max_notional is not None:
+                    self.safety.max_notional_per_order = max(float(original_max_notional), temporary_notional_limit)
                 if original_max_shares is not None:
-                    self.safety.max_shares = max(int(original_max_shares), int(shares))
+                    self.safety.max_shares = max(float(original_max_shares), float(shares))
+                temporary_total_limit = float(amount) + price * max(2.0, shares * 0.02)
                 if original_max_total is not None:
-                    # 추가 매수분만큼 누적한도 임시 상향 (현 한도 + 이번 주문액 + 여유)
-                    self.safety.max_total_invested = float(original_max_total) + float(amount) + price * 2
+                    self.safety.max_total_invested = float(original_max_total) + temporary_total_limit
+                if original_max_total_ntl is not None:
+                    self.safety.max_total_notional = float(original_max_total_ntl) + temporary_total_limit
+
                 # 안전 체크
                 check = self.safety.check_order("BUY", ticker, shares, price)
                 if not check.allowed:
@@ -292,25 +368,30 @@ class Runner:
                 if order.status == OrderStatus.FILLED:
                     self.stats.orders_filled += 1
                     fill_price = order.filled_avg_price or price
+                    filled_shares = order.filled_shares or shares
                     # add_to_position으로 평균가/stop/target 재계산
                     atr = self.rulebook.get_last_atr(ticker) if hasattr(self.rulebook, "get_last_atr") else None
                     rb = self.rulebook.get_rulebook(ticker) if hasattr(self.rulebook, "get_rulebook") else None
                     if atr and rb:
-                        self.position_manager.add_to_position(ticker, fill_price, shares, rb, atr)
+                        self.position_manager.add_to_position(ticker, fill_price, filled_shares, rb, atr)
                     self.notifier.send(
-                        f"✅ `{ticker}` 추가매수 체결: {shares}주 @ {fill_price:,.0f} (req={req.request_id[:8]})",
+                        f"✅ `{ticker}` 추가매수 체결: {filled_shares:g}주 @ {fill_price:,.4f} (req={req.request_id[:8]})",
                         parse_mode="Markdown",
                     )
-                    logger.info(f"[APPROVAL-EXEC] {ticker} 추가매수 체결 {shares}주 @ {fill_price:,.0f}")
+                    logger.info(f"[APPROVAL-EXEC] {ticker} 추가매수 체결 {filled_shares:g}주 @ {fill_price:,.4f}")
                 else:
                     self.notifier.send(f"⚠️ `{ticker}` 추가매수 미체결: status={order.status.value}", parse_mode="Markdown")
             finally:
                 if original_max_krw is not None:
                     self.safety.max_krw = original_max_krw
+                if original_max_notional is not None:
+                    self.safety.max_notional_per_order = original_max_notional
                 if original_max_shares is not None:
                     self.safety.max_shares = original_max_shares
                 if original_max_total is not None:
                     self.safety.max_total_invested = original_max_total
+                if original_max_total_ntl is not None:
+                    self.safety.max_total_notional = original_max_total_ntl
 
             # 요청 완료 처리
             req.status = "executed"
@@ -477,8 +558,14 @@ class Runner:
                 logger.debug(f"{ticker} SELL 시그널이지만 포지션 없음, 스킵")
                 return
 
+        order_shares = self._resolve_order_shares(side, ticker, price)
+        if order_shares <= SHARE_EPS:
+            self.stats.orders_blocked += 1
+            logger.info(f"{ticker} {side} 차단: 주문 수량 계산 결과 0")
+            return
+
         # 안전 체크
-        check = self.safety.check_order(side, ticker, self.order_shares, price)
+        check = self.safety.check_order(side, ticker, order_shares, price)
         if not check.allowed:
             self.stats.orders_blocked += 1
             logger.info(f"{ticker} {side} 차단: [{check.code}] {check.reason}")
@@ -488,9 +575,9 @@ class Runner:
         # 주문 실행
         try:
             if side == "BUY":
-                order = self.broker.place_buy(ticker, self.order_shares, OrderType.MARKET)
+                order = self.broker.place_buy(ticker, order_shares, OrderType.MARKET)
             else:
-                order = self.broker.place_sell(ticker, self.order_shares, OrderType.MARKET)
+                order = self.broker.place_sell(ticker, order_shares, OrderType.MARKET)
 
             self.safety.record_order(order, side)
 
@@ -503,9 +590,10 @@ class Runner:
                         atr = self.rulebook.get_last_atr(ticker)
                         rb = self.rulebook.get_rulebook(ticker)
                         fill_price = order.filled_avg_price or price
+                        filled_shares = order.filled_shares or order_shares
                         if atr and rb:
                             self.position_manager.register_entry(
-                                ticker, fill_price, self.order_shares, rb, atr
+                                ticker, fill_price, filled_shares, rb, atr
                             )
                             # 강한 시그널이면 추가 매수 승인 요청 발송
                             self._maybe_request_approval(
@@ -517,7 +605,7 @@ class Runner:
                         logger.error(f"{ticker} register_entry 실패: {e}")
 
             self.notifier.send_order(order)
-            logger.info(f"{ticker} {side} 발주 완료: id={order.order_id} status={order.status.value}")
+            logger.info(f"{ticker} {side} 발주 완료: shares={order_shares:g} id={order.order_id} status={order.status.value}")
 
         except Exception as e:
             self.stats.orders_blocked += 1
@@ -575,7 +663,7 @@ class Runner:
 
             pnl_total = sum(h.unrealized_pnl for h in holdings)
             holdings_lines = [
-                f"  {h.ticker}: {h.shares}주 평가 {h.market_value:,.0f}원 "
+                f"  {h.ticker}: {h.shares:g}주 평가 {h.market_value:,.0f}원 "
                 f"({h.unrealized_pnl_pct:+.2f}%)"
                 for h in holdings
             ] or ["  (없음)"]
@@ -680,6 +768,7 @@ if __name__ == "__main__":
         rulebook=rulebook,
         symbols=["TEST_A", "TEST_B"],
         order_shares=1,
+        order_notional=None,
     )
 
     # PaperBroker 현재가 mock (TEST_A: 상승, TEST_B: 횡보)
@@ -715,7 +804,13 @@ if __name__ == "__main__":
     assert runner.stats.market_ticks == 0, "리셋 안 됨"
     print(f"  ✅ 요약 전송됨, stats 리셋됨")
 
-    print("\n[5] 에러 핸들링 테스트")
+    print("\n[5] 금액 기반 수량 계산 테스트")
+    runner.order_notional = 50.0
+    q = runner._resolve_order_shares("BUY", "TEST_A", 200.0)
+    print(f"  $50 / $200 = {q:g}주")
+    assert q == 0.25
+
+    print("\n[6] 에러 핸들링 테스트")
     broker.get_current_price = lambda t: (_ for _ in ()).throw(RuntimeError("price fail"))
     runner.tick_market()  # 예외 발생해도 죽으면 안 됨
     assert "tick_market" in runner.stats.last_error

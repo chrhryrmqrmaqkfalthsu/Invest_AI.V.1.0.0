@@ -5,6 +5,9 @@
 - 백테스트와 실전 둘 다에서 사용
 """
 from dataclasses import dataclass, field
+import json
+import os
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -51,6 +54,212 @@ class Trade:
             "pnl_krw": round(self.pnl_krw, 0),
             "commission": round(self.commission, 0),
         }
+
+
+def _exit_shadow_enabled() -> bool:
+    return str(os.environ.get("EXIT_SHADOW", "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _safe_float(value) -> Optional[float]:
+    try:
+        if value is None or pd.isna(value):
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _shadow_log_path(ticker: str) -> Path:
+    safe_ticker = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in str(ticker or "UNKNOWN"))
+    return Path("logs") / f"exit_shadow_{safe_ticker}.jsonl"
+
+
+def _classify_exit_shadow_difference(
+    rb: Rulebook,
+    legacy_reason: Optional[str],
+    legacy_price: Optional[float],
+    new_reason: Optional[str],
+    new_trigger: Optional[float],
+    diagnostics: dict,
+) -> str:
+    if legacy_reason == new_reason:
+        if legacy_reason is None:
+            return "SAME"
+        if legacy_price is not None and new_trigger is not None and abs(float(legacy_price) - float(new_trigger)) > 1e-9:
+            return "INTENTIONAL_SLIPPAGE"
+        return "SAME"
+
+    strategy = str(getattr(rb, "exit_strategy", "") or "").lower()
+    if strategy == "hybrid":
+        if legacy_reason == "take_profit" and new_reason in {"stop_loss", "trailing"}:
+            return "INTENTIONAL_HYBRID_PRIORITY"
+        if legacy_reason == "stop_loss" and new_reason == "trailing":
+            return "INTENTIONAL_HYBRID_PRIORITY"
+
+    if bool(diagnostics.get("trailing_delay_difference")):
+        return "INTENTIONAL_TRAILING_DELAY"
+
+    if bool(diagnostics.get("dynamic_exit_difference")):
+        return "INTENTIONAL_DYNAMIC_EXIT"
+
+    if legacy_reason == "time_out" or new_reason == "time_out":
+        if bool(diagnostics.get("timeout_boundary")):
+            return "INTENTIONAL_TRADING_DAY_TIMEOUT"
+
+    return "BUG_CANDIDATE"
+
+
+def _write_exit_shadow_record(record: dict) -> None:
+    try:
+        path = _shadow_log_path(record.get("ticker", "UNKNOWN"))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    except Exception as e:
+        log.warning(f"exit shadow log write failed: {e}")
+
+
+def _shadow_compare_exit(
+    rb: Rulebook,
+    row,
+    next_row,
+    entry_date: str,
+    entry_price: float,
+    avg_cost: float,
+    total_shares: float,
+    atr: float,
+    stop_loss: float,
+    take_profit: float,
+    trailing_stop: float,
+    extreme: float,
+    legacy_reason: Optional[str],
+    legacy_price: Optional[float],
+    holding_days: int,
+    cur_market_score: float,
+    cur_vix_level: float,
+    dyn_sl_atr: float,
+    dyn_tp_atr: float,
+    dyn_trail_atr: float,
+) -> None:
+    if not _exit_shadow_enabled():
+        return
+
+    try:
+        from engine.core.exit_policy import (
+            ExitExecutionConfig,
+            MarketContext,
+            PositionState,
+            PriceSnapshot,
+            evaluate_exit,
+            resolve_exit_params,
+        )
+
+        ticker = str(getattr(rb, "ticker", "UNKNOWN") or "UNKNOWN")
+        direction = str(getattr(rb, "direction", "long") or "long").lower()
+        new_reason = None
+        new_trigger = None
+        fill_base = None
+        fill_stress = None
+        new_diagnostics = {}
+
+        if direction != "long":
+            new_diagnostics["unsupported_direction"] = direction
+        else:
+            position = PositionState(
+                ticker=ticker,
+                direction="long",
+                entry_date=entry_date,
+                entry_price=float(entry_price),
+                avg_cost=float(avg_cost),
+                shares=float(total_shares),
+                atr_at_entry=float(atr),
+                stop_price=float(stop_loss),
+                target_price=float(take_profit),
+                trailing_stop=float(trailing_stop),
+                trailing_distance=float(atr) * float(dyn_trail_atr),
+                highest_price=float(extreme),
+                max_holding_days=int(getattr(rb, "max_holding_days", holding_days)),
+                exit_strategy=str(getattr(rb, "exit_strategy", "hybrid") or "hybrid"),
+                holding_trading_days=int(holding_days),
+            )
+            price = PriceSnapshot(
+                date=str(row.name.date()) if hasattr(row.name, "date") else str(row.name),
+                open=_safe_float(row.get("Open", row.get("Close"))),
+                high=_safe_float(row.get("High", row.get("Close"))),
+                low=_safe_float(row.get("Low", row.get("Close"))),
+                close=_safe_float(row.get("Close")),
+                next_open=_safe_float(next_row.get("Open", next_row.get("Close"))) if next_row is not None else None,
+            )
+            market_context = MarketContext(
+                market_score=float(cur_market_score),
+                vix_level=float(cur_vix_level),
+                holding_trading_days=int(holding_days),
+            )
+            execution_config = ExitExecutionConfig(trailing_activation_bars=2)
+            decision = evaluate_exit(position, price, rb, market_context, execution_config)
+            new_reason = decision.reason
+            new_trigger = decision.trigger_price
+            fill_base = decision.fill_price_base
+            fill_stress = decision.fill_price_stress
+            new_diagnostics = dict(decision.diagnostics or {})
+
+            shadow_sl, shadow_tp, shadow_trail = resolve_exit_params(rb, market_context)
+            new_diagnostics["dynamic_exit_difference"] = any(
+                abs(float(a) - float(b)) > 1e-9
+                for a, b in ((dyn_sl_atr, shadow_sl), (dyn_tp_atr, shadow_tp), (dyn_trail_atr, shadow_trail))
+            )
+            new_diagnostics["trailing_delay_difference"] = (
+                legacy_reason == "trailing" and new_reason is None and holding_days <= execution_config.trailing_activation_bars
+            ) or (
+                legacy_reason is None and new_reason == "trailing" and holding_days <= execution_config.trailing_activation_bars
+            )
+            new_diagnostics["timeout_boundary"] = holding_days >= int(getattr(rb, "max_holding_days", holding_days))
+
+        difference_type = _classify_exit_shadow_difference(
+            rb, legacy_reason, legacy_price, new_reason, new_trigger, new_diagnostics
+        )
+
+        record = {
+            "ticker": ticker,
+            "date": str(row.name.date()) if hasattr(row.name, "date") else str(row.name),
+            "entry_date": entry_date,
+            "holding_days": int(holding_days),
+            "legacy": {
+                "reason": legacy_reason,
+                "price": legacy_price,
+            },
+            "new": {
+                "reason": new_reason,
+                "trigger_price": new_trigger,
+                "fill_price_base": fill_base,
+                "fill_price_stress": fill_stress,
+            },
+            "difference_type": difference_type,
+            "inputs": {
+                "open": _safe_float(row.get("Open", row.get("Close"))),
+                "high": _safe_float(row.get("High", row.get("Close"))),
+                "low": _safe_float(row.get("Low", row.get("Close"))),
+                "close": _safe_float(row.get("Close")),
+                "atr": float(atr),
+                "entry_price": float(entry_price),
+                "avg_cost": float(avg_cost),
+                "stop_loss": float(stop_loss),
+                "take_profit": float(take_profit),
+                "trailing_stop": float(trailing_stop),
+                "extreme": float(extreme),
+                "exit_strategy": str(getattr(rb, "exit_strategy", "")),
+                "direction": str(getattr(rb, "direction", "")),
+                "dynamic_atr": {
+                    "stop_loss_atr": float(dyn_sl_atr),
+                    "take_profit_atr": float(dyn_tp_atr),
+                    "trailing_atr": float(dyn_trail_atr),
+                },
+            },
+            "diagnostics": new_diagnostics,
+        }
+        _write_exit_shadow_record(record)
+    except Exception as e:
+        log.warning(f"exit shadow compare failed: {e}")
 
 
 def simulate_exit(
@@ -189,6 +398,30 @@ def simulate_exit(
                     exit_price = trailing_stop
                     exit_reason = "trailing"
 
+        next_row = df.iloc[i + 1] if i + 1 < len(df) else None
+        _shadow_compare_exit(
+            rb=rb,
+            row=row,
+            next_row=next_row,
+            entry_date=entry_date,
+            entry_price=entry_price,
+            avg_cost=avg_cost,
+            total_shares=total_shares,
+            atr=atr,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            trailing_stop=trailing_stop,
+            extreme=extreme,
+            legacy_reason=exit_reason,
+            legacy_price=exit_price,
+            holding_days=i - entry_idx,
+            cur_market_score=cur_market_score,
+            cur_vix_level=cur_vix_level,
+            dyn_sl_atr=dyn_sl_atr,
+            dyn_tp_atr=dyn_tp_atr,
+            dyn_trail_atr=dyn_trail_atr,
+        )
+
         if exit_price is not None:
             return _build_trade(
                 entry_date, entry_price, initial_shares,
@@ -198,10 +431,33 @@ def simulate_exit(
 
     # 시간 초과 청산
     last_row = df.iloc[min(entry_idx + rb.max_holding_days, len(df) - 1)]
+    legacy_holding_days = min(rb.max_holding_days, len(df) - 1 - entry_idx)
+    _shadow_compare_exit(
+        rb=rb,
+        row=last_row,
+        next_row=None,
+        entry_date=entry_date,
+        entry_price=entry_price,
+        avg_cost=avg_cost,
+        total_shares=total_shares,
+        atr=atr,
+        stop_loss=stop_loss,
+        take_profit=take_profit,
+        trailing_stop=trailing_stop if "trailing_stop" in locals() else extreme,
+        extreme=extreme,
+        legacy_reason="time_out",
+        legacy_price=float(last_row["Close"]),
+        holding_days=legacy_holding_days,
+        cur_market_score=cur_market_score,
+        cur_vix_level=cur_vix_level,
+        dyn_sl_atr=dyn_sl_atr,
+        dyn_tp_atr=dyn_tp_atr,
+        dyn_trail_atr=dyn_trail_atr,
+    )
     return _build_trade(
         entry_date, entry_price, initial_shares,
         last_row.name, float(last_row["Close"]), "time_out",
-        min(rb.max_holding_days, len(df) - 1 - entry_idx),
+        legacy_holding_days,
         add_buys, total_shares, avg_cost, is_short, commission_rate,
     )
 

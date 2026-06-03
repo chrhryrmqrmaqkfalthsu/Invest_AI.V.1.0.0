@@ -1,7 +1,6 @@
 """Single-ticker pipeline orchestrator.
 
-Current scope: screening -> rolling validation. Full training is intentionally
-left as a TODO hook for a later task.
+Current scope: screening -> rolling validation -> optional full training.
 """
 from __future__ import annotations
 
@@ -13,6 +12,12 @@ from typing import Any, Callable
 
 from engine.core.feature_lag import FEATURE_LAG_METADATA
 from engine.core.metadata import build_metadata
+from engine.pipeline.full_training import (
+    full_training_gate_from_rolling,
+    run_full_training as run_full_training_stage,
+    save_full_training_artifacts,
+    summarize_full_training_result,
+)
 from engine.pipeline.rolling_validation import run_rolling_validation
 from engine.pipeline.screening import run_screening
 
@@ -20,6 +25,7 @@ PIPELINE_ROOT = Path("data/_system/pipeline/v1/runs")
 
 ScreeningFn = Callable[..., dict[str, Any]]
 RollingFn = Callable[..., dict[str, Any]]
+FullTrainingFn = Callable[..., dict[str, Any]]
 
 
 def _json_safe(value: Any) -> Any:
@@ -85,14 +91,28 @@ def _screening_summary(screening: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def _skipped_full_training(gate: dict[str, Any], *, enabled: bool) -> dict[str, Any]:
+    if not enabled:
+        reason = "DISABLED"
+    else:
+        reason = gate.get("reason_code") or "BELOW_CUTOFF"
+    return {
+        "executed": False,
+        "status": "SKIPPED",
+        "reason_code": reason,
+        "gate": gate,
+    }
+
+
 def process_ticker(
     ticker: str,
     run_id: str,
     run_full_training: bool = False,
     screening_fn: ScreeningFn | None = None,
     rolling_fn: RollingFn | None = None,
+    full_training_fn: FullTrainingFn | None = None,
 ) -> dict[str, Any]:
-    """Process one ticker through screening -> rolling.
+    """Process one ticker through screening -> rolling -> optional full training.
 
     One-ticker exceptions are caught and returned as status=ERROR so batch
     execution can continue.
@@ -108,6 +128,7 @@ def process_ticker(
     try:
         screen = screening_fn or run_screening
         roll = rolling_fn or run_rolling_validation
+        full_train = full_training_fn or run_full_training_stage
 
         screening = screen(ticker, include_context=True)
         context = screening.pop("_context", None)
@@ -135,20 +156,30 @@ def process_ticker(
             rolling_path = out_dir / "rolling_validation.json"
             write_json(rolling_path, rolling)
             outputs["rolling_validation"] = str(rolling_path)
+            rolling_summary = _stock_score_summary(rolling)
+            gate = full_training_gate_from_rolling(rolling)
 
-            # TODO: full_training 연결 (future task). Do not call it here.
-            if run_full_training:
-                full_training = None
+            final_stage = "rolling"
+            final_status = "ROLLING_DONE"
+            if run_full_training and gate.get("should_run"):
+                full_training_result = full_train(ticker, context=context, run_id=run_id)
+                ft_paths = save_full_training_artifacts(full_training_result, out_dir)
+                outputs.update(ft_paths)
+                full_training = summarize_full_training_result(full_training_result, ft_paths)
+                final_stage = "full_training"
+                final_status = "FULL_TRAINING_DONE"
+            else:
+                full_training = _skipped_full_training(gate, enabled=run_full_training)
 
             result = {
                 "ticker": ticker,
                 "run_id": run_id,
-                "final_stage": "rolling",
-                "final_status": "ROLLING_DONE",
+                "final_stage": final_stage,
+                "final_status": final_status,
                 "passed": True,
                 "reason_code": "",
                 "screening": _screening_summary(screening),
-                "rolling": _stock_score_summary(rolling),
+                "rolling": rolling_summary,
                 "full_training": full_training,
                 "outputs": outputs,
                 "elapsed_sec": time.time() - started,
@@ -166,6 +197,7 @@ def process_ticker(
                 "reason_code": result.get("reason_code"),
                 "screening": result.get("screening"),
                 "rolling": result.get("rolling"),
+                "full_training": result.get("full_training"),
             },
             feature_lag=FEATURE_LAG_METADATA,
             run_id=run_id,

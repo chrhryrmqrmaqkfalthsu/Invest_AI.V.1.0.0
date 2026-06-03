@@ -21,7 +21,7 @@ from engine.pipeline.orchestrator import PIPELINE_ROOT, process_ticker, write_js
 PROGRESS_FILENAME = "_progress.json"
 SUMMARY_FILENAME = "batch_summary.json"
 LOCK_FILENAME = ".batch.lock"
-TERMINAL_STATUSES = {"ROLLING_DONE", "SCREENED_OUT", "ERROR"}
+TERMINAL_STATUSES = {"ROLLING_DONE", "FULL_TRAINING_DONE", "SCREENED_OUT", "ERROR"}
 ACTIVE_STATUSES = {"RUNNING"}
 
 _STOP_REQUESTED = False
@@ -93,7 +93,8 @@ def update_progress_counts(progress: dict[str, Any]) -> dict[str, Any]:
         "total": len(entries),
         "pending": int(counts.get("PENDING", 0)),
         "running": int(counts.get("RUNNING", 0)),
-        "rolling_done": int(counts.get("ROLLING_DONE", 0)),
+        "rolling_done": int(counts.get("ROLLING_DONE", 0)) + int(counts.get("FULL_TRAINING_DONE", 0)),
+        "full_training_done": int(counts.get("FULL_TRAINING_DONE", 0)),
         "screened_out": int(counts.get("SCREENED_OUT", 0)),
         "error": int(counts.get("ERROR", 0)),
         "completed": int(sum(counts.get(status, 0) for status in TERMINAL_STATUSES)),
@@ -139,6 +140,7 @@ def set_ticker_status(
 def summarize_ticker_result(result: dict[str, Any]) -> dict[str, Any]:
     screening = result.get("screening", {}) or {}
     rolling = result.get("rolling", {}) or {}
+    full_training = result.get("full_training", {}) or {}
     return {
         "ticker": result.get("ticker"),
         "final_status": result.get("final_status"),
@@ -157,6 +159,10 @@ def summarize_ticker_result(result: dict[str, Any]) -> dict[str, Any]:
         "excluded": rolling.get("excluded"),
         "exclude_reason": rolling.get("exclude_reason"),
         "pass_count": rolling.get("pass_count"),
+        "full_training_executed": full_training.get("executed"),
+        "full_training_reason_code": full_training.get("reason_code"),
+        "full_training_member_count": full_training.get("member_count"),
+        "full_training_qualified_count": full_training.get("qualified_count"),
         "outputs": result.get("outputs", {}),
         "error": result.get("error", {}),
     }
@@ -211,11 +217,13 @@ def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         "excluded_count": rolling_excluded_count,
     }
 
+    full_training_done = int(status_counts.get("FULL_TRAINING_DONE", 0))
     return {
         "total": len(results),
         "status_counts": dict(status_counts),
         "screened_out_count": int(status_counts.get("SCREENED_OUT", 0)),
-        "rolling_done_count": int(status_counts.get("ROLLING_DONE", 0)),
+        "rolling_done_count": int(status_counts.get("ROLLING_DONE", 0)) + full_training_done,
+        "full_training_done_count": full_training_done,
         "error_count": error_count,
         "screening_reason_counts": dict(screened_reasons),
         "stock_score_distribution": distribution,

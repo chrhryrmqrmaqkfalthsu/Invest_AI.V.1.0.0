@@ -5,10 +5,10 @@ AlpacaBroker - Alpaca paper trading broker adapter.
 ---------
 - 기존 Broker 인터페이스(shares=int)를 유지한 채 Alpaca paper 연결을 검증한다.
 - 소수점 주문/금액 기반 주문/통화 단위 재설계는 다음 단계로 미룬다.
-- 인증 정보는 환경변수에서만 읽는다. 키 값을 코드에 넣지 않는다.
+- 인증 정보는 환경변수 또는 프로젝트 루트 .env에서만 읽는다. 키 값을 코드에 넣지 않는다.
 
-필수 환경변수
-------------
+필수 설정
+---------
 - ALPACA_API_KEY
 - ALPACA_SECRET_KEY
 - ALPACA_BASE_URL (선택, 기본 https://paper-api.alpaca.markets)
@@ -18,8 +18,10 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional, Any
 
+from dotenv import dotenv_values
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockLatestTradeRequest
 from alpaca.trading.client import TradingClient
@@ -41,6 +43,7 @@ from .base import (
 log = logging.getLogger("alpaca_broker")
 
 DEFAULT_ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
+ENV_PATH = Path.home() / "kingmaker" / ".env"
 
 
 class AlpacaBroker(Broker):
@@ -57,16 +60,23 @@ class AlpacaBroker(Broker):
         secret_key: Optional[str] = None,
         base_url: Optional[str] = None,
         paper: bool = True,
+        env_path: Optional[str] = None,
     ):
-        self.api_key = (api_key or os.environ.get("ALPACA_API_KEY") or "").strip()
-        self.secret_key = (secret_key or os.environ.get("ALPACA_SECRET_KEY") or "").strip()
-        self.base_url = (base_url or os.environ.get("ALPACA_BASE_URL") or DEFAULT_ALPACA_BASE_URL).strip()
+        env = dotenv_values(env_path or str(ENV_PATH))
+        self.api_key = (api_key or os.environ.get("ALPACA_API_KEY") or env.get("ALPACA_API_KEY") or "").strip()
+        self.secret_key = (secret_key or os.environ.get("ALPACA_SECRET_KEY") or env.get("ALPACA_SECRET_KEY") or "").strip()
+        self.base_url = (
+            base_url
+            or os.environ.get("ALPACA_BASE_URL")
+            or env.get("ALPACA_BASE_URL")
+            or DEFAULT_ALPACA_BASE_URL
+        ).strip()
         self.paper = bool(paper)
 
         if not self.api_key:
-            raise BrokerError("ALPACA_API_KEY 환경변수 누락")
+            raise BrokerError("ALPACA_API_KEY 환경변수/.env 누락")
         if not self.secret_key:
-            raise BrokerError("ALPACA_SECRET_KEY 환경변수 누락")
+            raise BrokerError("ALPACA_SECRET_KEY 환경변수/.env 누락")
 
         # TradingClient paper=True + url_override로 paper endpoint를 명시한다.
         self.trading = TradingClient(
@@ -306,5 +316,5 @@ class AlpacaBroker(Broker):
 
 if __name__ == "__main__":
     # 네트워크/API 키 없이 가능한 import-level smoke 안내.
-    print("AlpacaBroker loaded. Required env: ALPACA_API_KEY, ALPACA_SECRET_KEY")
+    print("AlpacaBroker loaded. Required env/.env: ALPACA_API_KEY, ALPACA_SECRET_KEY")
     print(f"Default paper base URL: {DEFAULT_ALPACA_BASE_URL}")

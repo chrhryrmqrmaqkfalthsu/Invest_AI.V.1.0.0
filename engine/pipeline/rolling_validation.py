@@ -92,22 +92,29 @@ def backtest_result_to_oos_period(
 
 def run_rolling_validation(
     ticker: str,
+    context: dict[str, Any] | None = None,
     ga_config: GAConfig | None = None,
     fitness_mode: str = "swing",
     top_n: int | None = None,
 ) -> dict[str, Any]:
-    """Run rolling validation for one ticker and return score-ready output."""
+    """Run rolling validation for one ticker and return score-ready output.
+
+    Args:
+        ticker: symbol to validate.
+        context: optional prepared context from screening. Passing it avoids
+            loading OHLCV/market/sentiment data twice in the staged pipeline.
+    """
     if top_n is not None:
         # First implementation intentionally does not use ensemble OOS.
         # Later: run_ensemble_backtest(top final_population members, ...).
         pass
 
     run_id = str(uuid4())
-    ctx = prepare_ticker_context(ticker)
+    ctx = context or prepare_ticker_context(ticker)
     df = ctx["df"]
     base_rulebook = ctx["base_rulebook"]
     ga_cfg = ga_config or DEFAULT_ROLLING_GA_CONFIG
-    splits = make_year_splits(DEFAULT_ROLLING_YEARS, ctx.get("data_min"), ctx.get("data_max"))
+    splits = ctx.get("splits") or make_year_splits(DEFAULT_ROLLING_YEARS, ctx.get("data_min"), ctx.get("data_max"))
 
     periods: list[dict[str, Any]] = []
     oos_periods: list[list[str]] = []

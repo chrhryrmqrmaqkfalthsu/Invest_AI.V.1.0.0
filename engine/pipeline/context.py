@@ -29,6 +29,27 @@ def _date_series(df: pd.DataFrame) -> pd.Series:
     return pd.to_datetime(pd.Series(df.index, index=df.index), errors="coerce")
 
 
+def _valid_ratio(series: pd.Series | None, *, positive: bool = False, non_negative: bool = False) -> float:
+    if series is None or len(series) == 0:
+        return 0.0
+    numeric = pd.to_numeric(series, errors="coerce")
+    valid = numeric.notna()
+    if positive:
+        valid = valid & (numeric > 0)
+    if non_negative:
+        valid = valid & (numeric >= 0)
+    return float(valid.sum() / len(numeric)) if len(numeric) else 0.0
+
+
+def _invalid_price_volume_ratio(df: pd.DataFrame) -> float:
+    if df is None or len(df) == 0 or "Close" not in df.columns or "Volume" not in df.columns:
+        return 1.0
+    close = pd.to_numeric(df["Close"], errors="coerce")
+    volume = pd.to_numeric(df["Volume"], errors="coerce")
+    invalid = close.isna() | volume.isna() | (close <= 0) | (volume <= 0)
+    return float(invalid.sum() / len(df)) if len(df) else 1.0
+
+
 def calculate_adv_usd_252d(df: pd.DataFrame, lookback_days: int = DEFAULT_ADV_LOOKBACK_DAYS) -> float:
     """Calculate recent average daily dollar volume.
 
@@ -90,7 +111,7 @@ def make_year_splits(
 
 
 def prepare_ticker_context(ticker: str) -> dict[str, Any]:
-    """Prepare all shared inputs needed by rolling validation for one ticker."""
+    """Prepare all shared inputs needed by screening/rolling validation for one ticker."""
     adapter = get_adapter(ticker)
     meta = adapter.meta
     # adapter.load_history already calls calc_indicators; do not call it again.
@@ -98,6 +119,9 @@ def prepare_ticker_context(ticker: str) -> dict[str, Any]:
     dates = _date_series(df).dropna()
     data_min = pd.Timestamp(dates.min()).normalize() if len(dates) else None
     data_max = pd.Timestamp(dates.max()).normalize() if len(dates) else None
+    data_min_str = data_min.strftime("%Y-%m-%d") if data_min is not None else None
+    data_max_str = data_max.strftime("%Y-%m-%d") if data_max is not None else None
+    splits = make_year_splits(DEFAULT_ROLLING_YEARS, data_min_str, data_max_str)
 
     market_history_df = get_market_history(years=DEFAULT_MARKET_HISTORY_YEARS)
     ticker_sentiment = load_ticker_sentiment(ticker)
@@ -111,14 +135,24 @@ def prepare_ticker_context(ticker: str) -> dict[str, Any]:
     base_rulebook.sector_name = sector_name
 
     adv_usd_252d = calculate_adv_usd_252d(df)
+    close_series = df["Close"] if df is not None and "Close" in df.columns else None
+    volume_series = df["Volume"] if df is not None and "Volume" in df.columns else None
 
     return {
         "ticker": ticker,
         "adapter": adapter,
         "meta": meta,
         "df": df,
-        "data_min": data_min.strftime("%Y-%m-%d") if data_min is not None else None,
-        "data_max": data_max.strftime("%Y-%m-%d") if data_max is not None else None,
+        "rows": int(len(df) if df is not None else 0),
+        "data_min": data_min_str,
+        "data_max": data_max_str,
+        "data_start": data_min_str,
+        "data_end": data_max_str,
+        "valid_close_ratio": _valid_ratio(close_series, positive=True),
+        "valid_volume_ratio": _valid_ratio(volume_series, non_negative=True),
+        "invalid_price_volume_ratio": _invalid_price_volume_ratio(df),
+        "splits": splits,
+        "split_count": len(splits),
         "market_history_df": market_history_df,
         "ticker_sentiment": ticker_sentiment,
         "sentiment_days": len(ticker_sentiment or {}),

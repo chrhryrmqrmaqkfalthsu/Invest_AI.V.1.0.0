@@ -9,13 +9,21 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from engine.core.feature_lag import (
+    DEFAULT_LAG_DAYS,
+    DEFAULT_MAX_AGE_DAYS,
+    lookup_lagged_daily_dict,
+    lookup_market_at_lagged,
+)
 from engine.core.logger import get_logger
 from engine.strategies.rulebook import Rulebook
 from engine.strategies.evaluator import evaluate_signal, calc_position_size_krw
 from engine.strategies.exit_simulator import simulate_exit
-from engine.market.context import lookup_market_at
 
 log = get_logger("backtest")
+
+FEATURE_LAG_DAYS = DEFAULT_LAG_DAYS
+FEATURE_LAG_MAX_AGE_DAYS = DEFAULT_MAX_AGE_DAYS
 
 
 @dataclass
@@ -51,12 +59,12 @@ class BacktestResult:
             "profit_factor": self.profit_factor,
             "sharpe_like": self.sharpe_like,
             "fitness": self.fitness,
-	        }
+        }
 
 
 # spread fitness 캐시 (GA 수명 동안 재사용)
-_SPREAD_CTX_CACHE: dict = {}   # key: (id(df), start, end) -> list[(cm,cs,cv,ef,snt,px,sh)]
-_SPREAD_RET_CACHE: dict = {}   # key: (id(df), start, end, exit_param_tuple) -> dict{j: pnl}
+_SPREAD_CTX_CACHE: dict = {}   # key: (id(df), start, end, lag, max_age) -> list[(cm,cs,cv,ef,snt,px,sh)]
+_SPREAD_RET_CACHE: dict = {}   # key: (ctx_key, exit_param_tuple) -> dict{j: pnl}
 
 
 def run_backtest(
@@ -78,6 +86,11 @@ def run_backtest(
 ) -> BacktestResult:
     """
     전체 기간을 순회하며 신호 발생 시 진입 → 청산 시뮬레이션 → 다음 진입.
+
+    Feature lag policy:
+        D일 신호에는 D-1 이하의 뉴스/이벤트만 사용한다.
+        ticker sentiment: lag_days=1, max_age_days=7
+        market events: lag_days=1
 
     Args:
         rb: 룰북
@@ -110,7 +123,7 @@ def run_backtest(
 
     # === spread fitness: 거래 루프와 독립적으로 "모든 날" 신호점수+실현수익 수집 (캐시 적용) ===
     if fitness_mode == "spread":
-        _ck = (id(df), start_date, end_date)
+        _ck = (id(df), start_date, end_date, FEATURE_LAG_DAYS, FEATURE_LAG_MAX_AGE_DAYS)
         # 1) 시장 컨텍스트 캐시 (GA 전체 불변) — 1회만 계산
         if _ck not in _SPREAD_CTX_CACHE:
             _ctx_list = []
@@ -126,7 +139,7 @@ def run_backtest(
                         pass
                 _ef = {}
                 if market_history_df is not None:
-                    _m = lookup_market_at(market_history_df, df.index[j])
+                    _m = lookup_market_at_lagged(market_history_df, df.index[j], lag_days=FEATURE_LAG_DAYS)
                     _cm = float(_m.get("score", market_score))
                     _cs = float(_m.get(f"sector_{sector_name}", sector_score))
                     _cv = float(_m.get("vix", vix_level))
@@ -140,8 +153,12 @@ def run_backtest(
                 _snt = 0.0
                 if ticker_sentiment:
                     try:
-                        _dk = pd.Timestamp(df.index[j]).strftime('%Y-%m-%d')
-                        _sv = ticker_sentiment.get(_dk)
+                        _sv = lookup_lagged_daily_dict(
+                            ticker_sentiment,
+                            df.index[j],
+                            lag_days=FEATURE_LAG_DAYS,
+                            max_age_days=FEATURE_LAG_MAX_AGE_DAYS,
+                        )
                         if _sv:
                             _snt = float(_sv.get('sentiment_avg', 0.0))
                     except Exception:
@@ -219,10 +236,11 @@ def run_backtest(
         sub_df = df.iloc[: i + 1]
 
         # 시점별 시장 컨텍스트 조회 (시계열이 있으면 사용, 없으면 고정값)
+        # D일 신호에는 D-1 이하의 이벤트/시장 컨텍스트만 사용한다.
         cur_event_flags = {}
         if market_history_df is not None:
             cur_date = df.index[i]
-            mkt = lookup_market_at(market_history_df, cur_date)
+            mkt = lookup_market_at_lagged(market_history_df, cur_date, lag_days=FEATURE_LAG_DAYS)
             cur_market = float(mkt.get("score", market_score))
             cur_sector = float(mkt.get(f"sector_{sector_name}", sector_score))
             cur_vix = float(mkt.get("vix", vix_level))
@@ -238,11 +256,16 @@ def run_backtest(
             cur_vix = vix_level
 
         # v6: 종목별 뉴스 감성 조회 (CSV 없으면 0.0 폴백)
+        # D일 신호에는 D-1 이하의 최신 뉴스 sentiment만 사용한다. max_age=7일.
         cur_sentiment = 0.0
         if ticker_sentiment:
             try:
-                _date_key = pd.Timestamp(df.index[i]).strftime('%Y-%m-%d')
-                _s = ticker_sentiment.get(_date_key)
+                _s = lookup_lagged_daily_dict(
+                    ticker_sentiment,
+                    df.index[i],
+                    lag_days=FEATURE_LAG_DAYS,
+                    max_age_days=FEATURE_LAG_MAX_AGE_DAYS,
+                )
                 if _s:
                     cur_sentiment = float(_s.get('sentiment_avg', 0.0))
             except Exception:

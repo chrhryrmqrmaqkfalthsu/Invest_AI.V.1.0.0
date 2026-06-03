@@ -12,14 +12,22 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from engine.core.data_loader import load_ohlcv
+from engine.core.feature_lag import (
+    DEFAULT_LAG_DAYS,
+    DEFAULT_MAX_AGE_DAYS,
+    lookup_lagged_daily_dict,
+    lookup_market_at_lagged,
+)
 from engine.core.indicators import calc_indicators
-from engine.market.context import get_market_history, lookup_market_at
+from engine.market.context import get_market_history
 from engine.market.ticker_sentiment import load_csv as load_ticker_sentiment
 
 EVENT_KEYS = ["has_war","has_rate_hike","has_rate_cut","has_geopolitical",
               "has_tariff","has_export_ban","has_earnings_shock","has_oil_surge",
               "has_banking_crisis","has_inflation","has_fed_statement"]
 HORIZONS = [5, 10, 20]
+FEATURE_LAG_DAYS = DEFAULT_LAG_DAYS
+FEATURE_LAG_MAX_AGE_DAYS = DEFAULT_MAX_AGE_DAYS
 
 def build(ticker: str) -> pd.DataFrame:
     df = load_ohlcv(ticker, years=6)
@@ -39,10 +47,15 @@ def build(ticker: str) -> pd.DataFrame:
         r = df.iloc[i]
         dkey = r["Date"].strftime("%Y-%m-%d")
         try:
-            mkt = lookup_market_at(mkt_hist, r["Date"]) or {}
+            mkt = lookup_market_at_lagged(mkt_hist, r["Date"], lag_days=FEATURE_LAG_DAYS) or {}
         except Exception:
             mkt = {}
-        s = tsent.get(dkey, {}) if isinstance(tsent, dict) else {}
+        s = lookup_lagged_daily_dict(
+            tsent,
+            r["Date"],
+            lag_days=FEATURE_LAG_DAYS,
+            max_age_days=FEATURE_LAG_MAX_AGE_DAYS,
+        ) if isinstance(tsent, dict) else {}
 
         row = {
             "Date": dkey,

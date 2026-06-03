@@ -252,17 +252,26 @@ class LearnedRuleBook(RuleBook):
             f"raw={res.raw_score:.2f} mkt_adj×{res.market_adjustment:.2f}{news_tag} "
             f"reasons=[{', '.join(res.reasons[:4])}]"
         )
+        signal_kwargs = {
+            "score": float(res.score),
+            "raw_score": float(res.raw_score),
+            "threshold": float(res.threshold),
+            "market_adjustment": float(res.market_adjustment),
+            "reasons": list(res.reasons),
+        }
 
         if res.should_buy:
             # long/short 무관: 인버스 ETF도 매수 신호면 매수 (시장 하락 베팅)
             return SignalResult(
                 ticker=ticker, signal=Signal.BUY, price=price,
                 reason=f"[{rb.direction}] {reason_str}",
+                **signal_kwargs,
             )
 
         return SignalResult(
             ticker=ticker, signal=Signal.HOLD, price=price,
             reason=f"미달({rb.direction}) {reason_str}",
+            **signal_kwargs,
         )
 
 

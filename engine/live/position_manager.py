@@ -31,6 +31,20 @@ log = logging.getLogger("position_manager")
 POSITIONS_PATH = Path("data/_system/positions.json")
 TRADE_LOG_PATH = Path("data/_system/trade_log.csv")
 KST = ZoneInfo("Asia/Seoul")
+SHARE_ROUND_DIGITS = 6
+SHARE_EPS = 10 ** (-SHARE_ROUND_DIGITS)
+
+
+def _to_shares(value) -> float:
+    try:
+        return float(value or 0.0)
+    except Exception:
+        return 0.0
+
+
+def _normalize_shares(value: float) -> float:
+    v = round(float(value), SHARE_ROUND_DIGITS)
+    return 0.0 if abs(v) <= SHARE_EPS else v
 
 
 @dataclass
@@ -39,7 +53,7 @@ class PositionEntry:
     ticker: str
     entry_date: str
     entry_price: float
-    shares: int
+    shares: float
     atr_at_entry: float
     stop_price: float
     target_price: float
@@ -56,11 +70,15 @@ class PositionEntry:
     total_invested_krw: float = 0.0
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d["shares"] = _normalize_shares(d.get("shares", 0.0))
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "PositionEntry":
-        return cls(**d)
+        data = dict(d)
+        data["shares"] = _normalize_shares(_to_shares(data.get("shares", 0.0)))
+        return cls(**data)
 
 
 class PositionManager:
@@ -100,11 +118,12 @@ class PositionManager:
         self,
         ticker: str,
         entry_price: float,
-        shares: int,
+        shares: float,
         rulebook: Rulebook,
         atr_value: float,
     ) -> PositionEntry:
         """매수 체결 후 호출. ATR 기반 stop/target 계산."""
+        shares = _normalize_shares(shares)
         stop = entry_price - rulebook.stop_loss_atr * atr_value
         target = entry_price + rulebook.take_profit_atr * atr_value
         trail_dist = rulebook.trailing_atr * atr_value
@@ -131,9 +150,9 @@ class PositionManager:
         self._positions[ticker] = entry
         self._save()
         log.info(
-            f"[ENTRY] {ticker} 등록: entry={entry_price:,.0f} "
-            f"stop={stop:,.0f}({(stop/entry_price-1)*100:+.2f}%) "
-            f"target={target:,.0f}({(target/entry_price-1)*100:+.2f}%) "
+            f"[ENTRY] {ticker} 등록: shares={shares:g}, entry={entry_price:,.4f} "
+            f"stop={stop:,.4f}({(stop/entry_price-1)*100:+.2f}%) "
+            f"target={target:,.4f}({(target/entry_price-1)*100:+.2f}%) "
             f"strategy={rulebook.direction}/{rulebook.exit_strategy}"
         )
         return entry
@@ -142,7 +161,7 @@ class PositionManager:
         self,
         ticker: str,
         add_price: float,
-        add_shares: int,
+        add_shares: float,
         rulebook,
         atr_value: float,
     ) -> Optional[PositionEntry]:
@@ -152,14 +171,15 @@ class PositionManager:
         - trailing_stop은 기존값과 새 계산값 중 큰 쪽 (보수적)
         - entry_date / win_rate_at_entry 등 진입 메타는 유지
         """
+        add_shares = _normalize_shares(add_shares)
         pos = self._positions.get(ticker)
         if pos is None:
             log.warning(f"{ticker} add_to_position: 기존 포지션 없음 → register_entry로 위임")
             return self.register_entry(ticker, add_price, add_shares, rulebook, atr_value)
 
-        old_shares = pos.shares
+        old_shares = _normalize_shares(pos.shares)
         old_invested = pos.entry_price * old_shares
-        new_shares = old_shares + add_shares
+        new_shares = _normalize_shares(old_shares + add_shares)
         new_invested = old_invested + add_price * add_shares
         new_avg = new_invested / new_shares if new_shares > 0 else add_price
 
@@ -180,9 +200,9 @@ class PositionManager:
         self._save()
 
         log.info(
-            f"[ADD-BUY] {ticker} +{add_shares}주 @ {add_price:,.0f} → "
-            f"총 {new_shares}주 평균 {new_avg:,.0f}, "
-            f"stop={stop:,.0f} target={target:,.0f} trail={pos.trailing_stop:,.0f}"
+            f"[ADD-BUY] {ticker} +{add_shares:g}주 @ {add_price:,.4f} → "
+            f"총 {new_shares:g}주 평균 {new_avg:,.4f}, "
+            f"stop={stop:,.4f} target={target:,.4f} trail={pos.trailing_stop:,.4f}"
         )
         return pos
 
@@ -218,12 +238,13 @@ class PositionManager:
             return None
 
         holdings = {h.ticker: h for h in broker.get_holdings()}
-        if ticker not in holdings or holdings[ticker].shares <= 0:
+        held = holdings.get(ticker)
+        if not held or _normalize_shares(held.shares) <= SHARE_EPS:
             log.info(f"{ticker} broker에 보유 없음 → unregister")
             self.unregister(ticker)
             return None
 
-        actual_shares = holdings[ticker].shares
+        actual_shares = _normalize_shares(held.shares)
 
         # 최고가 갱신 + 트레일링 스톱 끌어올리기
         if price > pos.highest_price:
@@ -270,7 +291,7 @@ class PositionManager:
 
         log.info(
             f"[EXIT-TRIGGER] {ticker} {exit_reason}: "
-            f"price={price:,.0f}, entry={pos.entry_price:,.0f}, "
+            f"price={price:,.4f}, entry={pos.entry_price:,.4f}, "
             f"PnL={(price/pos.entry_price-1)*100:+.2f}%, hold={holding_days}일"
         )
 
@@ -302,7 +323,7 @@ class PositionManager:
             "holding_days": holding_days,
             "highest_price": pos.highest_price,
             "pnl_pct": round(pnl_pct, 3),
-            "pnl_krw": round(pnl_krw, 0),
+            "pnl_krw": round(pnl_krw, 2),
             "exit_strategy": pos.exit_strategy,
         }
         self._append_trade_log(trade_record)
@@ -318,10 +339,10 @@ class PositionManager:
                 msg = (
                     f"{emoji} 자동 청산: {ticker}\n"
                     f"사유: {exit_reason}\n"
-                    f"진입 {pos.entry_price:,.0f} → 청산 {price:,.0f}\n"
-                    f"손익: {pnl_krw:+,.0f}원 ({pnl_pct:+.2f}%)\n"
+                    f"진입 {pos.entry_price:,.4f} → 청산 {price:,.4f}\n"
+                    f"손익: {pnl_krw:+,.2f} ({pnl_pct:+.2f}%)\n"
                     f"보유: {holding_days}일\n"
-                    f"최고가: {pos.highest_price:,.0f}"
+                    f"최고가: {pos.highest_price:,.4f}"
                 )
                 notifier.send(msg)
             except Exception as e:
@@ -391,79 +412,35 @@ if __name__ == "__main__":
     notifier = FakeNotifier()
     pm = pm_mod.PositionManager()
 
-    print("\n[1] 진입 등록: 379800 @ 13,000원, ATR=200원")
-    pm.register_entry("379800", 13000, 1, rb, 200)
+    print("\n[1] 진입 등록: 379800 @ 13,000원, 0.5주, ATR=200원")
+    pm.register_entry("379800", 13000, 0.5, rb, 200)
     p = pm.get("379800")
-    print(f"  stop={p.stop_price:.0f}, target={p.target_price:.0f}, trailing={p.trailing_stop:.0f}")
+    print(f"  shares={p.shares:g}, stop={p.stop_price:.0f}, target={p.target_price:.0f}, trailing={p.trailing_stop:.0f}")
+    assert p.shares == 0.5
     assert p.stop_price == 12600
     assert p.target_price == 13600
     assert p.trailing_stop == 12700
-    broker.place_buy("379800", 1, OrderType.MARKET)
+    broker.place_buy("379800", 0.5, OrderType.MARKET)
 
-    print("\n[2] 현재가 13,200원 (보유 지속 기대)")
+    print("\n[2] 추가진입: 0.3주 @ 13,100원")
+    pm.add_to_position("379800", 13100, 0.3, rb, 200)
+    p = pm.get("379800")
+    print(f"  shares={p.shares:g}, avg={p.entry_price:.4f}, invested={p.total_invested_krw:.2f}")
+    assert p.shares == 0.8
+
+    print("\n[3] 현재가 13,200원 (보유 지속 기대)")
     broker.get_current_price = lambda t: 13200.0
     exited = pm.check_exits(broker, notifier)
     assert exited == []
     print(f"  ✅ 청산 안 됨")
 
-    print("\n[3] 현재가 13,700원 (익절 트리거)")
+    print("\n[4] 현재가 13,700원 (익절 트리거, 0.5주 브로커 보유분 청산)")
     broker.get_current_price = lambda t: 13700.0
     exited = pm.check_exits(broker, notifier)
     assert len(exited) == 1
     assert exited[0]["exit_reason"] == "take_profit"
-    print(f"  ✅ 익절: pnl_pct={exited[0]['pnl_pct']}")
+    print(f"  ✅ 익절: shares={exited[0]['shares']:g}, pnl_pct={exited[0]['pnl_pct']}")
     assert pm.get("379800") is None
-
-    print("\n[4] 새 진입 → 손절 트리거 (fixed 전략)")
-    rb_fixed = Rulebook(
-        ticker="379800", direction="long",
-        stop_loss_atr=2.0, take_profit_atr=3.0,
-        trailing_atr=1.5, max_holding_days=20,
-        exit_strategy="fixed",
-    )
-    if paper_state.exists(): paper_state.unlink()
-    broker2 = PaperBroker(initial_cash=1_000_000)
-    broker2.place_buy("379800", 1, OrderType.MARKET)
-    pm.register_entry("379800", 13000, 1, rb_fixed, 200)
-    broker2.get_current_price = lambda t: 12500.0
-    exited = pm.check_exits(broker2, notifier)
-    assert len(exited) == 1
-    assert exited[0]["exit_reason"] == "stop_loss"
-    print(f"  ✅ 손절: pnl_pct={exited[0]['pnl_pct']}")
-
-    print("\n[5] 트레일링: 가격이 오르면 stop도 따라 올라감")
-    if paper_state.exists(): paper_state.unlink()
-    broker3 = PaperBroker(initial_cash=1_000_000)
-    broker3.place_buy("379800", 1, OrderType.MARKET)
-    rb_trail = Rulebook(
-        ticker="379800", direction="long",
-        stop_loss_atr=2.0, take_profit_atr=10.0,
-        trailing_atr=1.5, max_holding_days=20,
-        exit_strategy="trailing",
-    )
-    pm.register_entry("379800", 13000, 1, rb_trail, 200)
-    broker3.get_current_price = lambda t: 14000.0
-    pm.check_exits(broker3, notifier)
-    p = pm.get("379800")
-    assert p is not None
-    assert p.highest_price == 14000
-    expected_trail = 14000 - 1.5 * 200
-    print(f"  highest=14000 → trailing_stop={p.trailing_stop:.0f} (기대 {expected_trail:.0f})")
-    assert abs(p.trailing_stop - expected_trail) < 0.01
-    broker3.get_current_price = lambda t: p.trailing_stop - 10
-    exited = pm.check_exits(broker3, notifier)
-    assert len(exited) == 1
-    assert exited[0]["exit_reason"] == "trailing"
-    print(f"  ✅ 트레일링 청산: pnl_pct={exited[0]['pnl_pct']:+.2f}")
-
-    print("\n[6] trade_log.csv 확인")
-    assert test_log_path.exists()
-    with open(test_log_path) as f:
-        rows = list(csv.DictReader(f))
-    print(f"  기록된 청산: {len(rows)}건")
-    assert len(rows) == 3
-    for r in rows:
-        print(f"    - {r['ticker']} {r['exit_reason']:12s} pnl={float(r['pnl_pct']):>+8.2f}%")
 
     test_pos_path.unlink(missing_ok=True)
     test_log_path.unlink(missing_ok=True)

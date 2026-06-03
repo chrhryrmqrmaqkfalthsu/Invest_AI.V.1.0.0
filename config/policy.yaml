@@ -19,8 +19,9 @@ capital:
 # 소액 안전 한도 (초기 운영 전용 - 검증 끝나면 완화 가능)
 small_amount_safety:
   enabled: true                       # 활성화 시 아래 한도 모두 강제
-  max_shares_per_order: 1             # 주문당 최대 수량
-  max_krw_per_order: 30000            # 주문당 최대 금액 (KRW)
+  max_shares_per_order: 1             # 주문당 최대 수량. 0이면 주수 체크 비활성(소수점/Alpaca용)
+  max_notional_per_order: 30000       # 주문당 최대 금액. 브로커 기준통화(KIS=KRW, Alpaca=USD)
+  max_krw_per_order: 30000            # 하위호환: 주문당 최대 금액 (KRW)
   max_total_invested_krw: 60000      # 전체 누적 투자금 (10종목 × 1만원)
   max_orders_per_day: 3               # 일일 최대 주문 횟수
   require_first_order_approval: true  # 봇 첫 주문은 텔레그램 승인 필요  

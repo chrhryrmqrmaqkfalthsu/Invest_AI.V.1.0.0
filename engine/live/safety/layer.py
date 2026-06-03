@@ -2,9 +2,9 @@
 SafetyLayer - 주문 발사 전 모든 안전장치를 통과시키는 게이트
 사용법:
     layer = SafetyLayer(broker)
-    decision = layer.check_order("buy", "379800", shares=1, price=25615)
+    decision = layer.check_order("buy", "AAPL", shares=0.5, price=300)
     if decision.allowed:
-        order = broker.place_buy("379800", 1, ...)
+        order = broker.place_buy("AAPL", 0.5, ...)
         layer.record_order(order, side="buy")
     else:
         log.warning(f"차단: {decision.reason}")
@@ -16,7 +16,12 @@ SafetyLayer - 주문 발사 전 모든 안전장치를 통과시키는 게이트
   4. 시장 개장 여부
   5. 화이트리스트 (data/symbols/ 폴더에 있는 종목만)
   6. 첫 주문 승인 필요 여부
-  7. 소액 한도 (수량/금액/일일횟수/누적투자금)
+  7. 소액 한도 (선택적 수량/주문금액/일일횟수/누적투자금)
+
+주의:
+  - 금액 한도는 price의 기준통화에 맞는 notional로 계산한다.
+    KIS는 KRW, Alpaca는 USD처럼 브로커별 통화가 다를 수 있다.
+  - 기존 *_krw 필드명은 하위호환을 위해 유지하되 내부적으로는 notional 한도로 취급한다.
 """
 from __future__ import annotations
 
@@ -54,9 +59,11 @@ class SafetyLayer:
         risk = self.policy.get("risk", {}) or {}
 
         self.enabled                  = bool(sa.get("enabled", True))
-        self.max_shares               = int(sa.get("max_shares_per_order", 1))
-        self.max_krw                  = float(sa.get("max_krw_per_order", 10000))
-        self.max_total_invested       = float(sa.get("max_total_invested_krw", 100000))
+        self.max_shares               = self._optional_float(sa.get("max_shares_per_order", 1))
+        self.max_notional_per_order   = float(sa.get("max_notional_per_order", sa.get("max_krw_per_order", 10000)))
+        self.max_krw                  = self.max_notional_per_order  # 하위호환: runner의 일시 상향 코드가 참조
+        self.max_total_notional       = float(sa.get("max_total_notional", sa.get("max_total_invested_krw", 100000)))
+        self.max_total_invested       = self.max_total_notional      # 하위호환: SafetyState 필드명/runner 참조 유지
         self.max_orders_per_day       = int(sa.get("max_orders_per_day", 5))
         self.require_first_approval   = bool(sa.get("require_first_order_approval", True))
         self.daily_loss_limit_krw     = float(sa.get("daily_loss_limit_krw", 50000))
@@ -66,23 +73,51 @@ class SafetyLayer:
         self.cooldown_hours           = int(risk.get("cooldown_after_consecutive_loss_hours", 24))
 
     @staticmethod
+    def _optional_float(value) -> Optional[float]:
+        """0/None/빈 문자열은 비활성 한도로 취급한다."""
+        if value in (None, "", False):
+            return None
+        try:
+            v = float(value)
+        except Exception:
+            return None
+        return v if v > 0 else None
+
+    @staticmethod
     def _load_policy(path: Path) -> dict:
         if not path.exists():
             return {}
         with open(path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
 
+    def _current_order_notional_limit(self) -> float:
+        """하위호환을 위해 max_notional_per_order와 max_krw 중 더 큰 값을 현재 주문 한도로 본다."""
+        return max(float(getattr(self, "max_notional_per_order", 0.0) or 0.0),
+                   float(getattr(self, "max_krw", 0.0) or 0.0))
+
+    def _current_total_notional_limit(self) -> float:
+        return max(float(getattr(self, "max_total_notional", 0.0) or 0.0),
+                   float(getattr(self, "max_total_invested", 0.0) or 0.0))
+
     # ---------- 외부 API ----------
     def check_order(
         self,
         side: str,
         ticker: str,
-        shares: int,
+        shares: float,
         price: float,
     ) -> SafetyDecision:
         """주문 발사 전 호출. allowed=True면 broker.place_*로 진행 가능."""
         if not self.enabled:
             return SafetyDecision(True, reason="safety disabled")
+
+        try:
+            shares_f = float(shares)
+            price_f = float(price)
+        except Exception:
+            return SafetyDecision(False, f"수량/가격 변환 실패: shares={shares!r}, price={price!r}", "INVALID_ORDER")
+        if shares_f <= 0 or price_f <= 0:
+            return SafetyDecision(False, f"수량/가격은 양수여야 함: shares={shares_f}, price={price_f}", "INVALID_ORDER")
 
         st = state_mod.load()
 
@@ -126,24 +161,26 @@ class SafetyLayer:
                     "NEED_APPROVAL",
                 )
 
-        # [7] 소액 한도
-        if shares > self.max_shares:
-            return SafetyDecision(False, f"수량 {shares} > 한도 {self.max_shares}주", "LIMIT_SHARES")
+        # [7] 소액/금액 한도
+        if self.max_shares is not None and shares_f > self.max_shares:
+            return SafetyDecision(False, f"수량 {shares_f:g} > 한도 {self.max_shares:g}주", "LIMIT_SHARES")
 
-        order_krw = shares * price
-        if order_krw > self.max_krw:
-            return SafetyDecision(False, f"주문금액 {order_krw:,.0f}원 > 한도 {self.max_krw:,.0f}원", "LIMIT_KRW")
+        order_notional = shares_f * price_f
+        max_notional = self._current_order_notional_limit()
+        if max_notional > 0 and order_notional > max_notional:
+            return SafetyDecision(False, f"주문금액 {order_notional:,.2f} > 한도 {max_notional:,.2f}", "LIMIT_KRW")
 
         if st.orders_today >= self.max_orders_per_day:
             return SafetyDecision(False, f"일일 주문 {st.orders_today}회 >= 한도 {self.max_orders_per_day}", "LIMIT_DAILY")
 
-        # 매수일 때만 누적 투자금 체크
+        # 매수일 때만 누적 투자금 체크. state 필드명은 krw지만 기준통화 notional 누적으로 사용한다.
         if side_lower == "buy":
-            new_total = st.invested_krw_today + order_krw
-            if new_total > self.max_total_invested:
+            new_total = st.invested_krw_today + order_notional
+            max_total = self._current_total_notional_limit()
+            if max_total > 0 and new_total > max_total:
                 return SafetyDecision(
                     False,
-                    f"누적투자 {new_total:,.0f}원 > 한도 {self.max_total_invested:,.0f}원",
+                    f"누적투자 {new_total:,.2f} > 한도 {max_total:,.2f}",
                     "LIMIT_TOTAL",
                 )
 
@@ -158,9 +195,9 @@ class SafetyLayer:
         st.orders_today += 1
 
         if str(side).lower() == "buy":
-            filled_krw = order.filled_shares * order.filled_avg_price
-            if filled_krw > 0:
-                st.invested_krw_today += filled_krw
+            filled_notional = float(order.filled_shares) * float(order.filled_avg_price)
+            if filled_notional > 0:
+                st.invested_krw_today += filled_notional
 
         state_mod.save(st)
 
@@ -227,9 +264,9 @@ if __name__ == "__main__":
     broker.is_market_open = MagicMock(return_value=True)
 
     layer = SafetyLayer(broker)
-    print(f"\n[설정] max_shares={layer.max_shares}, max_krw={layer.max_krw:,.0f}, "
+    print(f"\n[설정] max_shares={layer.max_shares}, max_notional={layer._current_order_notional_limit():,.2f}, "
           f"max_orders={layer.max_orders_per_day}, "
-          f"max_total={layer.max_total_invested:,.0f}, "
+          f"max_total={layer._current_total_notional_limit():,.2f}, "
           f"require_approval={layer.require_first_approval}")
 
     # 화이트리스트 종목 (data/symbols 에 있어야 함)
@@ -240,7 +277,7 @@ if __name__ == "__main__":
         d = layer.check_order(side, ticker, shares, price)
         ok = (d.allowed == expect_allowed) and (not expect_code or d.code == expect_code)
         mark = "✅" if ok else "❌"
-        print(f"[{n}] {side} {ticker} {shares}주 @{price:,.0f} → "
+        print(f"[{n}] {side} {ticker} {shares:g}주 @{price:,.2f} → "
               f"allowed={d.allowed} code={d.code or '-'}  {mark}")
         if not ok:
             print(f"      reason: {d.reason}")

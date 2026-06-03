@@ -35,10 +35,10 @@ class Order:
     ticker: str
     side: OrderSide
     order_type: OrderType
-    shares: int
+    shares: float
     price: float                  # 지정가일 때 가격 (시장가는 0)
     status: OrderStatus
-    filled_shares: int = 0
+    filled_shares: float = 0.0
     filled_avg_price: float = 0.0
     commission: float = 0.0
     submitted_at: str = ""
@@ -56,7 +56,7 @@ class Order:
 @dataclass
 class Holding:
     ticker: str
-    shares: int
+    shares: float
     avg_cost: float            # 평단가
     current_price: float       # 현재가 (조회 시점)
     market_value: float        # 평가금액 = shares × current_price
@@ -124,7 +124,7 @@ class Broker(ABC):
     def place_buy(
         self,
         ticker: str,
-        shares: int,
+        shares: float,
         order_type: OrderType = OrderType.MARKET,
         price: float = 0.0,
     ) -> Order:
@@ -135,7 +135,7 @@ class Broker(ABC):
     def place_sell(
         self,
         ticker: str,
-        shares: int,
+        shares: float,
         order_type: OrderType = OrderType.MARKET,
         price: float = 0.0,
     ) -> Order:
@@ -166,17 +166,17 @@ if __name__ == "__main__":
     # 데이터클래스 직렬화 테스트
     o = Order(
         order_id="TEST001", ticker="379800", side=OrderSide.BUY,
-        order_type=OrderType.MARKET, shares=1, price=0.0,
-        status=OrderStatus.FILLED, filled_shares=1, filled_avg_price=25615.0,
+        order_type=OrderType.MARKET, shares=0.5, price=0.0,
+        status=OrderStatus.FILLED, filled_shares=0.5, filled_avg_price=25615.0,
         commission=4.0, submitted_at=datetime.now().isoformat(),
         filled_at=datetime.now().isoformat(),
     )
     print("Order dict:", o.to_dict())
 
-    h = Holding(ticker="379800", shares=1, avg_cost=25615, current_price=25800,
-                market_value=25800, unrealized_pnl=185, unrealized_pnl_pct=0.722)
+    h = Holding(ticker="379800", shares=0.5, avg_cost=25615, current_price=25800,
+                market_value=12900, unrealized_pnl=92.5, unrealized_pnl_pct=0.722)
     print("Holding dict:", h.to_dict())
 
-    b = Balance(cash_krw=1000000, total_value_krw=1025800, invested_krw=25615,
+    b = Balance(cash_krw=1000000, total_value_krw=1012900, invested_krw=12807.5,
                 holdings=[h], fetched_at=datetime.now().isoformat())
     print("Balance dict:", b.to_dict())

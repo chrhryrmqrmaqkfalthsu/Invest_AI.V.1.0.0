@@ -11,7 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from engine.core.feature_lag import FEATURE_LAG_METADATA
-from engine.core.metadata import build_metadata
+from engine.core.metadata import build_metadata, compute_rulebook_hash
 from engine.learning.backtest import run_backtest
 from engine.learning.genetic import GAConfig, GAResult, run_ga
 from engine.pipeline.context import DEFAULT_ROLLING_YEARS, make_year_splits, prepare_ticker_context
@@ -51,6 +51,27 @@ def _ga_config_to_plain_dict(ga_config: GAConfig | None) -> dict[str, Any]:
         return {}
 
 
+def _rulebook_to_dict(rulebook: Any) -> dict[str, Any]:
+    if rulebook is None:
+        return {}
+    if isinstance(rulebook, dict):
+        return dict(rulebook)
+    method = getattr(rulebook, "to_dict", None)
+    if callable(method):
+        try:
+            value = method()
+            return dict(value) if isinstance(value, dict) else {}
+        except Exception:
+            return {}
+    try:
+        return asdict(rulebook)
+    except Exception:
+        raw = getattr(rulebook, "__dict__", None)
+        if isinstance(raw, dict):
+            return {str(k): v for k, v in raw.items() if not str(k).startswith("_")}
+    return {}
+
+
 def _ga_summary(ga_result: GAResult | None) -> dict[str, Any]:
     if ga_result is None:
         return {}
@@ -73,6 +94,7 @@ def backtest_result_to_oos_period(
     ga_result: GAResult | None = None,
 ) -> dict[str, Any]:
     """Adapt BacktestResult to score_stock_from_rolling period format."""
+    best = getattr(ga_result, "best", None) if ga_result is not None else None
     return {
         "year": int(year),
         "train_period": [train_start, train_end],
@@ -87,6 +109,8 @@ def backtest_result_to_oos_period(
         "fitness": _float_or_zero(getattr(result, "fitness", 0.0)),
         "trades": list(getattr(result, "trades", []) or []),
         "ga": _ga_summary(ga_result),
+        "best_rulebook": _rulebook_to_dict(best),
+        "best_rulebook_hash": compute_rulebook_hash(best) if best is not None else "",
     }
 
 

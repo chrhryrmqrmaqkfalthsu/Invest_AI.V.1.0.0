@@ -192,9 +192,13 @@ def run_backtest(
                 j, _cm, _cs, _cv, _ef, _snt, _px, _sh = _item
                 if _sh <= 0:
                     continue
-                _tr = simulate_exit(rb, df, j, _sh, position_limit_krw,
-                                    commission_rate=commission_rate,
-                                    cur_market_score=_cm, cur_vix_level=_cv)
+                _tr = simulate_exit(
+                    rb, df, j, _sh, position_limit_krw,
+                    commission_rate=commission_rate,
+                    cur_market_score=_cm,
+                    cur_vix_level=_cv,
+                    cur_sector_score=_cs,
+                )
                 if _tr is None:
                     continue
                 _d = asdict(_tr) if hasattr(_tr, "__dataclass_fields__") else _tr
@@ -296,6 +300,7 @@ def run_backtest(
             commission_rate=commission_rate,
             cur_market_score=cur_market,  # v5: 동적 손절익절용
             cur_vix_level=cur_vix,
+            cur_sector_score=cur_sector,
         )
         if trade_obj is None:
             break

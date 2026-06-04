@@ -22,6 +22,7 @@ from engine.core.exit_policy import (
     update_position_for_add_buy,
 )
 from engine.core.logger import get_logger
+from engine.core.metadata import compute_rulebook_hash
 from engine.strategies.rulebook import Rulebook
 
 log = get_logger("exit_simulator")
@@ -48,6 +49,17 @@ class Trade:
     fill_price_stress: Optional[float] = None
     stress_pnl_pct: Optional[float] = None
     stress_pnl_krw: Optional[float] = None
+    entry_market_score: Optional[float] = None
+    entry_vix_level: Optional[float] = None
+    entry_sector_score: Optional[float] = None
+    entry_atr: Optional[float] = None
+    stop_price_at_entry: Optional[float] = None
+    target_price_at_entry: Optional[float] = None
+    trailing_stop_at_entry: Optional[float] = None
+    trailing_distance_at_entry: Optional[float] = None
+    exit_strategy: Optional[str] = None
+    rulebook_hash: Optional[str] = None
+    member_hash: Optional[str] = None
 
     def to_dict(self) -> dict:
         d = {
@@ -68,16 +80,31 @@ class Trade:
             "pnl_krw": round(self.pnl_krw, 0),
             "commission": round(self.commission, 0),
         }
-        if self.trigger_price is not None:
-            d["trigger_price"] = round(self.trigger_price, 4)
-        if self.fill_price_base is not None:
-            d["fill_price_base"] = round(self.fill_price_base, 4)
-        if self.fill_price_stress is not None:
-            d["fill_price_stress"] = round(self.fill_price_stress, 4)
-        if self.stress_pnl_pct is not None:
-            d["stress_pnl_pct"] = round(self.stress_pnl_pct, 3)
-        if self.stress_pnl_krw is not None:
-            d["stress_pnl_krw"] = round(self.stress_pnl_krw, 0)
+        optional_float_fields = {
+            "trigger_price": self.trigger_price,
+            "fill_price_base": self.fill_price_base,
+            "fill_price_stress": self.fill_price_stress,
+            "stress_pnl_pct": self.stress_pnl_pct,
+            "stress_pnl_krw": self.stress_pnl_krw,
+            "entry_market_score": self.entry_market_score,
+            "entry_vix_level": self.entry_vix_level,
+            "entry_sector_score": self.entry_sector_score,
+            "entry_atr": self.entry_atr,
+            "stop_price_at_entry": self.stop_price_at_entry,
+            "target_price_at_entry": self.target_price_at_entry,
+            "trailing_stop_at_entry": self.trailing_stop_at_entry,
+            "trailing_distance_at_entry": self.trailing_distance_at_entry,
+        }
+        for key, value in optional_float_fields.items():
+            if value is not None:
+                digits = 3 if key in {"stress_pnl_pct", "stress_pnl_krw"} else 4
+                d[key] = round(float(value), digits)
+        if self.exit_strategy is not None:
+            d["exit_strategy"] = str(self.exit_strategy)
+        if self.rulebook_hash is not None:
+            d["rulebook_hash"] = str(self.rulebook_hash)
+        if self.member_hash is not None:
+            d["member_hash"] = str(self.member_hash)
         return d
 
 
@@ -415,6 +442,30 @@ def _make_price_snapshot(df: pd.DataFrame, i: int) -> PriceSnapshot:
     )
 
 
+def _entry_context_from_position(
+    rb: Rulebook,
+    position,
+    *,
+    entry_market_score: float,
+    entry_vix_level: float,
+    entry_sector_score: float,
+) -> dict[str, Any]:
+    """Capture immutable entry context before add-buy updates mutate state."""
+    return {
+        "entry_market_score": float(entry_market_score),
+        "entry_vix_level": float(entry_vix_level),
+        "entry_sector_score": float(entry_sector_score),
+        "entry_atr": float(position.atr_at_entry),
+        "stop_price_at_entry": float(position.stop_price),
+        "target_price_at_entry": float(position.target_price),
+        "trailing_stop_at_entry": float(position.trailing_stop),
+        "trailing_distance_at_entry": float(position.trailing_distance),
+        "exit_strategy": str(position.exit_strategy),
+        "rulebook_hash": compute_rulebook_hash(rb),
+        "member_hash": str(position.member_hash or ""),
+    }
+
+
 def simulate_exit(
     rb: Rulebook,
     df: pd.DataFrame,
@@ -424,6 +475,7 @@ def simulate_exit(
     commission_rate: float = 0.0005,
     cur_market_score: float = 50.0,
     cur_vix_level: float = 18.0,
+    cur_sector_score: float = 50.0,
 ) -> Optional[Trade]:
     """
     entry_idx 시점에 진입했다고 가정하고 청산까지 시뮬레이션.
@@ -448,7 +500,11 @@ def simulate_exit(
         atr = entry_price * 0.02
 
     entry_date = str(df.index[entry_idx].date())
-    market_context = MarketContext(market_score=cur_market_score, vix_level=cur_vix_level)
+    market_context = MarketContext(
+        market_score=cur_market_score,
+        vix_level=cur_vix_level,
+        sector_score=cur_sector_score,
+    )
     execution_config = ExitExecutionConfig(trailing_activation_bars=2)
     position = initialize_position_state(
         ticker=str(getattr(rb, "ticker", "") or ""),
@@ -458,6 +514,13 @@ def simulate_exit(
         atr_value=atr,
         market_context=market_context,
         entry_date=entry_date,
+    )
+    entry_context = _entry_context_from_position(
+        rb,
+        position,
+        entry_market_score=cur_market_score,
+        entry_vix_level=cur_vix_level,
+        entry_sector_score=cur_sector_score,
     )
 
     used_krw = entry_price * initial_shares
@@ -511,6 +574,7 @@ def simulate_exit(
         bar_context = MarketContext(
             market_score=cur_market_score,
             vix_level=cur_vix_level,
+            sector_score=cur_sector_score,
             holding_trading_days=holding_days,
             current_trade_date=price_snapshot.date,
         )
@@ -556,6 +620,7 @@ def simulate_exit(
                 trigger_price=decision.trigger_price,
                 fill_price_base=decision.fill_price_base,
                 fill_price_stress=decision.fill_price_stress,
+                entry_context=entry_context,
             )
 
     # 데이터가 max_holding_days 전에 끝난 경우의 안전 fallback.
@@ -570,6 +635,7 @@ def simulate_exit(
         trigger_price=exit_price,
         fill_price_base=exit_price,
         fill_price_stress=exit_price,
+        entry_context=entry_context,
     )
 
 
@@ -580,6 +646,7 @@ def _build_trade(
     trigger_price: Optional[float] = None,
     fill_price_base: Optional[float] = None,
     fill_price_stress: Optional[float] = None,
+    entry_context: Optional[dict[str, Any]] = None,
 ) -> Trade:
     if is_short:
         gross_pnl_pct = (avg_cost - exit_price) / avg_cost * 100
@@ -598,6 +665,7 @@ def _build_trade(
         stress_pnl_krw = (fill_price_stress - avg_cost) * total_shares * (-1 if is_short else 1) - stress_commission
         stress_pnl_pct = stress_pnl_krw / (avg_cost * total_shares) * 100
 
+    ctx = dict(entry_context or {})
     return Trade(
         entry_date=entry_date,
         entry_price=entry_price,
@@ -617,6 +685,17 @@ def _build_trade(
         fill_price_stress=fill_price_stress,
         stress_pnl_pct=stress_pnl_pct,
         stress_pnl_krw=stress_pnl_krw,
+        entry_market_score=ctx.get("entry_market_score"),
+        entry_vix_level=ctx.get("entry_vix_level"),
+        entry_sector_score=ctx.get("entry_sector_score"),
+        entry_atr=ctx.get("entry_atr"),
+        stop_price_at_entry=ctx.get("stop_price_at_entry"),
+        target_price_at_entry=ctx.get("target_price_at_entry"),
+        trailing_stop_at_entry=ctx.get("trailing_stop_at_entry"),
+        trailing_distance_at_entry=ctx.get("trailing_distance_at_entry"),
+        exit_strategy=ctx.get("exit_strategy"),
+        rulebook_hash=ctx.get("rulebook_hash"),
+        member_hash=ctx.get("member_hash"),
     )
 
 
@@ -633,8 +712,8 @@ if __name__ == "__main__":
     df = pd.DataFrame(
         {
             "Open": close + np.random.randn(n) * 30,
-            "High": close + np.abs(np.random.randn(n)) * 80,
-            "Low": close - np.abs(np.random.randn(n)) * 80,
+            "High": close + abs(np.random.randn(n)) * 80,
+            "Low": close - abs(np.random.randn(n)) * 80,
             "Close": close,
             "Volume": np.random.randint(10000, 50000, n),
         },

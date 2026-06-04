@@ -1,10 +1,8 @@
 """Live adapter and shadow helpers for the shared ExitPolicy.
 
-The live PositionManager still owns the real order decision during C-P1 Phase 3.
-This module only normalizes live state, evaluates ExitPolicy in parallel, and
-classifies/logs differences.  Existing positions do not carry rulebook_snapshot
-or member_hash, so the initial shadow falls back to the current live rulebook
-source and marks that limitation in diagnostics.
+The live PositionManager still owns real order decisions during C-P1 shadow.
+This module only normalizes state, evaluates ExitPolicy in parallel, and logs
+classified differences.  Trading-day holding counts use the shared calendar.
 """
 from __future__ import annotations
 
@@ -26,6 +24,7 @@ from engine.core.exit_policy import (
     initialize_position_state,
 )
 from engine.core.metadata import compute_member_hash, compute_rulebook_hash
+from engine.live.market_clock import UsMarketClock, market_clock_for_ticker
 from engine.strategies.rulebook import Rulebook
 
 KST = ZoneInfo("Asia/Seoul")
@@ -44,18 +43,14 @@ def _get(obj: Any, name: str, default: Any = None) -> Any:
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
-        if value is None:
-            return default
-        return float(value)
+        return default if value is None else float(value)
     except Exception:
         return default
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
     try:
-        if value is None:
-            return default
-        return int(float(value))
+        return default if value is None else int(float(value))
     except Exception:
         return default
 
@@ -79,16 +74,20 @@ def _json_safe(value: Any) -> Any:
         except Exception:
             pass
     raw = getattr(value, "__dict__", None)
-    if isinstance(raw, Mapping):
-        return _json_safe(raw)
-    return str(value)
+    return _json_safe(raw) if isinstance(raw, Mapping) else str(value)
 
 
-def approximate_trading_days(entry_date: Any, now: Optional[datetime] = None) -> int:
-    """Approximate trading-day holding count using weekdays only.
+def count_holding_trading_days(
+    entry_date: Any,
+    now: Optional[datetime] = None,
+    *,
+    ticker: Optional[str] = None,
+    market_clock: Any = None,
+) -> int:
+    """Count exact exchange sessions after entry through ``now``.
 
-    C-P1 shadow intentionally does not solve the market-clock/holiday problem.
-    Task BJ must replace this approximation before live cutover.
+    Existing live entry timestamps are stored in KST.  For the current US-only
+    C-P1 universe, omitting ticker intentionally defaults to UsMarketClock.
     """
     try:
         entry = datetime.fromisoformat(str(entry_date))
@@ -99,21 +98,25 @@ def approximate_trading_days(entry_date: Any, now: Optional[datetime] = None) ->
     current = now or datetime.now(KST)
     if current.tzinfo is None:
         current = current.replace(tzinfo=KST)
-    start = entry.astimezone(KST).date()
-    end = current.astimezone(KST).date()
-    if end <= start:
+    try:
+        clock = market_clock or (market_clock_for_ticker(ticker) if ticker else UsMarketClock())
+        return max(0, int(clock.session_count(entry, current)))
+    except Exception:
         return 0
-    days = 0
-    cursor = start
-    while cursor < end:
-        cursor = cursor.fromordinal(cursor.toordinal() + 1)
-        if cursor.weekday() < 5:
-            days += 1
-    return days
+
+
+def approximate_trading_days(
+    entry_date: Any,
+    now: Optional[datetime] = None,
+    *,
+    ticker: Optional[str] = None,
+    market_clock: Any = None,
+) -> int:
+    """Backward-compatible alias; now calendar-backed rather than approximate."""
+    return count_holding_trading_days(entry_date, now, ticker=ticker, market_clock=market_clock)
 
 
 def position_entry_to_state(pos: Any, rulebook: Any, holding_trading_days: int) -> PositionState:
-    """Map the exact current live PositionEntry state into PositionState."""
     direction = str(_get(pos, "rulebook_direction", _get(rulebook, "direction", "long")) or "long")
     entry_price = _safe_float(_get(pos, "entry_price", 0.0))
     snapshot = _get(pos, "rulebook_snapshot", None)
@@ -150,12 +153,6 @@ def position_entry_to_dynamic_state(
     holding_trading_days: int,
     market_context: ExitMarketContext,
 ) -> PositionState:
-    """Approximate ExitPolicy state using current market context.
-
-    Existing live positions lack their entry-time market context, therefore the
-    dynamic stop/target/trailing levels below are an approximation.  New live
-    entries must eventually persist rulebook_snapshot + entry context.
-    """
     entry_price = _safe_float(_get(pos, "entry_price", 0.0))
     highest = _safe_float(_get(pos, "highest_price", entry_price), entry_price)
     state = initialize_position_state(
@@ -168,12 +165,11 @@ def position_entry_to_dynamic_state(
         entry_date=str(_get(pos, "entry_date", "") or ""),
         member_hash=str(_get(pos, "member_hash", "") or "") or None,
     )
-    dynamic_trailing = max(state.trailing_stop, highest - state.trailing_distance)
     return replace(
         state,
         avg_cost=entry_price,
         highest_price=highest,
-        trailing_stop=dynamic_trailing,
+        trailing_stop=max(state.trailing_stop, highest - state.trailing_distance),
         holding_trading_days=max(0, _safe_int(holding_trading_days, 0)),
         add_buy_count=max(0, _safe_int(_get(pos, "add_buy_count", 0), 0)),
     )
@@ -185,7 +181,6 @@ def market_context_to_exit_context(
     holding_trading_days: Optional[int] = None,
     current_trade_date: Optional[str] = None,
 ) -> ExitMarketContext:
-    """Normalize engine.market.context.MarketContext for ExitPolicy."""
     sector_map = _get(ctx, "sector_strength", {}) or {}
     sector_score = _safe_float(sector_map.get(sector_name, 50.0) if isinstance(sector_map, Mapping) else 50.0, 50.0)
     return ExitMarketContext(
@@ -198,7 +193,6 @@ def market_context_to_exit_context(
 
 
 def legacy_live_decision(pos: Any, price: float, holding_calendar_days: int) -> dict[str, Any]:
-    """Pure mirror of current PositionManager live polling decision order."""
     current = _safe_float(price)
     highest = max(_safe_float(_get(pos, "highest_price", current)), current)
     trailing_distance = _safe_float(_get(pos, "trailing_distance", 0.0))
@@ -207,7 +201,6 @@ def legacy_live_decision(pos: Any, price: float, holding_calendar_days: int) -> 
     target_price = _safe_float(_get(pos, "target_price", current))
     max_holding_days = _safe_int(_get(pos, "max_holding_days", 20), 20)
     strategy = str(_get(pos, "exit_strategy", "hybrid") or "hybrid").lower()
-
     hits = {
         "stop_hit": current <= stop_price,
         "target_hit": current >= target_price,
@@ -247,7 +240,6 @@ def legacy_live_decision(pos: Any, price: float, holding_calendar_days: int) -> 
 
 
 def resolve_live_rulebook(ticker: str, provider: Any = None) -> tuple[Optional[Rulebook], str]:
-    """Read the same current sources used by LearnedRuleBook, without writes."""
     if provider is not None:
         try:
             getter = getattr(provider, "get_rulebook", None)
@@ -259,7 +251,6 @@ def resolve_live_rulebook(ticker: str, provider: Any = None) -> tuple[Optional[R
                 return rb, "LearnedRuleBook"
         except Exception:
             pass
-
     params_path = SYMBOLS_DIR / ticker / "parameters.json"
     if params_path.exists():
         try:
@@ -269,7 +260,6 @@ def resolve_live_rulebook(ticker: str, provider: Any = None) -> tuple[Optional[R
                 return Rulebook.from_dict(dict(payload)), str(params_path)
         except Exception:
             pass
-
     if SEED_PATTERNS_PATH.exists():
         try:
             seeds = json.loads(SEED_PATTERNS_PATH.read_text(encoding="utf-8"))
@@ -344,25 +334,17 @@ def compare_legacy_and_exit_policy(
         "timeout_hit": bool(diagnostics.get("timeout_hit", False)),
     }
     combined_hits = {key: bool(legacy_hits.get(key)) or bool(policy_hits.get(key)) for key in policy_hits}
-    price_hit_count = sum(bool(combined_hits[k]) for k in ("stop_hit", "target_hit", "trailing_hit"))
     diagnostics["hybrid_priority_difference"] = bool(
         diagnostics.get("hybrid_priority_difference")
-        or (strategy == "hybrid" and price_hit_count >= 2 and legacy_reason != policy_reason)
+        or (strategy == "hybrid" and sum(bool(combined_hits[k]) for k in ("stop_hit", "target_hit", "trailing_hit")) >= 2 and legacy_reason != policy_reason)
     )
     diagnostics["trailing_delay_difference"] = bool(
         diagnostics.get("trailing_delay_difference")
-        or (
-            {legacy_reason, policy_reason} == {"trailing", None}
-            and int(holding_trading_days) <= int(diagnostics.get("trailing_activation_bars", 2))
-        )
+        or ({legacy_reason, policy_reason} == {"trailing", None} and int(holding_trading_days) <= int(diagnostics.get("trailing_activation_bars", 2)))
     )
     diagnostics["timeout_boundary"] = bool(
         diagnostics.get("timeout_boundary")
-        or (
-            legacy_reason != policy_reason
-            and (legacy_reason == "time_out" or policy_reason == "time_out")
-            and int(holding_calendar_days) != int(holding_trading_days)
-        )
+        or (legacy_reason != policy_reason and (legacy_reason == "time_out" or policy_reason == "time_out") and int(holding_calendar_days) != int(holding_trading_days))
     )
     diagnostics["dynamic_exit_difference"] = bool(
         diagnostics.get("dynamic_exit_difference")
@@ -436,10 +418,9 @@ def evaluate_live_shadow(
     )
     static_state = position_entry_to_state(pos, rulebook, holding_trading_days)
     dynamic_state = position_entry_to_dynamic_state(pos, rulebook, holding_trading_days, exit_ctx)
-    snapshot = PriceSnapshot(date=timestamp or "", current_price=float(price), close=float(price))
     decision = evaluate_exit(
         dynamic_state,
-        snapshot,
+        PriceSnapshot(date=timestamp or "", current_price=float(price), close=float(price)),
         rulebook,
         market_context=exit_ctx,
         execution_config=ExitExecutionConfig(

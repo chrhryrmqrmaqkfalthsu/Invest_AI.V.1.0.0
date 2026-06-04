@@ -28,6 +28,18 @@ class TradingHours:
     weekdays_only: bool = True
 
     def is_open(self, now: Optional[datetime] = None) -> bool:
+        # US equity adapters share the exact Alpaca/cache/fallback calendar used
+        # by live Scheduler and ExitPolicy holding-day calculations.  Import is
+        # local to keep the generic adapter layer free of import cycles.
+        if self.timezone == "America/New_York":
+            try:
+                from engine.live.market_clock import UsMarketClock
+
+                return bool(UsMarketClock().is_open(now))
+            except Exception as exc:
+                log.warning(f"US calendar-backed market-open check failed: {type(exc).__name__}")
+                return False
+
         tz = ZoneInfo(self.timezone)
         now_local = (now or datetime.now(tz)).astimezone(tz)
         if self.weekdays_only and now_local.weekday() >= 5:

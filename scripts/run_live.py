@@ -9,17 +9,14 @@ run_live.py - 라이브 트레이딩 봇 엔트리포인트.
     └─ cron         → Runner.daily_summary    (평일 16:00)
 
   Runner (뇌)
-    ├─ Broker (PaperBroker | KisBroker)
+    ├─ Broker (PaperBroker | KisBroker | AlpacaBroker)
     ├─ SafetyLayer
     ├─ TelegramNotifier
     ├─ MarketClock
-    └─ RuleBook (DemoRuleBook)
+    └─ RuleBook
 
-사용법:
-  PYTHONPATH=. python scripts/run_live.py                  # .env의 KIS_MODE 사용
-  PYTHONPATH=. python scripts/run_live.py --mode paper     # 강제 paper
-  PYTHONPATH=. python scripts/run_live.py --dry-run        # KIS 실모드여도 주문 mock
-  Ctrl+C로 graceful 종료.
+현재 live Runner는 단일 시장 universe만 지원한다. US/KR 혼재는 시작 전에
+fail-fast하며, 시장별 Runner 분리는 후속 작업이다.
 """
 from __future__ import annotations
 
@@ -31,7 +28,7 @@ import time
 from pathlib import Path
 
 from engine.live.broker.factory import make_broker
-from engine.live.market_clock import KrxMarketClock
+from engine.live.market_clock import select_market_clock, validate_broker_market_compatibility
 from engine.live.runner import Runner
 from engine.live.safety.layer import SafetyLayer
 from engine.live.scheduler import Scheduler
@@ -47,24 +44,18 @@ logging.basicConfig(
 logger = logging.getLogger("run_live")
 
 
-# ----------------- 종목 로드 -----------------
 def load_symbols(symbols_dir: Path = Path("data/symbols")) -> list[str]:
-    """
-    data/symbols/ 하위 디렉토리 이름을 종목코드로 사용.
-    SafetyLayer 화이트리스트와 동일한 소스.
-    """
+    """Use data/symbols child directories as the live whitelist/universe."""
     if not symbols_dir.exists():
         logger.warning(f"종목 디렉토리 없음: {symbols_dir}")
         return []
-    syms = sorted([d.name for d in symbols_dir.iterdir() if d.is_dir()])
-    return syms
+    return sorted([d.name for d in symbols_dir.iterdir() if d.is_dir()])
 
 
-# ----------------- 메인 -----------------
 def main():
     parser = argparse.ArgumentParser(description="Kingmaker live trading bot")
-    parser.add_argument("--mode", choices=["paper", "real", "vts", "live"], default=None,
-                        help="브로커 모드 강제 지정 (기본: .env의 KIS_MODE)")
+    parser.add_argument("--mode", choices=["paper", "real", "vts", "live", "alpaca", "alpaca_paper"], default=None,
+                        help="브로커 모드 강제 지정 (기본: .env의 BROKER_MODE/KIS_MODE)")
     parser.add_argument("--dry-run", action="store_true",
                         help="KIS 실모드에서도 주문은 mock으로 처리")
     parser.add_argument("--market-tick", type=int, default=60,
@@ -76,7 +67,7 @@ def main():
     parser.add_argument("--stop-loss", type=float, default=0.03,
                         help="DemoRuleBook 손절률. 기본 0.03")
     parser.add_argument("--summary-hour", type=int, default=16,
-                        help="일일 요약 시각(시). 기본 16")
+                        help="일일 요약 시각(시). 기본 16 (시장별 timezone 정합은 후속)")
     parser.add_argument("--rulebook", choices=["learned", "demo"], default="learned",
                         help="룰북 선택. learned=학습된 룰북(기본), demo=SMA20 데모")
     parser.add_argument("--summary-minute", type=int, default=0,
@@ -87,28 +78,32 @@ def main():
     logger.info("Kingmaker live trading bot 시작")
     logger.info("=" * 60)
 
-    # 1) 브로커
     broker = make_broker(force_mode=args.mode, dry_run=args.dry_run)
     logger.info(f"Broker: mode={broker.mode} dry_run={args.dry_run}")
 
-    # 2) 종목 로드
     symbols = load_symbols()
     if not symbols:
         logger.error("종목이 비어있음. data/symbols/ 아래 종목 디렉토리를 만들어주세요.")
         sys.exit(1)
     logger.info(f"종목 {len(symbols)}개: {symbols}")
 
-    # 3) 의존성
+    try:
+        clock = select_market_clock(symbols)
+        validate_broker_market_compatibility(broker, clock)
+    except Exception as exc:
+        logger.error(f"라이브 시장/브로커 정합성 실패: {exc}")
+        sys.exit(2)
+    source = getattr(clock, "calendar_source", "built-in")
+    logger.info(f"MarketClock: market={clock.name} source={source}")
+
     notifier = TelegramNotifier()
     safety = SafetyLayer(broker=broker)
-    clock = KrxMarketClock()
     if args.rulebook == "learned":
         rulebook = LearnedRuleBook()
     else:
         rulebook = DemoRuleBook(window=args.sma_window, stop_loss_pct=args.stop_loss)
     logger.info(f"RuleBook: {rulebook.name()}")
 
-    # 4) Runner
     runner = Runner(
         broker=broker,
         safety=safety,
@@ -119,7 +114,6 @@ def main():
         order_shares=1,
     )
 
-    # 4.5) TelegramBot 폴링 (사용자 명령 수신: /positions, /approve_50k 등)
     try:
         bot = TelegramBot(broker=broker, safety=safety, notifier=notifier)
         runner.attach_bot(bot)
@@ -129,14 +123,8 @@ def main():
         logger.error(f"TelegramBot 시작 실패 (계속 진행): {e}")
         bot = None
 
-    # 5) Scheduler에 잡 등록
     scheduler = Scheduler(default_timezone="Asia/Seoul")
-
-    scheduler.add_once_job(
-        func=runner.startup_check,
-        delay_sec=2,
-        job_id="startup_check",
-    )
+    scheduler.add_once_job(func=runner.startup_check, delay_sec=2, job_id="startup_check")
     scheduler.add_market_hours_job(
         func=runner.tick_market,
         interval_sec=args.market_tick,
@@ -157,7 +145,6 @@ def main():
         job_id="daily_summary",
     )
 
-    # 6) graceful shutdown
     stop_flag = {"stop": False}
 
     def shutdown_handler(signum, frame):
@@ -182,14 +169,12 @@ def main():
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
 
-    # 7) 시작
     scheduler.start()
     logger.info(f"Scheduler 가동. 등록된 잡 {len(scheduler.list_jobs())}개")
-    for j in scheduler.list_jobs():
-        logger.info(f"  - {j}")
+    for job in scheduler.list_jobs():
+        logger.info(f"  - {job}")
     logger.info("Ctrl+C로 종료")
 
-    # 메인 스레드는 잠자기 (Scheduler는 백그라운드)
     try:
         while not stop_flag["stop"]:
             time.sleep(1)

@@ -1,87 +1,104 @@
-"""
-MarketClock - 시장별 영업시간/영업일 판단 인터페이스
-- Scheduler가 이걸 보고 "지금 일해야 하는지" 판단
-- 코인 추가 시 CryptoMarket 클래스 하나 추가하면 끝
+"""Market clocks and single-market live-universe selection.
 
-설계 원칙:
-  Scheduler는 시간 판단을 직접 안 함. 항상 MarketClock에 위임.
-  MarketClock 구현체만 갈아끼면 KRX/코인/미국 어디든 작동.
+Scheduler delegates all market-time decisions to this interface. US sessions
+are backed by the cache/API/fallback provider in ``us_market_calendar``.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime, time, timedelta
-from typing import Optional, Set
+from datetime import date, datetime, time, timedelta
+from functools import lru_cache
+from typing import Iterable, Optional, Set
 from zoneinfo import ZoneInfo
 
 
 class MarketClock(ABC):
-    """모든 시장의 영업시간 판단 인터페이스"""
+    """Common market-hours and trading-session interface."""
 
     name: str = "abstract"
     timezone: ZoneInfo = ZoneInfo("UTC")
 
     @abstractmethod
     def is_open(self, dt: Optional[datetime] = None) -> bool:
-        """해당 시각에 정규장이 열려있는가"""
         ...
 
     @abstractmethod
     def is_business_day(self, dt: Optional[datetime] = None) -> bool:
-        """해당 날짜가 영업일인가 (주말/공휴일 제외)"""
         ...
 
     def now(self) -> datetime:
-        """이 시장 기준 현재 시각 (timezone-aware)"""
         return datetime.now(self.timezone)
 
     def next_open(self, dt: Optional[datetime] = None) -> Optional[datetime]:
-        """다음 개장 시각 (운영 정보용, 필수 아님)"""
         return None
 
+    def session_close(self, value: date | datetime | str) -> Optional[datetime]:
+        return None
 
-# ==================================================
-# KRX (한국거래소)
-# ==================================================
+    def session_count(self, start: date | datetime | str, end: date | datetime | str) -> int:
+        """Generic session count: strictly after start and through end."""
+        start_date = self._to_local_date(start)
+        end_date = self._to_local_date(end)
+        if end_date <= start_date:
+            return 0
+        count = 0
+        cursor = start_date
+        while cursor < end_date:
+            cursor += timedelta(days=1)
+            probe = datetime.combine(cursor, time(12, 0), tzinfo=self.timezone)
+            if self.is_business_day(probe):
+                count += 1
+        return count
+
+    def _to_local_date(self, value: date | datetime | str) -> date:
+        if isinstance(value, datetime):
+            dt = value.replace(tzinfo=self.timezone) if value.tzinfo is None else value.astimezone(self.timezone)
+            return dt.date()
+        if isinstance(value, date):
+            return value
+        raw = str(value).strip()
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            dt = dt.replace(tzinfo=self.timezone) if dt.tzinfo is None else dt.astimezone(self.timezone)
+            return dt.date()
+        except Exception:
+            return date.fromisoformat(raw[:10])
+
+
 class KrxMarketClock(MarketClock):
-    """
-    KRX 정규장: 평일 09:00 ~ 15:30 (Asia/Seoul)
-    공휴일은 별도 캘린더 (간단 버전: 주말만 차단, 공휴일은 데이터 갱신 실패로 자연 처리)
-    """
+    """KRX regular market. Holiday list remains manually extensible."""
+
     name = "KRX"
     timezone = ZoneInfo("Asia/Seoul")
-
-    OPEN_TIME  = time(9, 0)
+    OPEN_TIME = time(9, 0)
     CLOSE_TIME = time(15, 30)
-
-    # 운영 중 추가 가능 (수동 또는 별도 로더로 갱신)
-    holidays: Set[str] = set()  # "YYYY-MM-DD" 형식
+    holidays: Set[str] = set()
 
     def is_open(self, dt: Optional[datetime] = None) -> bool:
-        dt = self._to_local(dt)
-        if not self.is_business_day(dt):
-            return False
-        return self.OPEN_TIME <= dt.time() <= self.CLOSE_TIME
+        local = self._to_local(dt)
+        return self.is_business_day(local) and self.OPEN_TIME <= local.time() <= self.CLOSE_TIME
 
     def is_business_day(self, dt: Optional[datetime] = None) -> bool:
-        dt = self._to_local(dt)
-        if dt.weekday() >= 5:  # 5=토, 6=일
-            return False
-        if dt.strftime("%Y-%m-%d") in self.holidays:
-            return False
-        return True
+        local = self._to_local(dt)
+        return local.weekday() < 5 and local.strftime("%Y-%m-%d") not in self.holidays
 
     def next_open(self, dt: Optional[datetime] = None) -> Optional[datetime]:
-        dt = self._to_local(dt)
-        candidate = dt.replace(hour=9, minute=0, second=0, microsecond=0)
-        if dt.time() >= self.OPEN_TIME:
+        local = self._to_local(dt)
+        candidate = local.replace(hour=9, minute=0, second=0, microsecond=0)
+        if local.time() >= self.OPEN_TIME:
             candidate += timedelta(days=1)
-        # 영업일 찾을 때까지 점프
-        for _ in range(10):
+        for _ in range(15):
             if self.is_business_day(candidate):
                 return candidate
             candidate += timedelta(days=1)
         return None
+
+    def session_close(self, value: date | datetime | str) -> Optional[datetime]:
+        session_date = self._to_local_date(value)
+        probe = datetime.combine(session_date, time(12, 0), tzinfo=self.timezone)
+        if not self.is_business_day(probe):
+            return None
+        return datetime.combine(session_date, self.CLOSE_TIME, tzinfo=self.timezone)
 
     def _to_local(self, dt: Optional[datetime]) -> datetime:
         if dt is None:
@@ -91,11 +108,7 @@ class KrxMarketClock(MarketClock):
         return dt.astimezone(self.timezone)
 
 
-# ==================================================
-# Crypto (예: 바이낸스 — 24/7)
-# ==================================================
 class CryptoMarketClock(MarketClock):
-    """24/7 시장. 정기 점검 시간 등은 추후 추가."""
     name = "Crypto"
     timezone = ZoneInfo("UTC")
 
@@ -106,97 +119,90 @@ class CryptoMarketClock(MarketClock):
         return True
 
 
-# ==================================================
-# US (예시 — 정확한 구현은 추후)
-# ==================================================
 class UsMarketClock(MarketClock):
-    """
-    US 정규장: 평일 09:30 ~ 16:00 (America/New_York)
-    한국시간으로는 23:30 ~ 06:00 (서머타임은 ZoneInfo가 처리)
-    프리/애프터 마켓은 추후 별도 클래스로.
-    """
+    """US equity regular sessions backed by an exact session calendar."""
+
     name = "US"
     timezone = ZoneInfo("America/New_York")
 
-    OPEN_TIME  = time(9, 30)
-    CLOSE_TIME = time(16, 0)
+    def __init__(self, calendar=None):
+        self.calendar = calendar if calendar is not None else get_us_market_calendar()
 
-    holidays: Set[str] = set()
+    @property
+    def calendar_source(self) -> str:
+        return str(getattr(self.calendar, "source", "unknown"))
 
     def is_open(self, dt: Optional[datetime] = None) -> bool:
-        dt = self._to_local(dt)
-        if not self.is_business_day(dt):
-            return False
-        return self.OPEN_TIME <= dt.time() <= self.CLOSE_TIME
+        return bool(self.calendar.is_open(dt))
 
     def is_business_day(self, dt: Optional[datetime] = None) -> bool:
-        dt = self._to_local(dt)
-        if dt.weekday() >= 5:
-            return False
-        if dt.strftime("%Y-%m-%d") in self.holidays:
-            return False
-        return True
+        return bool(self.calendar.is_business_day(dt or self.now()))
 
-    def _to_local(self, dt: Optional[datetime]) -> datetime:
-        if dt is None:
-            return self.now()
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=self.timezone)
-        return dt.astimezone(self.timezone)
+    def next_open(self, dt: Optional[datetime] = None) -> Optional[datetime]:
+        return self.calendar.next_open(dt)
+
+    def session_close(self, value: date | datetime | str) -> Optional[datetime]:
+        return self.calendar.session_close(value)
+
+    def session_count(self, start: date | datetime | str, end: date | datetime | str) -> int:
+        return int(self.calendar.session_count(start, end))
 
 
-# ==================================================
-# 단위 테스트
-# ==================================================
+@lru_cache(maxsize=1)
+def get_us_market_calendar():
+    from engine.live.us_market_calendar import UsMarketCalendar
+
+    return UsMarketCalendar()
+
+
+def market_region_for_ticker(ticker: str) -> str:
+    """Classify without importing adapters or triggering any market-data side effect."""
+    base = str(ticker).strip().split(".")[0].upper()
+    return "KRX" if base.isdigit() and len(base) == 6 else "US"
+
+
+@lru_cache(maxsize=2)
+def _clock_for_region(region: str) -> MarketClock:
+    if region == "US":
+        return UsMarketClock()
+    if region == "KRX":
+        return KrxMarketClock()
+    raise ValueError(f"unsupported market region: {region}")
+
+
+def market_clock_for_ticker(ticker: str) -> MarketClock:
+    return _clock_for_region(market_region_for_ticker(ticker))
+
+
+def select_market_clock(symbols: Iterable[str], *, us_calendar=None) -> MarketClock:
+    """Select one clock for a single-market universe; mixed markets fail fast."""
+    normalized = [str(symbol).strip() for symbol in symbols if str(symbol).strip()]
+    if not normalized:
+        raise ValueError("cannot select market clock for empty symbols")
+    regions = {market_region_for_ticker(symbol) for symbol in normalized}
+    if len(regions) != 1:
+        raise ValueError(f"mixed-market live universe is not supported yet: {sorted(regions)}")
+    region = next(iter(regions))
+    if region == "US":
+        return UsMarketClock(calendar=us_calendar) if us_calendar is not None else UsMarketClock()
+    return KrxMarketClock()
+
+
+def validate_broker_market_compatibility(broker, clock: MarketClock) -> None:
+    """Block unsupported broker/market combinations before Runner starts."""
+    class_names = {cls.__name__ for cls in type(broker).mro()}
+    if clock.name == "US" and "KisBroker" in class_names:
+        raise RuntimeError(
+            "KisBroker domestic live path cannot run a US-only universe; use paper/Alpaca or implement verified KIS overseas orders"
+        )
+
+
 if __name__ == "__main__":
     from datetime import datetime as dt
 
-    print("=" * 60)
-    print("MarketClock 검증")
-    print("=" * 60)
-
     krx = KrxMarketClock()
-    crypto = CryptoMarketClock()
     us = UsMarketClock()
-
-    # 테스트 시각들 (모두 Asia/Seoul)
     tz_seoul = ZoneInfo("Asia/Seoul")
-    cases = [
-        ("2026-05-25 10:00", "월요일 10:00",  krx, True,  True),
-        ("2026-05-25 15:31", "월요일 15:31",  krx, False, True),
-        ("2026-05-25 08:59", "월요일 08:59",  krx, False, True),
-        ("2026-05-30 10:00", "토요일 10:00",  krx, False, False),
-        ("2026-05-25 10:00", "코인 평일 10시", crypto, True, True),
-        ("2026-05-31 03:00", "코인 일요일 새벽", crypto, True, True),
-    ]
-
-    print(f"\n{'시각':<25} {'시장':<8} {'예상open':<10} {'예상영업일':<12} 결과")
-    for ts, desc, market, exp_open, exp_biz in cases:
-        d = dt.strptime(ts, "%Y-%m-%d %H:%M").replace(tzinfo=tz_seoul)
-        got_open = market.is_open(d)
-        got_biz = market.is_business_day(d)
-        ok = (got_open == exp_open) and (got_biz == exp_biz)
-        mark = "✅" if ok else "❌"
-        print(f"  {desc:<22} {market.name:<8} open={got_open}/{exp_open} "
-              f"biz={got_biz}/{exp_biz}  {mark}")
-
-    # next_open
-    print("\n[next_open] 토요일 14:00 → 다음 KRX 개장:")
-    sat = dt(2026, 5, 30, 14, 0, tzinfo=tz_seoul)
-    nxt = krx.next_open(sat)
-    print(f"  {nxt}  (월요일 09:00이어야 정상)")
-    assert nxt.weekday() == 0 and nxt.hour == 9
-    print("  ✅ 정상")
-
-    # 공휴일 등록 테스트
-    print("\n[공휴일] 2026-05-25를 공휴일로 등록 후 재검증:")
-    krx.holidays.add("2026-05-25")
-    d = dt(2026, 5, 25, 10, 0, tzinfo=tz_seoul)
-    print(f"  is_open={krx.is_open(d)} (False여야 정상)")
-    assert krx.is_open(d) is False
-    print("  ✅ 정상")
-    krx.holidays.clear()
-
-    print("\n" + "=" * 60)
-    print("✅ MarketClock 검증 완료")
-    print("=" * 60)
+    assert krx.is_open(dt(2026, 5, 25, 10, 0, tzinfo=tz_seoul))
+    assert not us.is_open(dt(2026, 1, 1, 23, 30, tzinfo=tz_seoul))
+    print(f"MarketClock OK: US calendar source={us.calendar_source}")

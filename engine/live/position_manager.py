@@ -261,7 +261,7 @@ class PositionManager:
         except Exception as exc:
             raw_market_context = None
             log.warning(f"{ticker} live exit shadow market context fallback: {exc}")
-        holding_trading_days = approximate_trading_days(pos.entry_date)
+        holding_trading_days = approximate_trading_days(pos.entry_date, ticker=ticker)
         record = evaluate_live_shadow(
             ticker=ticker,
             pos=pos,

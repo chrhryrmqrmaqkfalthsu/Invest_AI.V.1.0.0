@@ -17,6 +17,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,11 @@ TRADE_LOG_PATH = Path("data/_system/trade_log.csv")
 KST = ZoneInfo("Asia/Seoul")
 SHARE_ROUND_DIGITS = 6
 SHARE_EPS = 10 ** (-SHARE_ROUND_DIGITS)
+
+
+def _exit_live_shadow_enabled() -> bool:
+    """C-P1 shadow gate. Default OFF; legacy order path remains authoritative."""
+    return str(os.environ.get("EXIT_LIVE_SHADOW", "0")).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _to_shares(value) -> float:
@@ -229,6 +235,47 @@ class PositionManager:
                 log.error(f"{ticker} 청산 체크 실패: {e}")
         return exited
 
+    def _run_live_exit_shadow(
+        self,
+        ticker: str,
+        pos: PositionEntry,
+        price: float,
+        holding_calendar_days: int,
+        actual_legacy_reason: Optional[str],
+    ) -> None:
+        """Evaluate/log ExitPolicy only. Any exception must never affect orders."""
+        from engine.live.exit_policy_adapter import (
+            approximate_trading_days,
+            evaluate_live_shadow,
+            resolve_live_rulebook,
+            write_live_shadow_record,
+        )
+        from engine.market.context import get_market_context
+
+        rulebook, source = resolve_live_rulebook(ticker)
+        if rulebook is None:
+            log.warning(f"{ticker} live exit shadow skip: current live rulebook missing")
+            return
+        try:
+            raw_market_context = get_market_context()
+        except Exception as exc:
+            raw_market_context = None
+            log.warning(f"{ticker} live exit shadow market context fallback: {exc}")
+        holding_trading_days = approximate_trading_days(pos.entry_date)
+        record = evaluate_live_shadow(
+            ticker=ticker,
+            pos=pos,
+            price=price,
+            rulebook=rulebook,
+            raw_market_context=raw_market_context,
+            holding_calendar_days=holding_calendar_days,
+            holding_trading_days=holding_trading_days,
+            actual_legacy_reason=actual_legacy_reason,
+            rulebook_source=source,
+            timestamp=datetime.now(KST).isoformat(),
+        )
+        write_live_shadow_record(record)
+
     def _check_one(
         self, ticker: str, pos: PositionEntry, broker: Broker, notifier=None,
     ) -> Optional[dict]:
@@ -285,6 +332,13 @@ class PositionManager:
                 exit_reason = "time_out"
         else:
             log.warning(f"{ticker} unknown exit_strategy: {strategy}")
+
+        # C-P1 Phase 3 shadow: default OFF, log-only, and fully isolated.
+        if _exit_live_shadow_enabled():
+            try:
+                self._run_live_exit_shadow(ticker, pos, price, holding_days, exit_reason)
+            except Exception as e:
+                log.warning(f"{ticker} live exit shadow failed (legacy order unaffected): {e}")
 
         if exit_reason is None:
             return None

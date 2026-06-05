@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import signal
 import sys
 import time
+from pathlib import Path
 
 from engine.live.broker.factory import make_broker
 from engine.live.market_clock import select_market_clock, validate_broker_market_compatibility
@@ -33,7 +35,7 @@ from engine.live.runner import Runner
 from engine.live.safety.layer import SafetyLayer
 from engine.live.scheduler import Scheduler
 from engine.live.telegram.notifier import TelegramNotifier
-from engine.live.telegram.bot import TelegramBot
+from engine.live.telegram.locked_bot import TelegramBot, is_process_alive
 from engine.live.universe import (
     DEFAULT_LIVE_PROMOTION_ID,
     LiveUniverseConfig,
@@ -48,6 +50,73 @@ logging.basicConfig(
 )
 logger = logging.getLogger("run_live")
 
+RUN_BOT_PID_PATH = Path("data/_system/run_bot.pid")
+
+
+def assert_no_legacy_run_bot(pid_path: Path | str = RUN_BOT_PID_PATH) -> None:
+    """Fail closed while a pre-lock standalone run_bot.py process is alive.
+
+    The currently running legacy bot was started before the polling lock code
+    existed, so it cannot advertise lock ownership.  This guard closes that
+    one-time migration gap.  A dead/stale PID file is tolerated but never
+    modified here.
+    """
+    path = Path(pid_path)
+    if not path.exists():
+        return
+    try:
+        pid = int(path.read_text(encoding="utf-8").strip())
+    except Exception as exc:
+        raise RuntimeError(f"legacy run_bot PID file invalid; manual inspection required: {path}") from exc
+    if pid == os.getpid():
+        return
+    if is_process_alive(pid):
+        raise RuntimeError(
+            f"legacy run_bot.py is still polling Telegram without the new lock: pid={pid}. "
+            "Gracefully stop it before starting run_live.py."
+        )
+    logger.warning("stale legacy run_bot PID file ignored: pid=%s path=%s", pid, path)
+
+
+def start_telegram_control(
+    *,
+    no_telegram_bot: bool,
+    broker,
+    safety,
+    notifier,
+    runner,
+    bot_factory=TelegramBot,
+    legacy_run_bot_pid_path: Path | str = RUN_BOT_PID_PATH,
+):
+    """Start the sole Telegram command consumer or explicitly run headless.
+
+    Headless mode is an explicit testing/diagnostic escape hatch.  Production
+    live operation must keep this disabled so approvals and kill commands are
+    owned by the same process as Runner/ApprovalManager/PositionManager.
+    """
+    if no_telegram_bot:
+        logger.warning("Telegram command polling disabled by explicit --no-telegram-bot (test/headless only)")
+        return None
+
+    assert_no_legacy_run_bot(legacy_run_bot_pid_path)
+    bot = bot_factory(
+        broker=broker,
+        safety=safety,
+        notifier=notifier,
+        polling_owner="run_live",
+    )
+    try:
+        runner.attach_bot(bot)
+        bot.start_polling(blocking=False)
+    except Exception:
+        try:
+            bot.stop()
+        except Exception:
+            pass
+        raise
+    logger.info("TelegramBot 단독 폴링 시작")
+    return bot
+
 
 def main():
     parser = argparse.ArgumentParser(description="Kingmaker live trading bot")
@@ -55,6 +124,8 @@ def main():
                         help="브로커 모드 강제 지정 (기본: .env의 BROKER_MODE/KIS_MODE)")
     parser.add_argument("--dry-run", action="store_true",
                         help="KIS 실모드에서도 주문은 mock으로 처리")
+    parser.add_argument("--no-telegram-bot", action="store_true",
+                        help="명시적 테스트/headless 모드. 실제 Paper/Live E2E에서는 사용 금지")
     parser.add_argument("--market", choices=["US", "KRX"], default="US",
                         help="단일 라이브 시장. 기본 US")
     parser.add_argument("--universe", choices=["promoted", "parameters"], default="promoted",
@@ -130,13 +201,16 @@ def main():
     )
 
     try:
-        bot = TelegramBot(broker=broker, safety=safety, notifier=notifier)
-        runner.attach_bot(bot)
-        bot.start_polling(blocking=False)
-        logger.info("TelegramBot 폴링 시작")
+        bot = start_telegram_control(
+            no_telegram_bot=args.no_telegram_bot,
+            broker=broker,
+            safety=safety,
+            notifier=notifier,
+            runner=runner,
+        )
     except Exception as e:
-        logger.error(f"TelegramBot 시작 실패 (계속 진행): {e}")
-        bot = None
+        logger.error(f"TelegramBot 시작 실패 — Scheduler 시작 전 종료: {e}")
+        sys.exit(3)
 
     scheduler = Scheduler(default_timezone="Asia/Seoul")
     scheduler.add_once_job(func=runner.startup_check, delay_sec=2, job_id="startup_check")

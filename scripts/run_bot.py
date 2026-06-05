@@ -13,7 +13,7 @@ import sys
 
 from engine.live.broker.factory import make_broker
 from engine.live.safety.layer import SafetyLayer
-from engine.live.telegram.bot import TelegramBot
+from engine.live.telegram.locked_bot import TelegramBot
 from engine.live.telegram.notifier import TelegramNotifier
 from engine.ai.training import get_training_manager
 
@@ -34,7 +34,7 @@ def main():
 
     log.info("TelegramBot 초기화...")
     notifier = TelegramNotifier()
-    bot = TelegramBot(broker=broker, safety=safety, notifier=notifier)
+    bot = TelegramBot(broker=broker, safety=safety, notifier=notifier, polling_owner="run_bot")
 
     # TrainingManager에 notifier 연결 (학습 진행률/완료 알림용)
     try:

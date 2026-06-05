@@ -15,7 +15,6 @@ from typing import Dict, Optional
 
 import pandas as pd
 
-from engine.adapters.factory import get_adapter
 from engine.core.indicators import calc_indicators
 from engine.live.per_ticker_news import get_news_score
 from engine.market.context import MarketContext, get_market_context
@@ -104,6 +103,9 @@ class LearnedRuleBook(RuleBook):
                 return df
 
         try:
+            # Lazy import prevents KRX/KIS adapter side effects during US-only startup.
+            from engine.adapters.factory import get_adapter
+
             adapter = self._adapter_cache.get(ticker)
             if adapter is None:
                 adapter = get_adapter(ticker)
@@ -152,7 +154,6 @@ class LearnedRuleBook(RuleBook):
             market_score, sector_score, vix_level = 50.0, 50.0, 18.0
             context_timestamp = ""
 
-        # Store the exact context used by this signal evaluation for entry registration.
         self._last_market_context[ticker] = {
             "score": market_score,
             "market_score": market_score,
@@ -223,46 +224,21 @@ class LearnedRuleBook(RuleBook):
             "reasons": list(res.reasons),
         }
         if res.should_buy:
-            return SignalResult(
-                ticker=ticker,
-                signal=Signal.BUY,
-                price=price,
-                reason=f"[{rb.direction}] {reason_str}",
-                **signal_kwargs,
-            )
-        return SignalResult(
-            ticker=ticker,
-            signal=Signal.HOLD,
-            price=price,
-            reason=f"미달({rb.direction}) {reason_str}",
-            **signal_kwargs,
-        )
+            return SignalResult(ticker=ticker, signal=Signal.BUY, price=price, reason=f"[{rb.direction}] {reason_str}", **signal_kwargs)
+        return SignalResult(ticker=ticker, signal=Signal.HOLD, price=price, reason=f"미달({rb.direction}) {reason_str}", **signal_kwargs)
 
     def get_last_atr(self, ticker: str):
-        """가장 최근 evaluate 호출 시점의 ATR."""
         return self._last_atr.get(ticker)
 
     def get_rulebook(self, ticker: str):
-        """ticker의 가장 최근 평가 Rulebook 객체."""
         return self._rulebook_by_ticker.get(ticker)
 
     def get_last_market_context(self, ticker: str):
-        """Return a copy of the exact market context used for the last signal."""
         ctx = self._last_market_context.get(ticker)
         return dict(ctx) if isinstance(ctx, dict) else None
 
 
 if __name__ == "__main__":
-    import logging as _lg
-
-    _lg.basicConfig(level=_lg.INFO, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
-    print("=" * 60)
-    print("LearnedRuleBook 단위 테스트")
-    print("=" * 60)
+    print("LearnedRuleBook smoke")
     rb = LearnedRuleBook()
-    print(f"룰북: {rb.name()}\n")
-    for ticker, price in [("379800", 13500), ("360750", 18000), ("UNKNOWN", 1000)]:
-        print(f"--- {ticker} (현재가 {price}원) ---")
-        res = rb.evaluate(ticker, price)
-        print(f"  signal: {res.signal.value}")
-        print(f"  reason: {res.reason}\n")
+    print(rb.name())

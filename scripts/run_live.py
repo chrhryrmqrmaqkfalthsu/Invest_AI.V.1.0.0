@@ -3,21 +3,10 @@ run_live.py - 라이브 트레이딩 봇 엔트리포인트.
 
 구성:
   Scheduler (시계)
-    ├─ once         → Runner.startup_check    (가동 직후 1회)
-    ├─ market_hours → Runner.tick_market      (장중 60초)
-    ├─ interval     → Runner.tick_offmarket   (24h 60분, 헬스체크)
-    └─ cron         → Runner.daily_summary    (평일 16:00)
-
-  Runner (뇌)
-    ├─ Broker (PaperBroker | KisBroker | AlpacaBroker)
-    ├─ SafetyLayer
-    ├─ TelegramNotifier
-    ├─ MarketClock
-    └─ RuleBook
-
-현재 live Runner는 단일 시장 universe만 지원한다. startup과 hot-reload는
-동일한 promotion/market 정책을 공유하고, 최종 clock 선택에서도 혼재 시장을
-fail-fast한다.
+    ├─ once         → Runner.startup_check
+    ├─ market_hours → Runner.tick_market
+    ├─ interval     → Runner.tick_offmarket
+    └─ cron         → Runner.daily_summary
 """
 from __future__ import annotations
 
@@ -36,11 +25,7 @@ from engine.live.safety.layer import SafetyLayer
 from engine.live.scheduler import Scheduler
 from engine.live.telegram.notifier import TelegramNotifier
 from engine.live.telegram.locked_bot import TelegramBot, is_process_alive
-from engine.live.universe import (
-    DEFAULT_LIVE_PROMOTION_ID,
-    LiveUniverseConfig,
-    load_live_universe,
-)
+from engine.live.universe import DEFAULT_LIVE_PROMOTION_ID, LiveUniverseConfig, load_live_universe
 from engine.strategies.demo_rulebook import DemoRuleBook
 from engine.strategies.learned_rulebook import LearnedRuleBook
 
@@ -54,13 +39,6 @@ RUN_BOT_PID_PATH = Path("data/_system/run_bot.pid")
 
 
 def assert_no_legacy_run_bot(pid_path: Path | str = RUN_BOT_PID_PATH) -> None:
-    """Fail closed while a pre-lock standalone run_bot.py process is alive.
-
-    The currently running legacy bot was started before the polling lock code
-    existed, so it cannot advertise lock ownership.  This guard closes that
-    one-time migration gap.  A dead/stale PID file is tolerated but never
-    modified here.
-    """
     path = Path(pid_path)
     if not path.exists():
         return
@@ -88,23 +66,12 @@ def start_telegram_control(
     bot_factory=TelegramBot,
     legacy_run_bot_pid_path: Path | str = RUN_BOT_PID_PATH,
 ):
-    """Start the sole Telegram command consumer or explicitly run headless.
-
-    Headless mode is an explicit testing/diagnostic escape hatch.  Production
-    live operation must keep this disabled so approvals and kill commands are
-    owned by the same process as Runner/ApprovalManager/PositionManager.
-    """
     if no_telegram_bot:
         logger.warning("Telegram command polling disabled by explicit --no-telegram-bot (test/headless only)")
         return None
 
     assert_no_legacy_run_bot(legacy_run_bot_pid_path)
-    bot = bot_factory(
-        broker=broker,
-        safety=safety,
-        notifier=notifier,
-        polling_owner="run_live",
-    )
+    bot = bot_factory(broker=broker, safety=safety, notifier=notifier, polling_owner="run_live")
     try:
         runner.attach_bot(bot)
         bot.start_polling(blocking=False)
@@ -120,49 +87,31 @@ def start_telegram_control(
 
 def main():
     parser = argparse.ArgumentParser(description="Kingmaker live trading bot")
-    parser.add_argument("--mode", choices=["paper", "real", "vts", "live", "alpaca", "alpaca_paper"], default=None,
-                        help="브로커 모드 강제 지정 (기본: .env의 BROKER_MODE/KIS_MODE)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="KIS 실모드에서도 주문은 mock으로 처리")
-    parser.add_argument("--no-telegram-bot", action="store_true",
-                        help="명시적 테스트/headless 모드. 실제 Paper/Live E2E에서는 사용 금지")
-    parser.add_argument("--market", choices=["US", "KRX"], default="US",
-                        help="단일 라이브 시장. 기본 US")
-    parser.add_argument("--universe", choices=["promoted", "parameters"], default="promoted",
-                        help="promoted=정확한 promotion-id 승인 종목만, parameters=시장 내 모든 parameters 종목")
-    parser.add_argument("--promotion-id", default=DEFAULT_LIVE_PROMOTION_ID,
-                        help="--universe promoted에서 반드시 정확히 일치해야 하는 promotion id")
-    parser.add_argument("--market-tick", type=int, default=60,
-                        help="장중 tick 주기(초). 기본 60")
-    parser.add_argument("--offmarket-tick", type=int, default=3600,
-                        help="장외 헬스체크 주기(초). 기본 3600")
-    parser.add_argument("--sma-window", type=int, default=20,
-                        help="DemoRuleBook SMA 윈도우. 기본 20")
-    parser.add_argument("--stop-loss", type=float, default=0.03,
-                        help="DemoRuleBook 손절률. 기본 0.03")
-    parser.add_argument("--summary-hour", type=int, default=16,
-                        help="일일 요약 시각(시). 기본 16 (시장별 timezone 정합은 후속)")
-    parser.add_argument("--rulebook", choices=["learned", "demo"], default="learned",
-                        help="룰북 선택. learned=학습된 룰북(기본), demo=SMA20 데모")
-    parser.add_argument("--summary-minute", type=int, default=0,
-                        help="일일 요약 시각(분). 기본 0")
+    parser.add_argument("--mode", choices=["paper", "real", "vts", "live", "alpaca", "alpaca_paper"], default=None)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--no-telegram-bot", action="store_true", help="명시적 테스트/headless 모드. 실제 Paper/Live E2E에서는 사용 금지")
+    parser.add_argument("--market", choices=["US", "KRX"], default="US")
+    parser.add_argument("--universe", choices=["promoted", "parameters"], default="promoted")
+    parser.add_argument("--promotion-id", default=DEFAULT_LIVE_PROMOTION_ID)
+    parser.add_argument("--market-tick", type=int, default=60)
+    parser.add_argument("--offmarket-tick", type=int, default=3600)
+    parser.add_argument("--sma-window", type=int, default=20)
+    parser.add_argument("--stop-loss", type=float, default=0.03)
+    parser.add_argument("--summary-hour", type=int, default=16)
+    parser.add_argument("--rulebook", choices=["learned", "demo"], default="learned")
+    parser.add_argument("--summary-minute", type=int, default=0)
     args = parser.parse_args()
 
     logger.info("=" * 60)
     logger.info("Kingmaker live trading bot 시작")
     logger.info("=" * 60)
 
-    universe_config = LiveUniverseConfig(
-        market=args.market,
-        universe_mode=args.universe,
-        promotion_id=args.promotion_id,
-    )
+    universe_config = LiveUniverseConfig(market=args.market, universe_mode=args.universe, promotion_id=args.promotion_id)
     try:
         universe = load_live_universe(universe_config)
         symbols = list(universe.symbols)
         if not symbols:
             raise RuntimeError(f"필터 통과 종목이 없음: {universe.summary()}")
-        # 최종 안전망: helper 필터 후에도 단일-market clock 검증은 유지한다.
         clock = select_market_clock(symbols)
     except Exception as exc:
         logger.error(f"라이브 universe/clock 검증 실패: {exc}")
@@ -183,10 +132,7 @@ def main():
 
     notifier = TelegramNotifier()
     safety = SafetyLayer(broker=broker)
-    if args.rulebook == "learned":
-        rulebook = LearnedRuleBook()
-    else:
-        rulebook = DemoRuleBook(window=args.sma_window, stop_loss_pct=args.stop_loss)
+    rulebook = LearnedRuleBook() if args.rulebook == "learned" else DemoRuleBook(window=args.sma_window, stop_loss_pct=args.stop_loss)
     logger.info(f"RuleBook: {rulebook.name()}")
 
     runner = Runner(
@@ -214,25 +160,9 @@ def main():
 
     scheduler = Scheduler(default_timezone="Asia/Seoul")
     scheduler.add_once_job(func=runner.startup_check, delay_sec=2, job_id="startup_check")
-    scheduler.add_market_hours_job(
-        func=runner.tick_market,
-        interval_sec=args.market_tick,
-        market=clock,
-        job_id="tick_market",
-    )
-    scheduler.add_interval_job(
-        func=runner.tick_offmarket,
-        interval_sec=args.offmarket_tick,
-        name="tick_offmarket",
-    )
-    scheduler.add_cron_job(
-        func=runner.daily_summary,
-        hour=args.summary_hour,
-        minute=args.summary_minute,
-        market=clock,
-        weekdays_only=True,
-        job_id="daily_summary",
-    )
+    scheduler.add_market_hours_job(func=runner.tick_market, interval_sec=args.market_tick, market=clock, job_id="tick_market")
+    scheduler.add_interval_job(func=runner.tick_offmarket, interval_sec=args.offmarket_tick, job_id="tick_offmarket", name="tick_offmarket")
+    scheduler.add_cron_job(func=runner.daily_summary, hour=args.summary_hour, minute=args.summary_minute, market=clock, weekdays_only=True, job_id="daily_summary")
 
     stop_flag = {"stop": False}
 
@@ -242,17 +172,25 @@ def main():
         stop_flag["stop"] = True
         logger.info(f"signal {signum} 수신 — graceful shutdown...")
         try:
-            notifier.send("🛑 Kingmaker 종료 중...")
-        except Exception:
-            pass
-        try:
             if bot is not None:
                 bot.stop()
                 logger.info("TelegramBot 폴링 종료")
         except Exception as e:
             logger.warning(f"TelegramBot 종료 예외: {e}")
-        scheduler.shutdown(wait=True)
-        logger.info("Scheduler shutdown 완료")
+        try:
+            scheduler.shutdown(wait=True)
+            logger.info("Scheduler shutdown 완료")
+        except Exception as e:
+            logger.warning(f"Scheduler shutdown 예외: {e}")
+        try:
+            notifier.send("🛑 Kingmaker 종료됨")
+        except Exception:
+            pass
+        for handler in logging.getLogger().handlers:
+            try:
+                handler.flush()
+            except Exception:
+                pass
         sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown_handler)

@@ -1,208 +1,133 @@
-"""Market clocks and single-market live-universe selection.
-
-Scheduler delegates all market-time decisions to this interface. US sessions
-are backed by the cache/API/fallback provider in ``us_market_calendar``.
-"""
+"""Market clocks for KRX/US/Crypto live scheduling."""
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from datetime import date, datetime, time, timedelta
-from functools import lru_cache
-from typing import Iterable, Optional, Set
+from datetime import date, datetime, time
+from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 
+from engine.live.us_market_calendar import UsMarketCalendar
 
-class MarketClock(ABC):
-    """Common market-hours and trading-session interface."""
+KST = ZoneInfo("Asia/Seoul")
+NY = ZoneInfo("America/New_York")
 
-    name: str = "abstract"
-    timezone: ZoneInfo = ZoneInfo("UTC")
 
-    @abstractmethod
-    def is_open(self, dt: Optional[datetime] = None) -> bool:
-        ...
+class MarketClock:
+    name = "GENERIC"
 
-    @abstractmethod
-    def is_business_day(self, dt: Optional[datetime] = None) -> bool:
-        ...
+    def is_open(self, now: Optional[datetime] = None) -> bool:
+        raise NotImplementedError
 
-    def now(self) -> datetime:
-        return datetime.now(self.timezone)
+    def is_business_day(self, now: Optional[datetime] = None) -> bool:
+        raise NotImplementedError
 
-    def next_open(self, dt: Optional[datetime] = None) -> Optional[datetime]:
+    def next_open(self, now: Optional[datetime] = None) -> Optional[datetime]:
         return None
 
-    def session_close(self, value: date | datetime | str) -> Optional[datetime]:
+    def session_close(self, now: Optional[datetime] = None) -> Optional[datetime]:
         return None
-
-    def session_count(self, start: date | datetime | str, end: date | datetime | str) -> int:
-        """Generic session count: strictly after start and through end."""
-        start_date = self._to_local_date(start)
-        end_date = self._to_local_date(end)
-        if end_date <= start_date:
-            return 0
-        count = 0
-        cursor = start_date
-        while cursor < end_date:
-            cursor += timedelta(days=1)
-            probe = datetime.combine(cursor, time(12, 0), tzinfo=self.timezone)
-            if self.is_business_day(probe):
-                count += 1
-        return count
-
-    def _to_local_date(self, value: date | datetime | str) -> date:
-        if isinstance(value, datetime):
-            dt = value.replace(tzinfo=self.timezone) if value.tzinfo is None else value.astimezone(self.timezone)
-            return dt.date()
-        if isinstance(value, date):
-            return value
-        raw = str(value).strip()
-        try:
-            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            dt = dt.replace(tzinfo=self.timezone) if dt.tzinfo is None else dt.astimezone(self.timezone)
-            return dt.date()
-        except Exception:
-            return date.fromisoformat(raw[:10])
-
-
-class KrxMarketClock(MarketClock):
-    """KRX regular market. Holiday list remains manually extensible."""
-
-    name = "KRX"
-    timezone = ZoneInfo("Asia/Seoul")
-    OPEN_TIME = time(9, 0)
-    CLOSE_TIME = time(15, 30)
-    holidays: Set[str] = set()
-
-    def is_open(self, dt: Optional[datetime] = None) -> bool:
-        local = self._to_local(dt)
-        return self.is_business_day(local) and self.OPEN_TIME <= local.time() <= self.CLOSE_TIME
-
-    def is_business_day(self, dt: Optional[datetime] = None) -> bool:
-        local = self._to_local(dt)
-        return local.weekday() < 5 and local.strftime("%Y-%m-%d") not in self.holidays
-
-    def next_open(self, dt: Optional[datetime] = None) -> Optional[datetime]:
-        local = self._to_local(dt)
-        candidate = local.replace(hour=9, minute=0, second=0, microsecond=0)
-        if local.time() >= self.OPEN_TIME:
-            candidate += timedelta(days=1)
-        for _ in range(15):
-            if self.is_business_day(candidate):
-                return candidate
-            candidate += timedelta(days=1)
-        return None
-
-    def session_close(self, value: date | datetime | str) -> Optional[datetime]:
-        session_date = self._to_local_date(value)
-        probe = datetime.combine(session_date, time(12, 0), tzinfo=self.timezone)
-        if not self.is_business_day(probe):
-            return None
-        return datetime.combine(session_date, self.CLOSE_TIME, tzinfo=self.timezone)
-
-    def _to_local(self, dt: Optional[datetime]) -> datetime:
-        if dt is None:
-            return self.now()
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=self.timezone)
-        return dt.astimezone(self.timezone)
 
 
 class CryptoMarketClock(MarketClock):
-    name = "Crypto"
-    timezone = ZoneInfo("UTC")
+    name = "CRYPTO"
 
-    def is_open(self, dt: Optional[datetime] = None) -> bool:
+    def is_open(self, now: Optional[datetime] = None) -> bool:
         return True
 
-    def is_business_day(self, dt: Optional[datetime] = None) -> bool:
+    def is_business_day(self, now: Optional[datetime] = None) -> bool:
         return True
+
+
+class KrxMarketClock(MarketClock):
+    name = "KRX"
+
+    def is_open(self, now: Optional[datetime] = None) -> bool:
+        now = now or datetime.now(KST)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=KST)
+        local = now.astimezone(KST)
+        if local.weekday() >= 5:
+            return False
+        return time(9, 0) <= local.time() <= time(15, 30)
+
+    def is_business_day(self, now: Optional[datetime] = None) -> bool:
+        now = now or datetime.now(KST)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=KST)
+        return now.astimezone(KST).weekday() < 5
 
 
 class UsMarketClock(MarketClock):
-    """US equity regular sessions backed by an exact session calendar."""
-
     name = "US"
-    timezone = ZoneInfo("America/New_York")
 
-    def __init__(self, calendar=None):
-        self.calendar = calendar if calendar is not None else get_us_market_calendar()
+    def __init__(self, calendar: Optional[UsMarketCalendar] = None):
+        self.calendar = calendar or UsMarketCalendar()
 
     @property
     def calendar_source(self) -> str:
-        return str(getattr(self.calendar, "source", "unknown"))
+        return self.calendar.source
 
-    def is_open(self, dt: Optional[datetime] = None) -> bool:
-        return bool(self.calendar.is_open(dt))
+    def is_open(self, now: Optional[datetime] = None) -> bool:
+        now = now or datetime.now(NY)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=NY)
+        return self.calendar.is_open(now.astimezone(NY))
 
-    def is_business_day(self, dt: Optional[datetime] = None) -> bool:
-        return bool(self.calendar.is_business_day(dt or self.now()))
+    def is_business_day(self, now: Optional[datetime] = None) -> bool:
+        now = now or datetime.now(NY)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=NY)
+        return self.calendar.is_business_day(now.astimezone(NY).date())
 
-    def next_open(self, dt: Optional[datetime] = None) -> Optional[datetime]:
-        return self.calendar.next_open(dt)
+    def next_open(self, now: Optional[datetime] = None) -> Optional[datetime]:
+        now = now or datetime.now(NY)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=NY)
+        return self.calendar.next_open(now.astimezone(NY))
 
-    def session_close(self, value: date | datetime | str) -> Optional[datetime]:
-        return self.calendar.session_close(value)
+    def session_close(self, now: Optional[datetime] = None) -> Optional[datetime]:
+        now = now or datetime.now(NY)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=NY)
+        return self.calendar.session_close(now.astimezone(NY))
 
-    def session_count(self, start: date | datetime | str, end: date | datetime | str) -> int:
-        return int(self.calendar.session_count(start, end))
-
-
-@lru_cache(maxsize=1)
-def get_us_market_calendar():
-    from engine.live.us_market_calendar import UsMarketCalendar
-
-    return UsMarketCalendar()
+    def session_count(self, start: date, end: date) -> int:
+        return self.calendar.session_count(start, end)
 
 
 def market_region_for_ticker(ticker: str) -> str:
-    """Classify without importing adapters or triggering any market-data side effect."""
-    base = str(ticker).strip().split(".")[0].upper()
-    return "KRX" if base.isdigit() and len(base) == 6 else "US"
-
-
-@lru_cache(maxsize=2)
-def _clock_for_region(region: str) -> MarketClock:
-    if region == "US":
-        return UsMarketClock()
-    if region == "KRX":
-        return KrxMarketClock()
-    raise ValueError(f"unsupported market region: {region}")
+    s = str(ticker or "").strip().upper()
+    if s.isdigit() and len(s) == 6:
+        return "KRX"
+    if s.endswith(".KS") or s.endswith(".KQ"):
+        return "KRX"
+    return "US"
 
 
 def market_clock_for_ticker(ticker: str) -> MarketClock:
-    return _clock_for_region(market_region_for_ticker(ticker))
+    return KrxMarketClock() if market_region_for_ticker(ticker) == "KRX" else UsMarketClock()
 
 
-def select_market_clock(symbols: Iterable[str], *, us_calendar=None) -> MarketClock:
-    """Select one clock for a single-market universe; mixed markets fail fast."""
-    normalized = [str(symbol).strip() for symbol in symbols if str(symbol).strip()]
-    if not normalized:
-        raise ValueError("cannot select market clock for empty symbols")
-    regions = {market_region_for_ticker(symbol) for symbol in normalized}
-    if len(regions) != 1:
-        raise ValueError(f"mixed-market live universe is not supported yet: {sorted(regions)}")
+def select_market_clock(tickers: Iterable[str], us_calendar: Optional[UsMarketCalendar] = None) -> MarketClock:
+    regions = {market_region_for_ticker(t) for t in tickers}
+    if not regions:
+        return KrxMarketClock()
+    if len(regions) > 1:
+        raise ValueError(f"mixed-market universe is not supported by one Runner: {sorted(regions)}")
     region = next(iter(regions))
-    if region == "US":
-        return UsMarketClock(calendar=us_calendar) if us_calendar is not None else UsMarketClock()
-    return KrxMarketClock()
+    return UsMarketClock(calendar=us_calendar) if region == "US" else KrxMarketClock()
 
 
 def validate_broker_market_compatibility(broker, clock: MarketClock) -> None:
     """Block unsupported broker/market combinations before Runner starts."""
     class_names = {cls.__name__ for cls in type(broker).mro()}
-    if clock.name == "US" and "KisBroker" in class_names:
+    is_kis = "KisBroker" in class_names or "GuardedKisBroker" in class_names or bool(getattr(broker, "is_guarded_kis_broker", False))
+    if clock.name == "US" and is_kis:
         raise RuntimeError(
             "KisBroker domestic live path cannot run a US-only universe; use paper/Alpaca or implement verified KIS overseas orders"
         )
 
 
 if __name__ == "__main__":
-    from datetime import datetime as dt
-
-    krx = KrxMarketClock()
-    us = UsMarketClock()
-    tz_seoul = ZoneInfo("Asia/Seoul")
-    assert krx.is_open(dt(2026, 5, 25, 10, 0, tzinfo=tz_seoul))
-    assert not us.is_open(dt(2026, 1, 1, 23, 30, tzinfo=tz_seoul))
-    print(f"MarketClock OK: US calendar source={us.calendar_source}")
+    assert KrxMarketClock().is_open(datetime(2026, 5, 25, 10, 0, tzinfo=KST))
+    assert not UsMarketClock().is_open(datetime(2026, 1, 1, 23, 30, tzinfo=KST))
+    print(f"MarketClock OK: US calendar source={UsMarketClock().calendar_source}")

@@ -22,6 +22,7 @@ from engine.live.approval_manager import ApprovalManager, classify_strength
 from engine.live.broker.base import Broker, OrderStatus, OrderType
 from engine.live.market_clock import MarketClock, select_market_clock
 from engine.live.position_manager import PositionManager
+from engine.live.pending_order_manager import PendingOrderManager
 from engine.live.safety.layer import SafetyLayer
 from engine.live.telegram.notifier import TelegramNotifier
 from engine.live.universe import LiveUniverseConfig, load_live_universe
@@ -95,6 +96,8 @@ class Runner:
         )
         self.position_manager = PositionManager()
         self.approval_manager = ApprovalManager()
+        self.pending_order_manager = PendingOrderManager(self.broker)
+        self._tick_locked_tickers = set()
 
     def _supports_fractional_shares(self) -> bool:
         mode = str(getattr(self.broker, "mode", "") or "").lower()
@@ -187,6 +190,7 @@ class Runner:
             logger.info("startup_check 시작...")
             if not self.broker.health_check():
                 raise RuntimeError("broker.health_check() = False")
+            self._poll_pending_orders(context="startup_check")
             balance = self.broker.get_balance()
             warmup = []
             for t in self.symbols:
@@ -205,7 +209,12 @@ class Runner:
 
     def tick_market(self) -> None:
         try:
-            exited = self.position_manager.check_exits(self.broker, self.notifier)
+            self._poll_pending_orders(context="tick_market.pre_exit")
+            if self.pending_order_manager.all():
+                logger.info("pending 주문 존재 → 자동청산 체크 1 tick 보류")
+                exited = []
+            else:
+                exited = self.position_manager.check_exits(self.broker, self.notifier, pending_manager=self.pending_order_manager)
             if exited:
                 logger.info(f"자동 청산 {len(exited)}건 완료")
         except Exception as e:
@@ -216,6 +225,8 @@ class Runner:
             self._handle_error("_process_pending_approvals", e)
         self.stats.market_ticks += 1
         try:
+            self._poll_pending_orders(context="tick_market.pre_signal")
+            self._tick_locked_tickers = set()
             logger.debug(f"tick_market #{self.stats.market_ticks}")
             for ticker in self.symbols:
                 self._process_ticker(ticker)
@@ -223,6 +234,10 @@ class Runner:
             self._handle_error("tick_market", e)
 
     def _process_ticker(self, ticker: str) -> None:
+        pending_mgr = getattr(self, "pending_order_manager", None)
+        if pending_mgr is not None and pending_mgr.is_ticker_locked(ticker):
+            logger.info(f"{ticker} pending 주문 잠금 → 신규 시그널 처리 스킵")
+            return
         price = self.broker.get_current_price(ticker)
         if price is None:
             logger.warning(f"{ticker} 현재가 조회 실패")
@@ -256,6 +271,10 @@ class Runner:
             self.approval_manager._save()
             return
         try:
+            pending_mgr = getattr(self, "pending_order_manager", None)
+            if pending_mgr is not None and pending_mgr.is_ticker_locked(ticker):
+                logger.info(f"[APPROVAL-EXEC] {ticker} pending 주문 잠금 → 추가매수 보류")
+                return
             price = self.broker.get_current_price(ticker)
             if price is None or price <= 0:
                 logger.warning(f"[APPROVAL-EXEC] {ticker} 현재가 조회 실패")
@@ -304,6 +323,19 @@ class Runner:
 
                 order = self.broker.place_buy(ticker, shares, OrderType.MARKET)
                 self.safety.record_order(order, "BUY", purpose="add_buy")
+                getattr(self, "_tick_locked_tickers", set()).add(ticker)
+                if order.status != OrderStatus.FILLED and pending_mgr is not None:
+                    pending_mgr.track_order(
+                        order,
+                        purpose="add_buy",
+                        approval_request_id=req.request_id,
+                        metadata={"approved_krw": amount},
+                    )
+                    req.status = "order_pending"
+                    self.approval_manager._save()
+                    self.notifier.send(f"⚠️ `{ticker}` 추가매수 주문 접수/미체결: status={order.status.value}", parse_mode="Markdown")
+                    logger.info(f"[APPROVAL-EXEC] {ticker} 추가매수 pending 추적 id={order.order_id}")
+                    return
                 if order.status == OrderStatus.FILLED:
                     self.stats.orders_filled += 1
                     fill_price = order.filled_avg_price or price
@@ -322,8 +354,6 @@ class Runner:
                             parse_mode="Markdown",
                         )
                         logger.info(f"[APPROVAL-EXEC] {ticker} 추가매수 체결 {filled_shares:g}주 @ {fill_price:,.4f}")
-                else:
-                    self.notifier.send(f"⚠️ `{ticker}` 추가매수 미체결: status={order.status.value}", parse_mode="Markdown")
             finally:
                 if original_max_krw is not None:
                     self.safety.max_krw = original_max_krw
@@ -450,6 +480,12 @@ class Runner:
 
     def _try_order(self, side: str, ticker: str, price: float, reason: str, signal_result=None) -> None:
         self.stats.orders_attempted += 1
+        pending_mgr = getattr(self, "pending_order_manager", None)
+        tick_locks = getattr(self, "_tick_locked_tickers", set())
+        if (pending_mgr is not None and pending_mgr.is_ticker_locked(ticker)) or ticker in tick_locks:
+            self.stats.orders_blocked += 1
+            logger.info(f"{ticker} {side} 차단: pending 주문/tick 잠금")
+            return
         if side == "SELL":
             holdings = {h.ticker: h for h in self.broker.get_holdings()}
             if ticker not in holdings or holdings[ticker].shares <= 0:
@@ -473,6 +509,14 @@ class Runner:
                 if side == "BUY" else self.broker.place_sell(ticker, order_shares, OrderType.MARKET)
             )
             self.safety.record_order(order, side, purpose="entry")
+            if not hasattr(self, "_tick_locked_tickers"):
+                self._tick_locked_tickers = set()
+            self._tick_locked_tickers.add(ticker)
+            if order.status != OrderStatus.FILLED and pending_mgr is not None:
+                pending_mgr.track_order(order, purpose="entry", metadata={"reason": reason})
+                self.notifier.send_order(order)
+                logger.info(f"{ticker} {side} pending 추적 시작: id={order.order_id} status={order.status.value}")
+                return
             if order.status == OrderStatus.FILLED:
                 self.stats.orders_filled += 1
                 if side == "BUY" and hasattr(self.rulebook, "get_last_atr"):
@@ -509,6 +553,7 @@ class Runner:
     def tick_offmarket(self) -> None:
         self.stats.offmarket_ticks += 1
         try:
+            self._poll_pending_orders(context="tick_offmarket")
             logger.debug(f"tick_offmarket #{self.stats.offmarket_ticks}")
             if not self.broker.health_check():
                 self.notifier.send_error("브로커 health_check 실패")
@@ -529,6 +574,63 @@ class Runner:
                 logger.error(f"MarketContext 갱신 실패: {me}")
         except Exception as e:
             self._handle_error("tick_offmarket", e)
+
+
+    def _poll_pending_orders(self, context: str = "") -> None:
+        """pending 주문을 선행 재조회하고, 최종화 가능한 체결만 한 번 정산한다."""
+        if not hasattr(self, "pending_order_manager") or self.pending_order_manager is None:
+            return
+        events = self.pending_order_manager.poll_all()
+        for record, order in events:
+            try:
+                self._finalize_pending_order(record, order)
+                self.pending_order_manager.mark_finalized(record.order_id)
+                logger.info(
+                    f"[PENDING-FINALIZED] {context} {record.ticker} {record.side} "
+                    f"id={record.order_id} status={order.status.value} filled={order.filled_shares:g}"
+                )
+            except Exception as exc:
+                logger.error(f"[PENDING-RECONCILE-ERROR] {record.order_id}: {exc}")
+                self.pending_order_manager.mark_reconcile_error(record.order_id, str(exc))
+
+    def _finalize_pending_order(self, record, order) -> None:
+        side = str(record.side or getattr(order.side, "value", order.side)).lower()
+        purpose = str(record.purpose or "entry")
+        filled_shares = float(order.filled_shares or 0.0)
+        if filled_shares <= SHARE_EPS:
+            return
+        self.safety.record_fill(order, side, purpose=purpose)
+        if side == "buy":
+            fill_price = float(order.filled_avg_price or 0.0)
+            if purpose == "add_buy":
+                atr = self.rulebook.get_last_atr(order.ticker) if hasattr(self.rulebook, "get_last_atr") else None
+                rb = self.rulebook.get_rulebook(order.ticker) if hasattr(self.rulebook, "get_rulebook") else None
+                if atr and rb:
+                    self.position_manager.add_to_position(order.ticker, fill_price, filled_shares, rb, atr)
+                rid = str(getattr(record, "approval_request_id", "") or "")
+                req = self.approval_manager.get_request(rid) if rid else None
+                if req is not None:
+                    req.status = "executed"
+                    self.approval_manager._save()
+            else:
+                atr = self.rulebook.get_last_atr(order.ticker) if hasattr(self.rulebook, "get_last_atr") else None
+                rb = self.rulebook.get_rulebook(order.ticker) if hasattr(self.rulebook, "get_rulebook") else None
+                entry_market_context = (
+                    self.rulebook.get_last_market_context(order.ticker)
+                    if hasattr(self.rulebook, "get_last_market_context") else None
+                )
+                if atr and rb and self.position_manager.get(order.ticker) is None:
+                    self.position_manager.register_entry(
+                        order.ticker, fill_price, filled_shares, rb, atr,
+                        entry_market_context=entry_market_context,
+                    )
+        elif side == "sell":
+            self.position_manager.finalize_sell_fill(
+                order,
+                exit_reason=str(getattr(record, "exit_reason", "") or record.purpose or "manual"),
+                broker=self.broker,
+                notifier=self.notifier,
+            )
 
     def daily_summary(self) -> None:
         try:

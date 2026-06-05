@@ -297,11 +297,11 @@ class PositionManager:
     def all(self) -> List[PositionEntry]:
         return list(self._positions.values())
 
-    def check_exits(self, broker: Broker, notifier=None) -> List[dict]:
+    def check_exits(self, broker: Broker, notifier=None, pending_manager=None) -> List[dict]:
         exited = []
         for ticker, pos in list(self._positions.items()):
             try:
-                exit_info = self._check_one(ticker, pos, broker, notifier)
+                exit_info = self._check_one(ticker, pos, broker, notifier, pending_manager=pending_manager)
                 if exit_info:
                     exited.append(exit_info)
             except Exception as e:
@@ -458,7 +458,7 @@ class PositionManager:
         )
         write_live_shadow_record(record)
 
-    def _check_one(self, ticker: str, pos: PositionEntry, broker: Broker, notifier=None) -> Optional[dict]:
+    def _check_one(self, ticker: str, pos: PositionEntry, broker: Broker, notifier=None, pending_manager=None) -> Optional[dict]:
         price = broker.get_current_price(ticker)
         if price is None:
             log.warning(f"{ticker} 현재가 조회 실패, 청산 체크 skip")
@@ -467,6 +467,9 @@ class PositionManager:
         holdings = {h.ticker: h for h in broker.get_holdings()}
         held = holdings.get(ticker)
         if not held or _normalize_shares(held.shares) <= SHARE_EPS:
+            if pending_manager is not None and pending_manager.has_pending_exit(ticker):
+                log.warning(f"{ticker} broker 보유 없음이지만 pending SELL 존재 → unregister 보류")
+                return None
             log.info(f"{ticker} broker에 보유 없음 → unregister")
             self.unregister(ticker)
             return None
@@ -520,6 +523,10 @@ class PositionManager:
         if exit_reason is None:
             return None
 
+        if pending_manager is not None and pending_manager.is_ticker_locked(ticker):
+            log.info(f"{ticker} pending 주문 잠금 → 자동 SELL 발사 보류")
+            return None
+
         log.info(
             f"[EXIT-TRIGGER] {ticker} {exit_reason}: price={price:,.4f}, "
             f"entry={pos.entry_price:,.4f}, PnL={(price/pos.entry_price-1)*100:+.2f}%, "
@@ -539,6 +546,8 @@ class PositionManager:
 
         # Safety guard: never finalize/unregister before the broker confirms FILLED.
         if order.status != OrderStatus.FILLED:
+            if pending_manager is not None:
+                pending_manager.track_order(order, purpose="exit", exit_reason=exit_reason)
             log.warning(f"{ticker} 매도 미체결({order.status.value}) → 포지션 유지")
             return None
 
@@ -581,6 +590,68 @@ class PositionManager:
                 log.warning(f"청산 알림 실패: {e}")
 
         self.unregister(ticker)
+        return trade_record
+
+
+    def finalize_sell_fill(self, order, exit_reason: str, broker: Broker, notifier=None) -> Optional[dict]:
+        """pending SELL 체결분을 한 번만 포지션/trade_log에 반영한다.
+
+        부분 체결은 추적 shares만 줄이고 포지션을 유지한다. 전량 체결은 브로커
+        holdings가 0임을 확인한 뒤 unregister한다.
+        """
+        ticker = str(order.ticker)
+        pos = self._positions.get(ticker)
+        if pos is None:
+            log.warning(f"{ticker} pending SELL 정산 스킵: PositionEntry 없음")
+            return None
+        filled_shares = _normalize_shares(float(order.filled_shares or 0.0))
+        if filled_shares <= SHARE_EPS:
+            return None
+        filled_price = float(order.filled_avg_price or 0.0)
+        if filled_price <= 0:
+            filled_price = broker.get_current_price(ticker) or pos.entry_price
+        pnl_pct = (filled_price - pos.entry_price) / pos.entry_price * 100
+        pnl_krw = (filled_price - pos.entry_price) * filled_shares
+        trade_record = {
+            "exited_at": datetime.now(KST).isoformat(),
+            "ticker": ticker,
+            "direction": pos.rulebook_direction,
+            "entry_date": pos.entry_date,
+            "entry_price": pos.entry_price,
+            "exit_price": filled_price,
+            "shares": filled_shares,
+            "exit_reason": exit_reason or "pending_sell",
+            "holding_days": max(0, (datetime.now(KST) - datetime.fromisoformat(pos.entry_date).replace(tzinfo=KST) if datetime.fromisoformat(pos.entry_date).tzinfo is None else datetime.now(KST) - datetime.fromisoformat(pos.entry_date)).days),
+            "highest_price": pos.highest_price,
+            "pnl_pct": round(pnl_pct, 3),
+            "pnl_krw": round(pnl_krw, 2),
+            "exit_strategy": pos.exit_strategy,
+        }
+        self._append_trade_log(trade_record)
+
+        remaining = _normalize_shares(float(pos.shares or 0.0) - filled_shares)
+        broker_remaining = None
+        try:
+            holdings = {h.ticker: h for h in broker.get_holdings()}
+            broker_remaining = _normalize_shares(float(getattr(holdings.get(ticker), "shares", 0.0) or 0.0))
+        except Exception as exc:
+            log.warning(f"{ticker} pending SELL 정산 중 holdings 재조회 실패: {exc}")
+
+        if remaining <= SHARE_EPS and (broker_remaining is None or broker_remaining <= SHARE_EPS):
+            self.unregister(ticker)
+        else:
+            pos.shares = broker_remaining if broker_remaining is not None and broker_remaining > SHARE_EPS else max(remaining, 0.0)
+            pos.total_invested_krw = float(pos.entry_price * pos.shares)
+            self._save()
+
+        if notifier:
+            try:
+                notifier.send(
+                    f"✅ pending SELL 정산: {ticker} {filled_shares:g}주 @ {filled_price:,.4f} "
+                    f"손익 {pnl_krw:+,.2f} ({pnl_pct:+.2f}%)"
+                )
+            except Exception as e:
+                log.warning(f"pending SELL 정산 알림 실패: {e}")
         return trade_record
 
     def _append_trade_log(self, record: dict) -> None:

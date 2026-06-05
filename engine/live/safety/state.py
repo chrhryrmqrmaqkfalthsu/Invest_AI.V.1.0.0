@@ -1,16 +1,15 @@
 """
-SafetyState - SafetyLayer가 사용하는 일일 상태 저장소
-- 매일 자정 자동 리셋 (날짜 바뀌면 카운터 0으로)
+SafetyState - SafetyLayer가 사용하는 일일/진입 안전 상태 저장소
+- 매일 자정 자동 리셋 (일일 카운터만 0으로)
 - data/_system/safety_state.json 에 영속화
-- 봇 재시작해도 그날 사용량/쿨다운 상태 복원
+- 봇 재시작/날짜 변경 뒤에도 종목별 매수 쿨다운 상태 복원
 """
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, date
+from datetime import date
 from pathlib import Path
-from typing import Optional
 
 STATE_PATH = Path.home() / "kingmaker" / "data" / "_system" / "safety_state.json"
 
@@ -25,6 +24,9 @@ class SafetyState:
     cooldown_until: str = ""                # ISO datetime; "" 이면 쿨다운 없음
     first_order_approved: bool = False      # 오늘 첫 주문 승인 여부
     kill_until: str = ""                    # 일일 손실 한도 도달 시 그날 끝까지 차단
+    # BQ-2a: 일일 리셋과 무관하게 유지되는 종목별 FILLED BUY 시각.
+    last_buy_at_by_ticker: dict[str, str] = field(default_factory=dict)
+    last_add_buy_at_by_ticker: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -35,7 +37,7 @@ def _today_str() -> str:
 
 
 def load() -> SafetyState:
-    """상태 로드. 파일 없거나 날짜 바뀌었으면 새로 만듦."""
+    """상태 로드. 파일 없거나 날짜 바뀌었으면 일일 카운터만 새로 만듦."""
     today = _today_str()
     if not STATE_PATH.exists():
         return SafetyState(date=today)
@@ -45,13 +47,19 @@ def load() -> SafetyState:
         return SafetyState(date=today)
 
     state = SafetyState(**{k: v for k, v in data.items() if k in SafetyState.__dataclass_fields__})
+    if not isinstance(state.last_buy_at_by_ticker, dict):
+        state.last_buy_at_by_ticker = {}
+    if not isinstance(state.last_add_buy_at_by_ticker, dict):
+        state.last_add_buy_at_by_ticker = {}
 
-    # 날짜가 바뀌었으면 일일 카운터만 리셋. 쿨다운/연속손실은 유지.
+    # 날짜가 바뀌었으면 일일 카운터만 리셋. 쿨다운/연속손실/종목별 BUY 시각은 유지.
     if state.date != today:
         new_state = SafetyState(
             date=today,
-            consecutive_losses=state.consecutive_losses,  # 어제까지 누적 유지
-            cooldown_until=state.cooldown_until,           # 쿨다운은 시각 기반이라 유지
+            consecutive_losses=state.consecutive_losses,
+            cooldown_until=state.cooldown_until,
+            last_buy_at_by_ticker=dict(state.last_buy_at_by_ticker),
+            last_add_buy_at_by_ticker=dict(state.last_add_buy_at_by_ticker),
         )
         save(new_state)
         return new_state
@@ -73,7 +81,6 @@ def reset_for_test() -> None:
 
 
 if __name__ == "__main__":
-    # 단위 테스트
     print("[1] reset")
     reset_for_test()
     s = load()
@@ -83,11 +90,13 @@ if __name__ == "__main__":
     s.orders_today = 2
     s.invested_krw_today = 15000.0
     s.consecutive_losses = 1
+    s.last_buy_at_by_ticker["AAPL"] = "2026-06-05T10:00:00+09:00"
     save(s)
 
     print("[3] reload")
     s2 = load()
     assert s2.orders_today == 2 and s2.invested_krw_today == 15000.0
+    assert "AAPL" in s2.last_buy_at_by_ticker
     print(f"  ✅ orders={s2.orders_today}, invested={s2.invested_krw_today}")
 
     print("[4] date rollover simulation")
@@ -95,9 +104,9 @@ if __name__ == "__main__":
     save(s2)
     s3 = load()
     assert s3.orders_today == 0
-    assert s3.consecutive_losses == 1  # 연속손실은 유지돼야 함
-    print(f"  ✅ orders reset to {s3.orders_today}, "
-          f"consecutive_losses preserved as {s3.consecutive_losses}")
+    assert s3.consecutive_losses == 1
+    assert "AAPL" in s3.last_buy_at_by_ticker
+    print(f"  ✅ orders reset to {s3.orders_today}, cooldown maps preserved")
 
     reset_for_test()
     print("✅ 모든 테스트 통과")

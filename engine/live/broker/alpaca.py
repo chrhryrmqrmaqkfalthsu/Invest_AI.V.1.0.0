@@ -120,18 +120,29 @@ class AlpacaBroker(Broker):
         return abs(qty - round(qty)) > SHARE_EPS
 
     @staticmethod
-    def _map_status(status: Any) -> OrderStatus:
-        raw = str(getattr(status, "value", status) or "").lower()
-        if raw in {"filled"}:
+    def _raw_status(status: Any) -> str:
+        return str(getattr(status, "value", status) or "").lower()
+
+    @staticmethod
+    def _map_status(status: Any, *, filled_qty: float = 0.0, qty: float = 0.0) -> OrderStatus:
+        raw = AlpacaBroker._raw_status(status)
+        if raw == "filled":
             return OrderStatus.FILLED
-        if raw in {"partially_filled"}:
+        # Alpaca의 calculated는 체결 후 정산 단계일 수 있다. 수량이 전량이면
+        # BN-1 상태머신이 불필요하게 영구 PENDING으로 남지 않도록 FILLED로 본다.
+        if raw == "calculated" and qty > SHARE_EPS and filled_qty + SHARE_EPS >= qty:
+            return OrderStatus.FILLED
+        if raw == "partially_filled":
             return OrderStatus.PARTIAL
         if raw in {"canceled", "cancelled", "expired", "replaced"}:
             return OrderStatus.CANCELLED
-        if raw in {"rejected"}:
+        if raw == "rejected":
             return OrderStatus.REJECTED
-        if raw in {"failed"}:
+        if raw == "failed":
             return OrderStatus.FAILED
+        # new/accepted/pending_new/pending_cancel/pending_replace/pending_review/
+        # accepted_for_bidding/stopped/suspended/calculated/held/done_for_day 등은
+        # 원본 상태를 보존한 채 fail-closed PENDING으로 축약한다.
         return OrderStatus.PENDING
 
     @staticmethod
@@ -155,6 +166,9 @@ class AlpacaBroker(Broker):
         filled_avg = self._to_float(getattr(o, "filled_avg_price", 0), 0.0)
         submitted_at = getattr(o, "submitted_at", "") or ""
         filled_at = getattr(o, "filled_at", "") or ""
+        raw_status = self._raw_status(getattr(o, "status", ""))
+        client_order_id = str(getattr(o, "client_order_id", "") or "")
+        replaced_by = str(getattr(o, "replaced_by", "") or "")
 
         return Order(
             order_id=order_id,
@@ -163,13 +177,16 @@ class AlpacaBroker(Broker):
             order_type=order_type,
             shares=qty,
             price=limit_price,
-            status=self._map_status(getattr(o, "status", "")),
+            status=self._map_status(getattr(o, "status", ""), filled_qty=filled_qty, qty=qty),
             filled_shares=filled_qty,
             filled_avg_price=filled_avg,
             commission=0.0,
             submitted_at=str(submitted_at),
             filled_at=str(filled_at),
-            message=str(getattr(o, "client_order_id", "") or ""),
+            message=client_order_id,
+            raw_status=raw_status,
+            client_order_id=client_order_id,
+            replaced_by=replaced_by,
         )
 
     # ---------- account / holdings ----------

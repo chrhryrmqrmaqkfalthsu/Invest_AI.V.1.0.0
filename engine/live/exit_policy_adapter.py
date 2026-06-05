@@ -1,14 +1,16 @@
-"""Live adapter and shadow helpers for the shared ExitPolicy.
+"""Live adapters, cutover helpers, and shadow logging for shared ExitPolicy.
 
-The live PositionManager still owns real order decisions during C-P1 shadow.
-This module only normalizes state, evaluates ExitPolicy in parallel, and logs
-classified differences.  Trading-day holding counts use the shared calendar.
+C-P1 cutover rules:
+- authoritative live decisions use the immutable entry-time rulebook snapshot and
+  the stop/target/trailing levels already stored on PositionEntry;
+- per-tick dynamic re-initialization remains shadow-diagnostic only;
+- trading-day holding counts use the shared exchange calendar.
 """
 from __future__ import annotations
 
 import dataclasses
 import json
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -31,6 +33,18 @@ KST = ZoneInfo("Asia/Seoul")
 LIVE_SHADOW_ROOT = Path("logs/live_exit_shadow")
 SYMBOLS_DIR = Path("data/symbols")
 SEED_PATTERNS_PATH = Path("data/_system/seed_patterns.json")
+
+
+@dataclass(frozen=True)
+class LivePolicyEvaluation:
+    """One authoritative ExitPolicy evaluation for live cutover/shadow reuse."""
+
+    decision: ExitDecision
+    position_state: PositionState
+    rulebook: Rulebook
+    market_context: ExitMarketContext
+    holding_trading_days: int
+    rulebook_source: str = "position_snapshot"
 
 
 def _get(obj: Any, name: str, default: Any = None) -> Any:
@@ -84,11 +98,7 @@ def count_holding_trading_days(
     ticker: Optional[str] = None,
     market_clock: Any = None,
 ) -> int:
-    """Count exact exchange sessions after entry through ``now``.
-
-    Existing live entry timestamps are stored in KST.  For the current US-only
-    C-P1 universe, omitting ticker intentionally defaults to UsMarketClock.
-    """
+    """Count exact exchange sessions after entry through ``now``."""
     try:
         entry = datetime.fromisoformat(str(entry_date))
     except Exception:
@@ -117,10 +127,11 @@ def approximate_trading_days(
 
 
 def position_entry_to_state(pos: Any, rulebook: Any, holding_trading_days: int) -> PositionState:
+    """Map stored PositionEntry levels without re-resolving dynamic exit params."""
     direction = str(_get(pos, "rulebook_direction", _get(rulebook, "direction", "long")) or "long")
     entry_price = _safe_float(_get(pos, "entry_price", 0.0))
     snapshot = _get(pos, "rulebook_snapshot", None)
-    if not isinstance(snapshot, Mapping):
+    if not isinstance(snapshot, Mapping) or not snapshot:
         snapshot = _json_safe(rulebook) if rulebook is not None else {}
     member_hash = str(_get(pos, "member_hash", "") or "")
     if not member_hash and rulebook is not None:
@@ -153,6 +164,7 @@ def position_entry_to_dynamic_state(
     holding_trading_days: int,
     market_context: ExitMarketContext,
 ) -> PositionState:
+    """Shadow-only diagnostic: rebuild levels from current market context."""
     entry_price = _safe_float(_get(pos, "entry_price", 0.0))
     highest = _safe_float(_get(pos, "highest_price", entry_price), entry_price)
     state = initialize_position_state(
@@ -182,13 +194,98 @@ def market_context_to_exit_context(
     current_trade_date: Optional[str] = None,
 ) -> ExitMarketContext:
     sector_map = _get(ctx, "sector_strength", {}) or {}
-    sector_score = _safe_float(sector_map.get(sector_name, 50.0) if isinstance(sector_map, Mapping) else 50.0, 50.0)
+    if isinstance(sector_map, Mapping):
+        sector_score = _safe_float(sector_map.get(sector_name, _get(ctx, "sector_score", 50.0)), 50.0)
+    else:
+        sector_score = _safe_float(_get(ctx, "sector_score", 50.0), 50.0)
     return ExitMarketContext(
         market_score=_safe_float(_get(ctx, "score", _get(ctx, "market_score", 50.0)), 50.0),
         vix_level=_safe_float(_get(ctx, "vix_level", 18.0), 18.0),
         sector_score=sector_score,
         current_trade_date=current_trade_date,
         holding_trading_days=holding_trading_days,
+    )
+
+
+def entry_context_from_position(pos: Any) -> ExitMarketContext:
+    """Return the immutable market context captured at entry."""
+    return ExitMarketContext(
+        market_score=_safe_float(_get(pos, "entry_market_score", 50.0), 50.0),
+        vix_level=_safe_float(_get(pos, "entry_vix_level", 18.0), 18.0),
+        sector_score=_safe_float(_get(pos, "entry_sector_score", 50.0), 50.0),
+    )
+
+
+def resolve_position_rulebook(pos: Any) -> tuple[Optional[Rulebook], str]:
+    """Resolve only the immutable entry snapshot; never auto-backfill old positions."""
+    snapshot = _get(pos, "rulebook_snapshot", None)
+    if not isinstance(snapshot, Mapping) or not snapshot:
+        return None, "missing_position_snapshot"
+    try:
+        return Rulebook.from_dict(dict(snapshot)), "position_snapshot"
+    except Exception:
+        return None, "invalid_position_snapshot"
+
+
+def apply_state_to_position_entry(pos: Any, state: PositionState) -> Any:
+    """Copy ExitPolicy state back to a mutable live PositionEntry."""
+    pos.entry_price = float(state.avg_cost)
+    pos.shares = float(state.shares)
+    pos.atr_at_entry = float(state.atr_at_entry)
+    pos.stop_price = float(state.stop_price)
+    pos.target_price = float(state.target_price)
+    pos.trailing_stop = float(state.trailing_stop)
+    pos.trailing_distance = float(state.trailing_distance)
+    pos.highest_price = float(state.highest_price)
+    pos.max_holding_days = int(state.max_holding_days)
+    pos.exit_strategy = str(state.exit_strategy)
+    pos.rulebook_direction = str(state.direction)
+    pos.add_buy_count = int(state.add_buy_count)
+    pos.rulebook_snapshot = dict(state.rulebook_snapshot or _get(pos, "rulebook_snapshot", {}) or {})
+    pos.member_hash = str(state.member_hash or _get(pos, "member_hash", "") or "")
+    return pos
+
+
+def evaluate_live_policy(
+    *,
+    ticker: str,
+    pos: Any,
+    price: float,
+    rulebook: Rulebook,
+    raw_market_context: Any,
+    holding_trading_days: int,
+    timestamp: Optional[str] = None,
+    rulebook_source: str = "position_snapshot",
+) -> LivePolicyEvaluation:
+    """Evaluate authoritative live policy from stored levels (no dynamic rebuild)."""
+    sector_name = str(_get(rulebook, "sector_name", "") or "")
+    exit_ctx = market_context_to_exit_context(
+        raw_market_context,
+        sector_name,
+        holding_trading_days=holding_trading_days,
+        current_trade_date=timestamp,
+    )
+    state = position_entry_to_state(pos, rulebook, holding_trading_days)
+    decision = evaluate_exit(
+        state,
+        PriceSnapshot(date=timestamp or "", current_price=float(price), close=float(price)),
+        rulebook,
+        market_context=exit_ctx,
+        execution_config=ExitExecutionConfig(
+            mode="live",
+            base_slippage_bps=0.0,
+            stress_slippage_bps=0.0,
+            use_next_open=False,
+            trailing_activation_bars=2,
+        ),
+    )
+    return LivePolicyEvaluation(
+        decision=decision,
+        position_state=state,
+        rulebook=rulebook,
+        market_context=exit_ctx,
+        holding_trading_days=int(holding_trading_days),
+        rulebook_source=rulebook_source,
     )
 
 
@@ -396,6 +493,39 @@ def compare_legacy_and_exit_policy(
     }
 
 
+def shadow_record_from_live_policy(
+    evaluation: LivePolicyEvaluation,
+    *,
+    ticker: str,
+    pos: Any,
+    price: float,
+    holding_calendar_days: int,
+    actual_legacy_reason: Optional[str] = None,
+    timestamp: Optional[str] = None,
+) -> dict[str, Any]:
+    """Compare legacy against the exact decision used by cutover."""
+    legacy = legacy_live_decision(pos, price, holding_calendar_days)
+    if actual_legacy_reason is not None or legacy.get("reason") is not None:
+        legacy["reason"] = actual_legacy_reason
+        legacy["price"] = float(price) if actual_legacy_reason is not None else None
+    return compare_legacy_and_exit_policy(
+        legacy,
+        evaluation.decision,
+        ticker=ticker,
+        price=price,
+        position=pos,
+        rulebook=evaluation.rulebook,
+        market_context=evaluation.market_context,
+        holding_calendar_days=holding_calendar_days,
+        holding_trading_days=evaluation.holding_trading_days,
+        static_state=evaluation.position_state,
+        dynamic_state=evaluation.position_state,
+        rulebook_source=evaluation.rulebook_source,
+        timestamp=timestamp,
+        extra_diagnostics={"cutover_authority": True},
+    )
+
+
 def evaluate_live_shadow(
     *,
     ticker: str,
@@ -409,6 +539,7 @@ def evaluate_live_shadow(
     rulebook_source: str = "",
     timestamp: Optional[str] = None,
 ) -> dict[str, Any]:
+    """Legacy-authority shadow. Dynamic re-initialization is diagnostic only."""
     sector_name = str(_get(rulebook, "sector_name", "") or "")
     exit_ctx = market_context_to_exit_context(
         raw_market_context,

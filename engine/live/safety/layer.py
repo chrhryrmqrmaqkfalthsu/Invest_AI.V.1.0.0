@@ -11,6 +11,11 @@ BQ-2a invariants:
 BN-1 invariants:
 - 주문 제출 카운트와 실제 체결 정산을 분리한다.
 - 같은 order_id의 재조회/재시작 정산은 idempotent하게 한 번만 반영한다.
+
+BS-1a invariants:
+- KILL_SWITCH/손실잠금/쿨다운/시장시간/whitelist/첫주문승인은
+  small_amount_safety.enabled 값과 무관하게 항상 강제한다.
+- enabled=False는 주문당 수량·금액·일일 주문 수·소액 누적 한도만 비활성화한다.
 """
 from __future__ import annotations
 
@@ -208,7 +213,7 @@ class SafetyLayer:
         price: float,
         purpose: str = "entry",
     ) -> SafetyDecision:
-        """주문 발사 전 호출. BUY purpose는 entry 또는 add_buy여야 한다."""
+        """주문 발사 전 호출. 운영 필수 게이트는 소액 안전 활성 여부와 무관하다."""
         try:
             shares_f = float(shares)
             price_f = float(price)
@@ -229,9 +234,8 @@ class SafetyLayer:
             if not guard.allowed:
                 return guard
 
-        if not self.enabled:
-            return SafetyDecision(True, reason="small-amount safety disabled; entry guards passed")
-
+        # BS-1a: 아래 운영 필수 게이트는 small_amount_safety.enabled=False여도
+        # 절대 우회할 수 없다.
         st = state_mod.load()
         if KILL_SWITCH_PATH.exists():
             return SafetyDecision(False, "KILL_SWITCH 파일 감지 — 모든 주문 차단", "KILL_SWITCH")
@@ -262,6 +266,10 @@ class SafetyLayer:
             if st.orders_today == 0:
                 return SafetyDecision(False, "오늘 첫 매수 주문은 텔레그램 /approve 승인 필요", "NEED_APPROVAL")
 
+        if not self.enabled:
+            return SafetyDecision(True, reason="운영 필수 게이트 통과; 소액 한도 비활성")
+
+        # enabled가 제어하는 범위는 소액 제한뿐이다.
         if self.max_shares is not None and shares_f > self.max_shares:
             return SafetyDecision(False, f"수량 {shares_f:g} > 한도 {self.max_shares:g}주", "LIMIT_SHARES")
 

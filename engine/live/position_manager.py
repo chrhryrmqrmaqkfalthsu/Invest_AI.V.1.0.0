@@ -210,12 +210,17 @@ class PositionManager:
         rulebook,
         atr_value: float,
     ) -> Optional[PositionEntry]:
-        """Update average cost/levels after an approved add-buy fill."""
+        """Update average cost/levels after an approved add-buy fill.
+
+        BQ-2a safety invariant: add-buy may never create a new position. If a
+        stale approval is executed after the tracked position disappeared, fail
+        closed instead of delegating to register_entry().
+        """
         add_shares = _normalize_shares(add_shares)
         pos = self._positions.get(ticker)
         if pos is None:
-            log.warning(f"{ticker} add_to_position: 기존 포지션 없음 → register_entry로 위임")
-            return self.register_entry(ticker, add_price, add_shares, rulebook, atr_value)
+            log.error(f"{ticker} add_to_position: 기존 포지션 없음 → stale 추가매수 차단")
+            return None
 
         # Snapshot-backed long positions use the same add-buy state transition as backtests.
         if pos.rulebook_snapshot and str(pos.rulebook_direction).lower() == "long":

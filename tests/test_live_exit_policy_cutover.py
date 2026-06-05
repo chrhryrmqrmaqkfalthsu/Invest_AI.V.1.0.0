@@ -222,8 +222,8 @@ def test_runner_passes_cached_context_to_register_entry() -> None:
         def get_last_market_context(self, ticker): return {"score": 77.0, "vix_level": 29.0, "sector_strength": {"tech": 68.0}}
 
     class FakeSafety:
-        def check_order(self, *args): return SimpleNamespace(allowed=True, code="", reason="")
-        def record_order(self, *args): pass
+        def check_order(self, *args, **kwargs): return SimpleNamespace(allowed=True, code="", reason="")
+        def record_order(self, *args, **kwargs): pass
 
     class FakePM:
         def register_entry(self, *args, **kwargs): captured.update(kwargs)

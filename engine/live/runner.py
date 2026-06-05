@@ -260,6 +260,15 @@ class Runner:
             if price is None or price <= 0:
                 logger.warning(f"[APPROVAL-EXEC] {ticker} 현재가 조회 실패")
                 return
+
+            add_buy_guard = self.safety.check_add_buy_guard(ticker)
+            if not add_buy_guard.allowed:
+                logger.warning(f"[APPROVAL-EXEC] {ticker} stale/invalid 추가매수 차단: [{add_buy_guard.code}] {add_buy_guard.reason}")
+                self.notifier.send(f"⛔ `{ticker}` 추가매수 차단: [{add_buy_guard.code}] {add_buy_guard.reason}", parse_mode="Markdown")
+                req.status = "rejected"
+                self.approval_manager._save()
+                return
+
             shares = self._resolve_order_shares("BUY", ticker, price, target_notional=amount)
             if shares <= SHARE_EPS:
                 logger.warning(f"[APPROVAL-EXEC] {ticker} 주문 수량 계산 실패: amount={amount}, price={price}")
@@ -285,7 +294,7 @@ class Runner:
                 if original_max_total_ntl is not None:
                     self.safety.max_total_notional = float(original_max_total_ntl) + temporary_notional_limit
 
-                check = self.safety.check_order("BUY", ticker, shares, price)
+                check = self.safety.check_order("BUY", ticker, shares, price, purpose="add_buy")
                 if not check.allowed:
                     logger.warning(f"[APPROVAL-EXEC] {ticker} 안전체크 차단: [{check.code}] {check.reason}")
                     self.notifier.send(f"⛔ `{ticker}` 추가매수 차단: [{check.code}] {check.reason}", parse_mode="Markdown")
@@ -294,20 +303,25 @@ class Runner:
                     return
 
                 order = self.broker.place_buy(ticker, shares, OrderType.MARKET)
-                self.safety.record_order(order, "BUY")
+                self.safety.record_order(order, "BUY", purpose="add_buy")
                 if order.status == OrderStatus.FILLED:
                     self.stats.orders_filled += 1
                     fill_price = order.filled_avg_price or price
                     filled_shares = order.filled_shares or shares
                     atr = self.rulebook.get_last_atr(ticker) if hasattr(self.rulebook, "get_last_atr") else None
                     rb = self.rulebook.get_rulebook(ticker) if hasattr(self.rulebook, "get_rulebook") else None
+                    updated = None
                     if atr and rb:
-                        self.position_manager.add_to_position(ticker, fill_price, filled_shares, rb, atr)
-                    self.notifier.send(
-                        f"✅ `{ticker}` 추가매수 체결: {filled_shares:g}주 @ {fill_price:,.4f} (req={req.request_id[:8]})",
-                        parse_mode="Markdown",
-                    )
-                    logger.info(f"[APPROVAL-EXEC] {ticker} 추가매수 체결 {filled_shares:g}주 @ {fill_price:,.4f}")
+                        updated = self.position_manager.add_to_position(ticker, fill_price, filled_shares, rb, atr)
+                    if updated is None:
+                        logger.error(f"[APPROVAL-EXEC] {ticker} 추가매수 체결 후 포지션 갱신 실패")
+                        self.notifier.send(f"❌ `{ticker}` 추가매수 체결 후 포지션 갱신 실패", parse_mode="Markdown")
+                    else:
+                        self.notifier.send(
+                            f"✅ `{ticker}` 추가매수 체결: {filled_shares:g}주 @ {fill_price:,.4f} (req={req.request_id[:8]})",
+                            parse_mode="Markdown",
+                        )
+                        logger.info(f"[APPROVAL-EXEC] {ticker} 추가매수 체결 {filled_shares:g}주 @ {fill_price:,.4f}")
                 else:
                     self.notifier.send(f"⚠️ `{ticker}` 추가매수 미체결: status={order.status.value}", parse_mode="Markdown")
             finally:
@@ -446,7 +460,7 @@ class Runner:
             self.stats.orders_blocked += 1
             logger.info(f"{ticker} {side} 차단: 주문 수량 계산 결과 0")
             return
-        check = self.safety.check_order(side, ticker, order_shares, price)
+        check = self.safety.check_order(side, ticker, order_shares, price, purpose="entry")
         if not check.allowed:
             self.stats.orders_blocked += 1
             logger.info(f"{ticker} {side} 차단: [{check.code}] {check.reason}")
@@ -458,7 +472,7 @@ class Runner:
                 self.broker.place_buy(ticker, order_shares, OrderType.MARKET)
                 if side == "BUY" else self.broker.place_sell(ticker, order_shares, OrderType.MARKET)
             )
-            self.safety.record_order(order, side)
+            self.safety.record_order(order, side, purpose="entry")
             if order.status == OrderStatus.FILLED:
                 self.stats.orders_filled += 1
                 if side == "BUY" and hasattr(self.rulebook, "get_last_atr"):

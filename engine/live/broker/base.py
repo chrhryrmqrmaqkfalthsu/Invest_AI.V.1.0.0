@@ -44,6 +44,10 @@ class Order:
     submitted_at: str = ""
     filled_at: str = ""
     message: str = ""             # 오류/거부 사유 등
+    # BN-1: 브로커 원본 상태를 보존해 축약된 내부 상태만으로 판단하지 않는다.
+    raw_status: str = ""
+    client_order_id: str = ""     # BN-2 deterministic client_order_id 복구 대비
+    replaced_by: str = ""
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -169,7 +173,7 @@ if __name__ == "__main__":
         order_type=OrderType.MARKET, shares=0.5, price=0.0,
         status=OrderStatus.FILLED, filled_shares=0.5, filled_avg_price=25615.0,
         commission=4.0, submitted_at=datetime.now().isoformat(),
-        filled_at=datetime.now().isoformat(),
+        filled_at=datetime.now().isoformat(), raw_status="filled",
     )
     print("Order dict:", o.to_dict())
 

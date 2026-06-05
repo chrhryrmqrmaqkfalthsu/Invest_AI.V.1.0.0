@@ -6,7 +6,11 @@ BQ-2a invariants:
   하나라도 있으면 fail-closed 한다.
 - 승인형 추가매수(add_buy)는 기존 추적 포지션과 broker 보유가 모두 있어야 하며,
   add_buy.enabled 및 min_cooldown_minutes를 통과해야 한다.
-- ticker별 BUY 시각은 FILLED 주문만 SafetyState에 영속 기록한다.
+- ticker별 BUY 시각은 실제 체결 주문만 SafetyState에 영속 기록한다.
+
+BN-1 invariants:
+- 주문 제출 카운트와 실제 체결 정산을 분리한다.
+- 같은 order_id의 재조회/재시작 정산은 idempotent하게 한 번만 반영한다.
 """
 from __future__ import annotations
 
@@ -277,27 +281,53 @@ class SafetyLayer:
 
         return SafetyDecision(True, reason="모든 안전장치 통과")
 
-    def record_order(self, order: Order, side: str, purpose: str = "entry") -> None:
-        """주문 상태 기록. ticker cooldown 시각은 FILLED BUY만 기록한다."""
+    def record_submission(self, order: Order, side: str, purpose: str = "entry") -> None:
+        """실제 주문 제출을 order_id 기준 한 번만 기록한다."""
         if order.status in (OrderStatus.REJECTED, OrderStatus.FAILED):
+            return
+        st = state_mod.load()
+        order_id = str(order.order_id or "").strip()
+        if order_id and order_id in st.submitted_order_ids:
+            return
+        timestamp = str(order.submitted_at or "").strip() or datetime.now().astimezone().isoformat()
+        st.orders_today += 1
+        if order_id:
+            st.submitted_order_ids[order_id] = timestamp
+        state_mod.save(st)
+
+    def record_fill(self, order: Order, side: str, purpose: str = "entry") -> None:
+        """실제 체결분을 order_id 기준 한 번만 정산한다.
+
+        FILLED뿐 아니라 PARTIAL 후 terminal 주문도 filled_shares/filled_avg_price가
+        유효하면 한 번 반영한다.
+        """
+        filled_shares = float(order.filled_shares or 0.0)
+        filled_avg_price = float(order.filled_avg_price or 0.0)
+        if filled_shares <= SHARE_EPS or filled_avg_price <= 0:
             return
 
         st = state_mod.load()
-        st.orders_today += 1
+        order_id = str(order.order_id or "").strip()
+        if order_id and order_id in st.settled_order_ids:
+            return
+
         side_lower = str(side).lower()
         purpose_lower = str(purpose or "entry").lower()
-
+        timestamp = str(order.filled_at or "").strip() or datetime.now().astimezone().isoformat()
         if side_lower == "buy":
-            filled_notional = float(order.filled_shares) * float(order.filled_avg_price)
-            if filled_notional > 0:
-                st.invested_krw_today += filled_notional
-            if order.status == OrderStatus.FILLED:
-                timestamp = str(order.filled_at or "").strip() or datetime.now().astimezone().isoformat()
-                st.last_buy_at_by_ticker[str(order.ticker)] = timestamp
-                if purpose_lower == "add_buy":
-                    st.last_add_buy_at_by_ticker[str(order.ticker)] = timestamp
-
+            st.invested_krw_today += filled_shares * filled_avg_price
+            st.last_buy_at_by_ticker[str(order.ticker)] = timestamp
+            if purpose_lower == "add_buy":
+                st.last_add_buy_at_by_ticker[str(order.ticker)] = timestamp
+        if order_id:
+            st.settled_order_ids[order_id] = timestamp
         state_mod.save(st)
+
+    def record_order(self, order: Order, side: str, purpose: str = "entry") -> None:
+        """하위 호환 wrapper. 제출과 존재하는 체결분을 각각 idempotent 기록한다."""
+        self.record_submission(order, side, purpose=purpose)
+        if float(order.filled_shares or 0.0) > SHARE_EPS:
+            self.record_fill(order, side, purpose=purpose)
 
     def record_realized_pnl(self, pnl_krw: float, total_value_krw: float = 0) -> None:
         st = state_mod.load()

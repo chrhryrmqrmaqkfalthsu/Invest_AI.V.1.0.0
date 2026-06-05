@@ -15,8 +15,9 @@ run_live.py - 라이브 트레이딩 봇 엔트리포인트.
     ├─ MarketClock
     └─ RuleBook
 
-현재 live Runner는 단일 시장 universe만 지원한다. US/KR 혼재는 시작 전에
-fail-fast하며, 시장별 Runner 분리는 후속 작업이다.
+현재 live Runner는 단일 시장 universe만 지원한다. startup과 hot-reload는
+동일한 promotion/market 정책을 공유하고, 최종 clock 선택에서도 혼재 시장을
+fail-fast한다.
 """
 from __future__ import annotations
 
@@ -25,7 +26,6 @@ import logging
 import signal
 import sys
 import time
-from pathlib import Path
 
 from engine.live.broker.factory import make_broker
 from engine.live.market_clock import select_market_clock, validate_broker_market_compatibility
@@ -34,6 +34,11 @@ from engine.live.safety.layer import SafetyLayer
 from engine.live.scheduler import Scheduler
 from engine.live.telegram.notifier import TelegramNotifier
 from engine.live.telegram.bot import TelegramBot
+from engine.live.universe import (
+    DEFAULT_LIVE_PROMOTION_ID,
+    LiveUniverseConfig,
+    load_live_universe,
+)
 from engine.strategies.demo_rulebook import DemoRuleBook
 from engine.strategies.learned_rulebook import LearnedRuleBook
 
@@ -44,20 +49,18 @@ logging.basicConfig(
 logger = logging.getLogger("run_live")
 
 
-def load_symbols(symbols_dir: Path = Path("data/symbols")) -> list[str]:
-    """Use data/symbols child directories as the live whitelist/universe."""
-    if not symbols_dir.exists():
-        logger.warning(f"종목 디렉토리 없음: {symbols_dir}")
-        return []
-    return sorted([d.name for d in symbols_dir.iterdir() if d.is_dir()])
-
-
 def main():
     parser = argparse.ArgumentParser(description="Kingmaker live trading bot")
     parser.add_argument("--mode", choices=["paper", "real", "vts", "live", "alpaca", "alpaca_paper"], default=None,
                         help="브로커 모드 강제 지정 (기본: .env의 BROKER_MODE/KIS_MODE)")
     parser.add_argument("--dry-run", action="store_true",
                         help="KIS 실모드에서도 주문은 mock으로 처리")
+    parser.add_argument("--market", choices=["US", "KRX"], default="US",
+                        help="단일 라이브 시장. 기본 US")
+    parser.add_argument("--universe", choices=["promoted", "parameters"], default="promoted",
+                        help="promoted=정확한 promotion-id 승인 종목만, parameters=시장 내 모든 parameters 종목")
+    parser.add_argument("--promotion-id", default=DEFAULT_LIVE_PROMOTION_ID,
+                        help="--universe promoted에서 반드시 정확히 일치해야 하는 promotion id")
     parser.add_argument("--market-tick", type=int, default=60,
                         help="장중 tick 주기(초). 기본 60")
     parser.add_argument("--offmarket-tick", type=int, default=3600,
@@ -78,23 +81,34 @@ def main():
     logger.info("Kingmaker live trading bot 시작")
     logger.info("=" * 60)
 
-    broker = make_broker(force_mode=args.mode, dry_run=args.dry_run)
-    logger.info(f"Broker: mode={broker.mode} dry_run={args.dry_run}")
-
-    symbols = load_symbols()
-    if not symbols:
-        logger.error("종목이 비어있음. data/symbols/ 아래 종목 디렉토리를 만들어주세요.")
+    universe_config = LiveUniverseConfig(
+        market=args.market,
+        universe_mode=args.universe,
+        promotion_id=args.promotion_id,
+    )
+    try:
+        universe = load_live_universe(universe_config)
+        symbols = list(universe.symbols)
+        if not symbols:
+            raise RuntimeError(f"필터 통과 종목이 없음: {universe.summary()}")
+        # 최종 안전망: helper 필터 후에도 단일-market clock 검증은 유지한다.
+        clock = select_market_clock(symbols)
+    except Exception as exc:
+        logger.error(f"라이브 universe/clock 검증 실패: {exc}")
         sys.exit(1)
+
+    logger.info(f"LiveUniverse: {universe.summary()}")
     logger.info(f"종목 {len(symbols)}개: {symbols}")
+    source = getattr(clock, "calendar_source", "built-in")
+    logger.info(f"MarketClock: market={clock.name} source={source}")
 
     try:
-        clock = select_market_clock(symbols)
+        broker = make_broker(force_mode=args.mode, dry_run=args.dry_run)
         validate_broker_market_compatibility(broker, clock)
     except Exception as exc:
         logger.error(f"라이브 시장/브로커 정합성 실패: {exc}")
         sys.exit(2)
-    source = getattr(clock, "calendar_source", "built-in")
-    logger.info(f"MarketClock: market={clock.name} source={source}")
+    logger.info(f"Broker: mode={broker.mode} dry_run={args.dry_run}")
 
     notifier = TelegramNotifier()
     safety = SafetyLayer(broker=broker)
@@ -112,6 +126,7 @@ def main():
         rulebook=rulebook,
         symbols=symbols,
         order_shares=1,
+        universe_config=universe.config,
     )
 
     try:

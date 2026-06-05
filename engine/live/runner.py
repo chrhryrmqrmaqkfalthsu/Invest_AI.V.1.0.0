@@ -20,10 +20,11 @@ from zoneinfo import ZoneInfo
 
 from engine.live.approval_manager import ApprovalManager, classify_strength
 from engine.live.broker.base import Broker, OrderStatus, OrderType
-from engine.live.market_clock import MarketClock
+from engine.live.market_clock import MarketClock, select_market_clock
 from engine.live.position_manager import PositionManager
 from engine.live.safety.layer import SafetyLayer
 from engine.live.telegram.notifier import TelegramNotifier
+from engine.live.universe import LiveUniverseConfig, load_live_universe
 from engine.market.context import build_market_context
 from engine.strategies.demo_rulebook import RuleBook, Signal
 
@@ -75,6 +76,7 @@ class Runner:
         symbols: List[str],
         order_shares: float = 1.0,
         order_notional: Optional[float] = None,
+        universe_config: Optional[LiveUniverseConfig] = None,
     ):
         self.broker = broker
         self.safety = safety
@@ -82,6 +84,7 @@ class Runner:
         self.clock = clock
         self.rulebook = rulebook
         self.symbols = list(symbols)
+        self.universe_config = universe_config.normalized() if universe_config is not None else None
         self.order_shares = float(order_shares)
         self.order_notional = float(order_notional) if order_notional and float(order_notional) > 0 else None
         self.stats = RunnerStats(started_at=datetime.now(ZoneInfo("Asia/Seoul")))
@@ -133,26 +136,45 @@ class Runner:
         return _normalize_shares(shares)
 
     def reload_symbols(self) -> dict:
-        from pathlib import Path as _P
+        """Add only symbols that still satisfy the immutable startup policy."""
+        if self.universe_config is None:
+            logger.warning("[HOT-RELOAD] universe policy 없음 — 안전을 위해 신규 종목 편입 차단")
+            return {
+                "added": [],
+                "total": len(self.symbols),
+                "eligible": len(self.symbols),
+                "blocked": True,
+                "reason": "UNIVERSE_POLICY_MISSING",
+            }
 
-        symbols_dir = _P("data/symbols")
-        if not symbols_dir.exists():
-            return {"added": [], "total": len(self.symbols)}
+        result = load_live_universe(self.universe_config)
+        eligible = list(result.symbols)
+        if eligible:
+            reload_clock = select_market_clock(eligible)
+            if reload_clock.name != self.clock.name:
+                raise RuntimeError(
+                    f"hot-reload clock mismatch: runner={self.clock.name} eligible={reload_clock.name}"
+                )
+
         current = set(self.symbols)
-        on_disk = {d.name for d in symbols_dir.iterdir() if d.is_dir()}
-        valid = {t for t in on_disk if (symbols_dir / t / "parameters.json").exists()}
-        added = sorted(valid - current)
+        added = sorted(set(eligible) - current)
         if added:
             self.symbols.extend(added)
             try:
                 cache = getattr(self.rulebook, "_rulebook_cache", None)
                 if isinstance(cache, dict):
-                    for t in added:
-                        cache.pop(t, None)
-                logger.info(f"[HOT-RELOAD] 신규 종목 편입: {added} (총 {len(self.symbols)}개)")
+                    for ticker in added:
+                        cache.pop(ticker, None)
+                logger.info(f"[HOT-RELOAD] 정책 통과 신규 종목 편입: {added} (총 {len(self.symbols)}개)")
             except Exception as e:
                 logger.warning(f"[HOT-RELOAD] rulebook 캐시 invalidate 실패: {e}")
-        return {"added": added, "total": len(self.symbols)}
+        return {
+            "added": added,
+            "total": len(self.symbols),
+            "eligible": len(eligible),
+            "blocked": False,
+            "excluded_reason_counts": dict(result.excluded_reason_counts),
+        }
 
     def attach_bot(self, bot) -> None:
         bot.position_manager = self.position_manager

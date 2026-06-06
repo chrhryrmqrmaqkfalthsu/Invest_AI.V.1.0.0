@@ -20,7 +20,7 @@ class S:
 class B:
     mode='alpaca_paper'
     def __init__(self,status=OrderStatus.PENDING,raise_submit=False):
-        self.status=status; self.raise_submit=raise_submit; self.orders={}; self.recovered=None; self.buy_calls=0; self.sell_calls=0; self.last_cid=''
+        self.status=status; self.raise_submit=raise_submit; self.orders={}; self.recovered=None; self.buy_calls=0; self.sell_calls=0; self.last_cid=''; self.get_order_calls=0; self.fail_get_order=False
     def get_balance(self): return Balance(1,1,0,self.get_holdings())
     def get_holdings(self): return [Holding('AAA',1,100,94,94,-6,-6)]
     def get_current_price(self,t): return 100.0
@@ -34,7 +34,10 @@ class B:
         self.sell_calls+=1; self.last_cid=client_order_id
         o=Order('S1',t,OrderSide.SELL,order_type,q,price,self.status,client_order_id=client_order_id)
         self.orders[o.order_id]=o; return o
-    def get_order(self,oid): return self.orders.get(oid)
+    def get_order(self,oid):
+        self.get_order_calls+=1
+        if self.fail_get_order: return None
+        return self.orders.get(oid)
     def get_order_by_client_order_id(self,cid):
         if self.recovered and self.recovered.client_order_id==cid: return self.recovered
         return next((o for o in self.orders.values() if o.client_order_id==cid),None)
@@ -81,8 +84,18 @@ def test_deterministic_keys_and_paper_kis_no_intent(tmp_path):
         assert br.buy_calls==1; assert r.pending_order_manager.all()==[]
 def test_filled_buy_after_intent_can_go_reconciling(tmp_path):
     b=B(status=OrderStatus.FILLED); r=runner(tmp_path,b); o=r._submit_order_with_intent(side='BUY',ticker='AAA',shares=1,purpose='entry',seed='f')
+    assert r.pending_order_manager.get_record('B1').state=='RECONCILING'
     r._get_buy_reconciler().track_failure(o,purpose='entry',error='ATR missing')
     assert r.pending_order_manager.all()[0].state=='RECONCILING'
+def test_recovered_filled_emits_event_without_get_order_and_keeps_lock_until_finalized(tmp_path):
+    b=B(); b.fail_get_order=True; path=tmp_path/'p.json'; cid=PendingOrderManager.make_client_order_id(ticker='AAA',side='buy',purpose='entry',seed='filled')
+    m=PendingOrderManager(b,path=path); m.create_submitting_intent(client_order_id=cid,ticker='AAA',side='buy',purpose='entry',requested_shares=1)
+    b.recovered=Order('B99','AAA',OrderSide.BUY,OrderType.MARKET,1,0,OrderStatus.FILLED,1,100,client_order_id=cid)
+    events=m.poll_all()
+    assert len(events)==1; assert events[0][0].state=='RECONCILING'; assert events[0][1].order_id=='B99'
+    assert b.get_order_calls==0; assert m.is_ticker_locked('AAA')
+    m.mark_finalized('B99')
+    assert not m.is_ticker_locked('AAA')
 def test_auto_exit_sell_intent_first(tmp_path,monkeypatch):
     monkeypatch.setenv('EXIT_LIVE_POLICY','0'); b=B(); b.get_current_price=lambda t: 94.0; p=PendingOrderManager(b,path=tmp_path/'p.json'); pm=PositionManager.__new__(PositionManager)
     pos=PositionEntry('AAA',datetime.now().isoformat(),100,1,1,95,110,2,95,100,'fixed',99,'long',member_hash='mh')

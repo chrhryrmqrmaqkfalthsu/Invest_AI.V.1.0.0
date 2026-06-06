@@ -1,8 +1,9 @@
 """BN-1/BN-2 pending 주문 상태머신.
 
-BN-2 추가:
+BN-2:
 - 주문 제출 전 SUBMITTING intent를 atomic 저장한다.
 - client_order_id로 submit 후 order_id 저장 전 크래시를 복구한다.
+- BT-2: 복구/제출 결과가 FILLED여도 finalization 전에는 레코드를 삭제하지 않고 RECONCILING으로 유지한다.
 """
 from __future__ import annotations
 
@@ -224,19 +225,52 @@ class PendingOrderManager:
                        exit_reason: str = "", approval_request_id: str = "") -> Optional[PendingOrderRecord]:
         cid = str(client_order_id or getattr(order, "client_order_id", "") or "").strip()
         existing = self.get_record_by_client_order_id(cid) if cid else None
-        if order.status == OrderStatus.FILLED and existing is None:
-            return None
+        base_metadata = dict(getattr(existing, "metadata", {}) or {})
+        base_metadata.update(metadata or {})
+        purpose_value = purpose or (existing.purpose if existing else "entry")
+        exit_reason_value = exit_reason or (existing.exit_reason if existing else "")
+        approval_id_value = approval_request_id or (existing.approval_request_id if existing else "")
+
         for key, record in list(self._records.items()):
             if record is existing:
                 self._records.pop(key, None)
                 break
+
         if order.status == OrderStatus.FILLED:
+            now = self._now_iso()
+            order_id = str(order.order_id or f"LOCAL-FILLED-{uuid.uuid4().hex}")
+            record = PendingOrderRecord(
+                order_id=order_id,
+                ticker=str(order.ticker).strip().upper(),
+                side=self._side_value(order.side),
+                purpose=str(purpose_value or "entry"),
+                requested_shares=float(order.shares or 0.0),
+                internal_status=OrderStatus.FILLED.value,
+                state=STATE_RECONCILING,
+                created_at=existing.created_at if existing is not None else now,
+                updated_at=now,
+                raw_status=str(getattr(order, "raw_status", "") or ""),
+                client_order_id=cid or str(getattr(order, "client_order_id", "") or ""),
+                replaced_by=str(getattr(order, "replaced_by", "") or ""),
+                submitted_at=str(order.submitted_at or getattr(existing, "submitted_at", "") or now),
+                filled_shares=float(order.filled_shares or 0.0),
+                filled_avg_price=float(order.filled_avg_price or 0.0),
+                exit_reason=str(exit_reason_value or ""),
+                approval_request_id=str(approval_id_value or ""),
+                metadata=base_metadata,
+                finalization_state="pending",
+            )
+            self._records[order_id] = record
             self._save()
-            return None
-        return self.track_order(order, purpose=purpose or (existing.purpose if existing else "entry"),
-                                metadata={**(getattr(existing, "metadata", {}) or {}), **(metadata or {})},
-                                exit_reason=exit_reason or (existing.exit_reason if existing else ""),
-                                approval_request_id=approval_request_id or (existing.approval_request_id if existing else ""))
+            return record
+
+        return self.track_order(
+            order,
+            purpose=purpose_value,
+            metadata=base_metadata,
+            exit_reason=exit_reason_value,
+            approval_request_id=approval_id_value,
+        )
 
     def resolve_submit_exception(self, client_order_id: str) -> Optional[Order]:
         cid = str(client_order_id or "").strip()
@@ -364,7 +398,6 @@ class PendingOrderManager:
         order = self.resolve_submit_exception(record.client_order_id)
         if order is None:
             return None
-        # resolve_submit_exception may have replaced the key with order_id.
         return order
 
     def poll_all(self) -> List[Tuple[PendingOrderRecord, Order]]:
@@ -384,6 +417,11 @@ class PendingOrderManager:
                     continue
                 record = self.get_record(recovered.order_id) or record
                 order_id = recovered.order_id
+                if recovered.status == OrderStatus.FILLED:
+                    record.state = STATE_RECONCILING
+                    record.finalization_state = "pending"
+                    events.append((record, recovered))
+                    continue
             if record.state == STATE_RECONCILING and bool(record.metadata.get("local_reconciliation")):
                 record.last_polled_at = self._now_iso(); record.updated_at = record.last_polled_at; changed = True
                 events.append((record, self._order_from_record(record))); continue

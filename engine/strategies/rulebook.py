@@ -15,7 +15,10 @@ class Rulebook:
     direction: str = "long"           # 'long' | 'short'
     version: str = "v5"
     generated_at: str = ""
-    mask_schema_version: int = 0       # 0=legacy hash compatible, 1+=use_xxx mask schema
+    mask_schema_version: int = 1       # 0=legacy hash compatible, 1+=use_xxx mask schema
+    use_news_global: bool = True
+    use_event_block: bool = True
+    use_market_entry_adjustment: bool = True
 
     # ===== 신호 가중치 (기본 16개) =====
     weight_ma_align: float = 1.0       # 정배열
@@ -127,6 +130,8 @@ class Rulebook:
         # 알려진 필드만 추출 (이후 버전 호환)
         known = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in d.items() if k in known}
+        if "mask_schema_version" not in d:
+            filtered["mask_schema_version"] = 0
         return cls(**filtered)
 
 

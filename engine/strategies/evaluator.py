@@ -133,6 +133,8 @@ def evaluate_signal(
     # short ETF는 부호 반전 (시장 호재 → 인버스에는 악재)
     eff_sent = -news_sentiment if is_short else news_sentiment
     s_news = rb.weight_news_sentiment * eff_sent  # 호재(+)면 신호 강화, 악재(-)면 신호 약화
+    if not getattr(rb, "use_news_global", True):
+        s_news = 0.0
     components["news"] = s_news
     if abs(s_news) > 0.01:
         reasons.append(f"전체톤({eff_sent:+.2f})({s_news:+.2f})")
@@ -174,7 +176,7 @@ def evaluate_signal(
     # ---------- 이벤트 반응 (v5 신규) ----------
     # 11개 이벤트 카테고리별 종목 반응 계수 적용
     event_adj = 0.0
-    if event_flags:
+    if event_flags and getattr(rb, "use_event_block", True):
         event_adj += event_flags.get("has_war", 0) * rb.event_response_war
         event_adj += event_flags.get("has_rate_hike", 0) * rb.event_response_rate_hike
         event_adj += event_flags.get("has_rate_cut", 0) * rb.event_response_rate_cut
@@ -215,6 +217,8 @@ def evaluate_signal(
     # 보정 한도 학습 가능 (v5: 기존 고정 0.3 → rb.market_adjustment_strength)
     strength = max(0.0, min(1.0, rb.market_adjustment_strength))
     market_adjustment = 1.0 + max(min(correlation_adj * strength, strength), -strength)
+    if not getattr(rb, "use_market_entry_adjustment", True):
+        market_adjustment = 1.0
 
     final_score = raw_score * market_adjustment
 

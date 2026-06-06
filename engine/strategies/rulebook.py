@@ -220,10 +220,13 @@ PARAM_RANGES = {
 }
 
 CATEGORICAL_PARAMS = {
-    "exit_strategy":             ["fixed", "trailing", "hybrid"],
-    "position_sizing_strategy":  ["fixed", "signal_scaled", "kelly_lite"],
-    "add_buy_enabled":           [False, True],
-    "crash_buy_enabled":         [False, True],  # v5 신규
+    "exit_strategy":                 ["fixed", "trailing", "hybrid"],
+    "position_sizing_strategy":      ["fixed", "signal_scaled", "kelly_lite"],
+    "add_buy_enabled":               [False, True],
+    "crash_buy_enabled":             [False, True],  # v5 신규
+    "use_news_global":               [False, True],
+    "use_event_block":               [False, True],
+    "use_market_entry_adjustment":   [False, True],
 }
 
 

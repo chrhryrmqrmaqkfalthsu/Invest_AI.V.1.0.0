@@ -51,6 +51,17 @@ def _rand_in(low, high, integer: bool = False):
 
 
 _INT_PARAMS = {"max_holding_days", "add_buy_max_count"}
+_MASK_CATEGORICAL_PARAMS = {
+    "use_news_global",
+    "use_event_block",
+    "use_market_entry_adjustment",
+}
+
+
+def _mark_mask_schema_if_needed(rb: Rulebook) -> None:
+    """GA가 mask categorical을 다루는 산출물은 schema 1로 승격한다."""
+    if any(k in CATEGORICAL_PARAMS and hasattr(rb, k) for k in _MASK_CATEGORICAL_PARAMS):
+        rb.mask_schema_version = max(int(getattr(rb, "mask_schema_version", 0) or 0), 1)
 
 
 def random_rulebook(base: Rulebook) -> Rulebook:
@@ -63,6 +74,7 @@ def random_rulebook(base: Rulebook) -> Rulebook:
     for k, choices in CATEGORICAL_PARAMS.items():
         if hasattr(rb, k):
             setattr(rb, k, random.choice(choices))
+    _mark_mask_schema_if_needed(rb)
     return rb
 
 
@@ -83,6 +95,7 @@ def mutate(rb: Rulebook, mutation_rate: float, strength: float) -> Rulebook:
     for k, choices in CATEGORICAL_PARAMS.items():
         if random.random() < mutation_rate / 2 and hasattr(new_rb, k):
             setattr(new_rb, k, random.choice(choices))
+    _mark_mask_schema_if_needed(new_rb)
     return new_rb
 
 
@@ -95,6 +108,7 @@ def crossover(p1: Rulebook, p2: Rulebook) -> Rulebook:
     for k in CATEGORICAL_PARAMS.keys():
         if hasattr(child, k) and random.random() < 0.5:
             setattr(child, k, getattr(p2, k))
+    _mark_mask_schema_if_needed(child)
     return child
 
 

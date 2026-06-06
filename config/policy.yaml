@@ -22,9 +22,11 @@ small_amount_safety:
   max_shares_per_order: 1             # 주문당 최대 수량. 0이면 주수 체크 비활성(소수점/Alpaca용)
   max_notional_per_order: 30000       # 주문당 최대 금액. 브로커 기준통화(KIS=KRW, Alpaca=USD)
   max_krw_per_order: 30000            # 하위호환: 주문당 최대 금액 (KRW)
-  max_total_invested_krw: 60000      # 전체 누적 투자금 (10종목 × 1만원)
+  max_bought_notional_per_day: 60000  # 당일 체결 BUY 누적 금액 상한
+  max_total_exposure_notional: 60000  # 브로커 실보유 노출 + pending BUY 예약금 상한
+  max_total_invested_krw: 60000       # 하위호환: 전체 노출 상한으로 매핑
   max_orders_per_day: 3               # 일일 최대 주문 횟수
-  require_first_order_approval: true  # 봇 첫 주문은 텔레그램 승인 필요  
+  require_first_order_approval: true  # 봇 첫 주문은 텔레그램 승인 필요
   daily_loss_limit_krw: 50000         # 일일 누적 손실 절대금액 상한 (KRW)
 
 # 리스크 관리

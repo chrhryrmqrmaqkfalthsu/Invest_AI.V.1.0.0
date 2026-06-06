@@ -98,6 +98,10 @@ class Runner:
         self.position_manager = PositionManager()
         self.approval_manager = ApprovalManager()
         self.pending_order_manager = PendingOrderManager(self.broker)
+        try:
+            self.safety.pending_order_manager = self.pending_order_manager
+        except Exception:
+            pass
         self.buy_reconciler = self._make_buy_reconciler()
         self._tick_locked_tickers = set()
 

@@ -15,7 +15,7 @@ BN-1 invariants:
 BS-1a invariants:
 - KILL_SWITCH/손실잠금/쿨다운/시장시간/whitelist/첫주문승인은
   small_amount_safety.enabled 값과 무관하게 항상 강제한다.
-- enabled=False는 주문당 수량·금액·일일 주문 수·소액 누적 한도만 비활성화한다.
+- enabled=False는 주문당 수량·금액·일일 주문 수·당일 매수/전체 노출 소액 한도만 비활성화한다.
 """
 from __future__ import annotations
 
@@ -56,8 +56,14 @@ class SafetyLayer:
         self.max_shares = self._optional_float(sa.get("max_shares_per_order", 1))
         self.max_notional_per_order = float(sa.get("max_notional_per_order", sa.get("max_krw_per_order", 10000)))
         self.max_krw = self.max_notional_per_order
-        self.max_total_notional = float(sa.get("max_total_notional", sa.get("max_total_invested_krw", 100000)))
-        self.max_total_invested = self.max_total_notional
+        daily_bought = sa.get("max_bought_notional_per_day", sa.get("max_daily_bought_notional", 0))
+        self.max_bought_notional_per_day = float(daily_bought or 0.0)
+        exposure_limit = sa.get("max_total_exposure_notional", sa.get("max_total_notional", sa.get("max_total_invested_krw", 100000)))
+        self.max_total_exposure_notional = float(exposure_limit or 0.0)
+        # 하위호환 속성: 기존 테스트/운영 코드가 접근해도 전체 노출 한도를 의미한다.
+        self.max_total_notional = self.max_total_exposure_notional
+        self.max_total_invested = self.max_total_exposure_notional
+        self.pending_order_manager = None
         self.max_orders_per_day = int(sa.get("max_orders_per_day", 5))
         self.require_first_approval = bool(sa.get("require_first_order_approval", True))
         self.daily_loss_limit_krw = float(sa.get("daily_loss_limit_krw", 50000))
@@ -118,9 +124,56 @@ class SafetyLayer:
 
     def _current_total_notional_limit(self) -> float:
         return max(
+            float(getattr(self, "max_total_exposure_notional", 0.0) or 0.0),
             float(getattr(self, "max_total_notional", 0.0) or 0.0),
             float(getattr(self, "max_total_invested", 0.0) or 0.0),
         )
+
+    def _pending_buy_reserved_notional(self, reference_price: float) -> float:
+        pending = getattr(self, "pending_order_manager", None)
+        if pending is None:
+            return 0.0
+        total = 0.0
+        try:
+            records = pending.all()
+        except Exception:
+            raise RuntimeError("pending 주문 상태 조회 실패")
+        for record in records:
+            if str(getattr(record, "side", "")).lower() != "buy" or str(getattr(record, "state", "")) == "DONE":
+                continue
+            md = getattr(record, "metadata", {}) or {}
+            reserved = md.get("approved_krw") or md.get("reserved_notional")
+            try:
+                if reserved is not None:
+                    total += max(0.0, float(reserved))
+                    continue
+            except Exception:
+                pass
+            px = float(getattr(record, "filled_avg_price", 0.0) or 0.0) or float(reference_price or 0.0)
+            total += max(0.0, float(getattr(record, "requested_shares", 0.0) or 0.0) * px)
+        return total
+
+    def _current_exposure_notional(self, reference_price: float) -> tuple[float, Optional[str]]:
+        if self.broker is None:
+            return 0.0, "broker 없음"
+        try:
+            holdings = self.broker.get_holdings()
+        except Exception as exc:
+            return 0.0, str(exc)
+        exposure = 0.0
+        try:
+            for holding in holdings:
+                shares = float(getattr(holding, "shares", 0.0) or 0.0)
+                avg_cost = float(getattr(holding, "avg_cost", 0.0) or 0.0)
+                market_value = float(getattr(holding, "market_value", 0.0) or 0.0)
+                current_price = float(getattr(holding, "current_price", 0.0) or 0.0)
+                cost_value = shares * avg_cost
+                fallback_market = shares * current_price
+                exposure += max(cost_value, market_value, fallback_market, 0.0)
+            exposure += self._pending_buy_reserved_notional(reference_price)
+            return exposure, None
+        except Exception as exc:
+            return 0.0, str(exc)
 
     def _tracked_position_exists(self, ticker: str) -> tuple[bool, Optional[str]]:
         if not POSITIONS_PATH.exists():
@@ -282,10 +335,19 @@ class SafetyLayer:
             return SafetyDecision(False, f"일일 주문 {st.orders_today}회 >= 한도 {self.max_orders_per_day}", "LIMIT_DAILY")
 
         if side_lower == "buy":
-            new_total = st.invested_krw_today + order_notional
+            daily_limit = float(getattr(self, "max_bought_notional_per_day", 0.0) or 0.0)
+            daily_total = st.invested_krw_today + order_notional
+            if daily_limit > 0 and daily_total > daily_limit:
+                return SafetyDecision(False, f"당일 매수금액 {daily_total:,.2f} > 한도 {daily_limit:,.2f}", "LIMIT_DAILY_BUY_NOTIONAL")
+
             max_total = self._current_total_notional_limit()
-            if max_total > 0 and new_total > max_total:
-                return SafetyDecision(False, f"누적투자 {new_total:,.2f} > 한도 {max_total:,.2f}", "LIMIT_TOTAL")
+            if max_total > 0:
+                exposure, exposure_error = self._current_exposure_notional(price_f)
+                if exposure_error:
+                    return SafetyDecision(False, f"전체 노출 조회 실패: {exposure_error}", "EXPOSURE_CHECK_FAILED")
+                projected = exposure + order_notional
+                if projected > max_total:
+                    return SafetyDecision(False, f"전체 노출 {projected:,.2f} > 한도 {max_total:,.2f}", "LIMIT_TOTAL_EXPOSURE")
 
         return SafetyDecision(True, reason="모든 안전장치 통과")
 

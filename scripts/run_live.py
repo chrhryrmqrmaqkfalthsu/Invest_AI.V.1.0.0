@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 from engine.live.broker.factory import make_broker
+from engine.live.exit_policy_guard import validate_startup_exit_policy
 from engine.live.market_clock import select_market_clock, validate_broker_market_compatibility
 from engine.live.runner import Runner
 from engine.live.safety.layer import SafetyLayer
@@ -125,6 +126,7 @@ def main():
     try:
         broker = make_broker(force_mode=args.mode, dry_run=args.dry_run)
         validate_broker_market_compatibility(broker, clock)
+        validate_startup_exit_policy(broker)
     except Exception as exc:
         logger.error(f"라이브 시장/브로커 정합성 실패: {exc}")
         sys.exit(2)

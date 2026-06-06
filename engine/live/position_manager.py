@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from engine.live.broker.base import Broker, OrderStatus, OrderType
+from engine.live.broker.base import Broker, Order, OrderSide, OrderStatus, OrderType
+from engine.live.exit_policy_guard import should_block_legacy_fallback
 from engine.strategies.rulebook import Rulebook
 
 log = logging.getLogger("position_manager")
@@ -458,6 +459,33 @@ class PositionManager:
         )
         write_live_shadow_record(record)
 
+
+    def _emergency_exit_policy_block(self, ticker: str, pos: PositionEntry, reason: str, notifier=None, pending_manager=None) -> None:
+        """실계좌 silent legacy fallback을 막고 ticker 잠금을 영속화한다."""
+        message = f"[CRITICAL][EXIT-POLICY-GUARD] {ticker} 실계좌 legacy 청산 fallback 차단: {reason}"
+        log.error(message)
+        if notifier is not None:
+            try:
+                notifier.send_error(message)
+            except Exception as exc:
+                log.warning(f"{ticker} ExitPolicy guard 알림 실패: {exc}")
+        if pending_manager is not None:
+            try:
+                order = Order(
+                    order_id=f"LOCAL-EXIT-POLICY-{ticker}",
+                    ticker=ticker,
+                    side=OrderSide.SELL,
+                    order_type=OrderType.MARKET,
+                    shares=float(pos.shares or 0.0),
+                    price=0.0,
+                    status=OrderStatus.PENDING,
+                    raw_status="exit_policy_guard",
+                    message=reason,
+                )
+                pending_manager.track_order(order, purpose="exit_policy_guard", metadata={"reason": reason})
+            except Exception as exc:
+                log.error(f"{ticker} ExitPolicy guard 잠금 실패: {exc}")
+
     def _check_one(self, ticker: str, pos: PositionEntry, broker: Broker, notifier=None, pending_manager=None) -> Optional[dict]:
         price = broker.get_current_price(ticker)
         if price is None:
@@ -483,6 +511,7 @@ class PositionManager:
         exit_reason: Optional[str] = None
         policy_evaluation = None
         policy_authority = False
+        strict_no_fallback = should_block_legacy_fallback(broker)
 
         if _exit_live_policy_enabled() and pos.rulebook_snapshot and str(pos.rulebook_direction).lower() == "long":
             try:
@@ -493,15 +522,33 @@ class PositionManager:
                     if policy_evaluation.decision.should_exit:
                         exit_reason = policy_evaluation.decision.reason
                 else:
+                    if strict_no_fallback:
+                        self._emergency_exit_policy_block(
+                            ticker, pos, "policy evaluation returned None", notifier, pending_manager
+                        )
+                        return None
                     log.warning(f"{ticker} policy snapshot invalid/non-long → legacy 유지")
                     exit_reason = self._legacy_exit_reason(pos, price, holding_calendar_days)
             except Exception as e:
-                # Requested BM behavior: policy exception falls back to unchanged legacy authority.
+                if strict_no_fallback:
+                    self._emergency_exit_policy_block(
+                        ticker, pos, f"ExitPolicy exception: {e}", notifier, pending_manager
+                    )
+                    return None
                 log.error(f"{ticker} ExitPolicy cutover 실패 → legacy 유지: {e}")
                 policy_evaluation = None
                 policy_authority = False
                 exit_reason = self._legacy_exit_reason(pos, price, holding_calendar_days)
         else:
+            if strict_no_fallback:
+                self._emergency_exit_policy_block(
+                    ticker,
+                    pos,
+                    "EXIT_LIVE_POLICY disabled or snapshot missing/non-long",
+                    notifier,
+                    pending_manager,
+                )
+                return None
             if _exit_live_policy_enabled() and not pos.rulebook_snapshot:
                 log.warning(f"{ticker} 구 포지션(snapshot 없음) → legacy 유지")
             exit_reason = self._legacy_exit_reason(pos, price, holding_calendar_days)

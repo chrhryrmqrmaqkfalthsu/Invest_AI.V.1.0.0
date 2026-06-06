@@ -15,6 +15,7 @@ class Rulebook:
     direction: str = "long"           # 'long' | 'short'
     version: str = "v5"
     generated_at: str = ""
+    mask_schema_version: int = 0       # 0=legacy hash compatible, 1+=use_xxx mask schema
 
     # ===== 신호 가중치 (기본 16개) =====
     weight_ma_align: float = 1.0       # 정배열

@@ -26,6 +26,18 @@ EXCLUDED_RULEBOOK_HASH_FIELDS = {
     "generated_at",
 }
 
+MASK_SCHEMA_VERSION_FIELD = "mask_schema_version"
+FUTURE_MASK_HASH_FIELDS = {
+    MASK_SCHEMA_VERSION_FIELD,
+    "use_technical_core",
+    "use_news_global",
+    "use_news_topics",
+    "use_event_block",
+    "use_market_adjustment",
+    "use_market_entry_adjustment",
+    "use_add_buy",
+}
+
 DEFAULT_FEATURE_LAG = {
     "ticker_sentiment_days": 1,
     "market_events_days": 1,
@@ -124,6 +136,32 @@ def _strip_excluded_fields(value: Any) -> Any:
     return safe_value
 
 
+def _mask_schema_version(canonical: Mapping[str, Any]) -> int:
+    """Return mask schema version, defaulting legacy rulebooks to 0."""
+    raw = canonical.get(MASK_SCHEMA_VERSION_FIELD, 0)
+    try:
+        return int(raw)
+    except Exception:
+        return 0
+
+
+def _strip_legacy_mask_fields(canonical: Dict[str, Any]) -> Dict[str, Any]:
+    """Preserve legacy hashes by hiding mask schema 0 fields from canonical hash.
+
+    Schema 0 means a rulebook predates explicit ``use_xxx`` masks. For this
+    legacy schema, both ``mask_schema_version`` and future mask flags are treated
+    as compatibility defaults and must not alter historical member identity.
+    Schema 1+ keeps those fields so mask choices become part of the strategy hash.
+    """
+    if _mask_schema_version(canonical) > 0:
+        return canonical
+    return {
+        str(k): v
+        for k, v in canonical.items()
+        if str(k) not in FUTURE_MASK_HASH_FIELDS
+    }
+
+
 def canonical_rulebook_dict(rb_or_dict: Any) -> Dict[str, Any]:
     """Return a canonical rulebook dict containing strategy parameters only.
 
@@ -135,7 +173,9 @@ def canonical_rulebook_dict(rb_or_dict: Any) -> Dict[str, Any]:
 
     base = _public_object_dict(rb_or_dict)
     stripped = _strip_excluded_fields(base)
-    return stripped if isinstance(stripped, dict) else {}
+    if not isinstance(stripped, dict):
+        return {}
+    return _strip_legacy_mask_fields(stripped)
 
 
 def compute_rulebook_hash(rb_or_dict: Any) -> str:

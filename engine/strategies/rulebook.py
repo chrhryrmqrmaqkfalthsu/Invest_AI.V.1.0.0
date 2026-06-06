@@ -165,7 +165,6 @@ PARAM_RANGES = {
     "rsi_high":               (60.0, 80.0),
     "bb_proximity":           (1.0, 1.15),
     "volume_surge_ratio":     (1.2, 2.5),
-    "macd_min_hist":          (-0.5, 0.5),
 
     # 신호
     "signal_threshold":       (1.5, 4.0),
@@ -184,7 +183,6 @@ PARAM_RANGES = {
     "add_buy_trigger_profit_pct": (0.5, 3.5),
     "add_buy_max_count":          (0, 3),
     "add_buy_size_ratio":         (0.3, 1.0),
-    "add_buy_min_signal_score":   (1.0, 2.5),
 
     # 시장 연관성
     "market_score_weight":    (-1.0, 1.0),
@@ -213,11 +211,6 @@ PARAM_RANGES = {
     "take_profit_atr_bull":   (1.5, 6.0),
     "trailing_atr_volatile":  (1.0, 4.0),
     "crash_threshold_score":  (10.0, 40.0),
-
-    # 개별주 전용
-    "earnings_blackout_days": (0, 3),
-    "disclosure_weight":      (0.0, 2.0),
-    "analyst_weight":         (0.0, 2.0),
 }
 
 CATEGORICAL_PARAMS = {

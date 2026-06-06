@@ -50,7 +50,7 @@ def _rand_in(low, high, integer: bool = False):
     return random.uniform(low, high)
 
 
-_INT_PARAMS = {"max_holding_days", "add_buy_max_count", "earnings_blackout_days"}
+_INT_PARAMS = {"max_holding_days", "add_buy_max_count"}
 
 
 def random_rulebook(base: Rulebook) -> Rulebook:

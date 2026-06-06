@@ -33,6 +33,9 @@ STATE_UNKNOWN_OPEN = "UNKNOWN_OPEN"
 STATE_RECONCILING = "RECONCILING"
 STATE_TERMINAL = "TERMINAL"
 STATE_DONE = "DONE"
+CLIENT_LOOKUP_FOUND = "FOUND"
+CLIENT_LOOKUP_NOT_FOUND = "NOT_FOUND"
+CLIENT_LOOKUP_UNKNOWN = "UNKNOWN"
 
 
 @dataclass
@@ -262,6 +265,34 @@ class PendingOrderManager:
         cid = str(client_order_id or "").strip()
         if not cid:
             return None
+        result_getter = getattr(self.broker, "get_order_by_client_order_id_result", None)
+        if result_getter is not None:
+            try:
+                status, order = result_getter(cid)
+            except Exception as exc:
+                status, order = CLIENT_LOOKUP_UNKNOWN, None
+                err = f"{type(exc).__name__}: {exc}"
+            else:
+                err = f"client_order_id lookup status={status}"
+            if status == CLIENT_LOOKUP_FOUND and order is not None:
+                self.mark_submitted(cid, order)
+                return order
+            rec = self.get_record_by_client_order_id(cid)
+            if rec and status == CLIENT_LOOKUP_NOT_FOUND:
+                for key, value in list(self._records.items()):
+                    if value is rec:
+                        self._records.pop(key, None)
+                        break
+                self._save()
+                return None
+            if rec:
+                rec.state = STATE_UNKNOWN_OPEN
+                rec.last_error = err
+                rec.retry_count += 1
+                rec.updated_at = self._now_iso()
+                self._save()
+            return None
+
         getter = getattr(self.broker, "get_order_by_client_order_id", None)
         if getter is None:
             rec = self.get_record_by_client_order_id(cid)
@@ -278,7 +309,7 @@ class PendingOrderManager:
             order = None
             err = f"{type(exc).__name__}: {exc}"
         else:
-            err = "client_order_id not found"
+            err = "client_order_id lookup unknown/none"
         if order is not None:
             self.mark_submitted(cid, order)
             return order

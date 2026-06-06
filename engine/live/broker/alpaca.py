@@ -1,11 +1,11 @@
-"""Alpaca broker adapter. BN-2: client_order_id submit/recovery."""
+"""Alpaca broker adapter. BN-2/BT-5: client_order_id submit/recovery."""
 from __future__ import annotations
 
 import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockLatestTradeRequest
@@ -20,6 +20,9 @@ log = logging.getLogger("alpaca_broker")
 DEFAULT_ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
 ENV_PATH = Path.home() / "kingmaker" / ".env"
 SHARE_EPS = 1e-6
+CLIENT_LOOKUP_FOUND = "FOUND"
+CLIENT_LOOKUP_NOT_FOUND = "NOT_FOUND"
+CLIENT_LOOKUP_UNKNOWN = "UNKNOWN"
 
 
 class AlpacaBroker(Broker):
@@ -58,6 +61,14 @@ class AlpacaBroker(Broker):
     @staticmethod
     def _raw(v: Any) -> str:
         return str(getattr(v, "value", v) or "").lower()
+
+    @staticmethod
+    def _is_not_found_exception(exc: Exception) -> bool:
+        status = getattr(exc, "status_code", None)
+        if status is None and getattr(exc, "response", None) is not None:
+            status = getattr(exc.response, "status_code", None)
+        text = f"{type(exc).__name__} {exc}".lower()
+        return status == 404 or "404" in text or "not found" in text
 
     @classmethod
     def _status(cls, raw: Any, filled: float, qty: float) -> OrderStatus:
@@ -178,16 +189,25 @@ class AlpacaBroker(Broker):
             log.warning(f"Alpaca get_order 실패 {order_id}: {e}")
             return None
 
-    def get_order_by_client_order_id(self, client_order_id: str) -> Optional[Order]:
+    def get_order_by_client_order_id_result(self, client_order_id: str) -> Tuple[str, Optional[Order]]:
         cid = str(client_order_id or "").strip()
         if not cid:
-            return None
+            return CLIENT_LOOKUP_NOT_FOUND, None
+        getter = getattr(self.trading, "get_order_by_client_id", None) or getattr(self.trading, "get_order_by_client_order_id", None)
+        if getter is None:
+            return CLIENT_LOOKUP_UNKNOWN, None
         try:
-            getter = getattr(self.trading, "get_order_by_client_id", None) or getattr(self.trading, "get_order_by_client_order_id", None)
-            return self._map(getter(cid)) if getter else None
+            return CLIENT_LOOKUP_FOUND, self._map(getter(cid))
         except Exception as e:
-            log.warning(f"Alpaca get_order_by_client_order_id 실패 {cid}: {e}")
-            return None
+            if self._is_not_found_exception(e):
+                log.info(f"Alpaca client_order_id 미접수 확인 {cid}: {e}")
+                return CLIENT_LOOKUP_NOT_FOUND, None
+            log.warning(f"Alpaca get_order_by_client_order_id 장애 {cid}: {e}")
+            return CLIENT_LOOKUP_UNKNOWN, None
+
+    def get_order_by_client_order_id(self, client_order_id: str) -> Optional[Order]:
+        status, order = self.get_order_by_client_order_id_result(client_order_id)
+        return order if status == CLIENT_LOOKUP_FOUND else None
 
 
 if __name__ == "__main__":

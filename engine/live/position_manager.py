@@ -581,7 +581,34 @@ class PositionManager:
         )
 
         try:
-            order = broker.place_sell(ticker, actual_shares, OrderType.MARKET)
+            if pending_manager is not None and str(getattr(broker, "mode", "") or "").lower().startswith("alpaca_"):
+                cid = pending_manager.make_client_order_id(
+                    ticker=ticker,
+                    side="sell",
+                    purpose="exit",
+                    seed=f"exit|{ticker}|{pos.entry_date}|{pos.member_hash}|{exit_reason}",
+                )
+                pending_manager.create_submitting_intent(
+                    client_order_id=cid,
+                    ticker=ticker,
+                    side="sell",
+                    purpose="exit",
+                    requested_shares=actual_shares,
+                    exit_reason=exit_reason,
+                    metadata={"entry_date": pos.entry_date, "member_hash": pos.member_hash},
+                )
+                try:
+                    order = broker.place_sell(ticker, actual_shares, OrderType.MARKET, client_order_id=cid)
+                except Exception:
+                    recovered = pending_manager.resolve_submit_exception(cid)
+                    if recovered is None:
+                        raise
+                    order = recovered
+                if not getattr(order, "client_order_id", ""):
+                    order.client_order_id = cid
+                pending_manager.mark_submitted(cid, order, purpose="exit", exit_reason=exit_reason)
+            else:
+                order = broker.place_sell(ticker, actual_shares, OrderType.MARKET)
         except Exception as e:
             log.error(f"{ticker} 매도 발사 실패: {e}")
             if notifier:

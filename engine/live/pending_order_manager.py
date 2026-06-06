@@ -1,19 +1,15 @@
-"""BN-1 pending 주문 및 BS-1b 체결 후 reconciliation 영속 상태머신.
+"""BN-1/BN-2 pending 주문 상태머신.
 
-책임:
-- 즉시 FILLED가 아닌 주문을 data/_system/pending_orders.json에 atomic 저장한다.
-- ticker 단위 주문 잠금으로 다음 tick/같은 tick 중복 주문을 막는다.
-- Broker.get_order(order_id)를 폴링하고 PARTIAL/UNKNOWN_OPEN/RECONCILING 상태를 보존한다.
-- BUY 체결 후 PositionManager 등록 실패와 startup 고아 보유를 RECONCILING으로
-  영속화해 재시작/다음 tick에도 fail-closed 재시도한다.
-- 실제 포지션/PnL 반영은 Runner/PositionManager의 단일 최종화 경로에 위임한다.
-
-BN-2 범위인 deterministic client_order_id 기반 제출 중 크래시 복구는 하지 않는다.
+BN-2 추가:
+- 주문 제출 전 SUBMITTING intent를 atomic 저장한다.
+- client_order_id로 submit 후 order_id 저장 전 크래시를 복구한다.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import re
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
@@ -28,6 +24,7 @@ PENDING_ORDERS_PATH = Path("data/_system/pending_orders.json")
 DEFAULT_TERMINAL_LOCK_SECONDS = 300
 TERMINAL_STATUSES = {OrderStatus.CANCELLED, OrderStatus.REJECTED, OrderStatus.FAILED}
 
+STATE_SUBMITTING = "SUBMITTING"
 STATE_OPEN = "OPEN"
 STATE_PARTIAL = "PARTIAL"
 STATE_UNKNOWN_OPEN = "UNKNOWN_OPEN"
@@ -74,27 +71,11 @@ class PendingOrderRecord:
 
     @property
     def is_terminal(self) -> bool:
-        return self.internal_status in {
-            OrderStatus.CANCELLED.value,
-            OrderStatus.REJECTED.value,
-            OrderStatus.FAILED.value,
-        }
+        return self.internal_status in {OrderStatus.CANCELLED.value, OrderStatus.REJECTED.value, OrderStatus.FAILED.value}
 
 
 class PendingOrderManager:
-    """영속 pending 주문 저장소와 폴러.
-
-    poll_all()은 최종화가 필요한 ``(record, order)`` 쌍만 반환한다. 호출자는
-    포지션/PnL 반영 성공 뒤 mark_finalized(), 실패 시 mark_reconcile_error()를
-    호출해야 한다.
-    """
-
-    def __init__(
-        self,
-        broker: Broker,
-        path: Optional[Path] = None,
-        terminal_lock_seconds: int = DEFAULT_TERMINAL_LOCK_SECONDS,
-    ):
+    def __init__(self, broker: Broker, path: Optional[Path] = None, terminal_lock_seconds: int = DEFAULT_TERMINAL_LOCK_SECONDS):
         self.broker = broker
         self.path = Path(path or PENDING_ORDERS_PATH)
         self.terminal_lock_seconds = max(0, int(terminal_lock_seconds))
@@ -130,6 +111,13 @@ class PendingOrderManager:
         except Exception:
             return None
 
+    @staticmethod
+    def make_client_order_id(*, ticker: str, side: str, purpose: str, seed: str) -> str:
+        raw = f"{datetime.now().astimezone():%Y%m%d}|{ticker}|{side}|{purpose}|{seed}"
+        digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+        safe = re.sub(r"[^A-Za-z0-9_-]+", "-", f"km2-{ticker}-{side}-{purpose}-{digest}")
+        return safe[:48]
+
     @property
     def load_error(self) -> str:
         return self._load_error
@@ -142,13 +130,9 @@ class PendingOrderManager:
             rows = payload.get("orders", payload) if isinstance(payload, dict) else {}
             if not isinstance(rows, dict):
                 raise ValueError("pending_orders root/orders must be an object")
-            self._records = {
-                str(order_id): PendingOrderRecord.from_dict(record)
-                for order_id, record in rows.items()
-            }
+            self._records = {str(order_id): PendingOrderRecord.from_dict(record) for order_id, record in rows.items()}
             log.info("pending_orders.json 로드: %s건", len(self._records))
         except Exception as exc:
-            # 손상된 상태를 빈 상태로 덮어써 중복 주문을 허용하지 않는다.
             self._load_error = f"{type(exc).__name__}: {exc}"
             self._records = {}
             log.error("pending_orders.json 로드 실패 → 모든 신규 주문 fail-closed: %s", self._load_error)
@@ -161,11 +145,7 @@ class PendingOrderManager:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        payload = {
-            "schema_version": 1,
-            "updated_at": self._now_iso(),
-            "orders": {order_id: record.to_dict() for order_id, record in self._records.items()},
-        }
+        payload = {"schema_version": 2, "updated_at": self._now_iso(), "orders": {k: v.to_dict() for k, v in self._records.items()}}
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(self.path)
 
@@ -173,11 +153,10 @@ class PendingOrderManager:
         now = self._now()
         removed = []
         for order_id, record in self._records.items():
-            if record.state != STATE_TERMINAL or record.finalization_state != "done":
-                continue
-            until = self._parse_time(record.lock_until)
-            if until is not None and now >= until:
-                removed.append(order_id)
+            if record.state == STATE_TERMINAL and record.finalization_state == "done":
+                until = self._parse_time(record.lock_until)
+                if until is not None and now >= until:
+                    removed.append(order_id)
         for order_id in removed:
             self._records.pop(order_id, None)
         if removed:
@@ -189,6 +168,10 @@ class PendingOrderManager:
 
     def get_record(self, order_id: str) -> Optional[PendingOrderRecord]:
         return self._records.get(str(order_id))
+
+    def get_record_by_client_order_id(self, client_order_id: str) -> Optional[PendingOrderRecord]:
+        cid = str(client_order_id or "").strip()
+        return next((r for r in self._records.values() if r.client_order_id == cid), None)
 
     def is_ticker_locked(self, ticker: str) -> bool:
         if self._load_error:
@@ -206,127 +189,139 @@ class PendingOrderManager:
         return False
 
     def has_pending_exit(self, ticker: str) -> bool:
-        ticker_u = str(ticker).strip().upper()
-        return any(
-            record.ticker.upper() == ticker_u
-            and record.side == "sell"
-            and record.state != STATE_DONE
-            for record in self._records.values()
-        )
+        t = str(ticker).strip().upper()
+        return any(r.ticker.upper() == t and r.side == "sell" and r.state != STATE_DONE for r in self._records.values())
 
     def has_pending_buy(self, ticker: str) -> bool:
-        ticker_u = str(ticker).strip().upper()
-        return any(
-            record.ticker.upper() == ticker_u
-            and record.side == "buy"
-            and record.state != STATE_DONE
-            for record in self._records.values()
+        t = str(ticker).strip().upper()
+        return any(r.ticker.upper() == t and r.side == "buy" and r.state != STATE_DONE for r in self._records.values())
+
+    def create_submitting_intent(self, *, client_order_id: str, ticker: str, side: str, purpose: str,
+                                 requested_shares: float, metadata: Optional[dict] = None,
+                                 exit_reason: str = "", approval_request_id: str = "") -> PendingOrderRecord:
+        if self._load_error:
+            raise RuntimeError(f"pending order state unavailable: {self._load_error}")
+        cid = str(client_order_id or "").strip()
+        if not cid:
+            raise ValueError("client_order_id required")
+        existing = self.get_record_by_client_order_id(cid)
+        if existing is not None:
+            return existing
+        now = self._now_iso()
+        key = f"SUBMITTING-{cid}"
+        record = PendingOrderRecord(
+            order_id="", ticker=str(ticker).strip().upper(), side=self._side_value(side), purpose=str(purpose or "entry"),
+            requested_shares=float(requested_shares or 0.0), internal_status=OrderStatus.PENDING.value,
+            state=STATE_SUBMITTING, created_at=now, updated_at=now, client_order_id=cid, submitted_at="",
+            exit_reason=str(exit_reason or ""), approval_request_id=str(approval_request_id or ""), metadata=dict(metadata or {}),
         )
+        self._records[key] = record
+        self._save()
+        log.info("[SUBMITTING-INTENT] %s %s %s cid=%s", record.ticker, record.side, record.purpose, cid)
+        return record
 
-    def track_order(
-        self,
-        order: Order,
-        *,
-        purpose: str,
-        metadata: Optional[dict] = None,
-        exit_reason: str = "",
-        approval_request_id: str = "",
-    ) -> Optional[PendingOrderRecord]:
-        """즉시 FILLED가 아닌 주문만 영속 추적한다.
+    def mark_submitted(self, client_order_id: str, order: Order, *, purpose: str = "", metadata: Optional[dict] = None,
+                       exit_reason: str = "", approval_request_id: str = "") -> Optional[PendingOrderRecord]:
+        cid = str(client_order_id or getattr(order, "client_order_id", "") or "").strip()
+        existing = self.get_record_by_client_order_id(cid) if cid else None
+        if order.status == OrderStatus.FILLED and existing is None:
+            return None
+        for key, record in list(self._records.items()):
+            if record is existing:
+                self._records.pop(key, None)
+                break
+        if order.status == OrderStatus.FILLED:
+            self._save()
+            return None
+        return self.track_order(order, purpose=purpose or (existing.purpose if existing else "entry"),
+                                metadata={**(getattr(existing, "metadata", {}) or {}), **(metadata or {})},
+                                exit_reason=exit_reason or (existing.exit_reason if existing else ""),
+                                approval_request_id=approval_request_id or (existing.approval_request_id if existing else ""))
 
-        PaperBroker 즉시 FILLED 정상 경로는 이 메서드에서 파일을 만들지 않고
-        그대로 반환된다. 체결 후 로컬 등록 실패는 track_reconciliation()을 쓴다.
-        """
+    def resolve_submit_exception(self, client_order_id: str) -> Optional[Order]:
+        cid = str(client_order_id or "").strip()
+        if not cid:
+            return None
+        getter = getattr(self.broker, "get_order_by_client_order_id", None)
+        if getter is None:
+            rec = self.get_record_by_client_order_id(cid)
+            if rec:
+                rec.state = STATE_UNKNOWN_OPEN
+                rec.last_error = "broker does not support client_order_id recovery"
+                rec.retry_count += 1
+                rec.updated_at = self._now_iso()
+                self._save()
+            return None
+        try:
+            order = getter(cid)
+        except Exception as exc:
+            order = None
+            err = f"{type(exc).__name__}: {exc}"
+        else:
+            err = "client_order_id not found"
+        if order is not None:
+            self.mark_submitted(cid, order)
+            return order
+        rec = self.get_record_by_client_order_id(cid)
+        if rec:
+            rec.state = STATE_UNKNOWN_OPEN
+            rec.last_error = err
+            rec.retry_count += 1
+            rec.updated_at = self._now_iso()
+            self._save()
+        return None
+
+    def track_order(self, order: Order, *, purpose: str, metadata: Optional[dict] = None,
+                    exit_reason: str = "", approval_request_id: str = "") -> Optional[PendingOrderRecord]:
         if order.status == OrderStatus.FILLED:
             return None
         if self._load_error:
             raise RuntimeError(f"pending order state unavailable: {self._load_error}")
-
         now = self._now_iso()
         order_id = str(order.order_id or f"LOCAL-{uuid.uuid4().hex}")
         status = self._status_value(order.status)
-        if order.status == OrderStatus.PARTIAL:
-            state = STATE_PARTIAL
-        elif order.status in TERMINAL_STATUSES:
-            state = STATE_TERMINAL if float(order.filled_shares or 0.0) <= 0 else STATE_RECONCILING
-        else:
-            state = STATE_OPEN
-
+        state = STATE_PARTIAL if order.status == OrderStatus.PARTIAL else (STATE_TERMINAL if order.status in TERMINAL_STATUSES and float(order.filled_shares or 0.0) <= 0 else (STATE_RECONCILING if order.status in TERMINAL_STATUSES else STATE_OPEN))
         record = PendingOrderRecord(
-            order_id=order_id,
-            ticker=str(order.ticker).strip().upper(),
-            side=self._side_value(order.side),
-            purpose=str(purpose or "entry"),
-            requested_shares=float(order.shares or 0.0),
-            internal_status=status,
-            state=state,
-            created_at=now,
-            updated_at=now,
-            raw_status=str(getattr(order, "raw_status", "") or ""),
-            client_order_id=str(getattr(order, "client_order_id", "") or ""),
-            replaced_by=str(getattr(order, "replaced_by", "") or ""),
-            submitted_at=str(order.submitted_at or now),
-            filled_shares=float(order.filled_shares or 0.0),
-            filled_avg_price=float(order.filled_avg_price or 0.0),
-            exit_reason=str(exit_reason or ""),
-            approval_request_id=str(approval_request_id or ""),
-            metadata=dict(metadata or {}),
+            order_id=order_id, ticker=str(order.ticker).strip().upper(), side=self._side_value(order.side),
+            purpose=str(purpose or "entry"), requested_shares=float(order.shares or 0.0), internal_status=status,
+            state=state, created_at=now, updated_at=now, raw_status=str(getattr(order, "raw_status", "") or ""),
+            client_order_id=str(getattr(order, "client_order_id", "") or ""), replaced_by=str(getattr(order, "replaced_by", "") or ""),
+            submitted_at=str(order.submitted_at or now), filled_shares=float(order.filled_shares or 0.0),
+            filled_avg_price=float(order.filled_avg_price or 0.0), exit_reason=str(exit_reason or ""),
+            approval_request_id=str(approval_request_id or ""), metadata=dict(metadata or {}),
         )
         self._records[order_id] = record
         self._save()
-        log.info(
-            "[PENDING-TRACK] %s %s %s id=%s status=%s raw=%s",
-            record.ticker, record.side, record.purpose, order_id, status, record.raw_status,
-        )
+        log.info("[PENDING-TRACK] %s %s %s id=%s status=%s raw=%s", record.ticker, record.side, record.purpose, order_id, status, record.raw_status)
         return record
 
-    def track_reconciliation(
-        self,
-        order: Order,
-        *,
-        purpose: str,
-        metadata: Optional[dict] = None,
-        approval_request_id: str = "",
-        error: str = "",
-    ) -> PendingOrderRecord:
-        """체결됐지만 로컬 포지션 반영이 끝나지 않은 주문/고아 보유를 영속화한다."""
+    def track_reconciliation(self, order: Order, *, purpose: str, metadata: Optional[dict] = None,
+                             approval_request_id: str = "", error: str = "") -> PendingOrderRecord:
         if self._load_error:
             raise RuntimeError(f"pending order state unavailable: {self._load_error}")
         now = self._now_iso()
         order_id = str(order.order_id or f"LOCAL-RECON-{uuid.uuid4().hex}")
         existing = self._records.get(order_id)
-        merged_metadata = dict(getattr(existing, "metadata", {}) or {})
-        merged_metadata.update(dict(metadata or {}))
-        merged_metadata["local_reconciliation"] = True
+        merged = dict(getattr(existing, "metadata", {}) or {})
+        merged.update(dict(metadata or {}))
+        merged["local_reconciliation"] = True
         record = PendingOrderRecord(
-            order_id=order_id,
-            ticker=str(order.ticker).strip().upper(),
-            side=self._side_value(order.side),
-            purpose=str(purpose or "entry"),
-            requested_shares=float(order.shares or order.filled_shares or 0.0),
-            internal_status=self._status_value(order.status),
-            state=STATE_RECONCILING,
-            created_at=existing.created_at if existing is not None else now,
-            updated_at=now,
+            order_id=order_id, ticker=str(order.ticker).strip().upper(), side=self._side_value(order.side),
+            purpose=str(purpose or "entry"), requested_shares=float(order.shares or order.filled_shares or 0.0),
+            internal_status=self._status_value(order.status), state=STATE_RECONCILING,
+            created_at=existing.created_at if existing else now, updated_at=now,
             raw_status=str(getattr(order, "raw_status", "") or getattr(existing, "raw_status", "")),
             client_order_id=str(getattr(order, "client_order_id", "") or getattr(existing, "client_order_id", "")),
             replaced_by=str(getattr(order, "replaced_by", "") or getattr(existing, "replaced_by", "")),
             submitted_at=str(order.submitted_at or getattr(existing, "submitted_at", "") or now),
-            last_polled_at=getattr(existing, "last_polled_at", ""),
-            filled_shares=float(order.filled_shares or order.shares or 0.0),
-            filled_avg_price=float(order.filled_avg_price or order.price or 0.0),
-            approval_request_id=str(approval_request_id or getattr(existing, "approval_request_id", "")),
-            metadata=merged_metadata,
-            retry_count=int(getattr(existing, "retry_count", 0) or 0),
-            last_error=str(error or getattr(existing, "last_error", "") or "reconciliation required")[:500],
-            finalization_state="pending",
+            last_polled_at=getattr(existing, "last_polled_at", ""), filled_shares=float(order.filled_shares or order.shares or 0.0),
+            filled_avg_price=float(order.filled_avg_price or order.price or 0.0), approval_request_id=str(approval_request_id or getattr(existing, "approval_request_id", "")),
+            metadata=merged, retry_count=int(getattr(existing, "retry_count", 0) or 0),
+            last_error=str(error or getattr(existing, "last_error", "") or "reconciliation required")[:500], finalization_state="pending",
         )
         self._records[order_id] = record
         self._save()
-        log.error(
-            "[RECONCILING-TRACK] %s %s %s id=%s error=%s",
-            record.ticker, record.side, record.purpose, order_id, record.last_error,
-        )
+        log.error("[RECONCILING-TRACK] %s %s %s id=%s error=%s", record.ticker, record.side, record.purpose, order_id, record.last_error)
         return record
 
     def _update_record(self, record: PendingOrderRecord, order: Order) -> None:
@@ -345,22 +340,10 @@ class PendingOrderManager:
             status = OrderStatus(record.internal_status)
         except Exception:
             status = OrderStatus.FILLED if record.filled_shares > 0 else OrderStatus.PENDING
-        side = OrderSide.SELL if record.side == "sell" else OrderSide.BUY
-        return Order(
-            order_id=record.order_id,
-            ticker=record.ticker,
-            side=side,
-            order_type=OrderType.MARKET,
-            shares=record.requested_shares,
-            price=0.0,
-            status=status,
-            filled_shares=record.filled_shares,
-            filled_avg_price=record.filled_avg_price,
-            submitted_at=record.submitted_at,
-            raw_status=record.raw_status,
-            client_order_id=record.client_order_id,
-            replaced_by=record.replaced_by,
-        )
+        return Order(record.order_id, record.ticker, OrderSide.SELL if record.side == "sell" else OrderSide.BUY,
+                     OrderType.MARKET, record.requested_shares, 0.0, status, record.filled_shares,
+                     record.filled_avg_price, submitted_at=record.submitted_at, raw_status=record.raw_status,
+                     client_order_id=record.client_order_id, replaced_by=record.replaced_by)
 
     def _migrate_replacement(self, old_id: str, record: PendingOrderRecord, new_id: str) -> None:
         self._records.pop(old_id, None)
@@ -373,83 +356,61 @@ class PendingOrderManager:
         self._records[new_id] = record
         log.warning("[PENDING-REPLACED] %s %s → %s", record.ticker, old_id, new_id)
 
+    def _recover_submitting(self, key: str, record: PendingOrderRecord) -> Optional[Order]:
+        if not record.client_order_id:
+            record.state = STATE_UNKNOWN_OPEN
+            record.last_error = "SUBMITTING without client_order_id"
+            return None
+        order = self.resolve_submit_exception(record.client_order_id)
+        if order is None:
+            return None
+        # resolve_submit_exception may have replaced the key with order_id.
+        return order
+
     def poll_all(self) -> List[Tuple[PendingOrderRecord, Order]]:
-        """모든 미완료 주문을 재조회하고 최종화가 필요한 이벤트만 반환한다."""
         if self._load_error:
             log.error("pending poll 차단: %s", self._load_error)
             return []
         self._purge_expired_terminal_locks()
         events: List[Tuple[PendingOrderRecord, Order]] = []
         changed = False
-
         for order_id, record in list(self._records.items()):
-            if record.state == STATE_DONE:
+            if record.state == STATE_DONE or (record.state == STATE_TERMINAL and record.finalization_state == "done"):
                 continue
-            if record.state == STATE_TERMINAL and record.finalization_state == "done":
-                continue
-
-            # BS-1b local reconciliation은 브로커 주문 재조회 성공 여부와 무관하게
-            # 로컬 포지션 반영을 매 tick 재시도한다.
+            if record.state == STATE_SUBMITTING or (not record.order_id and record.client_order_id):
+                recovered = self._recover_submitting(order_id, record)
+                changed = True
+                if recovered is None:
+                    continue
+                record = self.get_record(recovered.order_id) or record
+                order_id = recovered.order_id
             if record.state == STATE_RECONCILING and bool(record.metadata.get("local_reconciliation")):
-                record.last_polled_at = self._now_iso()
-                record.updated_at = record.last_polled_at
-                changed = True
-                events.append((record, self._order_from_record(record)))
-                continue
-
-            # LOCAL synthetic ID는 실제 브로커 조회가 불가능하다. caller가 즉시
-            # terminal 최종화를 하지 못한 경우 fail-closed 잠금을 유지한다.
+                record.last_polled_at = self._now_iso(); record.updated_at = record.last_polled_at; changed = True
+                events.append((record, self._order_from_record(record))); continue
             if order_id.startswith("LOCAL-"):
-                record.state = STATE_UNKNOWN_OPEN
-                record.retry_count += 1
-                record.last_error = "synthetic order id cannot be polled"
-                record.updated_at = self._now_iso()
-                changed = True
-                continue
-
+                record.state = STATE_UNKNOWN_OPEN; record.retry_count += 1; record.last_error = "synthetic order id cannot be polled"; record.updated_at = self._now_iso(); changed = True; continue
             try:
                 order = self.broker.get_order(order_id)
             except Exception as exc:
-                order = None
-                record.last_error = f"{type(exc).__name__}: {exc}"
-
+                order = None; record.last_error = f"{type(exc).__name__}: {exc}"
             if order is None:
-                record.state = STATE_UNKNOWN_OPEN
-                record.retry_count += 1
-                record.last_polled_at = self._now_iso()
-                record.updated_at = record.last_polled_at
+                record.state = STATE_UNKNOWN_OPEN; record.retry_count += 1; record.last_polled_at = self._now_iso(); record.updated_at = record.last_polled_at
                 if not record.last_error:
                     record.last_error = "broker.get_order returned None"
-                changed = True
-                continue
-
-            self._update_record(record, order)
-            changed = True
-
+                changed = True; continue
+            self._update_record(record, order); changed = True
             if record.raw_status == "replaced" and record.replaced_by:
-                self._migrate_replacement(order_id, record, record.replaced_by)
-                continue
-
+                self._migrate_replacement(order_id, record, record.replaced_by); continue
             if order.status == OrderStatus.PARTIAL:
-                record.state = STATE_PARTIAL
-                continue
+                record.state = STATE_PARTIAL; continue
             if order.status == OrderStatus.PENDING:
-                record.state = STATE_OPEN
-                continue
+                record.state = STATE_OPEN; continue
             if order.status == OrderStatus.FILLED:
-                record.state = STATE_RECONCILING
-                record.finalization_state = "pending"
-                events.append((record, order))
-                continue
+                record.state = STATE_RECONCILING; record.finalization_state = "pending"; events.append((record, order)); continue
             if order.status in TERMINAL_STATUSES:
                 record.state = STATE_RECONCILING if float(order.filled_shares or 0.0) > 0 else STATE_TERMINAL
-                record.finalization_state = "pending"
-                events.append((record, order))
-                continue
-
-            record.state = STATE_UNKNOWN_OPEN
-            record.last_error = f"unhandled internal status: {order.status}"
-
+                record.finalization_state = "pending"; events.append((record, order)); continue
+            record.state = STATE_UNKNOWN_OPEN; record.last_error = f"unhandled internal status: {order.status}"
         if changed:
             self._save()
         return events
@@ -459,10 +420,8 @@ class PendingOrderManager:
         if record is None:
             return
         if record.is_terminal or record.state == STATE_TERMINAL:
-            record.state = STATE_TERMINAL
-            record.finalization_state = "done"
-            record.lock_until = (self._now() + timedelta(seconds=self.terminal_lock_seconds)).isoformat()
-            record.updated_at = self._now_iso()
+            record.state = STATE_TERMINAL; record.finalization_state = "done"
+            record.lock_until = (self._now() + timedelta(seconds=self.terminal_lock_seconds)).isoformat(); record.updated_at = self._now_iso()
         else:
             self._records.pop(str(order_id), None)
         self._save()
@@ -471,13 +430,8 @@ class PendingOrderManager:
         record = self._records.get(str(order_id))
         if record is None:
             return
-        record.state = STATE_RECONCILING
-        record.finalization_state = "pending"
-        record.retry_count += 1
-        record.last_error = str(error or "reconcile failed")[:500]
-        record.updated_at = self._now_iso()
-        self._save()
+        record.state = STATE_RECONCILING; record.finalization_state = "pending"; record.retry_count += 1
+        record.last_error = str(error or "reconcile failed")[:500]; record.updated_at = self._now_iso(); self._save()
 
     def finalize_immediate_terminal(self, order_id: str) -> None:
-        """즉시 terminal 0체결처럼 로컬 반영이 필요 없는 주문을 잠금 상태로 완료."""
         self.mark_finalized(order_id)

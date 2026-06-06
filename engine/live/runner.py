@@ -358,7 +358,16 @@ class Runner:
                     self.approval_manager._save()
                     return
 
-                order = self.broker.place_buy(ticker, shares, OrderType.MARKET)
+                order = self._submit_order_with_intent(
+                    side="BUY",
+                    ticker=ticker,
+                    shares=shares,
+                    purpose="add_buy",
+                    order_type=OrderType.MARKET,
+                    metadata={"approved_krw": amount},
+                    approval_request_id=req.request_id,
+                    seed=f"approval|{req.request_id}|{ticker}|{amount:g}",
+                )
                 self.safety.record_order(order, "BUY", purpose="add_buy")
                 if not hasattr(self, "_tick_locked_tickers"):
                     self._tick_locked_tickers = set()
@@ -474,6 +483,71 @@ class Runner:
         except Exception as e:
             logger.warning(f"{ticker} _maybe_reconfirm_existing 예외: {e}")
 
+
+    def _bn2_client_intent_supported(self) -> bool:
+        mode = str(getattr(self.broker, "mode", "") or "").lower()
+        return mode.startswith("alpaca_")
+
+    def _submit_order_with_intent(
+        self,
+        *,
+        side: str,
+        ticker: str,
+        shares: float,
+        purpose: str,
+        order_type: OrderType = OrderType.MARKET,
+        price: float = 0.0,
+        metadata: Optional[dict] = None,
+        exit_reason: str = "",
+        approval_request_id: str = "",
+        seed: str = "",
+    ):
+        pending_mgr = getattr(self, "pending_order_manager", None)
+        if pending_mgr is None or not self._bn2_client_intent_supported():
+            if str(side).upper() == "BUY":
+                return self.broker.place_buy(ticker, shares, order_type) if float(price or 0.0) == 0.0 else self.broker.place_buy(ticker, shares, order_type, price)
+            return self.broker.place_sell(ticker, shares, order_type) if float(price or 0.0) == 0.0 else self.broker.place_sell(ticker, shares, order_type, price)
+
+        cid = pending_mgr.make_client_order_id(
+            ticker=ticker,
+            side=str(side).lower(),
+            purpose=purpose,
+            seed=seed or f"{ticker}|{side}|{purpose}|{shares:g}|{price:g}",
+        )
+        pending_mgr.create_submitting_intent(
+            client_order_id=cid,
+            ticker=ticker,
+            side=str(side).lower(),
+            purpose=purpose,
+            requested_shares=shares,
+            metadata=metadata or {},
+            exit_reason=exit_reason,
+            approval_request_id=approval_request_id,
+        )
+        try:
+            order = (
+                self.broker.place_buy(ticker, shares, order_type, price, client_order_id=cid)
+                if str(side).upper() == "BUY"
+                else self.broker.place_sell(ticker, shares, order_type, price, client_order_id=cid)
+            )
+        except Exception:
+            recovered = pending_mgr.resolve_submit_exception(cid)
+            if recovered is not None:
+                logger.warning("[BN2-RECOVERED-AFTER-SUBMIT-ERROR] %s cid=%s id=%s", ticker, cid, recovered.order_id)
+                return recovered
+            raise
+        if not getattr(order, "client_order_id", ""):
+            order.client_order_id = cid
+        pending_mgr.mark_submitted(
+            cid,
+            order,
+            purpose=purpose,
+            metadata=metadata or {},
+            exit_reason=exit_reason,
+            approval_request_id=approval_request_id,
+        )
+        return order
+
     def _maybe_request_approval(self, ticker, fill_price, rb, sig) -> None:
         if sig is None:
             return
@@ -554,9 +628,14 @@ class Runner:
             return
 
         try:
-            order = (
-                self.broker.place_buy(ticker, order_shares, OrderType.MARKET)
-                if side == "BUY" else self.broker.place_sell(ticker, order_shares, OrderType.MARKET)
+            order = self._submit_order_with_intent(
+                side=side,
+                ticker=ticker,
+                shares=order_shares,
+                purpose="entry",
+                order_type=OrderType.MARKET,
+                metadata={"reason": reason},
+                seed=f"signal|{ticker}|{side}|{reason}|{self.stats.market_ticks}",
             )
             self.safety.record_order(order, side, purpose="entry")
             if not hasattr(self, "_tick_locked_tickers"):

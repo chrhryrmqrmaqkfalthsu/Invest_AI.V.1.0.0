@@ -1,6 +1,6 @@
 """
 Broker 추상 인터페이스
-- Paper / KIS(실전) 양쪽에서 구현
+- Paper / KIS(실전) / Alpaca 양쪽에서 구현
 - 주문/잔고/시세 조회의 공통 API
 """
 from abc import ABC, abstractmethod
@@ -44,9 +44,8 @@ class Order:
     submitted_at: str = ""
     filled_at: str = ""
     message: str = ""             # 오류/거부 사유 등
-    # BN-1: 브로커 원본 상태를 보존해 축약된 내부 상태만으로 판단하지 않는다.
-    raw_status: str = ""
-    client_order_id: str = ""     # BN-2 deterministic client_order_id 복구 대비
+    raw_status: str = ""           # BN-1: 브로커 원본 상태 보존
+    client_order_id: str = ""      # BN-2 deterministic client_order_id 복구
     replaced_by: str = ""
 
     def to_dict(self) -> dict:
@@ -61,11 +60,11 @@ class Order:
 class Holding:
     ticker: str
     shares: float
-    avg_cost: float            # 평단가
-    current_price: float       # 현재가 (조회 시점)
-    market_value: float        # 평가금액 = shares × current_price
-    unrealized_pnl: float      # 평가손익 (수수료 제외)
-    unrealized_pnl_pct: float  # 평가손익률
+    avg_cost: float
+    current_price: float
+    market_value: float
+    unrealized_pnl: float
+    unrealized_pnl_pct: float
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -73,9 +72,9 @@ class Holding:
 
 @dataclass
 class Balance:
-    cash_krw: float            # 가용 현금
-    total_value_krw: float     # 총 자산 (현금 + 평가금액)
-    invested_krw: float        # 매수 원금 합계
+    cash_krw: float
+    total_value_krw: float
+    invested_krw: float
     holdings: List[Holding] = field(default_factory=list)
     fetched_at: str = ""
 
@@ -93,14 +92,12 @@ class BrokerError(Exception):
 class Broker(ABC):
     """모든 Broker 구현체가 따라야 하는 인터페이스"""
 
-    # 식별
     @property
     @abstractmethod
     def mode(self) -> str:
-        """'paper' | 'live'"""
+        """'paper' | 'live' | 'alpaca_paper' | 'alpaca_live'"""
         ...
 
-    # 잔고
     @abstractmethod
     def get_balance(self) -> Balance:
         """예수금 + 보유 종목 + 평가손익"""
@@ -111,19 +108,16 @@ class Broker(ABC):
         """보유 종목만 (현재가/평가손익 포함)"""
         ...
 
-    # 시세
     @abstractmethod
     def get_current_price(self, ticker: str) -> Optional[float]:
         """현재가 조회 (None이면 조회 실패)"""
         ...
 
-    # 시장 상태
     @abstractmethod
     def is_market_open(self, ticker: Optional[str] = None) -> bool:
         """장 개장 여부 (ticker 주면 해당 종목 거래소 기준)"""
         ...
 
-    # 주문
     @abstractmethod
     def place_buy(
         self,
@@ -131,6 +125,7 @@ class Broker(ABC):
         shares: float,
         order_type: OrderType = OrderType.MARKET,
         price: float = 0.0,
+        client_order_id: str = "",
     ) -> Order:
         """매수 주문 실행"""
         ...
@@ -142,6 +137,7 @@ class Broker(ABC):
         shares: float,
         order_type: OrderType = OrderType.MARKET,
         price: float = 0.0,
+        client_order_id: str = "",
     ) -> Order:
         """매도 주문 실행"""
         ...
@@ -156,7 +152,10 @@ class Broker(ABC):
         """주문 상태 조회"""
         ...
 
-    # 부가
+    def get_order_by_client_order_id(self, client_order_id: str) -> Optional[Order]:
+        """BN-2: client_order_id 기반 복구 조회. 미지원 브로커는 None."""
+        return None
+
     def health_check(self) -> bool:
         """연결 정상 여부 (기본 구현: get_balance 시도)"""
         try:
@@ -167,7 +166,6 @@ class Broker(ABC):
 
 
 if __name__ == "__main__":
-    # 데이터클래스 직렬화 테스트
     o = Order(
         order_id="TEST001", ticker="379800", side=OrderSide.BUY,
         order_type=OrderType.MARKET, shares=0.5, price=0.0,

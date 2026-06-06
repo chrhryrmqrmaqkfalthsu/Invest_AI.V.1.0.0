@@ -3,9 +3,14 @@ BrokerFactory - 환경설정에 따라 Paper / KIS / Alpaca broker 자동 선택
 
 Live factory 경로는 calendar-aware PaperBroker와 US fail-closed KIS wrapper를
 사용한다. AlpacaBroker는 자체 clock/API를 그대로 사용한다.
+
+BT-1 invariant:
+- alpaca / alpaca_paper는 paper 계좌만 생성한다.
+- alpaca_live / alpaca-live처럼 명시적으로 요청한 경우에만 Alpaca 실계좌 broker를 생성한다.
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
 from dotenv import dotenv_values
@@ -14,6 +19,7 @@ from .base import Broker
 from .market_aware import CalendarAwarePaperBroker, GuardedKisBroker
 from .alpaca import AlpacaBroker
 
+log = logging.getLogger("broker_factory")
 ENV_PATH = Path.home() / "kingmaker" / ".env"
 
 
@@ -34,10 +40,13 @@ def make_broker(
         return GuardedKisBroker(dry_run=dry_run)
     if mode in ("alpaca", "alpaca_paper", "alpaca-paper"):
         return AlpacaBroker(paper=True)
+    if mode in ("alpaca_live", "alpaca-live"):
+        log.critical("[ALPACA-LIVE] 실계좌 AlpacaBroker 생성 요청 감지 — EXIT_LIVE_POLICY 가드 확인 필요")
+        return AlpacaBroker(paper=False)
     raise ValueError(
-        f"알 수 없는 mode: {mode!r}. paper / real / vts / live / alpaca_paper 중 하나여야 함."
+        f"알 수 없는 mode: {mode!r}. paper / real / vts / live / alpaca_paper / alpaca_live 중 하나여야 함."
     )
 
 
 if __name__ == "__main__":
-    print("BrokerFactory loaded. Live wrappers: CalendarAwarePaperBroker / GuardedKisBroker")
+    print("BrokerFactory loaded. Live wrappers: CalendarAwarePaperBroker / GuardedKisBroker / AlpacaBroker")

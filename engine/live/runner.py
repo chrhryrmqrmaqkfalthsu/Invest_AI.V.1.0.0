@@ -20,9 +20,10 @@ from zoneinfo import ZoneInfo
 
 from engine.live.approval_manager import ApprovalManager, classify_strength
 from engine.live.broker.base import Broker, OrderStatus, OrderType
+from engine.live.buy_reconciliation import BuyPreflight, BuyReconciliationService
 from engine.live.market_clock import MarketClock, select_market_clock
-from engine.live.position_manager import PositionManager
 from engine.live.pending_order_manager import PendingOrderManager
+from engine.live.position_manager import PositionManager
 from engine.live.safety.layer import SafetyLayer
 from engine.live.telegram.notifier import TelegramNotifier
 from engine.live.universe import LiveUniverseConfig, load_live_universe
@@ -97,7 +98,24 @@ class Runner:
         self.position_manager = PositionManager()
         self.approval_manager = ApprovalManager()
         self.pending_order_manager = PendingOrderManager(self.broker)
+        self.buy_reconciler = self._make_buy_reconciler()
         self._tick_locked_tickers = set()
+
+    def _make_buy_reconciler(self) -> BuyReconciliationService:
+        return BuyReconciliationService(
+            broker=self.broker,
+            rulebook_provider=self.rulebook,
+            position_manager=self.position_manager,
+            pending_manager=getattr(self, "pending_order_manager", None),
+            notifier=self.notifier,
+        )
+
+    def _get_buy_reconciler(self) -> BuyReconciliationService:
+        reconciler = getattr(self, "buy_reconciler", None)
+        if reconciler is None:
+            reconciler = self._make_buy_reconciler()
+            self.buy_reconciler = reconciler
+        return reconciler
 
     def _supports_fractional_shares(self) -> bool:
         mode = str(getattr(self.broker, "mode", "") or "").lower()
@@ -192,6 +210,12 @@ class Runner:
                 raise RuntimeError("broker.health_check() = False")
             self._poll_pending_orders(context="startup_check")
             balance = self.broker.get_balance()
+            try:
+                orphans = self._get_buy_reconciler().detect_orphan_holdings(balance.holdings)
+                if orphans:
+                    logger.error("[ORPHAN-HOLDINGS] startup 고아 보유 탐지: %s", orphans)
+            except Exception as orphan_exc:
+                logger.error("startup 고아 보유 탐지 실패: %s", orphan_exc)
             warmup = []
             for t in self.symbols:
                 p = self.broker.get_current_price(t)
@@ -288,6 +312,15 @@ class Runner:
                 self.approval_manager._save()
                 return
 
+            try:
+                preflight = self._get_buy_reconciler().preflight(ticker)
+            except Exception as preflight_exc:
+                logger.error(f"[APPROVAL-EXEC] {ticker} 추가매수 preflight 실패: {preflight_exc}")
+                self.notifier.send_error(f"{ticker} 추가매수 preflight 실패: {preflight_exc}")
+                req.status = "rejected"
+                self.approval_manager._save()
+                return
+
             shares = self._resolve_order_shares("BUY", ticker, price, target_notional=amount)
             if shares <= SHARE_EPS:
                 logger.warning(f"[APPROVAL-EXEC] {ticker} 주문 수량 계산 실패: amount={amount}, price={price}")
@@ -323,7 +356,9 @@ class Runner:
 
                 order = self.broker.place_buy(ticker, shares, OrderType.MARKET)
                 self.safety.record_order(order, "BUY", purpose="add_buy")
-                getattr(self, "_tick_locked_tickers", set()).add(ticker)
+                if not hasattr(self, "_tick_locked_tickers"):
+                    self._tick_locked_tickers = set()
+                self._tick_locked_tickers.add(ticker)
                 if order.status != OrderStatus.FILLED and pending_mgr is not None:
                     pending_mgr.track_order(
                         order,
@@ -338,22 +373,24 @@ class Runner:
                     return
                 if order.status == OrderStatus.FILLED:
                     self.stats.orders_filled += 1
-                    fill_price = order.filled_avg_price or price
-                    filled_shares = order.filled_shares or shares
-                    atr = self.rulebook.get_last_atr(ticker) if hasattr(self.rulebook, "get_last_atr") else None
-                    rb = self.rulebook.get_rulebook(ticker) if hasattr(self.rulebook, "get_rulebook") else None
-                    updated = None
-                    if atr and rb:
-                        updated = self.position_manager.add_to_position(ticker, fill_price, filled_shares, rb, atr)
-                    if updated is None:
-                        logger.error(f"[APPROVAL-EXEC] {ticker} 추가매수 체결 후 포지션 갱신 실패")
-                        self.notifier.send(f"❌ `{ticker}` 추가매수 체결 후 포지션 갱신 실패", parse_mode="Markdown")
-                    else:
-                        self.notifier.send(
-                            f"✅ `{ticker}` 추가매수 체결: {filled_shares:g}주 @ {fill_price:,.4f} (req={req.request_id[:8]})",
-                            parse_mode="Markdown",
+                    try:
+                        updated = self._get_buy_reconciler().reconcile(order, purpose="add_buy", preflight=preflight)
+                    except Exception as reconcile_exc:
+                        self._get_buy_reconciler().track_failure(
+                            order,
+                            purpose="add_buy",
+                            approval_request_id=req.request_id,
+                            error=reconcile_exc,
+                            metadata={"approved_krw": amount},
                         )
-                        logger.info(f"[APPROVAL-EXEC] {ticker} 추가매수 체결 {filled_shares:g}주 @ {fill_price:,.4f}")
+                        req.status = "order_pending"
+                        self.approval_manager._save()
+                        return
+                    self.notifier.send(
+                        f"✅ `{ticker}` 추가매수 체결: {float(order.filled_shares or shares):g}주 @ {float(order.filled_avg_price or price):,.4f} (req={req.request_id[:8]})",
+                        parse_mode="Markdown",
+                    )
+                    logger.info(f"[APPROVAL-EXEC] {ticker} 추가매수 체결/정산 완료: {updated}")
             finally:
                 if original_max_krw is not None:
                     self.safety.max_krw = original_max_krw
@@ -486,6 +523,15 @@ class Runner:
             self.stats.orders_blocked += 1
             logger.info(f"{ticker} {side} 차단: pending 주문/tick 잠금")
             return
+        buy_preflight: Optional[BuyPreflight] = None
+        if side == "BUY":
+            try:
+                buy_preflight = self._get_buy_reconciler().preflight(ticker)
+            except Exception as preflight_exc:
+                self.stats.orders_blocked += 1
+                logger.error(f"{ticker} BUY preflight 차단: {preflight_exc}")
+                self.notifier.send_error(f"{ticker} BUY preflight 차단: {preflight_exc}")
+                return
         if side == "SELL":
             holdings = {h.ticker: h for h in self.broker.get_holdings()}
             if ticker not in holdings or holdings[ticker].shares <= 0:
@@ -519,30 +565,18 @@ class Runner:
                 return
             if order.status == OrderStatus.FILLED:
                 self.stats.orders_filled += 1
-                if side == "BUY" and hasattr(self.rulebook, "get_last_atr"):
+                if side == "BUY":
                     try:
-                        atr = self.rulebook.get_last_atr(ticker)
-                        rb = self.rulebook.get_rulebook(ticker)
-                        entry_market_context = (
-                            self.rulebook.get_last_market_context(ticker)
-                            if hasattr(self.rulebook, "get_last_market_context") else None
+                        self._get_buy_reconciler().reconcile(order, purpose="entry", preflight=buy_preflight)
+                        self._maybe_request_approval(ticker, float(order.filled_avg_price or price), buy_preflight.rulebook if buy_preflight else None, signal_result)
+                    except Exception as reconcile_exc:
+                        self._get_buy_reconciler().track_failure(
+                            order,
+                            purpose="entry",
+                            error=reconcile_exc,
+                            metadata={"reason": reason},
                         )
-                        fill_price = order.filled_avg_price or price
-                        filled_shares = order.filled_shares or order_shares
-                        if atr and rb:
-                            self.position_manager.register_entry(
-                                ticker,
-                                fill_price,
-                                filled_shares,
-                                rb,
-                                atr,
-                                entry_market_context=entry_market_context,
-                            )
-                            self._maybe_request_approval(ticker, fill_price, rb, signal_result)
-                        else:
-                            logger.warning(f"{ticker} register_entry 스킵: atr={atr} rb={rb}")
-                    except Exception as e:
-                        logger.error(f"{ticker} register_entry 실패: {e}")
+                        return
             self.notifier.send_order(order)
             logger.info(f"{ticker} {side} 발주 완료: shares={order_shares:g} id={order.order_id} status={order.status.value}")
         except Exception as e:
@@ -575,7 +609,6 @@ class Runner:
         except Exception as e:
             self._handle_error("tick_offmarket", e)
 
-
     def _poll_pending_orders(self, context: str = "") -> None:
         """pending 주문을 선행 재조회하고, 최종화 가능한 체결만 한 번 정산한다."""
         if not hasattr(self, "pending_order_manager") or self.pending_order_manager is None:
@@ -601,29 +634,24 @@ class Runner:
             return
         self.safety.record_fill(order, side, purpose=purpose)
         if side == "buy":
-            fill_price = float(order.filled_avg_price or 0.0)
+            try:
+                result = self._get_buy_reconciler().reconcile(order, purpose=purpose)
+            except Exception as reconcile_exc:
+                self._get_buy_reconciler().track_failure(
+                    order,
+                    purpose=purpose,
+                    approval_request_id=str(getattr(record, "approval_request_id", "") or ""),
+                    error=reconcile_exc,
+                    metadata=dict(getattr(record, "metadata", {}) or {}),
+                )
+                raise
             if purpose == "add_buy":
-                atr = self.rulebook.get_last_atr(order.ticker) if hasattr(self.rulebook, "get_last_atr") else None
-                rb = self.rulebook.get_rulebook(order.ticker) if hasattr(self.rulebook, "get_rulebook") else None
-                if atr and rb:
-                    self.position_manager.add_to_position(order.ticker, fill_price, filled_shares, rb, atr)
                 rid = str(getattr(record, "approval_request_id", "") or "")
                 req = self.approval_manager.get_request(rid) if rid else None
                 if req is not None:
                     req.status = "executed"
                     self.approval_manager._save()
-            else:
-                atr = self.rulebook.get_last_atr(order.ticker) if hasattr(self.rulebook, "get_last_atr") else None
-                rb = self.rulebook.get_rulebook(order.ticker) if hasattr(self.rulebook, "get_rulebook") else None
-                entry_market_context = (
-                    self.rulebook.get_last_market_context(order.ticker)
-                    if hasattr(self.rulebook, "get_last_market_context") else None
-                )
-                if atr and rb and self.position_manager.get(order.ticker) is None:
-                    self.position_manager.register_entry(
-                        order.ticker, fill_price, filled_shares, rb, atr,
-                        entry_market_context=entry_market_context,
-                    )
+            logger.info("[BUY-RECONCILED] %s purpose=%s result=%s", order.ticker, purpose, result)
         elif side == "sell":
             self.position_manager.finalize_sell_fill(
                 order,

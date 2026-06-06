@@ -1,9 +1,11 @@
-"""BN-1 pending 주문 영속 상태머신.
+"""BN-1 pending 주문 및 BS-1b 체결 후 reconciliation 영속 상태머신.
 
 책임:
 - 즉시 FILLED가 아닌 주문을 data/_system/pending_orders.json에 atomic 저장한다.
 - ticker 단위 주문 잠금으로 다음 tick/같은 tick 중복 주문을 막는다.
 - Broker.get_order(order_id)를 폴링하고 PARTIAL/UNKNOWN_OPEN/RECONCILING 상태를 보존한다.
+- BUY 체결 후 PositionManager 등록 실패와 startup 고아 보유를 RECONCILING으로
+  영속화해 재시작/다음 tick에도 fail-closed 재시도한다.
 - 실제 포지션/PnL 반영은 Runner/PositionManager의 단일 최종화 경로에 위임한다.
 
 BN-2 범위인 deterministic client_order_id 기반 제출 중 크래시 복구는 하지 않는다.
@@ -18,7 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from engine.live.broker.base import Broker, Order, OrderStatus
+from engine.live.broker.base import Broker, Order, OrderSide, OrderStatus, OrderType
 
 log = logging.getLogger("pending_order_manager")
 
@@ -212,6 +214,15 @@ class PendingOrderManager:
             for record in self._records.values()
         )
 
+    def has_pending_buy(self, ticker: str) -> bool:
+        ticker_u = str(ticker).strip().upper()
+        return any(
+            record.ticker.upper() == ticker_u
+            and record.side == "buy"
+            and record.state != STATE_DONE
+            for record in self._records.values()
+        )
+
     def track_order(
         self,
         order: Order,
@@ -223,8 +234,8 @@ class PendingOrderManager:
     ) -> Optional[PendingOrderRecord]:
         """즉시 FILLED가 아닌 주문만 영속 추적한다.
 
-        PaperBroker 즉시 FILLED 경로는 이 메서드에서 파일을 만들지 않고 그대로
-        반환된다.
+        PaperBroker 즉시 FILLED 정상 경로는 이 메서드에서 파일을 만들지 않고
+        그대로 반환된다. 체결 후 로컬 등록 실패는 track_reconciliation()을 쓴다.
         """
         if order.status == OrderStatus.FILLED:
             return None
@@ -269,6 +280,55 @@ class PendingOrderManager:
         )
         return record
 
+    def track_reconciliation(
+        self,
+        order: Order,
+        *,
+        purpose: str,
+        metadata: Optional[dict] = None,
+        approval_request_id: str = "",
+        error: str = "",
+    ) -> PendingOrderRecord:
+        """체결됐지만 로컬 포지션 반영이 끝나지 않은 주문/고아 보유를 영속화한다."""
+        if self._load_error:
+            raise RuntimeError(f"pending order state unavailable: {self._load_error}")
+        now = self._now_iso()
+        order_id = str(order.order_id or f"LOCAL-RECON-{uuid.uuid4().hex}")
+        existing = self._records.get(order_id)
+        merged_metadata = dict(getattr(existing, "metadata", {}) or {})
+        merged_metadata.update(dict(metadata or {}))
+        merged_metadata["local_reconciliation"] = True
+        record = PendingOrderRecord(
+            order_id=order_id,
+            ticker=str(order.ticker).strip().upper(),
+            side=self._side_value(order.side),
+            purpose=str(purpose or "entry"),
+            requested_shares=float(order.shares or order.filled_shares or 0.0),
+            internal_status=self._status_value(order.status),
+            state=STATE_RECONCILING,
+            created_at=existing.created_at if existing is not None else now,
+            updated_at=now,
+            raw_status=str(getattr(order, "raw_status", "") or getattr(existing, "raw_status", "")),
+            client_order_id=str(getattr(order, "client_order_id", "") or getattr(existing, "client_order_id", "")),
+            replaced_by=str(getattr(order, "replaced_by", "") or getattr(existing, "replaced_by", "")),
+            submitted_at=str(order.submitted_at or getattr(existing, "submitted_at", "") or now),
+            last_polled_at=getattr(existing, "last_polled_at", ""),
+            filled_shares=float(order.filled_shares or order.shares or 0.0),
+            filled_avg_price=float(order.filled_avg_price or order.price or 0.0),
+            approval_request_id=str(approval_request_id or getattr(existing, "approval_request_id", "")),
+            metadata=merged_metadata,
+            retry_count=int(getattr(existing, "retry_count", 0) or 0),
+            last_error=str(error or getattr(existing, "last_error", "") or "reconciliation required")[:500],
+            finalization_state="pending",
+        )
+        self._records[order_id] = record
+        self._save()
+        log.error(
+            "[RECONCILING-TRACK] %s %s %s id=%s error=%s",
+            record.ticker, record.side, record.purpose, order_id, record.last_error,
+        )
+        return record
+
     def _update_record(self, record: PendingOrderRecord, order: Order) -> None:
         record.internal_status = self._status_value(order.status)
         record.raw_status = str(getattr(order, "raw_status", "") or record.raw_status)
@@ -279,6 +339,28 @@ class PendingOrderManager:
         record.last_polled_at = self._now_iso()
         record.updated_at = record.last_polled_at
         record.last_error = ""
+
+    def _order_from_record(self, record: PendingOrderRecord) -> Order:
+        try:
+            status = OrderStatus(record.internal_status)
+        except Exception:
+            status = OrderStatus.FILLED if record.filled_shares > 0 else OrderStatus.PENDING
+        side = OrderSide.SELL if record.side == "sell" else OrderSide.BUY
+        return Order(
+            order_id=record.order_id,
+            ticker=record.ticker,
+            side=side,
+            order_type=OrderType.MARKET,
+            shares=record.requested_shares,
+            price=0.0,
+            status=status,
+            filled_shares=record.filled_shares,
+            filled_avg_price=record.filled_avg_price,
+            submitted_at=record.submitted_at,
+            raw_status=record.raw_status,
+            client_order_id=record.client_order_id,
+            replaced_by=record.replaced_by,
+        )
 
     def _migrate_replacement(self, old_id: str, record: PendingOrderRecord, new_id: str) -> None:
         self._records.pop(old_id, None)
@@ -305,6 +387,16 @@ class PendingOrderManager:
                 continue
             if record.state == STATE_TERMINAL and record.finalization_state == "done":
                 continue
+
+            # BS-1b local reconciliation은 브로커 주문 재조회 성공 여부와 무관하게
+            # 로컬 포지션 반영을 매 tick 재시도한다.
+            if record.state == STATE_RECONCILING and bool(record.metadata.get("local_reconciliation")):
+                record.last_polled_at = self._now_iso()
+                record.updated_at = record.last_polled_at
+                changed = True
+                events.append((record, self._order_from_record(record)))
+                continue
+
             # LOCAL synthetic ID는 실제 브로커 조회가 불가능하다. caller가 즉시
             # terminal 최종화를 하지 못한 경우 fail-closed 잠금을 유지한다.
             if order_id.startswith("LOCAL-"):

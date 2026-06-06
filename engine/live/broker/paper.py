@@ -234,7 +234,8 @@ class PaperBroker(Broker):
 
     def place_buy(self, ticker: str, shares: float,
                   order_type: OrderType = OrderType.MARKET,
-                  price: float = 0.0) -> Order:
+                  price: float = 0.0,
+                  client_order_id: str = "") -> Order:
         shares = _normalize_shares(shares)
         if shares <= 0:
             return self._reject(ticker, OrderSide.BUY, shares, order_type, price,
@@ -289,7 +290,8 @@ class PaperBroker(Broker):
 
     def place_sell(self, ticker: str, shares: float,
                    order_type: OrderType = OrderType.MARKET,
-                   price: float = 0.0) -> Order:
+                   price: float = 0.0,
+                   client_order_id: str = "") -> Order:
         shares = _normalize_shares(shares)
         if shares <= 0:
             return self._reject(ticker, OrderSide.SELL, shares, order_type, price,

@@ -577,10 +577,10 @@ class KisBroker(Broker):
         )
 
     # ---------- 공개 API ----------
-    def place_buy(self, ticker, shares, order_type=OrderType.MARKET, price=0.0) -> Order:
+    def place_buy(self, ticker, shares, order_type=OrderType.MARKET, price=0.0, client_order_id: str = "") -> Order:
         return self._send_order(OrderSide.BUY, ticker, shares, order_type, price)
 
-    def place_sell(self, ticker, shares, order_type=OrderType.MARKET, price=0.0) -> Order:
+    def place_sell(self, ticker, shares, order_type=OrderType.MARKET, price=0.0, client_order_id: str = "") -> Order:
         return self._send_order(OrderSide.SELL, ticker, shares, order_type, price)
 
     def get_order(self, order_id: str) -> Optional[Order]:

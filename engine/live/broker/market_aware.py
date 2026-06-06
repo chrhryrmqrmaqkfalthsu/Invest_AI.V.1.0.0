@@ -83,9 +83,10 @@ class GuardedKisBroker(Broker):
         shares: float,
         order_type: OrderType = OrderType.MARKET,
         price: float = 0.0,
+        client_order_id: str = "",
     ) -> Order:
         self._ensure_domestic_ticker(ticker)
-        return self._require_inner().place_buy(ticker, shares, order_type, price)
+        return self._require_inner().place_buy(ticker, shares, order_type, price, client_order_id=client_order_id)
 
     def place_sell(
         self,
@@ -93,9 +94,10 @@ class GuardedKisBroker(Broker):
         shares: float,
         order_type: OrderType = OrderType.MARKET,
         price: float = 0.0,
+        client_order_id: str = "",
     ) -> Order:
         self._ensure_domestic_ticker(ticker)
-        return self._require_inner().place_sell(ticker, shares, order_type, price)
+        return self._require_inner().place_sell(ticker, shares, order_type, price, client_order_id=client_order_id)
 
     def cancel_order(self, order_id: str) -> bool:
         return self._require_inner().cancel_order(order_id)

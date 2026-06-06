@@ -3,6 +3,11 @@
 
 Read-only engine calls. Writes only under:
   data/_system/research/bv0_20260607/baseline/
+
+Notes:
+- Existing backtest/exit code is imported and called, not modified.
+- Portfolio summary uses realized exit-date equity on fixed capital
+  (universe_size * position_limit). Raw trades remain the source of truth.
 """
 from __future__ import annotations
 
@@ -12,7 +17,7 @@ import math
 import random
 import statistics
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -64,9 +69,7 @@ def safe_float(v: Any, default: float = 0.0) -> float:
         return default
 
 
-def finite(v: float | None) -> float | None:
-    if v is None:
-        return None
+def finite(v: Any) -> float | None:
     try:
         f = float(v)
         return f if math.isfinite(f) else None
@@ -123,16 +126,8 @@ def market_ctx(market_history: pd.DataFrame | None, date: Any, sector_name: str)
         return 50.0, 50.0, 18.0
 
 
-def run_rb_trades(
-    baseline: str,
-    ticker: str,
-    rb: Rulebook,
-    df: pd.DataFrame,
-    year: int,
-    member_hash: str,
-    market_history: pd.DataFrame | None,
-    ticker_sentiment: dict | None,
-) -> list[dict[str, Any]]:
+def run_rb_trades(baseline: str, ticker: str, rb: Rulebook, df: pd.DataFrame, year: int, member_hash: str,
+                  market_history: pd.DataFrame | None, ticker_sentiment: dict | None) -> list[dict[str, Any]]:
     result = run_backtest(
         rb,
         df,
@@ -155,15 +150,28 @@ def no_market_adjustment_trades(ticker, rb, df, year, member_hash, market_histor
     return run_rb_trades("market_off", ticker, rb2, df, year, member_hash, market_history, ticker_sentiment)
 
 
+def disable_non_simple_inputs(rb: Rulebook) -> None:
+    rb.market_score_weight = 0.0
+    rb.sector_strength_weight = 0.0
+    rb.vix_sensitivity = 0.0
+    rb.market_adjustment_strength = 0.0
+    rb.weight_news_sentiment = 0.0
+    rb.news_block_cap = 0.0
+    rb.crash_buy_enabled = False
+    for name in list(rb.__dataclass_fields__):
+        if name.startswith("weight_news_"):
+            setattr(rb, name, 0.0)
+        if name.startswith("event_response_"):
+            setattr(rb, name, 0.0)
+    rb.event_strength_multiplier = 0.0
+
+
 def simple_rb(base: Rulebook, kind: str) -> Rulebook:
     rb = copy.deepcopy(base)
     rb.position_sizing_strategy = "fixed"
     rb.base_position_ratio = 1.0
     rb.signal_multiplier = 1.0
-    rb.market_score_weight = 0.0
-    rb.sector_strength_weight = 0.0
-    rb.vix_sensitivity = 0.0
-    rb.market_adjustment_strength = 0.0
+    disable_non_simple_inputs(rb)
     for name in list(rb.__dataclass_fields__):
         if name.startswith("weight_"):
             setattr(rb, name, 0.0)
@@ -218,23 +226,24 @@ def random_entry_trades(ticker, rb, df, year, member_hash, target_count, seed, m
             continue
         row = trade_to_row(ticker, "random_entry", seed, year, member_hash, trade)
         rows.append(row)
-        blocked_until = pd.Timestamp(row["exit_date"]) + pd.Timedelta(days=1)
+        row_exit = pd.Timestamp(row["exit_date"]) if row.get("exit_date") else ts
+        blocked_until = row_exit + pd.Timedelta(days=1)
     return rows
 
 
-def annual_returns(rows: list[dict[str, Any]]) -> dict[str, float]:
+def annual_returns(rows: list[dict[str, Any]], capital: float) -> dict[str, float]:
     by_year = defaultdict(float)
     for r in rows:
-        by_year[str(r["year"])] += safe_float(r.get("pnl_krw")) / POSITION_LIMIT
-    return dict(sorted((k, v * 100.0) for k, v in by_year.items()))
+        by_year[str(r["year"])] += safe_float(r.get("pnl_krw"))
+    return dict(sorted((k, v / capital * 100.0) for k, v in by_year.items()))
 
 
-def equity_curve(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def equity_curve(rows: list[dict[str, Any]], capital: float) -> list[dict[str, Any]]:
     ordered = sorted(rows, key=lambda r: (str(r.get("exit_date") or ""), str(r.get("ticker") or ""), str(r.get("entry_date") or "")))
     equity = 1.0
     curve = []
     for r in ordered:
-        equity *= 1.0 + safe_float(r.get("pnl_krw")) / POSITION_LIMIT
+        equity += safe_float(r.get("pnl_krw")) / capital
         curve.append({"date": r.get("exit_date"), "equity": equity})
     return curve
 
@@ -245,16 +254,17 @@ def max_drawdown_pct(curve: list[dict[str, Any]]) -> float:
     for p in curve:
         equity = safe_float(p.get("equity"), 1.0)
         peak = max(peak, equity)
-        mdd = min(mdd, (equity / peak - 1.0) * 100.0)
+        if peak > 0:
+            mdd = min(mdd, (equity / peak - 1.0) * 100.0)
     return mdd
 
 
-def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    pnl = [safe_float(r.get("pnl_pct")) for r in rows]
+def summarize_rows(rows: list[dict[str, Any]], capital: float) -> dict[str, Any]:
+    pnl_pct = [safe_float(r.get("pnl_pct")) for r in rows]
     pnl_krw = [safe_float(r.get("pnl_krw")) for r in rows]
     wins = [x for x in pnl_krw if x > 0]
     losses = [x for x in pnl_krw if x < 0]
-    curve = equity_curve(rows)
+    curve = equity_curve(rows, capital)
     total_return = (curve[-1]["equity"] - 1.0) * 100.0 if curve else 0.0
     n_years = max(1, max(YEARS) - min(YEARS) + 1)
     cagr = ((1 + total_return / 100.0) ** (1 / n_years) - 1) * 100.0 if total_return > -100 else -100.0
@@ -264,11 +274,11 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "total_return_pct": total_return,
         "cagr_pct": cagr,
         "mdd_pct": max_drawdown_pct(curve),
-        "expectancy_pct": statistics.mean(pnl) if pnl else 0.0,
+        "expectancy_pct": statistics.mean(pnl_pct) if pnl_pct else 0.0,
         "profit_factor": finite(pf),
         "avg_holding_days": statistics.mean([int(r.get("holding_days") or 0) for r in rows]) if rows else 0.0,
-        "win_rate_pct": (sum(1 for x in pnl if x > 0) / len(pnl) * 100.0) if pnl else 0.0,
-        "annual_returns_pct": annual_returns(rows),
+        "win_rate_pct": (sum(1 for x in pnl_pct if x > 0) / len(pnl_pct) * 100.0) if pnl_pct else 0.0,
+        "annual_returns_pct": annual_returns(rows, capital),
         "equity_curve": curve,
     }
 
@@ -297,6 +307,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     market_history = get_market_history(years=DATA_YEARS)
     universe = load_rulebooks()
+    portfolio_capital = len(universe) * POSITION_LIMIT
     metadata_rows = []
     all_rows: list[dict[str, Any]] = []
     with TRADES_PATH.open("w", encoding="utf-8") as trades_fh:
@@ -333,7 +344,7 @@ def main() -> None:
     for r in all_rows:
         key = r["baseline"] if r["baseline"] != "random_entry" else f"random_entry_seed_{r['seed']}"
         groups[key].append(r)
-    summaries = {k: summarize_rows(v) for k, v in sorted(groups.items())}
+    summaries = {k: summarize_rows(v, portfolio_capital) for k, v in sorted(groups.items())}
     random_seed_summaries = [summaries[f"random_entry_seed_{s}"] for s in RANDOM_SEEDS if f"random_entry_seed_{s}" in summaries]
     random_cagr = [x["cagr_pct"] for x in random_seed_summaries]
     random_aggregate = {
@@ -344,22 +355,24 @@ def main() -> None:
         "mdd_pct": quantiles([x["mdd_pct"] for x in random_seed_summaries]),
         "trade_count": quantiles([x["trade_count"] for x in random_seed_summaries]),
     }
-    empty = summarize_rows([])
+    empty = summarize_rows([], portfolio_capital)
     current = summaries.get("current_rulebook", empty)
     market_off = summaries.get("market_off", empty)
     simple_rsi = summaries.get("simple_rsi", empty)
     simple_macd = summaries.get("simple_macd", empty)
+    best_simple_cagr = max(simple_rsi["cagr_pct"], simple_macd["cagr_pct"])
     judgment = {
         "current_vs_random_cagr_lift_pct_point_vs_median": current["cagr_pct"] - random_aggregate["cagr_pct"]["median"],
         "current_random_cagr_percentile": percentile_rank(current["cagr_pct"], random_cagr),
         "current_vs_market_off_cagr_delta_pct_point": current["cagr_pct"] - market_off["cagr_pct"],
         "current_vs_simple_rsi_cagr_delta_pct_point": current["cagr_pct"] - simple_rsi["cagr_pct"],
         "current_vs_simple_macd_cagr_delta_pct_point": current["cagr_pct"] - simple_macd["cagr_pct"],
+        "current_vs_best_simple_cagr_delta_pct_point": current["cagr_pct"] - best_simple_cagr,
     }
     per_ticker = {}
     for ticker in sorted({r["ticker"] for r in all_rows}):
-        cur_s = summarize_rows([r for r in all_rows if r["ticker"] == ticker and r["baseline"] == "current_rulebook"])
-        rnd = [summarize_rows([r for r in all_rows if r["ticker"] == ticker and r["baseline"] == "random_entry" and r["seed"] == seed])["cagr_pct"] for seed in RANDOM_SEEDS]
+        cur_s = summarize_rows([r for r in all_rows if r["ticker"] == ticker and r["baseline"] == "current_rulebook"], POSITION_LIMIT)
+        rnd = [summarize_rows([r for r in all_rows if r["ticker"] == ticker and r["baseline"] == "random_entry" and r["seed"] == seed], POSITION_LIMIT)["cagr_pct"] for seed in RANDOM_SEEDS]
         per_ticker[ticker] = {
             "current_cagr_pct": cur_s["cagr_pct"],
             "random_cagr_median_pct": quantiles(rnd)["median"],
@@ -370,7 +383,7 @@ def main() -> None:
     elapsed = time.perf_counter() - t0
     summary = {
         "generated_at": pd.Timestamp.now().isoformat(),
-        "config": {"years": YEARS, "random_seeds": RANDOM_SEEDS, "position_limit": POSITION_LIMIT, "commission": COMMISSION, "warmup": WARMUP, "data_years": DATA_YEARS, "data_end": DATA_END, "universe_size": len(universe), "market_history_rows": len(market_history)},
+        "config": {"years": YEARS, "random_seeds": RANDOM_SEEDS, "position_limit": POSITION_LIMIT, "portfolio_capital": portfolio_capital, "commission": COMMISSION, "warmup": WARMUP, "data_years": DATA_YEARS, "data_end": DATA_END, "universe_size": len(universe), "market_history_rows": len(market_history), "equity_curve_method": "realized exit-date pnl / fixed portfolio capital; no intratrade mark-to-market"},
         "elapsed_seconds": elapsed,
         "metadata": metadata_rows,
         "summaries": summaries,
@@ -378,13 +391,14 @@ def main() -> None:
         "judgment": judgment,
         "per_ticker_lift": per_ticker,
         "raw_trades_path": str(TRADES_PATH),
+        "baseline_counts": dict(Counter(r["baseline"] for r in all_rows)),
     }
     SUMMARY_PATH.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     MANIFEST_PATH.write_text(json.dumps({"generated_at": pd.Timestamp.now().isoformat(), "folder": str(OUT), "files": [TRADES_PATH.name, SUMMARY_PATH.name, REPORT_PATH.name, MANIFEST_PATH.name], "source_files": ["scripts/research/run_baselines.py", "engine/learning/backtest.py", "engine/strategies/exit_simulator.py", "engine/strategies/evaluator.py", "engine/strategies/rulebook.py"]}, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def fmt(x):
         return "n/a" if x is None else f"{float(x):.2f}"
-    report = ["# BV-0 2단계 baseline 실험 보고", "", f"- 실행시간: {elapsed:.1f}초", f"- 원자료: `{TRADES_PATH}`", "", "| 비교군 | CAGR% | Total% | MDD% | 거래수 | Expectancy% | PF | Avg hold |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
+    report = ["# BV-0 2단계 baseline 실험 보고", "", f"- 실행시간: {elapsed:.1f}초", f"- 원자료: `{TRADES_PATH}`", f"- equity curve: realized exit-date pnl / fixed capital {portfolio_capital:,.0f}; intratrade MTM 아님", "", "| 비교군 | CAGR% | Total% | MDD% | 거래수 | Expectancy% | PF | Avg hold |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for name in ["current_rulebook", "market_off", "simple_rsi", "simple_macd"]:
         s = summaries.get(name, empty)
         report.append(f"| {name} | {fmt(s['cagr_pct'])} | {fmt(s['total_return_pct'])} | {fmt(s['mdd_pct'])} | {s['trade_count']} | {fmt(s['expectancy_pct'])} | {fmt(s['profit_factor'])} | {fmt(s['avg_holding_days'])} |")
@@ -392,10 +406,9 @@ def main() -> None:
     report += ["", "## 랜덤 분포", "```json", json.dumps(random_aggregate, ensure_ascii=False, indent=2), "```", "", "## 판정"]
     report.append(f"1. 현재 룰북 vs 랜덤: CAGR lift {fmt(judgment['current_vs_random_cagr_lift_pct_point_vs_median'])}pp, 랜덤 분포 내 percentile {fmt(judgment['current_random_cagr_percentile'])}%.")
     report.append(f"2. 시장보정 기여: current - market_off CAGR delta {fmt(judgment['current_vs_market_off_cagr_delta_pct_point'])}pp.")
-    best_simple = max(simple_rsi["cagr_pct"], simple_macd["cagr_pct"])
-    report.append(f"3. 복잡도 정당성: current - best(simple RSI/MACD) CAGR delta {fmt(current['cagr_pct'] - best_simple)}pp.")
+    report.append(f"3. 복잡도 정당성: current - best(simple RSI/MACD) CAGR delta {fmt(judgment['current_vs_best_simple_cagr_delta_pct_point'])}pp.")
     REPORT_PATH.write_text("\n".join(report) + "\n", encoding="utf-8")
-    print(json.dumps({"elapsed_seconds": elapsed, "trades": len(all_rows), "judgment": judgment, "out": str(OUT)}, ensure_ascii=False, indent=2))
+    print(json.dumps({"elapsed_seconds": elapsed, "trades": len(all_rows), "counts": summary["baseline_counts"], "judgment": judgment, "out": str(OUT)}, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ BN-2:
 - 주문 제출 전 SUBMITTING intent를 atomic 저장한다.
 - client_order_id로 submit 후 order_id 저장 전 크래시를 복구한다.
 - BT-2: 복구/제출 결과가 FILLED여도 finalization 전에는 레코드를 삭제하지 않고 RECONCILING으로 유지한다.
+- BT-3: 같은 order_id/client_order_id 재추적은 기존 레코드를 보존한다.
 """
 from __future__ import annotations
 
@@ -240,37 +241,22 @@ class PendingOrderManager:
             now = self._now_iso()
             order_id = str(order.order_id or f"LOCAL-FILLED-{uuid.uuid4().hex}")
             record = PendingOrderRecord(
-                order_id=order_id,
-                ticker=str(order.ticker).strip().upper(),
-                side=self._side_value(order.side),
-                purpose=str(purpose_value or "entry"),
-                requested_shares=float(order.shares or 0.0),
-                internal_status=OrderStatus.FILLED.value,
-                state=STATE_RECONCILING,
-                created_at=existing.created_at if existing is not None else now,
-                updated_at=now,
-                raw_status=str(getattr(order, "raw_status", "") or ""),
-                client_order_id=cid or str(getattr(order, "client_order_id", "") or ""),
-                replaced_by=str(getattr(order, "replaced_by", "") or ""),
-                submitted_at=str(order.submitted_at or getattr(existing, "submitted_at", "") or now),
-                filled_shares=float(order.filled_shares or 0.0),
-                filled_avg_price=float(order.filled_avg_price or 0.0),
-                exit_reason=str(exit_reason_value or ""),
-                approval_request_id=str(approval_id_value or ""),
-                metadata=base_metadata,
-                finalization_state="pending",
+                order_id=order_id, ticker=str(order.ticker).strip().upper(), side=self._side_value(order.side),
+                purpose=str(purpose_value or "entry"), requested_shares=float(order.shares or 0.0),
+                internal_status=OrderStatus.FILLED.value, state=STATE_RECONCILING,
+                created_at=existing.created_at if existing is not None else now, updated_at=now,
+                raw_status=str(getattr(order, "raw_status", "") or ""), client_order_id=cid or str(getattr(order, "client_order_id", "") or ""),
+                replaced_by=str(getattr(order, "replaced_by", "") or ""), submitted_at=str(order.submitted_at or getattr(existing, "submitted_at", "") or now),
+                filled_shares=float(order.filled_shares or 0.0), filled_avg_price=float(order.filled_avg_price or 0.0),
+                exit_reason=str(exit_reason_value or ""), approval_request_id=str(approval_id_value or ""),
+                metadata=base_metadata, finalization_state="pending",
             )
             self._records[order_id] = record
             self._save()
             return record
 
-        return self.track_order(
-            order,
-            purpose=purpose_value,
-            metadata=base_metadata,
-            exit_reason=exit_reason_value,
-            approval_request_id=approval_id_value,
-        )
+        return self.track_order(order, purpose=purpose_value, metadata=base_metadata,
+                                exit_reason=exit_reason_value, approval_request_id=approval_id_value)
 
     def resolve_submit_exception(self, client_order_id: str) -> Optional[Order]:
         cid = str(client_order_id or "").strip()
@@ -311,15 +297,20 @@ class PendingOrderManager:
             return None
         if self._load_error:
             raise RuntimeError(f"pending order state unavailable: {self._load_error}")
-        now = self._now_iso()
         order_id = str(order.order_id or f"LOCAL-{uuid.uuid4().hex}")
+        order_client_id = str(getattr(order, "client_order_id", "") or "")
+        existing = self._records.get(order_id)
+        if existing is not None and (not order_client_id or existing.client_order_id == order_client_id):
+            return existing
+
+        now = self._now_iso()
         status = self._status_value(order.status)
         state = STATE_PARTIAL if order.status == OrderStatus.PARTIAL else (STATE_TERMINAL if order.status in TERMINAL_STATUSES and float(order.filled_shares or 0.0) <= 0 else (STATE_RECONCILING if order.status in TERMINAL_STATUSES else STATE_OPEN))
         record = PendingOrderRecord(
             order_id=order_id, ticker=str(order.ticker).strip().upper(), side=self._side_value(order.side),
             purpose=str(purpose or "entry"), requested_shares=float(order.shares or 0.0), internal_status=status,
             state=state, created_at=now, updated_at=now, raw_status=str(getattr(order, "raw_status", "") or ""),
-            client_order_id=str(getattr(order, "client_order_id", "") or ""), replaced_by=str(getattr(order, "replaced_by", "") or ""),
+            client_order_id=order_client_id, replaced_by=str(getattr(order, "replaced_by", "") or ""),
             submitted_at=str(order.submitted_at or now), filled_shares=float(order.filled_shares or 0.0),
             filled_avg_price=float(order.filled_avg_price or 0.0), exit_reason=str(exit_reason or ""),
             approval_request_id=str(approval_request_id or ""), metadata=dict(metadata or {}),

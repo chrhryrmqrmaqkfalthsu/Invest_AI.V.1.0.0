@@ -24,6 +24,11 @@ log = get_logger("backtest")
 
 FEATURE_LAG_DAYS = DEFAULT_LAG_DAYS
 FEATURE_LAG_MAX_AGE_DAYS = DEFAULT_MAX_AGE_DAYS
+COMPLEXITY_MASK_FIELDS = (
+    "use_news_global",
+    "use_event_block",
+    "use_market_entry_adjustment",
+)
 
 
 @dataclass
@@ -67,6 +72,23 @@ _SPREAD_CTX_CACHE: dict = {}   # key: (id(df), start, end, lag, max_age) -> list
 _SPREAD_RET_CACHE: dict = {}   # key: (ctx_key, exit_param_tuple) -> dict{j: pnl}
 
 
+def _count_active_complexity_masks(rb: Rulebook) -> int:
+    """Return the number of active entry feature masks used for complexity penalty."""
+    return sum(bool(getattr(rb, field, True)) for field in COMPLEXITY_MASK_FIELDS)
+
+
+def _calc_complexity_penalty(active_count: int, coefficient: float) -> float:
+    """Linear complexity penalty: coefficient per active mask."""
+    coeff = max(float(coefficient or 0.0), 0.0)
+    return float(max(int(active_count or 0), 0)) * coeff
+
+
+def _apply_complexity_penalty(rb: Rulebook, raw_fitness: float, coefficient: float) -> float:
+    """Apply additive fitness penalty without changing trades or signal behavior."""
+    penalty = _calc_complexity_penalty(_count_active_complexity_masks(rb), coefficient)
+    return float(raw_fitness) - penalty
+
+
 def run_backtest(
     rb: Rulebook,
     df: pd.DataFrame,
@@ -83,6 +105,7 @@ def run_backtest(
     end_date: Optional[str] = None,
     ticker_sentiment: Optional[dict] = None,
     fitness_mode: str = "legacy",
+    complexity_penalty_per_mask: float = 0.0,
 ) -> BacktestResult:
     """
     전체 기간을 순회하며 신호 발생 시 진입 → 청산 시뮬레이션 → 다음 진입.
@@ -102,6 +125,7 @@ def run_backtest(
         warmup: 지표 안정화를 위한 시작 인덱스
         market_history_df: 시점별 시장 시계열 DataFrame (있으면 우선 사용)
         sector_name: market_history_df에서 조회할 섹터명 (tech/finance/energy/...)
+        complexity_penalty_per_mask: swing fitness에서 활성 entry mask 1개당 차감할 점수
     """
     trades: list = []
     # walk-forward: 날짜 범위 (df는 그대로 — 지표 안정성 유지, 루프 내에서 필터)
@@ -326,7 +350,7 @@ def run_backtest(
         _res.fitness = _calc_fitness_spread(_all_scores, _all_rets)
         rb.fitness = _res.fitness
     elif fitness_mode == "swing":
-        _res.fitness = _calc_fitness_swing(
+        raw_fitness = _calc_fitness_swing(
             expectancy_pct=_res.expectancy_pct,
             win_rate=_res.win_rate,
             profit_factor=_res.profit_factor,
@@ -334,6 +358,7 @@ def run_backtest(
             trade_count=_res.trade_count,
             loss_count=_res.loss_count,
         )
+        _res.fitness = _apply_complexity_penalty(rb, raw_fitness, complexity_penalty_per_mask)
         rb.fitness = _res.fitness
     return _res
 

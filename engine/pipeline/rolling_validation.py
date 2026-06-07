@@ -13,7 +13,7 @@ from uuid import uuid4
 from engine.core.feature_lag import FEATURE_LAG_METADATA
 from engine.core.metadata import build_metadata, compute_rulebook_hash
 from engine.learning.backtest import run_backtest
-from engine.learning.genetic import GAConfig, GAResult, run_ga
+from engine.learning.genetic import GAConfig, GAResult, collect_top_rulebooks, run_ga
 from engine.pipeline.context import DEFAULT_ROLLING_YEARS, make_year_splits, prepare_ticker_context
 from engine.pipeline.scoring import score_stock_from_rolling
 
@@ -83,6 +83,37 @@ def _ga_summary(ga_result: GAResult | None) -> dict[str, Any]:
     }
 
 
+def _topn_candidate_to_oos_row(
+    *,
+    year: int,
+    rank_is: int,
+    train_start: str,
+    train_end: str,
+    test_start: str,
+    test_end: str,
+    rulebook: Any,
+    result: Any,
+    train_fitness: float,
+) -> dict[str, Any]:
+    rulebook_hash = compute_rulebook_hash(rulebook)
+    return {
+        "year": int(year),
+        "rank_is": int(rank_is),
+        "rulebook_hash": rulebook_hash,
+        "train_fitness": _float_or_zero(train_fitness),
+        "train_period": [train_start, train_end],
+        "test_period": [test_start, test_end],
+        "oos": {
+            "trade_count": int(getattr(result, "trade_count", 0) or 0),
+            "win_rate": _float_or_zero(getattr(result, "win_rate", 0.0)),
+            "expectancy_pct": _float_or_zero(getattr(result, "expectancy_pct", 0.0)),
+            "profit_factor": _float_or_zero(getattr(result, "profit_factor", 0.0)),
+            "max_drawdown_pct": _float_or_zero(getattr(result, "max_drawdown_pct", 0.0)),
+        },
+        "fitness": _float_or_zero(getattr(result, "fitness", 0.0)),
+    }
+
+
 def backtest_result_to_oos_period(
     *,
     year: int,
@@ -128,10 +159,11 @@ def run_rolling_validation(
         context: optional prepared context from screening. Passing it avoids
             loading OHLCV/market/sentiment data twice in the staged pipeline.
     """
-    if top_n is not None:
-        # First implementation intentionally does not use ensemble OOS.
-        # Later: run_ensemble_backtest(top final_population members, ...).
-        pass
+    try:
+        top_n_value = int(top_n) if top_n is not None else 1
+    except Exception:
+        top_n_value = 1
+    use_top_n_validation = top_n_value > 1
 
     run_id = str(uuid4())
     ctx = context or prepare_ticker_context(ticker)
@@ -143,6 +175,7 @@ def run_rolling_validation(
     periods: list[dict[str, Any]] = []
     oos_periods: list[list[str]] = []
     ga_by_year: dict[str, Any] = {}
+    top_n_periods: list[dict[str, Any]] = []
 
     base_kwargs = dict(
         position_limit_krw=DEFAULT_POSITION_LIMIT_KRW,
@@ -198,6 +231,42 @@ def run_rolling_validation(
         oos_periods.append([test_start, test_end])
         ga_by_year[str(year)] = period["ga"]
 
+        if use_top_n_validation:
+            candidates = collect_top_rulebooks(ga_result, top_n_value)
+            candidate_rows: list[dict[str, Any]] = []
+            for rank_is, candidate in enumerate(candidates, 1):
+                train_fitness = _float_or_zero(getattr(candidate, "fitness", 0.0))
+                candidate_oos = run_backtest(
+                    candidate,
+                    df,
+                    start_date=test_start,
+                    end_date=test_end,
+                    **base_kwargs,
+                )
+                candidate_rows.append(
+                    _topn_candidate_to_oos_row(
+                        year=year,
+                        rank_is=rank_is,
+                        train_start=train_start,
+                        train_end=train_end,
+                        test_start=test_start,
+                        test_end=test_end,
+                        rulebook=candidate,
+                        result=candidate_oos,
+                        train_fitness=train_fitness,
+                    )
+                )
+            top_n_periods.append(
+                {
+                    "year": year,
+                    "train_period": [train_start, train_end],
+                    "test_period": [test_start, test_end],
+                    "requested_top_n": top_n_value,
+                    "candidate_count": len(candidate_rows),
+                    "candidates": candidate_rows,
+                }
+            )
+
     stock_score = score_stock_from_rolling(periods, ctx["adv_usd_252d"])
     meta = getattr(ctx["meta"], "to_dict", lambda: {})()
 
@@ -214,6 +283,12 @@ def run_rolling_validation(
         "periods": periods,
         "stock_score": stock_score,
     }
+    if use_top_n_validation:
+        result["top_n_validation"] = {
+            "top_n": top_n_value,
+            "method": "collect_top_rulebooks_fitness_desc_hash_asc_then_oos",
+            "periods": top_n_periods,
+        }
     result["_meta"] = build_metadata(
         source="pipeline_v1.rolling_validation",
         ticker=ticker,

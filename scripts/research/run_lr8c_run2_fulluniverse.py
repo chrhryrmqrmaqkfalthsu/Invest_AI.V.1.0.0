@@ -6,10 +6,16 @@ This script is intentionally research-only:
 - no parameters.json write
 - no live rulebook mutation
 - append-only ignored research artifacts under data/_system/research
+
+Parallel mode:
+- use --shard-count N --shard-index I to split live universe by ticker index
+- all shards append to the same JSONL with fcntl.flock protection
+- run_key based resume prevents reprocessing completed ticker/period rows
 """
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import time
 from datetime import datetime, timezone
@@ -48,17 +54,28 @@ def utc_now() -> str:
 
 
 def append_jsonl(path: Path, row: dict[str, Any]) -> None:
+    """Append one JSON row with an inter-process file lock."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-        f.flush()
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+            f.flush()
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     if not path.exists():
         return rows
-    for line in path.read_text(encoding="utf-8").splitlines():
+    with path.open("r", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+        try:
+            lines = f.read().splitlines()
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    for line in lines:
         line = line.strip()
         if not line:
             continue
@@ -365,46 +382,60 @@ compute_rulebook_hash 변경 없음
     REPORT_PATH.write_text(report, encoding="utf-8")
 
 
-def main() -> int:
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--stop-after-step0", action="store_true")
-    args = parser.parse_args()
+    parser.add_argument("--shard-count", type=int, default=1)
+    parser.add_argument("--shard-index", type=int, default=0)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    if args.shard_count < 1:
+        raise SystemExit("--shard-count must be >= 1")
+    if args.shard_index < 0 or args.shard_index >= args.shard_count:
+        raise SystemExit("--shard-index must satisfy 0 <= index < shard-count")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     TOPN_PATH.touch(exist_ok=True)
     SURVIVORS_PATH.touch(exist_ok=True)
 
     universe = load_live_universe(LiveUniverseConfig())
-    symbols = tuple(universe.symbols)
+    all_symbols = tuple(universe.symbols)
+    symbols = all_symbols[args.shard_index :: args.shard_count]
     done = completed_keys(TOPN_PATH)
-    total_periods = len(symbols) * 4
+    total_periods = len(all_symbols) * 4
 
     timing: dict[str, Any] | None = None
     if TIMING_PATH.exists() and TIMING_PATH.read_text(encoding="utf-8").strip():
         timing = json.loads(TIMING_PATH.read_text(encoding="utf-8"))
 
-    first_symbol = symbols[0]
-    first_ctx = prepare_ticker_context(first_symbol)
-    first_split = build_splits(first_ctx.get("data_min"), first_ctx.get("data_max"))[0]
-    first_key = f"{first_symbol}|{first_split['label']}"
+    if not symbols:
+        print(f"LR8C_RUN2 shard {args.shard_index}/{args.shard_count}: no symbols assigned", flush=True)
+        return 0
 
-    if timing is None:
+    first_symbol = all_symbols[0]
+    first_ctx = prepare_ticker_context(first_symbol) if args.shard_index == 0 or timing is None else None
+    first_split = build_splits(first_ctx.get("data_min"), first_ctx.get("data_max"))[0] if first_ctx is not None else None
+    first_key = f"{first_symbol}|{first_split['label']}" if first_split is not None else ""
+
+    if timing is None and args.shard_index == 0 and first_ctx is not None and first_split is not None:
         start = time.perf_counter()
         if first_key not in done:
             row = run_one_period(first_symbol, first_ctx, first_split, seed=20260607 + 2022)
             append_jsonl(TOPN_PATH, row)
             done.add(first_key)
         elapsed = time.perf_counter() - start
-        # Use measured row elapsed when available; start elapsed includes context prep and append overhead.
         measured_rows = [r for r in read_jsonl(TOPN_PATH) if r.get("run_key") == first_key]
         measured = measured_rows[-1] if measured_rows else {}
         measured_elapsed = float(measured.get("timing", {}).get("elapsed_seconds", elapsed) or elapsed)
-        estimated = measured_elapsed * len(symbols) * 4
+        estimated = measured_elapsed * len(all_symbols) * 4
         timing = {
             "step": "STEP0_TIMING",
             "created_at": utc_now(),
             "ticker": first_symbol,
-            "universe_count": len(symbols),
+            "universe_count": len(all_symbols),
             "population": POPULATION,
             "generations": GENERATIONS,
             "candidate_mode": "qualified_all",
@@ -421,28 +452,33 @@ def main() -> int:
             "decision": "PROCEED_NO_TIME_GATE",
         }
         TIMING_PATH.write_text(json.dumps(timing, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        print(json.dumps(timing, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(timing, ensure_ascii=False, sort_keys=True), flush=True)
 
     if args.stop_after_step0:
-        write_survivors_and_report(symbols, timing)
+        write_survivors_and_report(all_symbols, timing)
         return 0
 
-    completed_count = len(done)
-    for sym_idx, ticker in enumerate(symbols, 1):
-        ctx = first_ctx if ticker == first_symbol else prepare_ticker_context(ticker)
+    print(
+        f"LR8C_RUN2 shard {args.shard_index}/{args.shard_count}: assigned_symbols={len(symbols)} total_completed={len(done)}/{total_periods}",
+        flush=True,
+    )
+    for local_idx, ticker in enumerate(symbols, 1):
+        ctx = first_ctx if ticker == first_symbol and first_ctx is not None else prepare_ticker_context(ticker)
         splits = build_splits(ctx.get("data_min"), ctx.get("data_max"))
         for split_idx, split in enumerate(splits, 1):
             key = f"{ticker}|{split['label']}"
+            done = completed_keys(TOPN_PATH)
             if key in done:
                 continue
-            seed = 20260607 + sym_idx * 100 + split_idx
-            print(f"LR8C_RUN2 progress {completed_count + 1}/{total_periods}: {ticker} {split['label']}", flush=True)
+            seed = 20260607 + (args.shard_index + 1) * 1_000_000 + local_idx * 100 + split_idx
+            print(
+                f"LR8C_RUN2 shard {args.shard_index}/{args.shard_count} progress {len(done) + 1}/{total_periods}: {ticker} {split['label']}",
+                flush=True,
+            )
             row = run_one_period(ticker, ctx, split, seed=seed)
             append_jsonl(TOPN_PATH, row)
-            done.add(key)
-            completed_count += 1
 
-    write_survivors_and_report(symbols, timing)
+    write_survivors_and_report(all_symbols, timing)
     return 0
 
 

@@ -30,10 +30,12 @@ from engine.live.universe import LiveUniverseConfig, load_live_universe
 from engine.pipeline.context import prepare_ticker_context
 from engine.pipeline.rolling_validation import DEFAULT_POSITION_LIMIT_KRW
 from engine.pipeline.topn_survivor import evaluate_survivors, score_topn_validation_periods
+from scripts.research.rulebook_persist import collect_rulebook_rows
 
 OUT_DIR = Path("data/_system/research/lr8c_run2_20260607")
 TIMING_PATH = OUT_DIR / "lr8c_run2_timing.txt"
 TOPN_PATH = OUT_DIR / "lr8c_run2_topn.jsonl"
+RULEBOOKS_PATH = OUT_DIR / "lr8c_run2_topn_rulebooks.jsonl"
 SURVIVORS_PATH = OUT_DIR / "lr8c_run2_survivors.jsonl"
 REPORT_PATH = OUT_DIR / "LR8C_RUN2_REPORT.md"
 
@@ -241,6 +243,13 @@ def run_one_period(ticker: str, ctx: dict[str, Any], split: dict[str, Any], seed
         "qualified_count": len(qualified_capped),
         "cap_triggered": bool(cap_triggered),
         "candidates": qualified_capped,
+        "_rulebooks": collect_rulebook_rows(
+            f"{ticker}|{split['label']}",
+            ticker,
+            split["year"],
+            candidates,
+            qualified_capped,
+        ),
     }
 
 
@@ -399,6 +408,7 @@ def main() -> int:
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     TOPN_PATH.touch(exist_ok=True)
+    RULEBOOKS_PATH.touch(exist_ok=True)
     SURVIVORS_PATH.touch(exist_ok=True)
 
     universe = load_live_universe(LiveUniverseConfig())
@@ -424,7 +434,10 @@ def main() -> int:
         start = time.perf_counter()
         if first_key not in done:
             row = run_one_period(first_symbol, first_ctx, first_split, seed=20260607 + 2022)
+            rulebook_rows = row.pop("_rulebooks", [])
             append_jsonl(TOPN_PATH, row)
+            for rr in rulebook_rows:
+                append_jsonl(RULEBOOKS_PATH, rr)
             done.add(first_key)
         elapsed = time.perf_counter() - start
         measured_rows = [r for r in read_jsonl(TOPN_PATH) if r.get("run_key") == first_key]
@@ -476,7 +489,10 @@ def main() -> int:
                 flush=True,
             )
             row = run_one_period(ticker, ctx, split, seed=seed)
+            rulebook_rows = row.pop("_rulebooks", [])
             append_jsonl(TOPN_PATH, row)
+            for rr in rulebook_rows:
+                append_jsonl(RULEBOOKS_PATH, rr)
 
     write_survivors_and_report(all_symbols, timing)
     return 0

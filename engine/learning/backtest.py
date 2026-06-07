@@ -330,6 +330,17 @@ def run_backtest(
             break
         # Trade 데이터클래스 → dict로 변환 (storage 호환)
         trade = asdict(trade_obj) if hasattr(trade_obj, "__dataclass_fields__") else trade_obj
+        if isinstance(trade, dict):
+            entry_reasons = list(getattr(sig, "reasons", []) or [])
+            trade["entry_reason"] = "; ".join(str(x) for x in entry_reasons)
+            trade["entry_reasons"] = entry_reasons
+            trade["entry_signal_score"] = float(getattr(sig, "score", 0.0) or 0.0)
+            trade["entry_signal_raw_score"] = float(getattr(sig, "raw_score", 0.0) or 0.0)
+            trade["entry_signal_threshold"] = float(getattr(sig, "threshold", 0.0) or 0.0)
+            trade["entry_market_adjustment"] = float(getattr(sig, "market_adjustment", 0.0) or 0.0)
+            trade["entry_signal_components"] = dict(getattr(sig, "components", {}) or {})
+            trade["entry_news_sentiment"] = float(cur_sentiment or 0.0)
+            trade["entry_event_flags"] = dict(cur_event_flags or {})
         trades.append(trade)
 
         # 청산 시점 인덱스 찾기 (날짜로 매칭)

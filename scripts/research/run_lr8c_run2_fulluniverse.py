@@ -31,11 +31,13 @@ from engine.pipeline.context import prepare_ticker_context
 from engine.pipeline.rolling_validation import DEFAULT_POSITION_LIMIT_KRW
 from engine.pipeline.topn_survivor import evaluate_survivors, score_topn_validation_periods
 from scripts.research.rulebook_persist import collect_rulebook_rows
+from scripts.research.trade_persist import collect_trade_rows
 
 OUT_DIR = Path("data/_system/research/lr8c_run2_20260607")
 TIMING_PATH = OUT_DIR / "lr8c_run2_timing.txt"
 TOPN_PATH = OUT_DIR / "lr8c_run2_topn.jsonl"
 RULEBOOKS_PATH = OUT_DIR / "lr8c_run2_topn_rulebooks.jsonl"
+TRADES_PATH = OUT_DIR / "lr8c_run2_trades.jsonl"
 SURVIVORS_PATH = OUT_DIR / "lr8c_run2_survivors.jsonl"
 REPORT_PATH = OUT_DIR / "LR8C_RUN2_REPORT.md"
 
@@ -178,8 +180,10 @@ def run_one_period(ticker: str, ctx: dict[str, Any], split: dict[str, Any], seed
     ga_result = run_ga(base_rulebook=ctx["base_rulebook"], evaluate_fn=evaluate_fn, ga_config=ga_cfg)
     ga_elapsed = time.perf_counter() - start
 
+    run_key = f"{ticker}|{split['label']}"
     candidates = collect_top_rulebooks(ga_result, QUALIFIED_COLLECT_N)
     candidate_rows: list[dict[str, Any]] = []
+    candidate_trades_by_hash: dict[str, dict[str, Any]] = {}
     oos_start = time.perf_counter()
     for rank_is, rb in enumerate(candidates, 1):
         oos_result = run_backtest(
@@ -189,7 +193,21 @@ def run_one_period(ticker: str, ctx: dict[str, Any], split: dict[str, Any], seed
             end_date=split["test_end"],
             **kwargs,
         )
-        candidate_rows.append(backtest_oos_row(ticker, split, rank_is, rb, oos_result))
+        row = backtest_oos_row(ticker, split, rank_is, rb, oos_result)
+        candidate_rows.append(row)
+        rulebook_hash = str(row.get("rulebook_hash") or "")
+        if rulebook_hash:
+            candidate_trades_by_hash[rulebook_hash] = {
+                "run_key": run_key,
+                "ticker": ticker,
+                "year": split["year"],
+                "label": split["label"],
+                "is_stress": bool(split.get("is_stress")),
+                "rank_is": int(rank_is),
+                "rulebook_hash": rulebook_hash,
+                "trade_count": int(getattr(oos_result, "trade_count", 0) or 0),
+                "trades": list(getattr(oos_result, "trades", []) or []),
+            }
     oos_elapsed = time.perf_counter() - oos_start
 
     scored = score_topn_validation_periods(
@@ -211,7 +229,7 @@ def run_one_period(ticker: str, ctx: dict[str, Any], split: dict[str, Any], seed
 
     elapsed = time.perf_counter() - start
     return {
-        "run_key": f"{ticker}|{split['label']}",
+        "run_key": run_key,
         "created_at": utc_now(),
         "ticker": ticker,
         "year": split["year"],
@@ -244,12 +262,13 @@ def run_one_period(ticker: str, ctx: dict[str, Any], split: dict[str, Any], seed
         "cap_triggered": bool(cap_triggered),
         "candidates": qualified_capped,
         "_rulebooks": collect_rulebook_rows(
-            f"{ticker}|{split['label']}",
+            run_key,
             ticker,
             split["year"],
             candidates,
             qualified_capped,
         ),
+        "_trades": collect_trade_rows(candidate_trades_by_hash, qualified_capped),
     }
 
 
@@ -409,6 +428,7 @@ def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     TOPN_PATH.touch(exist_ok=True)
     RULEBOOKS_PATH.touch(exist_ok=True)
+    TRADES_PATH.touch(exist_ok=True)
     SURVIVORS_PATH.touch(exist_ok=True)
 
     universe = load_live_universe(LiveUniverseConfig())
@@ -435,9 +455,12 @@ def main() -> int:
         if first_key not in done:
             row = run_one_period(first_symbol, first_ctx, first_split, seed=20260607 + 2022)
             rulebook_rows = row.pop("_rulebooks", [])
+            trade_rows = row.pop("_trades", [])
             append_jsonl(TOPN_PATH, row)
             for rr in rulebook_rows:
                 append_jsonl(RULEBOOKS_PATH, rr)
+            for tr in trade_rows:
+                append_jsonl(TRADES_PATH, tr)
             done.add(first_key)
         elapsed = time.perf_counter() - start
         measured_rows = [r for r in read_jsonl(TOPN_PATH) if r.get("run_key") == first_key]
@@ -490,9 +513,12 @@ def main() -> int:
             )
             row = run_one_period(ticker, ctx, split, seed=seed)
             rulebook_rows = row.pop("_rulebooks", [])
+            trade_rows = row.pop("_trades", [])
             append_jsonl(TOPN_PATH, row)
             for rr in rulebook_rows:
                 append_jsonl(RULEBOOKS_PATH, rr)
+            for tr in trade_rows:
+                append_jsonl(TRADES_PATH, tr)
 
     write_survivors_and_report(all_symbols, timing)
     return 0

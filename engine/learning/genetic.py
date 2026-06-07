@@ -13,6 +13,7 @@ import numpy as np
 
 from engine.core.config import config
 from engine.core.logger import get_logger
+from engine.core.metadata import compute_rulebook_hash
 from engine.strategies.rulebook import (
     CATEGORICAL_PARAMS,
     PARAM_RANGES,
@@ -41,6 +42,54 @@ class GAResult:
     fitness_history: list              # [(gen, best, avg)]
     final_population: list
     generations_run: int
+
+
+def collect_top_rulebooks(ga_result: GAResult, n: int) -> list[Rulebook]:
+    """GA 결과에서 fitness 기준 상위 N개 비중복 룰북을 반환한다.
+
+    ``GAResult.best``는 마지막 세대 population이 아니라 과거 세대의
+    best_overall일 수 있으므로 ``final_population``과 반드시 합집합으로
+    다룬다. 중복 제거는 ``compute_rulebook_hash`` 기준이다.
+
+    Note:
+        ``compute_rulebook_hash``는 mask_schema_version 1+에서 mask 조합을
+        hash에 반영한다. 따라서 마스크 조합이 다른 룰북은 서로 다른
+        후보로 취급되며, 이는 Top-N 후보 다양성을 위한 의도된 동작이다.
+    """
+    try:
+        limit = int(n)
+    except Exception:
+        limit = 0
+    if ga_result is None or limit <= 0:
+        return []
+
+    candidates: list[Rulebook] = []
+    best = getattr(ga_result, "best", None)
+    if best is not None:
+        candidates.append(best)
+    candidates.extend(list(getattr(ga_result, "final_population", []) or []))
+
+    by_hash: dict[str, Rulebook] = {}
+    for rb in candidates:
+        if rb is None:
+            continue
+        rulebook_hash = compute_rulebook_hash(rb)
+        current = by_hash.get(rulebook_hash)
+        rb_fitness = getattr(rb, "fitness", None)
+        current_fitness = getattr(current, "fitness", None) if current is not None else None
+        rb_score = float(rb_fitness) if rb_fitness is not None else float("-inf")
+        current_score = float(current_fitness) if current_fitness is not None else float("-inf")
+        if current is None or rb_score > current_score:
+            by_hash[rulebook_hash] = rb
+
+    ranked = sorted(
+        by_hash.items(),
+        key=lambda item: (
+            -(float(getattr(item[1], "fitness", None)) if getattr(item[1], "fitness", None) is not None else float("-inf")),
+            item[0],
+        ),
+    )
+    return [rb for _, rb in ranked[:limit]]
 
 
 # ---------- 룰북 생성/변이 ----------

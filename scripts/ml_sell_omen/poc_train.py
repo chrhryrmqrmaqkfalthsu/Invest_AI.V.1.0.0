@@ -14,7 +14,7 @@ Split:
 Leakage guard:
     feature 이름에 fwd/future/forward/label/target가 포함되면 즉시 중단한다.
     GPT 시장 이벤트 위험군인 has_*는 기본 제외한다.
-    절대 가격 레벨 Close도 기본 제외한다.
+    종목별 스케일을 먹는 절대 OHLCV 레벨도 기본 제외한다.
 """
 from __future__ import annotations
 
@@ -28,10 +28,10 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.impute import SimpleImputer
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import average_precision_score, precision_score, recall_score, roc_auc_score
 from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_DIR = ROOT / "data" / "_system" / "condition_db"
@@ -53,7 +53,7 @@ BASE_EXCLUDE_COLUMNS = {
     "label_window_end",
 }
 RISKY_GPT_MARKET_PREFIXES = ("has_",)
-ABSOLUTE_PRICE_COLUMNS = {"Close"}
+ABSOLUTE_LEVEL_COLUMNS = {"Open", "High", "Low", "Close", "Volume"}
 
 
 @dataclass
@@ -91,7 +91,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--top-pct", type=float, default=0.20)
     parser.add_argument("--permutation-repeats", type=int, default=5)
     parser.add_argument("--include-gpt-market-events", action="store_true", help="위험군 has_* GPT 시장 이벤트 피처를 포함한다. 기본은 제외.")
-    parser.add_argument("--include-absolute-close", action="store_true", help="절대 가격 레벨 Close를 포함한다. 기본은 제외.")
+    parser.add_argument("--include-absolute-levels", action="store_true", help="절대 OHLCV 레벨을 포함한다. 기본은 제외.")
+    parser.add_argument("--include-absolute-close", dest="include_absolute_levels", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--write-report", type=Path, default=None)
     return parser.parse_args()
 
@@ -100,7 +101,6 @@ def _load_condition_db(data_dir: Path) -> pd.DataFrame:
     files = sorted(data_dir.glob("*.csv"))
     if not files:
         raise FileNotFoundError(f"condition_db csv not found: {data_dir}")
-
     frames: list[pd.DataFrame] = []
     for path in files:
         df = pd.read_csv(path)
@@ -110,8 +110,7 @@ def _load_condition_db(data_dir: Path) -> pd.DataFrame:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df = df.dropna(subset=["Date", "Close"]).sort_values("Date").reset_index(drop=True)
         frames.append(df)
-    out = pd.concat(frames, ignore_index=True).sort_values(["ticker", "Date"]).reset_index(drop=True)
-    return out
+    return pd.concat(frames, ignore_index=True).sort_values(["ticker", "Date"]).reset_index(drop=True)
 
 
 def _future_min_close_return_pct(close: pd.Series, horizon: int) -> pd.Series:
@@ -122,38 +121,26 @@ def _future_min_close_return_pct(close: pd.Series, horizon: int) -> pd.Series:
 def _add_label(df: pd.DataFrame, horizon: int, threshold_pct: float) -> pd.DataFrame:
     out = df.copy()
     grouped = out.groupby("ticker", group_keys=False)
-    out[f"future_min_{horizon}d_close_ret_pct"] = grouped["Close"].apply(
-        lambda s: _future_min_close_return_pct(s, horizon)
-    )
+    out[f"future_min_{horizon}d_close_ret_pct"] = grouped["Close"].apply(lambda s: _future_min_close_return_pct(s, horizon))
     out["label_window_end"] = grouped["Date"].shift(-horizon)
-    out["label_sell_omen_10d_5pct"] = (
-        out[f"future_min_{horizon}d_close_ret_pct"] <= float(threshold_pct)
-    ).astype("int8")
-    out = out.dropna(subset=[f"future_min_{horizon}d_close_ret_pct", "label_window_end"]).copy()
-    return out
+    out["label_sell_omen_10d_5pct"] = (out[f"future_min_{horizon}d_close_ret_pct"] <= float(threshold_pct)).astype("int8")
+    return out.dropna(subset=[f"future_min_{horizon}d_close_ret_pct", "label_window_end"]).copy()
 
 
 def _rolling_prev_mean_by_ticker(df: pd.DataFrame, col: str, window: int) -> pd.Series:
-    return df.groupby("ticker", group_keys=False)[col].apply(
-        lambda s: s.shift(1).rolling(window=window, min_periods=1).mean()
-    )
+    return df.groupby("ticker", group_keys=False)[col].apply(lambda s: s.shift(1).rolling(window=window, min_periods=1).mean())
 
 
 def _rolling_std_by_ticker(df: pd.DataFrame, col: str, window: int) -> pd.Series:
-    return df.groupby("ticker", group_keys=False)[col].apply(
-        lambda s: s.rolling(window=window, min_periods=2).std()
-    )
+    return df.groupby("ticker", group_keys=False)[col].apply(lambda s: s.rolling(window=window, min_periods=2).std())
 
 
 def _rolling_prev_max_by_ticker(df: pd.DataFrame, col: str, window: int) -> pd.Series:
-    return df.groupby("ticker", group_keys=False)[col].apply(
-        lambda s: s.shift(1).rolling(window=window, min_periods=1).max()
-    )
+    return df.groupby("ticker", group_keys=False)[col].apply(lambda s: s.shift(1).rolling(window=window, min_periods=1).max())
 
 
 def _add_past_only_features(df: pd.DataFrame, include_gpt_market_events: bool) -> pd.DataFrame:
     out = df.copy().sort_values(["ticker", "Date"]).reset_index(drop=True)
-
     out["ret_1d_pct"] = out.groupby("ticker")["Close"].pct_change(1) * 100.0
     out["ret_5d_pct"] = out.groupby("ticker")["Close"].pct_change(5) * 100.0
     out["ret_10d_pct"] = out.groupby("ticker")["Close"].pct_change(10) * 100.0
@@ -169,29 +156,20 @@ def _add_past_only_features(df: pd.DataFrame, include_gpt_market_events: bool) -
             out[f"{col}_ratio_vs_prev5"] = (out[col].fillna(0.0) + 1.0) / (prev5.fillna(0.0) + 1.0)
 
     if include_gpt_market_events:
-        has_cols = [c for c in out.columns if c.startswith("has_")]
-        for col in has_cols:
+        for col in [c for c in out.columns if c.startswith("has_")]:
             prev5_max = _rolling_prev_max_by_ticker(out, col, 5).fillna(0.0)
             out[f"{col}_new_5d"] = ((out[col].fillna(0.0) > 0.0) & (prev5_max <= 0.0)).astype("int8")
 
-    sent_topic_cols = [c for c in out.columns if c.startswith("sent_")]
-    for col in sent_topic_cols:
+    for col in [c for c in out.columns if c.startswith("sent_")]:
         prev5 = _rolling_prev_mean_by_ticker(out, col, 5)
         out[f"{col}_delta_vs_prev5"] = out[col] - prev5
-
     return out
 
 
-def _candidate_feature_columns(
-    df: pd.DataFrame,
-    *,
-    include_gpt_market_events: bool,
-    include_absolute_close: bool,
-) -> list[str]:
+def _candidate_feature_columns(df: pd.DataFrame, *, include_gpt_market_events: bool, include_absolute_levels: bool) -> list[str]:
     excluded = set(BASE_EXCLUDE_COLUMNS) | IDENTITY_COLUMNS
-    if not include_absolute_close:
-        excluded |= ABSOLUTE_PRICE_COLUMNS
-
+    if not include_absolute_levels:
+        excluded |= ABSOLUTE_LEVEL_COLUMNS
     features: list[str] = []
     for col in df.columns:
         if col in excluded:
@@ -206,7 +184,7 @@ def _candidate_feature_columns(
     return sorted(features)
 
 
-def _assert_no_leakage(feature_cols: Iterable[str], include_gpt_market_events: bool) -> None:
+def _assert_no_leakage(feature_cols: Iterable[str], include_gpt_market_events: bool, include_absolute_levels: bool) -> None:
     leaked = [c for c in feature_cols if any(keyword in c.lower() for keyword in LEAK_KEYWORDS)]
     if leaked:
         raise RuntimeError(f"LEAKAGE_GUARD_FAILED: forbidden future/label columns in features: {leaked}")
@@ -214,13 +192,16 @@ def _assert_no_leakage(feature_cols: Iterable[str], include_gpt_market_events: b
         risky = [c for c in feature_cols if any(c.startswith(prefix) for prefix in RISKY_GPT_MARKET_PREFIXES)]
         if risky:
             raise RuntimeError(f"GPT_MARKET_GUARD_FAILED: risky GPT market columns in features: {risky}")
+    if not include_absolute_levels:
+        absolute = [c for c in feature_cols if c in ABSOLUTE_LEVEL_COLUMNS]
+        if absolute:
+            raise RuntimeError(f"ABSOLUTE_LEVEL_GUARD_FAILED: absolute OHLCV columns in features: {absolute}")
 
 
 def _split_time(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     train = df[(df["Date"] <= TRAIN_END) & (df["label_window_end"] <= TRAIN_END)].copy()
     valid = df[(df["Date"] >= VALID_START) & (df["Date"] <= VALID_END) & (df["label_window_end"] <= VALID_END)].copy()
     oos = df[df["Date"] >= OOS_START].copy()
-
     if not train.empty and not valid.empty and not oos.empty:
         if not (train["Date"].max() < valid["Date"].min() < valid["Date"].max() < oos["Date"].min()):
             raise RuntimeError("TIME_SPLIT_GUARD_FAILED: split dates overlap or are not monotonic")
@@ -248,18 +229,14 @@ def _metric_report(y_true: pd.Series, scores: np.ndarray, top_pct: float) -> Met
     has_both_classes = len(set(y.tolist())) == 2
     auc = float(roc_auc_score(y, scores)) if has_both_classes else None
     ap = float(average_precision_score(y, scores)) if has_both_classes else None
-
     pred_050 = (scores >= 0.50).astype(int)
     precision_050 = float(precision_score(y, pred_050, zero_division=0)) if has_both_classes else None
     recall_050 = float(recall_score(y, pred_050, zero_division=0)) if has_both_classes else None
-
     k = max(1, int(round(len(scores) * float(top_pct))))
-    cutoff_idx = np.argsort(scores)[-k:]
     pred_top = np.zeros_like(y)
-    pred_top[cutoff_idx] = 1
+    pred_top[np.argsort(scores)[-k:]] = 1
     precision_top = float(precision_score(y, pred_top, zero_division=0)) if has_both_classes else None
     recall_top = float(recall_score(y, pred_top, zero_division=0)) if has_both_classes else None
-
     return MetricReport(
         rows=int(len(y)),
         positives=int(y.sum()),
@@ -279,10 +256,7 @@ def _metric_report(y_true: pd.Series, scores: np.ndarray, top_pct: float) -> Met
 def _print_split_reports(reports: Iterable[SplitReport]) -> None:
     print("=== split report ===")
     for r in reports:
-        print(
-            f"{r.name}: rows={r.rows} positives={r.positives} "
-            f"positive_rate={r.positive_rate:.4f} dates={r.min_date}..{r.max_date} tickers={r.tickers}"
-        )
+        print(f"{r.name}: rows={r.rows} positives={r.positives} positive_rate={r.positive_rate:.4f} dates={r.min_date}..{r.max_date} tickers={r.tickers}")
 
 
 def _top_permutation_importance(model: Pipeline, x: pd.DataFrame, y: pd.Series, repeats: int) -> list[dict[str, float | str]]:
@@ -296,9 +270,10 @@ def _top_permutation_importance(model: Pipeline, x: pd.DataFrame, y: pd.Series, 
         random_state=42,
         scoring="roc_auc",
     )
-    rows = []
-    for name, mean_imp, std_imp in zip(x.columns, result.importances_mean, result.importances_std):
-        rows.append({"feature": str(name), "importance_mean": float(mean_imp), "importance_std": float(std_imp)})
+    rows = [
+        {"feature": str(name), "importance_mean": float(mean_imp), "importance_std": float(std_imp)}
+        for name, mean_imp, std_imp in zip(x.columns, result.importances_mean, result.importances_std)
+    ]
     rows.sort(key=lambda row: row["importance_mean"], reverse=True)
     return rows[:15]
 
@@ -308,19 +283,19 @@ def main() -> int:
     df = _load_condition_db(args.data_dir)
     raw_rows = len(df)
     raw_tickers = df["ticker"].nunique()
+    include_absolute_levels = bool(args.include_absolute_levels)
 
     df = _add_label(df, horizon=args.horizon, threshold_pct=args.drop_threshold_pct)
     df = _add_past_only_features(df, include_gpt_market_events=bool(args.include_gpt_market_events))
     feature_cols = _candidate_feature_columns(
         df,
         include_gpt_market_events=bool(args.include_gpt_market_events),
-        include_absolute_close=bool(args.include_absolute_close),
+        include_absolute_levels=include_absolute_levels,
     )
-    _assert_no_leakage(feature_cols, include_gpt_market_events=bool(args.include_gpt_market_events))
+    _assert_no_leakage(feature_cols, bool(args.include_gpt_market_events), include_absolute_levels)
 
     train, valid, oos = _split_time(df)
     reports = [_split_report("train", train), _split_report("valid", valid), _split_report("oos", oos)]
-
     if train.empty or valid.empty or oos.empty:
         raise RuntimeError("split produced empty train/valid/oos; cannot run POC")
 
@@ -351,7 +326,6 @@ def main() -> int:
         ]
     )
     model.fit(x_train, y_train)
-
     valid_scores = model.predict_proba(x_valid)[:, 1]
     oos_scores = model.predict_proba(x_oos)[:, 1]
     if not (np.all(valid_scores >= 0.0) and np.all(valid_scores <= 1.0) and np.all(oos_scores >= 0.0) and np.all(oos_scores <= 1.0)):
@@ -368,17 +342,16 @@ def main() -> int:
     print(f"label: future_min_{args.horizon}d_close_ret_pct <= {args.drop_threshold_pct}%")
     print(f"feature_count={len(feature_cols)}")
     print(f"include_gpt_market_events={bool(args.include_gpt_market_events)}")
-    print(f"include_absolute_close={bool(args.include_absolute_close)}")
+    print(f"include_absolute_levels={include_absolute_levels}")
     print(f"leakage_guard=PASS forbidden_keywords={LEAK_KEYWORDS}")
     print("gpt_market_guard=PASS" if not args.include_gpt_market_events else "gpt_market_guard=DISABLED_BY_FLAG")
+    print("absolute_level_guard=PASS" if not include_absolute_levels else "absolute_level_guard=DISABLED_BY_FLAG")
     print(f"score_range_guard=PASS valid_min={valid_scores.min():.6f} valid_max={valid_scores.max():.6f} oos_min={oos_scores.min():.6f} oos_max={oos_scores.max():.6f}")
     _print_split_reports(reports)
-
     print("=== metrics: VALID 2024 ===")
     print(json.dumps(asdict(valid_metrics), ensure_ascii=False, sort_keys=True, indent=2))
     print("=== metrics: OOS 2025+ ===")
     print(json.dumps(asdict(oos_metrics), ensure_ascii=False, sort_keys=True, indent=2))
-
     print("=== top permutation importance on valid ===")
     for idx, row in enumerate(top_features, 1):
         print(f"{idx:02d}. {row['feature']} mean={row['importance_mean']:.6f} std={row['importance_std']:.6f}")
@@ -401,23 +374,19 @@ def main() -> int:
         },
         "policy": {
             "include_gpt_market_events": bool(args.include_gpt_market_events),
-            "include_absolute_close": bool(args.include_absolute_close),
-            "default_excludes": sorted(list(ABSOLUTE_PRICE_COLUMNS)) + ["has_*"],
+            "include_absolute_levels": include_absolute_levels,
+            "default_excludes": sorted(list(ABSOLUTE_LEVEL_COLUMNS)) + ["has_*"],
         },
         "feature_count": len(feature_cols),
         "feature_columns": feature_cols,
         "split": [asdict(r) for r in reports],
-        "metrics": {
-            "valid": asdict(valid_metrics),
-            "oos": asdict(oos_metrics),
-        },
+        "metrics": {"valid": asdict(valid_metrics), "oos": asdict(oos_metrics)},
         "top_permutation_importance_valid": top_features,
     }
     if args.write_report is not None:
         args.write_report.parent.mkdir(parents=True, exist_ok=True)
         args.write_report.write_text(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2), encoding="utf-8")
         print(f"report_written: {args.write_report}")
-
     return 0
 
 

@@ -7,7 +7,8 @@ Purpose:
 Leakage policy:
     - ticker_sentiment는 effective_date = news_date + lag_days 이후에만 사용한다.
     - GPT 시장 이벤트 has_*는 기본 생성하지 않는다.
-    - market_score/vix는 가격 기반 market_history_v2의 score/vix만 옵션으로 병합한다.
+    - 기본 market history는 가격 기반 score/vix가 있는 market_history.csv다.
+      지정 파일에 해당 컬럼이 없으면 안전한 기본값(market_score=50, vix=18)으로 채운다.
     - fwd_*는 라벨 원천으로만 쓰며 학습 피처에서는 제외해야 한다.
 
 이 스크립트는 데이터 빌더이며 모델 학습은 poc_train.py에서 수행한다.
@@ -23,7 +24,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SENTIMENT_DIR = ROOT / "data" / "_system" / "ticker_sentiment"
-DEFAULT_MARKET_HISTORY = ROOT / "data" / "_system" / "market_history_v2.csv"
+DEFAULT_MARKET_HISTORY = ROOT / "data" / "_system" / "market_history.csv"
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "_system" / "condition_db_sell_omen_clean"
 
 NEWS_COLUMNS = [
@@ -69,7 +70,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--tickers", nargs="*", default=None, help="명시 tickers. 없으면 ticker_sentiment 전체")
     parser.add_argument("--max-tickers", type=int, default=0, help="0이면 제한 없음")
     parser.add_argument("--sentiment-lag-days", type=int, default=1)
-    parser.add_argument("--include-price-market", action="store_true", help="market_history_v2의 score/vix 가격 기반 컬럼 병합")
+    parser.add_argument("--include-price-market", action="store_true", help="market history의 score/vix 가격 기반 컬럼 병합. 없으면 기본값 사용")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -198,8 +199,17 @@ def _load_market_history(path: Path) -> pd.DataFrame:
     return df[keep].dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
 
 
+def _coerce_numeric_column(out: pd.DataFrame, col: str, default: float) -> pd.Series:
+    if col not in out.columns:
+        return pd.Series(default, index=out.index, dtype="float64")
+    series = pd.to_numeric(out[col], errors="coerce")
+    if not isinstance(series, pd.Series):
+        series = pd.Series(default, index=out.index, dtype="float64")
+    return series.fillna(default).astype(float)
+
+
 def _merge_market(df: pd.DataFrame, market_df: pd.DataFrame) -> pd.DataFrame:
-    if market_df.empty:
+    if market_df.empty or "Date" not in market_df.columns:
         out = df.copy()
         out["market_score"] = 50.0
         out["vix"] = 18.0
@@ -210,8 +220,8 @@ def _merge_market(df: pd.DataFrame, market_df: pd.DataFrame) -> pd.DataFrame:
         on="Date",
         direction="backward",
     )
-    out["market_score"] = pd.to_numeric(out.get("market_score"), errors="coerce").fillna(50.0)
-    out["vix"] = pd.to_numeric(out.get("vix"), errors="coerce").fillna(18.0)
+    out["market_score"] = _coerce_numeric_column(out, "market_score", 50.0)
+    out["vix"] = _coerce_numeric_column(out, "vix", 18.0)
     return out
 
 
@@ -232,6 +242,8 @@ def _finalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     fill_zero_cols = NEWS_COLUMNS + topic_cols
     for col in fill_zero_cols:
         out[col] = out[col].fillna(0.0)
+    out["market_score"] = out["market_score"].fillna(50.0)
+    out["vix"] = out["vix"].fillna(18.0)
     out["Volume_ratio"] = out["Volume_ratio"].replace([np.inf, -np.inf], np.nan).fillna(1.0)
     return out
 
@@ -268,10 +280,13 @@ def main() -> int:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     market_df = _load_market_history(args.market_history) if args.include_price_market else pd.DataFrame()
+    market_cols = [c for c in ["market_score", "vix"] if c in market_df.columns]
 
     print("=== B-1b clean condition DB builder ===")
     print(f"tickers={len(tickers)} output_dir={args.output_dir}")
     print(f"sentiment_lag_days={args.sentiment_lag_days} include_price_market={bool(args.include_price_market)}")
+    print(f"market_history={args.market_history}")
+    print(f"market_history_columns={market_cols if market_cols else 'DEFAULTS_ONLY'}")
     print("gpt_market_events=EXCLUDED_BY_DESIGN")
 
     ok = 0

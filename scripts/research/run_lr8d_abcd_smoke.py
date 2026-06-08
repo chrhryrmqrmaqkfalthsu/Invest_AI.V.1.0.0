@@ -7,6 +7,7 @@ B. swing fitness win-rate bonus and concentration penalty
 C. breakeven enabled categorical normalization / exit behavior
 D. walk-forward sell_omen score merge and exit behavior
 E. tiny integrated GA/backtest persistence shape
+F. full trade dump fields for post-run analysis
 
 This script is research-only and writes no promote/live artifacts.
 """
@@ -63,6 +64,35 @@ def _candidate(ticker: str, label: str, year: Any, rulebook_hash: str, exp: floa
             "profit_factor": pf,
             "max_drawdown_pct": -5.0,
         },
+    }
+
+
+def _assert_full_trade_dump(trade: dict) -> dict[str, Any]:
+    required = [
+        "full_dump_schema_version",
+        "rulebook_full",
+        "backtest_params_full",
+        "entry_context_full",
+        "exit_context_full",
+        "holding_path_full",
+    ]
+    missing = [key for key in required if key not in trade]
+    _assert(not missing, f"F: full trade dump keys missing: {missing}")
+    _assert(isinstance(trade["rulebook_full"], dict) and len(trade["rulebook_full"]) >= 50, "F: rulebook_full must contain full rulebook params")
+    entry_cols = ((trade.get("entry_context_full") or {}).get("row") or {}).get("columns") or {}
+    exit_cols = ((trade.get("exit_context_full") or {}).get("row") or {}).get("columns") or {}
+    _assert(isinstance(entry_cols, dict) and "Close" in entry_cols, "F: entry_context_full must contain full row columns")
+    _assert(isinstance(exit_cols, dict) and "Close" in exit_cols, "F: exit_context_full must contain full row columns")
+    path = trade.get("holding_path_full") or []
+    _assert(isinstance(path, list) and len(path) >= 1, "F: holding_path_full must contain at least entry row")
+    json.dumps(trade, ensure_ascii=False, sort_keys=True)
+    return {
+        "top_key_count": len(trade),
+        "rulebook_field_count": len(trade["rulebook_full"]),
+        "entry_column_count": len(entry_cols),
+        "exit_column_count": len(exit_cols),
+        "holding_path_row_count": len(path),
+        "json_serializable": True,
     }
 
 
@@ -206,6 +236,7 @@ def check_e_integrated_ga_backtest_shape() -> dict[str, Any]:
     _assert(forced.trade_count > 0, "E: forced integrated backtest must produce trades")
     _assert(sell_omen_count > 0, "E: forced sell_omen-enabled backtest must produce sell_omen exits")
     _assert(any("breakeven_enabled" in tr and "sell_omen_score" in tr for tr in forced.trades), "E: trade snapshot must include breakeven/sell_omen fields")
+    full_dump_summary = _assert_full_trade_dump(forced.trades[0])
 
     ga_cfg = GAConfig(
         population=6,
@@ -266,12 +297,14 @@ def check_e_integrated_ga_backtest_shape() -> dict[str, Any]:
     _assert(len(trade_rows) > 0, "E: trade persistence rows must be created")
     snapshots = [tr for row in trade_rows for tr in row.get("trades", [])]
     _assert(any("breakeven_enabled" in tr and "sell_omen_score" in tr for tr in snapshots), "E: persisted trade snapshots must include new fields")
+    _assert(any("rulebook_full" in tr and "entry_context_full" in tr for tr in snapshots), "F: persisted trade snapshots must include full dump fields")
 
     return {
         "ctx_score_info": ctx.get("sell_omen_score"),
         "forced_trade_count": forced.trade_count,
         "forced_sell_omen_count": sell_omen_count,
         "forced_profit_concentration": forced.profit_concentration,
+        "full_dump_summary": full_dump_summary,
         "tiny_ga_generations": ga_result.generations_run,
         "candidate_count": len(candidates),
         "rulebook_rows": len(rulebook_rows),

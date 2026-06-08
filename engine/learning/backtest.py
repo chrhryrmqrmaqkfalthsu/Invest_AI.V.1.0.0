@@ -4,8 +4,9 @@
 - 시점별 시장 컨텍스트 시계열 지원 (market_history_df)
 - 결과 요약: 승률, 기대값, MDD, Profit Factor, Sharpe-like, fitness
 """
-from dataclasses import dataclass, field, asdict
-from typing import Optional
+from dataclasses import dataclass, field, asdict, is_dataclass
+from datetime import date, datetime
+from typing import Any, Optional
 import numpy as np
 import pandas as pd
 
@@ -36,6 +37,7 @@ COMPLEXITY_MASK_FIELDS = (
     "use_event_block",
     "use_market_entry_adjustment",
 )
+FULL_TRADE_DUMP_SCHEMA_VERSION = 1
 
 
 @dataclass
@@ -83,6 +85,215 @@ _TOPIC_FEATURE_CACHE: dict = {}
 
 def _zero_event_flags() -> dict:
     return {k: 0 for k in EVENT_FLAG_KEYS}
+
+
+def _json_safe(value: Any) -> Any:
+    """Convert pandas/numpy/python objects to strict JSON-safe primitives.
+
+    Trade artifacts are appended as JSONL by research runners. This helper keeps
+    full-context dumps serializable while preserving as much source data as
+    possible. NaN/NaT/inf values become None.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        return value if np.isfinite(value) else None
+    if isinstance(value, (pd.Timestamp, datetime, date)):
+        try:
+            return pd.Timestamp(value).isoformat()
+        except Exception:
+            return str(value)
+    if isinstance(value, np.generic):
+        try:
+            return _json_safe(value.item())
+        except Exception:
+            return str(value)
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+    if is_dataclass(value):
+        try:
+            return _json_safe(asdict(value))
+        except Exception:
+            return str(value)
+    if isinstance(value, pd.Series):
+        return {str(k): _json_safe(v) for k, v in value.to_dict().items()}
+    if isinstance(value, pd.DataFrame):
+        return [_json_safe(row) for _, row in value.iterrows()]
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    return value if isinstance(value, (str, bool, int, float)) else str(value)
+
+
+def _row_date_str(df: pd.DataFrame, idx: int) -> str:
+    try:
+        value = df.index[int(idx)]
+        if hasattr(value, "date"):
+            return str(value.date())
+        return str(value)
+    except Exception:
+        return ""
+
+
+def _row_full_snapshot(df: pd.DataFrame, idx: int | None, *, role: str) -> dict:
+    """Dump every column available in df at one row."""
+    if idx is None:
+        return {"role": role, "row_index": None, "date": None, "columns": {}}
+    try:
+        i = int(idx)
+        if i < 0 or i >= len(df):
+            return {"role": role, "row_index": i, "date": None, "columns": {}, "error": "index_out_of_range"}
+        row = df.iloc[i]
+        return {
+            "role": role,
+            "row_index": i,
+            "date": _row_date_str(df, i),
+            "index_value": _json_safe(df.index[i]),
+            "columns": _json_safe(row.to_dict()),
+        }
+    except Exception as exc:
+        return {"role": role, "row_index": idx, "date": None, "columns": {}, "error": str(exc)}
+
+
+def _holding_path_full_snapshot(df: pd.DataFrame, entry_idx: int, exit_idx: int | None) -> list[dict]:
+    """Dump every df row between entry and exit inclusive."""
+    try:
+        start = max(0, int(entry_idx))
+        end = int(exit_idx) if exit_idx is not None else start
+        end = min(max(end, start), len(df) - 1)
+        return [_row_full_snapshot(df, j, role="holding_path") for j in range(start, end + 1)]
+    except Exception:
+        return []
+
+
+def _signal_full_snapshot(sig: Any) -> dict:
+    return {
+        "should_buy": bool(getattr(sig, "should_buy", False)),
+        "score": _json_safe(getattr(sig, "score", 0.0)),
+        "raw_score": _json_safe(getattr(sig, "raw_score", 0.0)),
+        "threshold": _json_safe(getattr(sig, "threshold", 0.0)),
+        "reasons": _json_safe(list(getattr(sig, "reasons", []) or [])),
+        "market_adjustment": _json_safe(getattr(sig, "market_adjustment", 0.0)),
+        "components": _json_safe(dict(getattr(sig, "components", {}) or {})),
+    }
+
+
+def _rulebook_full_snapshot(rb: Rulebook) -> dict:
+    try:
+        return _json_safe(asdict(rb))
+    except Exception:
+        method = getattr(rb, "to_dict", None)
+        if callable(method):
+            try:
+                return _json_safe(method())
+            except Exception:
+                pass
+    return _json_safe(vars(rb)) if hasattr(rb, "__dict__") else {"repr": repr(rb)}
+
+
+def _full_context_snapshot(
+    *,
+    role: str,
+    df: pd.DataFrame,
+    idx: int | None,
+    sig: Any,
+    sentiment: float,
+    market: float,
+    sector: float,
+    vix: float,
+    event_flags: dict,
+    topic_features: Optional[dict],
+) -> dict:
+    row_snapshot = _row_full_snapshot(df, idx, role=role)
+    row_cols = row_snapshot.get("columns", {}) if isinstance(row_snapshot, dict) else {}
+    return {
+        "role": role,
+        "row": row_snapshot,
+        "signal": _signal_full_snapshot(sig),
+        "inputs": {
+            "news_sentiment": _json_safe(sentiment),
+            "topic_features": _json_safe(topic_features or {}),
+            "market_score": _json_safe(market),
+            "sector_score": _json_safe(sector),
+            "vix_level": _json_safe(vix),
+            "event_flags": _json_safe(event_flags or {}),
+            "sell_omen_score": row_cols.get("sell_omen_score") if isinstance(row_cols, dict) else None,
+            "sell_omen_model_train_end": row_cols.get("sell_omen_model_train_end") if isinstance(row_cols, dict) else None,
+            "sell_omen_score_year": row_cols.get("sell_omen_score_year") if isinstance(row_cols, dict) else None,
+        },
+    }
+
+
+def _find_df_index_by_date(df: pd.DataFrame, value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        loc = df.index.get_loc(pd.Timestamp(value))
+        if isinstance(loc, slice):
+            return int(loc.start)
+        if isinstance(loc, (list, tuple, np.ndarray)):
+            arr = np.asarray(loc)
+            if arr.dtype == bool:
+                found = np.flatnonzero(arr)
+                return int(found[0]) if len(found) else None
+            return int(arr[0]) if len(arr) else None
+        return int(loc)
+    except Exception:
+        try:
+            dates = pd.to_datetime(pd.Series(df.index, index=range(len(df))), errors="coerce").dt.strftime("%Y-%m-%d")
+            key = pd.Timestamp(value).strftime("%Y-%m-%d")
+            matched = dates[dates == key]
+            return int(matched.index[0]) if len(matched) else None
+        except Exception:
+            return None
+
+
+def _attach_full_trade_dump(
+    *,
+    trade: dict,
+    rb: Rulebook,
+    df: pd.DataFrame,
+    entry_idx: int,
+    exit_idx: int | None,
+    entry_context_full: dict,
+    exit_context_full: Optional[dict],
+    position_limit_krw: float,
+    commission_rate: float,
+    cooldown_days: int,
+    warmup: int,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    topic_window: int,
+    use_llm_events: bool,
+) -> None:
+    """Add large analysis-only dumps without removing legacy flat fields."""
+    trade["full_dump_schema_version"] = FULL_TRADE_DUMP_SCHEMA_VERSION
+    trade["rulebook_full"] = _rulebook_full_snapshot(rb)
+    trade["backtest_params_full"] = _json_safe(
+        {
+            "position_limit_krw": position_limit_krw,
+            "commission_rate": commission_rate,
+            "cooldown_days": cooldown_days,
+            "warmup": warmup,
+            "start_date": start_date,
+            "end_date": end_date,
+            "feature_lag_days": FEATURE_LAG_DAYS,
+            "feature_lag_max_age_days": FEATURE_LAG_MAX_AGE_DAYS,
+            "topic_feature_window": topic_window,
+            "use_llm_events": use_llm_events,
+        }
+    )
+    trade["entry_context_full"] = _json_safe(entry_context_full)
+    trade["exit_context_full"] = _json_safe(exit_context_full or {})
+    trade["holding_path_full"] = _json_safe(_holding_path_full_snapshot(df, entry_idx, exit_idx))
+    trade["holding_path_row_count"] = len(trade.get("holding_path_full") or [])
+    trade["trade_dump_note"] = "rulebook_full + entry/exit_context_full + holding_path_full contain every available df column at the trade dates."
 
 
 def _news_zscore_window(rb: Rulebook) -> int:
@@ -424,6 +635,18 @@ def run_backtest(
 
         trade = asdict(trade_obj) if hasattr(trade_obj, "__dataclass_fields__") else trade_obj
         if isinstance(trade, dict):
+            entry_context_full = _full_context_snapshot(
+                role="entry",
+                df=df,
+                idx=i,
+                sig=sig,
+                sentiment=cur_sentiment,
+                market=cur_market,
+                sector=cur_sector,
+                vix=cur_vix,
+                event_flags=cur_event_flags,
+                topic_features=cur_topic_features,
+            )
             trade.update(
                 _signal_snapshot(
                     "entry",
@@ -437,12 +660,10 @@ def run_backtest(
                 )
             )
             exit_date = trade.get("exit_date")
+            exit_idx = _find_df_index_by_date(df, exit_date)
+            exit_context_full: Optional[dict] = None
             try:
-                exit_idx = df.index.get_loc(pd.Timestamp(exit_date)) if exit_date is not None else None
-                if isinstance(exit_idx, slice):
-                    exit_idx = exit_idx.start
                 if exit_idx is not None:
-                    exit_idx = int(exit_idx)
                     ex_market, ex_sector, ex_vix, ex_sentiment, ex_event_flags, ex_topic_features = _lookup_signal_context(
                         df=df,
                         idx=exit_idx,
@@ -465,6 +686,18 @@ def run_backtest(
                         event_flags=ex_event_flags,
                         topic_features=ex_topic_features,
                     )
+                    exit_context_full = _full_context_snapshot(
+                        role="exit",
+                        df=df,
+                        idx=exit_idx,
+                        sig=ex_sig,
+                        sentiment=ex_sentiment,
+                        market=ex_market,
+                        sector=ex_sector,
+                        vix=ex_vix,
+                        event_flags=ex_event_flags,
+                        topic_features=ex_topic_features,
+                    )
                     trade.update(
                         _signal_snapshot(
                             "exit",
@@ -480,17 +713,31 @@ def run_backtest(
                     trade["exit_snapshot_date"] = str(pd.Timestamp(df.index[exit_idx]).date())
             except Exception as e:
                 trade["exit_snapshot_error"] = str(e)
+            _attach_full_trade_dump(
+                trade=trade,
+                rb=rb,
+                df=df,
+                entry_idx=i,
+                exit_idx=exit_idx,
+                entry_context_full=entry_context_full,
+                exit_context_full=exit_context_full,
+                position_limit_krw=position_limit_krw,
+                commission_rate=commission_rate,
+                cooldown_days=cooldown_days,
+                warmup=warmup,
+                start_date=start_date,
+                end_date=end_date,
+                topic_window=topic_window,
+                use_llm_events=use_llm_events,
+            )
         trades.append(trade)
 
         exit_date = trade.get("exit_date")
         if exit_date is None:
             i += 1
             continue
-        try:
-            exit_idx = df.index.get_loc(pd.Timestamp(exit_date))
-            if isinstance(exit_idx, slice):
-                exit_idx = exit_idx.start
-        except KeyError:
+        exit_idx = _find_df_index_by_date(df, exit_date)
+        if exit_idx is None:
             exit_idx = i + 1
         i = max(exit_idx + 1 + cooldown_days, i + 1)
 

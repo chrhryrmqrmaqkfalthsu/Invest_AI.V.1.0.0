@@ -19,6 +19,7 @@ from engine.core.logger import get_logger
 from engine.strategies.rulebook import Rulebook
 from engine.strategies.evaluator import evaluate_signal, calc_position_size_krw
 from engine.strategies.exit_simulator import simulate_exit
+from engine.strategies.news_features import precompute_topic_features
 
 log = get_logger("backtest")
 
@@ -77,10 +78,42 @@ class BacktestResult:
 
 _SPREAD_CTX_CACHE: dict = {}
 _SPREAD_RET_CACHE: dict = {}
+_TOPIC_FEATURE_CACHE: dict = {}
 
 
 def _zero_event_flags() -> dict:
     return {k: 0 for k in EVENT_FLAG_KEYS}
+
+
+def _news_zscore_window(rb: Rulebook) -> int:
+    try:
+        window = int(getattr(rb, "news_zscore_window", 60) or 60)
+    except Exception:
+        window = 60
+    return max(1, min(window, 252))
+
+
+def _precompute_topic_feature_map(ticker_sentiment: Optional[dict], window: int) -> dict:
+    """Precompute ticker topic-news z-score features for one rulebook window.
+
+    ``precompute_topic_features`` itself uses only prior samples for each raw
+    news date. The backtest later applies FEATURE_LAG_DAYS again at lookup time,
+    so D-day entries only see topic features available through D-1 or earlier.
+    """
+    if not isinstance(ticker_sentiment, dict) or not ticker_sentiment:
+        return {}
+    key = (id(ticker_sentiment), len(ticker_sentiment), int(window))
+    cached = _TOPIC_FEATURE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    try:
+        features = precompute_topic_features(ticker_sentiment, int(window))
+        if not isinstance(features, dict):
+            features = {}
+    except Exception:
+        features = {}
+    _TOPIC_FEATURE_CACHE[key] = features
+    return features
 
 
 def _lookup_signal_context(
@@ -93,8 +126,9 @@ def _lookup_signal_context(
     market_history_df: Optional[pd.DataFrame],
     sector_name: str,
     ticker_sentiment: Optional[dict],
+    topic_feature_map: Optional[dict],
     use_llm_events: bool,
-) -> tuple[float, float, float, float, dict]:
+) -> tuple[float, float, float, float, dict, dict]:
     event_flags = _zero_event_flags()
     if market_history_df is not None:
         mkt = lookup_market_at_lagged(market_history_df, df.index[idx], lag_days=FEATURE_LAG_DAYS)
@@ -122,10 +156,33 @@ def _lookup_signal_context(
                 cur_sentiment = float(s.get("sentiment_avg", 0.0))
         except Exception:
             cur_sentiment = 0.0
-    return cur_market, cur_sector, cur_vix, cur_sentiment, event_flags
+
+    cur_topic_features: dict = {}
+    if topic_feature_map:
+        try:
+            t = lookup_lagged_daily_dict(
+                topic_feature_map,
+                df.index[idx],
+                lag_days=FEATURE_LAG_DAYS,
+                max_age_days=FEATURE_LAG_MAX_AGE_DAYS,
+            )
+            cur_topic_features = dict(t or {}) if isinstance(t, dict) else {}
+        except Exception:
+            cur_topic_features = {}
+    return cur_market, cur_sector, cur_vix, cur_sentiment, event_flags, cur_topic_features
 
 
-def _signal_snapshot(prefix: str, sig, *, sentiment: float, market: float, sector: float, vix: float, event_flags: dict) -> dict:
+def _signal_snapshot(
+    prefix: str,
+    sig,
+    *,
+    sentiment: float,
+    market: float,
+    sector: float,
+    vix: float,
+    event_flags: dict,
+    topic_features: Optional[dict] = None,
+) -> dict:
     reasons = list(getattr(sig, "reasons", []) or [])
     reason_key = f"{prefix}_reason"
     reasons_key = f"{prefix}_reasons"
@@ -141,6 +198,7 @@ def _signal_snapshot(prefix: str, sig, *, sentiment: float, market: float, secto
         f"{prefix}_market_adjustment": float(getattr(sig, "market_adjustment", 0.0) or 0.0),
         f"{prefix}_signal_components": dict(getattr(sig, "components", {}) or {}),
         f"{prefix}_news_sentiment": float(sentiment or 0.0),
+        f"{prefix}_topic_features": dict(topic_features or {}),
         f"{prefix}_market_score": float(market or 0.0),
         f"{prefix}_sector_score": float(sector or 0.0),
         f"{prefix}_vix_level": float(vix or 0.0),
@@ -183,6 +241,8 @@ def run_backtest(
     trades: list = []
     start_ts = pd.Timestamp(start_date) if start_date else None
     end_ts = pd.Timestamp(end_date) if end_date else None
+    topic_window = _news_zscore_window(rb)
+    topic_feature_map = _precompute_topic_feature_map(ticker_sentiment, topic_window)
 
     if "date" in df.columns:
         date_series = pd.to_datetime(df["date"])
@@ -197,7 +257,16 @@ def run_backtest(
     all_rets: list = []
 
     if fitness_mode == "spread":
-        ck = (id(df), start_date, end_date, FEATURE_LAG_DAYS, FEATURE_LAG_MAX_AGE_DAYS, bool(use_llm_events))
+        ck = (
+            id(df),
+            id(ticker_sentiment),
+            topic_window,
+            start_date,
+            end_date,
+            FEATURE_LAG_DAYS,
+            FEATURE_LAG_MAX_AGE_DAYS,
+            bool(use_llm_events),
+        )
         if ck not in _SPREAD_CTX_CACHE:
             ctx_list = []
             for j in range(max(warmup, 0), n):
@@ -212,7 +281,7 @@ def run_backtest(
                             break
                     except Exception:
                         pass
-                cm, cs, cv, snt, ef = _lookup_signal_context(
+                cm, cs, cv, snt, ef, topic = _lookup_signal_context(
                     df=df,
                     idx=j,
                     market_score=market_score,
@@ -221,11 +290,12 @@ def run_backtest(
                     market_history_df=market_history_df,
                     sector_name=sector_name,
                     ticker_sentiment=ticker_sentiment,
+                    topic_feature_map=topic_feature_map,
                     use_llm_events=use_llm_events,
                 )
                 px = float(df.iloc[j]["Close"])
                 sh = int(position_limit_krw / px) if px > 0 else 0
-                ctx_list.append((j, cm, cs, cv, ef, snt, px, sh))
+                ctx_list.append((j, cm, cs, cv, ef, snt, topic, px, sh))
             _SPREAD_CTX_CACHE[ck] = ctx_list
         ctx_list = _SPREAD_CTX_CACHE[ck]
 
@@ -249,7 +319,7 @@ def run_backtest(
             for item in ctx_list:
                 if item is None or item == "BREAK":
                     continue
-                j, cm, cs, cv, ef, snt, px, sh = item
+                j, cm, cs, cv, ef, snt, topic, px, sh = item
                 if sh <= 0:
                     continue
                 tr = simulate_exit(
@@ -276,10 +346,19 @@ def run_backtest(
                 continue
             if item == "BREAK":
                 break
-            j, cm, cs, cv, ef, snt, px, sh = item
+            j, cm, cs, cv, ef, snt, topic, px, sh = item
             if j not in ret_map:
                 continue
-            sig = evaluate_signal(rb, df.iloc[:j + 1], market_score=cm, sector_score=cs, vix_level=cv, news_sentiment=snt, event_flags=ef)
+            sig = evaluate_signal(
+                rb,
+                df.iloc[:j + 1],
+                market_score=cm,
+                sector_score=cs,
+                vix_level=cv,
+                news_sentiment=snt,
+                event_flags=ef,
+                topic_features=topic,
+            )
             all_scores.append(float(sig.score))
             all_rets.append(ret_map[j])
 
@@ -296,7 +375,7 @@ def run_backtest(
                 pass
 
         sub_df = df.iloc[: i + 1]
-        cur_market, cur_sector, cur_vix, cur_sentiment, cur_event_flags = _lookup_signal_context(
+        cur_market, cur_sector, cur_vix, cur_sentiment, cur_event_flags, cur_topic_features = _lookup_signal_context(
             df=df,
             idx=i,
             market_score=market_score,
@@ -305,6 +384,7 @@ def run_backtest(
             market_history_df=market_history_df,
             sector_name=sector_name,
             ticker_sentiment=ticker_sentiment,
+            topic_feature_map=topic_feature_map,
             use_llm_events=use_llm_events,
         )
         sig = evaluate_signal(
@@ -315,6 +395,7 @@ def run_backtest(
             vix_level=cur_vix,
             news_sentiment=cur_sentiment,
             event_flags=cur_event_flags,
+            topic_features=cur_topic_features,
         )
         if not sig.should_buy:
             i += 1
@@ -352,6 +433,7 @@ def run_backtest(
                     sector=cur_sector,
                     vix=cur_vix,
                     event_flags=cur_event_flags,
+                    topic_features=cur_topic_features,
                 )
             )
             exit_date = trade.get("exit_date")
@@ -361,7 +443,7 @@ def run_backtest(
                     exit_idx = exit_idx.start
                 if exit_idx is not None:
                     exit_idx = int(exit_idx)
-                    ex_market, ex_sector, ex_vix, ex_sentiment, ex_event_flags = _lookup_signal_context(
+                    ex_market, ex_sector, ex_vix, ex_sentiment, ex_event_flags, ex_topic_features = _lookup_signal_context(
                         df=df,
                         idx=exit_idx,
                         market_score=market_score,
@@ -370,6 +452,7 @@ def run_backtest(
                         market_history_df=market_history_df,
                         sector_name=sector_name,
                         ticker_sentiment=ticker_sentiment,
+                        topic_feature_map=topic_feature_map,
                         use_llm_events=use_llm_events,
                     )
                     ex_sig = evaluate_signal(
@@ -380,6 +463,7 @@ def run_backtest(
                         vix_level=ex_vix,
                         news_sentiment=ex_sentiment,
                         event_flags=ex_event_flags,
+                        topic_features=ex_topic_features,
                     )
                     trade.update(
                         _signal_snapshot(
@@ -390,6 +474,7 @@ def run_backtest(
                             sector=ex_sector,
                             vix=ex_vix,
                             event_flags=ex_event_flags,
+                            topic_features=ex_topic_features,
                         )
                     )
                     trade["exit_snapshot_date"] = str(pd.Timestamp(df.index[exit_idx]).date())

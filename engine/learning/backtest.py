@@ -505,7 +505,7 @@ def _calc_fitness_swing(*, expectancy_pct: float, win_rate: float, profit_factor
     elif exp < 1.0:
         exp_score -= 10.0
     pf_score = _clamp((pf - 1.0) * 15.0, -20.0, 35.0)
-    wr_score = _clamp((wr - 50.0) / 50.0 * 8.0, -8.0, 8.0)
+    wr_score = _clamp((wr - 50.0) / 50.0 * 5.0, 0.0, 5.0)
     mdd_penalty = -_clamp(mdd_abs * 0.8, 0.0, 40.0)
     base = exp_score + pf_score + wr_score + mdd_penalty
     if trade_count < 5:

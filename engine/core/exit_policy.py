@@ -33,8 +33,9 @@ class ExitExecutionConfig:
     fallback_to_trigger_price: bool = True
     trailing_activation_bars: int = 2
     trailing_activation_profit_pct: float = 0.0
-    breakeven_trigger_profit_pct: float = 0.0
-    breakeven_floor_profit_pct: float = 0.0
+    breakeven_enabled: Optional[bool] = None
+    breakeven_trigger_profit_pct: Optional[float] = None
+    breakeven_floor_profit_pct: Optional[float] = None
 
 
 @dataclass
@@ -290,6 +291,26 @@ def estimate_exit_fills(
     return float(base), float(stress)
 
 
+def _resolve_breakeven_settings(rulebook: Any, cfg: ExitExecutionConfig) -> tuple[bool, float, float]:
+    cfg_trigger = cfg.breakeven_trigger_profit_pct
+    cfg_floor = cfg.breakeven_floor_profit_pct
+    rb_trigger = _to_float(_get_attr(rulebook, "breakeven_trigger_profit_pct", 0.0), 0.0)
+    rb_floor = _to_float(_get_attr(rulebook, "breakeven_floor_profit_pct", 0.0), 0.0)
+
+    trigger = _to_float(cfg_trigger, rb_trigger)
+    floor = _to_float(cfg_floor, rb_floor)
+
+    if cfg.breakeven_enabled is None:
+        rb_enabled = _get_attr(rulebook, "breakeven_enabled", None)
+        enabled = bool(rb_enabled) if rb_enabled is not None else trigger > 0.0
+    else:
+        enabled = bool(cfg.breakeven_enabled)
+
+    if not enabled:
+        return False, 0.0, 0.0
+    return True, float(trigger), float(floor)
+
+
 def evaluate_exit(
     position: PositionState,
     price: PriceSnapshot,
@@ -299,8 +320,8 @@ def evaluate_exit(
 ) -> ExitDecision:
     """Evaluate whether a long position should exit at this point.
 
-    Policy order for hybrid/fixed long exits:
-    take_profit -> breakeven_stop -> trailing -> stop_loss -> time_out.
+    Ambiguous same-bar OHLC collisions are resolved conservatively:
+    stop_loss -> breakeven_stop -> trailing -> take_profit -> time_out.
     """
     cfg = execution_config or ExitExecutionConfig()
     ctx = market_context or MarketContext()
@@ -330,11 +351,10 @@ def evaluate_exit(
     activation_profit_pct = _to_float(cfg.trailing_activation_profit_pct, 0.0)
     trailing_active = holding_days > cfg.trailing_activation_bars and highest_profit_pct >= activation_profit_pct
 
-    breakeven_trigger_profit_pct = _to_float(cfg.breakeven_trigger_profit_pct, 0.0)
-    breakeven_floor_profit_pct = _to_float(cfg.breakeven_floor_profit_pct, 0.0)
-    breakeven_active = breakeven_trigger_profit_pct > 0.0 and highest_profit_pct >= breakeven_trigger_profit_pct
-    breakeven_stop = position.avg_cost * (1.0 + breakeven_floor_profit_pct / 100.0)
-    breakeven_hit = breakeven_active and low <= breakeven_stop
+    breakeven_enabled, breakeven_trigger_profit_pct, breakeven_floor_profit_pct = _resolve_breakeven_settings(rulebook, cfg)
+    breakeven_active = breakeven_enabled and highest_profit_pct >= breakeven_trigger_profit_pct
+    breakeven_stop = position.avg_cost * (1.0 + breakeven_floor_profit_pct / 100.0) if breakeven_enabled else None
+    breakeven_hit = bool(breakeven_active and breakeven_stop is not None and low <= breakeven_stop)
 
     diagnostics: Dict[str, Any] = {
         "strategy": strategy,
@@ -348,6 +368,7 @@ def evaluate_exit(
         "trailing_active": trailing_active,
         "trailing_activation_bars": cfg.trailing_activation_bars,
         "trailing_activation_profit_pct": activation_profit_pct,
+        "breakeven_enabled": breakeven_enabled,
         "breakeven_active": breakeven_active,
         "breakeven_trigger_profit_pct": breakeven_trigger_profit_pct,
         "breakeven_floor_profit_pct": breakeven_floor_profit_pct,
@@ -366,30 +387,30 @@ def evaluate_exit(
     trigger_price: Optional[float] = None
 
     if strategy == "fixed":
-        if target_hit:
-            reason, trigger_price = "take_profit", position.target_price
-        elif breakeven_hit:
-            reason, trigger_price = "breakeven_stop", breakeven_stop
-        elif stop_hit:
+        if stop_hit:
             reason, trigger_price = "stop_loss", position.stop_price
+        elif breakeven_hit and breakeven_stop is not None:
+            reason, trigger_price = "breakeven_stop", breakeven_stop
+        elif target_hit:
+            reason, trigger_price = "take_profit", position.target_price
         elif timeout_hit:
             reason, trigger_price = "time_out", ref_price
     elif strategy == "trailing":
-        if breakeven_hit:
+        if breakeven_hit and breakeven_stop is not None:
             reason, trigger_price = "breakeven_stop", breakeven_stop
         elif trailing_hit:
             reason, trigger_price = "trailing", updated_trailing
         elif timeout_hit:
             reason, trigger_price = "time_out", ref_price
     elif strategy == "hybrid":
-        if target_hit:
-            reason, trigger_price = "take_profit", position.target_price
-        elif breakeven_hit:
+        if stop_hit:
+            reason, trigger_price = "stop_loss", position.stop_price
+        elif breakeven_hit and breakeven_stop is not None:
             reason, trigger_price = "breakeven_stop", breakeven_stop
         elif trailing_hit:
             reason, trigger_price = "trailing", updated_trailing
-        elif stop_hit:
-            reason, trigger_price = "stop_loss", position.stop_price
+        elif target_hit:
+            reason, trigger_price = "take_profit", position.target_price
         elif timeout_hit:
             reason, trigger_price = "time_out", ref_price
     else:

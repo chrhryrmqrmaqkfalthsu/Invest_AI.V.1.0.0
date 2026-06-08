@@ -47,6 +47,7 @@ class Trade:
     trailing_stop_at_entry: Optional[float] = None
     trailing_distance_at_entry: Optional[float] = None
     trailing_activation_profit_pct: Optional[float] = None
+    breakeven_enabled: Optional[bool] = None
     breakeven_trigger_profit_pct: Optional[float] = None
     breakeven_floor_profit_pct: Optional[float] = None
     exit_strategy: Optional[str] = None
@@ -83,7 +84,15 @@ def _make_price_snapshot(df: pd.DataFrame, i: int) -> PriceSnapshot:
     )
 
 
+def _rulebook_breakeven_enabled(rb: Rulebook) -> bool:
+    raw = getattr(rb, "breakeven_enabled", None)
+    if raw is not None:
+        return bool(raw)
+    return float(getattr(rb, "breakeven_trigger_profit_pct", 0.0) or 0.0) > 0.0
+
+
 def _entry_context(rb: Rulebook, position, market_score: float, vix_level: float, sector_score: float) -> dict:
+    breakeven_enabled = _rulebook_breakeven_enabled(rb)
     return {
         "entry_market_score": float(market_score),
         "entry_vix_level": float(vix_level),
@@ -94,8 +103,9 @@ def _entry_context(rb: Rulebook, position, market_score: float, vix_level: float
         "trailing_stop_at_entry": float(position.trailing_stop),
         "trailing_distance_at_entry": float(position.trailing_distance),
         "trailing_activation_profit_pct": float(getattr(rb, "trailing_activation_profit_pct", 0.0) or 0.0),
-        "breakeven_trigger_profit_pct": float(getattr(rb, "breakeven_trigger_profit_pct", 0.0) or 0.0),
-        "breakeven_floor_profit_pct": float(getattr(rb, "breakeven_floor_profit_pct", 0.0) or 0.0),
+        "breakeven_enabled": bool(breakeven_enabled),
+        "breakeven_trigger_profit_pct": float(getattr(rb, "breakeven_trigger_profit_pct", 0.0) or 0.0) if breakeven_enabled else 0.0,
+        "breakeven_floor_profit_pct": float(getattr(rb, "breakeven_floor_profit_pct", 0.0) or 0.0) if breakeven_enabled else 0.0,
         "exit_strategy": str(position.exit_strategy),
         "rulebook_hash": compute_rulebook_hash(rb),
         "member_hash": str(position.member_hash or ""),
@@ -162,6 +172,7 @@ def _build_trade(
         trailing_stop_at_entry=ctx.get("trailing_stop_at_entry"),
         trailing_distance_at_entry=ctx.get("trailing_distance_at_entry"),
         trailing_activation_profit_pct=ctx.get("trailing_activation_profit_pct"),
+        breakeven_enabled=ctx.get("breakeven_enabled"),
         breakeven_trigger_profit_pct=ctx.get("breakeven_trigger_profit_pct"),
         breakeven_floor_profit_pct=ctx.get("breakeven_floor_profit_pct"),
         exit_strategy=ctx.get("exit_strategy"),
@@ -196,11 +207,13 @@ def simulate_exit(
 
     entry_date = str(df.index[entry_idx].date())
     mctx = MarketContext(market_score=cur_market_score, vix_level=cur_vix_level, sector_score=cur_sector_score)
+    breakeven_enabled = _rulebook_breakeven_enabled(rb)
     exec_cfg = ExitExecutionConfig(
         trailing_activation_bars=2,
         trailing_activation_profit_pct=float(getattr(rb, "trailing_activation_profit_pct", 0.0) or 0.0),
-        breakeven_trigger_profit_pct=float(getattr(rb, "breakeven_trigger_profit_pct", 0.0) or 0.0),
-        breakeven_floor_profit_pct=float(getattr(rb, "breakeven_floor_profit_pct", 0.0) or 0.0),
+        breakeven_enabled=breakeven_enabled,
+        breakeven_trigger_profit_pct=float(getattr(rb, "breakeven_trigger_profit_pct", 0.0) or 0.0) if breakeven_enabled else 0.0,
+        breakeven_floor_profit_pct=float(getattr(rb, "breakeven_floor_profit_pct", 0.0) or 0.0) if breakeven_enabled else 0.0,
     )
     position = initialize_position_state(
         ticker=str(getattr(rb, "ticker", "") or ""),

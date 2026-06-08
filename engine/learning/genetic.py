@@ -113,6 +113,32 @@ def _mark_mask_schema_if_needed(rb: Rulebook) -> None:
         rb.mask_schema_version = max(int(getattr(rb, "mask_schema_version", 0) or 0), 1)
 
 
+def _clamp_float(value: object, low: float, high: float) -> float:
+    try:
+        v = float(value)
+    except Exception:
+        v = low
+    return float(max(low, min(high, v)))
+
+
+def _normalize_dependent_params(rb: Rulebook) -> None:
+    """Normalize dependent genes so disabled categorical paths do not create hash noise."""
+    if not bool(getattr(rb, "breakeven_enabled", False)):
+        rb.breakeven_trigger_profit_pct = 0.0
+        rb.breakeven_floor_profit_pct = 0.0
+        return
+    trig_lo, trig_hi = PARAM_RANGES["breakeven_trigger_profit_pct"]
+    floor_lo, floor_hi = PARAM_RANGES["breakeven_floor_profit_pct"]
+    rb.breakeven_trigger_profit_pct = _clamp_float(getattr(rb, "breakeven_trigger_profit_pct", trig_lo), trig_lo, trig_hi)
+    rb.breakeven_floor_profit_pct = _clamp_float(getattr(rb, "breakeven_floor_profit_pct", floor_lo), floor_lo, floor_hi)
+
+
+def _finalize_rulebook_genes(rb: Rulebook) -> Rulebook:
+    _mark_mask_schema_if_needed(rb)
+    _normalize_dependent_params(rb)
+    return rb
+
+
 def random_rulebook(base: Rulebook) -> Rulebook:
     rb = copy.deepcopy(base)
     # 수치 파라미터
@@ -123,8 +149,7 @@ def random_rulebook(base: Rulebook) -> Rulebook:
     for k, choices in CATEGORICAL_PARAMS.items():
         if hasattr(rb, k):
             setattr(rb, k, random.choice(choices))
-    _mark_mask_schema_if_needed(rb)
-    return rb
+    return _finalize_rulebook_genes(rb)
 
 
 def mutate(rb: Rulebook, mutation_rate: float, strength: float) -> Rulebook:
@@ -144,8 +169,7 @@ def mutate(rb: Rulebook, mutation_rate: float, strength: float) -> Rulebook:
     for k, choices in CATEGORICAL_PARAMS.items():
         if random.random() < mutation_rate / 2 and hasattr(new_rb, k):
             setattr(new_rb, k, random.choice(choices))
-    _mark_mask_schema_if_needed(new_rb)
-    return new_rb
+    return _finalize_rulebook_genes(new_rb)
 
 
 def crossover(p1: Rulebook, p2: Rulebook) -> Rulebook:
@@ -157,8 +181,7 @@ def crossover(p1: Rulebook, p2: Rulebook) -> Rulebook:
     for k in CATEGORICAL_PARAMS.keys():
         if hasattr(child, k) and random.random() < 0.5:
             setattr(child, k, getattr(p2, k))
-    _mark_mask_schema_if_needed(child)
-    return child
+    return _finalize_rulebook_genes(child)
 
 
 def tournament_select(population: list, k: int) -> Rulebook:
@@ -208,8 +231,6 @@ def run_ga(
             # 약간의 변이를 주어 다양성 확보
             rb = mutate(rb, mutation_rate=0.1, strength=0.1)
             population.append(rb)
-
-
 
     while len(population) < cfg.population:
         population.append(random_rulebook(base_rulebook))

@@ -65,8 +65,9 @@ class Rulebook:
     take_profit_atr: float = 3.0
     trailing_atr: float = 1.5
     trailing_activation_profit_pct: float = 3.0
-    breakeven_trigger_profit_pct: float = 0.0  # 0이면 비활성. MFE가 N% 이상이면 breakeven_stop 활성
-    breakeven_floor_profit_pct: float = 0.0    # breakeven_stop 가격 = avg_cost * (1 + floor/100)
+    breakeven_enabled: bool = False
+    breakeven_trigger_profit_pct: float = 0.0  # enabled=True일 때 MFE가 N% 이상이면 breakeven_stop 활성
+    breakeven_floor_profit_pct: float = 0.0    # enabled=True일 때 breakeven_stop = avg_cost * (1 + floor/100)
     max_holding_days: int = 20
 
     # ===== 포지션 사이징 =====
@@ -133,6 +134,11 @@ class Rulebook:
         filtered = {k: v for k, v in d.items() if k in known}
         if "mask_schema_version" not in d:
             filtered["mask_schema_version"] = 0
+        if "breakeven_enabled" not in d:
+            try:
+                filtered["breakeven_enabled"] = float(d.get("breakeven_trigger_profit_pct", 0.0) or 0.0) > 0.0
+            except Exception:
+                filtered["breakeven_enabled"] = False
         return cls(**filtered)
 
 
@@ -174,8 +180,8 @@ PARAM_RANGES = {
     "take_profit_atr":        (1.5, 5.0),
     "trailing_atr":           (1.0, 3.0),
     "trailing_activation_profit_pct": (1.0, 8.0),
-    "breakeven_trigger_profit_pct": (0.0, 5.0),
-    "breakeven_floor_profit_pct": (-1.0, 1.5),
+    "breakeven_trigger_profit_pct": (4.0, 8.0),
+    "breakeven_floor_profit_pct": (1.0, 3.0),
     "max_holding_days":       (5, 30),
 
     "base_position_ratio":    (0.3, 1.0),
@@ -214,6 +220,7 @@ CATEGORICAL_PARAMS = {
     "exit_strategy":                 ["fixed", "trailing", "hybrid"],
     "position_sizing_strategy":      ["fixed", "signal_scaled", "kelly_lite"],
     "add_buy_enabled":               [False, True],
+    "breakeven_enabled":             [False, True],
     "crash_buy_enabled":             [False, True],
     "use_news_global":               [False, True],
     "use_event_block":               [False, True],

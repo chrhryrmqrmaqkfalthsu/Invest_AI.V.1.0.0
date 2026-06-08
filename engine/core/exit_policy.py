@@ -33,6 +33,8 @@ class ExitExecutionConfig:
     fallback_to_trigger_price: bool = True
     trailing_activation_bars: int = 2
     trailing_activation_profit_pct: float = 0.0
+    breakeven_trigger_profit_pct: float = 0.0
+    breakeven_floor_profit_pct: float = 0.0
 
 
 @dataclass
@@ -216,11 +218,7 @@ def update_position_for_add_buy(
     atr_value: float,
     market_context: Optional[MarketContext] = None,
 ) -> PositionState:
-    """Return a new PositionState after an add-buy fill.
-
-    This function only updates position accounting. Add-buy trigger checks and
-    SafetyLayer approval belong to a separate AddBuyPolicy path.
-    """
+    """Return a new PositionState after an add-buy fill."""
     _assert_long_only(position.direction)
 
     old_shares = max(_to_float(position.shares, 0.0), 0.0)
@@ -274,10 +272,7 @@ def estimate_exit_fills(
     execution_config: Optional[ExitExecutionConfig] = None,
     direction: str = "long",
 ) -> Tuple[float, float]:
-    """Estimate base/stress exit fills from a trigger price.
-
-    Phase 1 supports long exits only. For a long sell, slippage lowers fill.
-    """
+    """Estimate base/stress exit fills from a trigger price."""
     _assert_long_only(direction)
     cfg = execution_config or ExitExecutionConfig()
 
@@ -304,8 +299,8 @@ def evaluate_exit(
 ) -> ExitDecision:
     """Evaluate whether a long position should exit at this point.
 
-    OHLC snapshots use intraday high/low touch semantics. Live snapshots with
-    only ``current_price`` use polling semantics. The policy order is shared.
+    Policy order for hybrid/fixed long exits:
+    take_profit -> breakeven_stop -> trailing -> stop_loss -> time_out.
     """
     cfg = execution_config or ExitExecutionConfig()
     ctx = market_context or MarketContext()
@@ -331,8 +326,15 @@ def evaluate_exit(
     strategy = str(position.exit_strategy or _get_attr(rulebook, "exit_strategy", "hybrid") or "hybrid").lower()
     current_profit_pct = (ref_price - position.avg_cost) / position.avg_cost * 100.0 if position.avg_cost > 0 else 0.0
     highest_profit_pct = (highest - position.avg_cost) / position.avg_cost * 100.0 if position.avg_cost > 0 else 0.0
+
     activation_profit_pct = _to_float(cfg.trailing_activation_profit_pct, 0.0)
     trailing_active = holding_days > cfg.trailing_activation_bars and highest_profit_pct >= activation_profit_pct
+
+    breakeven_trigger_profit_pct = _to_float(cfg.breakeven_trigger_profit_pct, 0.0)
+    breakeven_floor_profit_pct = _to_float(cfg.breakeven_floor_profit_pct, 0.0)
+    breakeven_active = breakeven_trigger_profit_pct > 0.0 and highest_profit_pct >= breakeven_trigger_profit_pct
+    breakeven_stop = position.avg_cost * (1.0 + breakeven_floor_profit_pct / 100.0)
+    breakeven_hit = breakeven_active and low <= breakeven_stop
 
     diagnostics: Dict[str, Any] = {
         "strategy": strategy,
@@ -346,6 +348,10 @@ def evaluate_exit(
         "trailing_active": trailing_active,
         "trailing_activation_bars": cfg.trailing_activation_bars,
         "trailing_activation_profit_pct": activation_profit_pct,
+        "breakeven_active": breakeven_active,
+        "breakeven_trigger_profit_pct": breakeven_trigger_profit_pct,
+        "breakeven_floor_profit_pct": breakeven_floor_profit_pct,
+        "breakeven_stop": breakeven_stop,
         "stop_price": position.stop_price,
         "target_price": position.target_price,
         "trailing_stop": updated_trailing,
@@ -360,25 +366,30 @@ def evaluate_exit(
     trigger_price: Optional[float] = None
 
     if strategy == "fixed":
-        if stop_hit:
-            reason, trigger_price = "stop_loss", position.stop_price
-        elif target_hit:
+        if target_hit:
             reason, trigger_price = "take_profit", position.target_price
+        elif breakeven_hit:
+            reason, trigger_price = "breakeven_stop", breakeven_stop
+        elif stop_hit:
+            reason, trigger_price = "stop_loss", position.stop_price
         elif timeout_hit:
             reason, trigger_price = "time_out", ref_price
     elif strategy == "trailing":
-        if trailing_hit:
+        if breakeven_hit:
+            reason, trigger_price = "breakeven_stop", breakeven_stop
+        elif trailing_hit:
             reason, trigger_price = "trailing", updated_trailing
         elif timeout_hit:
             reason, trigger_price = "time_out", ref_price
     elif strategy == "hybrid":
-        # 확정 우선순위: stop_loss → trailing_stop → take_profit → max_holding.
-        if stop_hit:
-            reason, trigger_price = "stop_loss", position.stop_price
+        if target_hit:
+            reason, trigger_price = "take_profit", position.target_price
+        elif breakeven_hit:
+            reason, trigger_price = "breakeven_stop", breakeven_stop
         elif trailing_hit:
             reason, trigger_price = "trailing", updated_trailing
-        elif target_hit:
-            reason, trigger_price = "take_profit", position.target_price
+        elif stop_hit:
+            reason, trigger_price = "stop_loss", position.stop_price
         elif timeout_hit:
             reason, trigger_price = "time_out", ref_price
     else:
@@ -396,6 +407,7 @@ def evaluate_exit(
         {
             "stop_hit": stop_hit,
             "target_hit": target_hit,
+            "breakeven_hit": breakeven_hit,
             "trailing_hit": trailing_hit,
             "timeout_hit": timeout_hit,
         }

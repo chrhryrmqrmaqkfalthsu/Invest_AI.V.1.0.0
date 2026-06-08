@@ -160,6 +160,31 @@ class Runner:
                 pass
         return _normalize_shares(shares)
 
+    def _account_total_value_notional(self) -> float:
+        try:
+            balance = self.broker.get_balance()
+            for key in ("total_value_usd", "total_value", "total_value_krw"):
+                value = getattr(balance, key, None)
+                if value is not None:
+                    return float(value or 0.0)
+        except Exception as exc:
+            logger.warning("계좌 총액 조회 실패 — 손실률 한도는 절대손실 기준만 적용: %s", exc)
+        return 0.0
+
+    def _record_realized_pnl_from_trade(self, trade_record: Optional[dict]) -> None:
+        if not trade_record:
+            return
+        try:
+            pnl = float(trade_record.get("pnl_usd", trade_record.get("pnl_notional", trade_record.get("pnl_krw", 0.0))) or 0.0)
+            self.safety.record_realized_pnl(pnl, total_value_krw=self._account_total_value_notional())
+            logger.info("[RISK-PNL] realized pnl recorded: %+.2f", pnl)
+        except Exception as exc:
+            logger.error("실현손익 SafetyLayer 기록 실패: %s", exc)
+            try:
+                self.notifier.send_error(f"실현손익 SafetyLayer 기록 실패: {exc}")
+            except Exception:
+                pass
+
     def reload_symbols(self) -> dict:
         """Add only symbols that still satisfy the immutable startup policy."""
         if self.universe_config is None:
@@ -244,6 +269,8 @@ class Runner:
             else:
                 exited = self.position_manager.check_exits(self.broker, self.notifier, pending_manager=self.pending_order_manager)
             if exited:
+                for record in exited:
+                    self._record_realized_pnl_from_trade(record)
                 logger.info(f"자동 청산 {len(exited)}건 완료")
         except Exception as e:
             self._handle_error("position_manager.check_exits", e)
@@ -736,12 +763,13 @@ class Runner:
                     self.approval_manager._save()
             logger.info("[BUY-RECONCILED] %s purpose=%s result=%s", order.ticker, purpose, result)
         elif side == "sell":
-            self.position_manager.finalize_sell_fill(
+            trade_record = self.position_manager.finalize_sell_fill(
                 order,
                 exit_reason=str(getattr(record, "exit_reason", "") or record.purpose or "manual"),
                 broker=self.broker,
                 notifier=self.notifier,
             )
+            self._record_realized_pnl_from_trade(trade_record)
 
     def daily_summary(self) -> None:
         try:

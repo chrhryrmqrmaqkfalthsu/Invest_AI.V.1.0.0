@@ -23,8 +23,9 @@ from engine.strategies.rulebook import Rulebook
 
 log = logging.getLogger("position_manager")
 
-POSITIONS_PATH = Path("data/_system/positions.json")
-TRADE_LOG_PATH = Path("data/_system/trade_log.csv")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+POSITIONS_PATH = PROJECT_ROOT / "data" / "_system" / "positions.json"
+TRADE_LOG_PATH = PROJECT_ROOT / "data" / "_system" / "trade_log.csv"
 KST = ZoneInfo("Asia/Seoul")
 SHARE_ROUND_DIGITS = 6
 SHARE_EPS = 10 ** (-SHARE_ROUND_DIGITS)

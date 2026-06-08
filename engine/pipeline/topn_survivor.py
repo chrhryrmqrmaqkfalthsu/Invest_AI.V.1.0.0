@@ -241,9 +241,9 @@ def evaluate_survivors(
     """Return ticker-level survivors.
 
     A ticker survives when it repeatedly produces positive-expectancy OOS
-    candidates across general years. The selected executable rulebook is the
-    best stress-period rulebook when stress OOS is positive; otherwise the best
-    general-period rulebook is used.
+    candidates across general years and has non-negative average stress OOS.
+    The selected executable rulebook is the best stress-period rulebook after
+    the stress average gate passes.
     """
     general_groups = _candidate_group_rows(scored_periods.get("general_periods", []), group_by="ticker")
     stress_groups = _candidate_group_rows(scored_periods.get("stress_periods", []), group_by="ticker")
@@ -285,14 +285,16 @@ def evaluate_survivors(
             for row in stress_rows_all
             if _is_candidate_eligible(row, min_trades=min_trades, min_member_score=min_member_score)
         ]
-        stress_positive = [row for row in stress_rows if _row_expectancy(row) >= float(min_stress_expectancy_pct)]
         stress_exps = [_row_expectancy(row) for row in stress_rows]
         stress_scores = [_safe_float(row.get("oos_member_score"), 0.0) for row in stress_rows]
+        stress_avg_expectancy = mean(stress_exps) if stress_exps else None
 
-        if stress_rows_all and not stress_positive:
+        if not stress_rows:
+            continue
+        if stress_avg_expectancy is None or stress_avg_expectancy < float(min_stress_expectancy_pct):
             continue
 
-        selected = _best_by_expectancy(stress_positive) or _best_by_expectancy(year_rows)
+        selected = _best_by_expectancy(stress_rows)
         if selected is None:
             continue
 
@@ -326,7 +328,7 @@ def evaluate_survivors(
                 "min_trades": min(trades) if trades else 0,
                 "avg_trades": round(mean(trades), 6) if trades else 0.0,
                 "stress_appearance_count": len(stress_rows),
-                "stress_avg_expectancy_pct": round(mean(stress_exps), 6) if stress_exps else None,
+                "stress_avg_expectancy_pct": round(stress_avg_expectancy, 6) if stress_avg_expectancy is not None else None,
                 "stress_worst_expectancy_pct": round(min(stress_exps), 6) if stress_exps else None,
                 "stress_avg_member_score": round(mean(stress_scores), 6) if stress_scores else None,
                 "stress_worst_member_score": round(min(stress_scores), 6) if stress_scores else None,

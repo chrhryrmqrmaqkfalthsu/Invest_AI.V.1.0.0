@@ -30,7 +30,6 @@ small_amount_safety:
   require_first_order_approval: true
   daily_loss_limit_notional: 50
   daily_loss_limit_usd: 50
-  daily_loss_limit_krw: 50             # legacy field name; USD notional in US-only mode
 
 risk:
   daily_loss_limit_pct: 10

@@ -60,13 +60,14 @@ class SafetyLayer:
         self.max_bought_notional_per_day = float(daily_bought or 0.0)
         exposure_limit = sa.get("max_total_exposure_notional", sa.get("max_total_notional", sa.get("max_total_invested_krw", 100000)))
         self.max_total_exposure_notional = float(exposure_limit or 0.0)
-        # 하위호환 속성: 기존 테스트/운영 코드가 접근해도 전체 노출 한도를 의미한다.
         self.max_total_notional = self.max_total_exposure_notional
         self.max_total_invested = self.max_total_exposure_notional
         self.pending_order_manager = None
         self.max_orders_per_day = int(sa.get("max_orders_per_day", 5))
         self.require_first_approval = bool(sa.get("require_first_order_approval", True))
-        self.daily_loss_limit_krw = float(sa.get("daily_loss_limit_krw", 50000))
+        self.daily_loss_limit_usd = float(
+            sa.get("daily_loss_limit_usd", sa.get("daily_loss_limit_notional", sa.get("daily_loss_limit_krw", 50000)))
+        )
 
         self.daily_loss_limit_pct = float(risk.get("daily_loss_limit_pct", 10))
         self.consecutive_loss_limit = int(risk.get("consecutive_loss_limit", 3))
@@ -266,7 +267,6 @@ class SafetyLayer:
         price: float,
         purpose: str = "entry",
     ) -> SafetyDecision:
-        """주문 발사 전 호출. 운영 필수 게이트는 소액 안전 활성 여부와 무관하다."""
         try:
             shares_f = float(shares)
             price_f = float(price)
@@ -287,8 +287,6 @@ class SafetyLayer:
             if not guard.allowed:
                 return guard
 
-        # BS-1a: 아래 운영 필수 게이트는 small_amount_safety.enabled=False여도
-        # 절대 우회할 수 없다.
         st = state_mod.load()
         if KILL_SWITCH_PATH.exists():
             return SafetyDecision(False, "KILL_SWITCH 파일 감지 — 모든 주문 차단", "KILL_SWITCH")
@@ -322,14 +320,13 @@ class SafetyLayer:
         if not self.enabled:
             return SafetyDecision(True, reason="운영 필수 게이트 통과; 소액 한도 비활성")
 
-        # enabled가 제어하는 범위는 소액 제한뿐이다.
         if self.max_shares is not None and shares_f > self.max_shares:
             return SafetyDecision(False, f"수량 {shares_f:g} > 한도 {self.max_shares:g}주", "LIMIT_SHARES")
 
         order_notional = shares_f * price_f
         max_notional = self._current_order_notional_limit()
         if max_notional > 0 and order_notional > max_notional:
-            return SafetyDecision(False, f"주문금액 {order_notional:,.2f} > 한도 {max_notional:,.2f}", "LIMIT_KRW")
+            return SafetyDecision(False, f"주문금액 {order_notional:,.2f} > 한도 {max_notional:,.2f}", "LIMIT_NOTIONAL")
 
         if st.orders_today >= self.max_orders_per_day:
             return SafetyDecision(False, f"일일 주문 {st.orders_today}회 >= 한도 {self.max_orders_per_day}", "LIMIT_DAILY")
@@ -352,7 +349,6 @@ class SafetyLayer:
         return SafetyDecision(True, reason="모든 안전장치 통과")
 
     def record_submission(self, order: Order, side: str, purpose: str = "entry") -> None:
-        """실제 주문 제출을 order_id 기준 한 번만 기록한다."""
         if order.status in (OrderStatus.REJECTED, OrderStatus.FAILED):
             return
         st = state_mod.load()
@@ -366,11 +362,6 @@ class SafetyLayer:
         state_mod.save(st)
 
     def record_fill(self, order: Order, side: str, purpose: str = "entry") -> None:
-        """실제 체결분을 order_id 기준 한 번만 정산한다.
-
-        FILLED뿐 아니라 PARTIAL 후 terminal 주문도 filled_shares/filled_avg_price가
-        유효하면 한 번 반영한다.
-        """
         filled_shares = float(order.filled_shares or 0.0)
         filled_avg_price = float(order.filled_avg_price or 0.0)
         if filled_shares <= SHARE_EPS or filled_avg_price <= 0:
@@ -394,15 +385,22 @@ class SafetyLayer:
         state_mod.save(st)
 
     def record_order(self, order: Order, side: str, purpose: str = "entry") -> None:
-        """하위 호환 wrapper. 제출과 존재하는 체결분을 각각 idempotent 기록한다."""
         self.record_submission(order, side, purpose=purpose)
         if float(order.filled_shares or 0.0) > SHARE_EPS:
             self.record_fill(order, side, purpose=purpose)
 
-    def record_realized_pnl(self, pnl_krw: float, total_value_krw: float = 0) -> None:
+    def record_realized_pnl(self, pnl_usd: float, total_value_usd: float = 0, **legacy_kwargs) -> None:
+        """Record realized PnL in USD notional.
+
+        legacy keyword total_value_krw is accepted only for compatibility with
+        older callers; it is interpreted as USD notional in the US-only live mode.
+        """
+        if not total_value_usd and "total_value_krw" in legacy_kwargs:
+            total_value_usd = float(legacy_kwargs.get("total_value_krw") or 0.0)
+
         st = state_mod.load()
-        st.realized_pnl_today += pnl_krw
-        if pnl_krw < 0:
+        st.realized_pnl_today += pnl_usd
+        if pnl_usd < 0:
             st.consecutive_losses += 1
             if st.consecutive_losses >= self.consecutive_loss_limit:
                 st.cooldown_until = (datetime.now() + timedelta(hours=self.cooldown_hours)).isoformat()
@@ -410,9 +408,9 @@ class SafetyLayer:
             st.consecutive_losses = 0
 
         loss_today = -st.realized_pnl_today
-        krw_breach = loss_today >= self.daily_loss_limit_krw
-        pct_breach = total_value_krw > 0 and loss_today / total_value_krw * 100 >= self.daily_loss_limit_pct
-        if krw_breach or pct_breach:
+        usd_breach = loss_today >= self.daily_loss_limit_usd
+        pct_breach = total_value_usd > 0 and loss_today / total_value_usd * 100 >= self.daily_loss_limit_pct
+        if usd_breach or pct_breach:
             st.kill_until = datetime.now().replace(hour=23, minute=59, second=59, microsecond=0).isoformat()
         state_mod.save(st)
 

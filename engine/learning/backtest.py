@@ -51,6 +51,7 @@ class BacktestResult:
     expectancy_pct: float = 0.0
     max_drawdown_pct: float = 0.0
     profit_factor: float = 0.0
+    profit_concentration: float = 0.0
     sharpe_like: float = 0.0
     fitness: float = 0.0
 
@@ -68,6 +69,7 @@ class BacktestResult:
             "expectancy_pct": self.expectancy_pct,
             "max_drawdown_pct": self.max_drawdown_pct,
             "profit_factor": self.profit_factor,
+            "profit_concentration": self.profit_concentration,
             "sharpe_like": self.sharpe_like,
             "fitness": self.fitness,
         }
@@ -419,10 +421,44 @@ def run_backtest(
             max_drawdown_pct=res.max_drawdown_pct,
             trade_count=res.trade_count,
             loss_count=res.loss_count,
+            profit_concentration=res.profit_concentration,
         )
         res.fitness = _apply_complexity_penalty(rb, raw_fitness, complexity_penalty_per_mask)
         rb.fitness = res.fitness
     return res
+
+
+def _trade_numeric(trade: object, key: str) -> float | None:
+    try:
+        value = trade.get(key) if isinstance(trade, dict) else getattr(trade, key, None)
+    except Exception:
+        return None
+    if value is None:
+        return None
+    try:
+        v = float(value)
+    except Exception:
+        return None
+    return v if np.isfinite(v) else None
+
+
+def _calc_profit_concentration(trades: list) -> float:
+    """Return max single positive profit share among total positive profit.
+
+    Prefer pnl_krw because it reflects actual sized contribution. Fall back to
+    pnl_pct for older or synthetic trade rows without pnl_krw.
+    """
+    profits: list[float] = []
+    for trade in trades or []:
+        pnl = _trade_numeric(trade, "pnl_krw")
+        if pnl is None:
+            pnl = _trade_numeric(trade, "pnl_pct")
+        if pnl is not None and pnl > 0.0:
+            profits.append(float(pnl))
+    total_profit = float(sum(profits))
+    if total_profit <= 0.0:
+        return 0.0
+    return _clamp(max(profits) / total_profit, 0.0, 1.0)
 
 
 def _summarize(rb: Rulebook, trades: list) -> BacktestResult:
@@ -449,6 +485,7 @@ def _summarize(rb: Rulebook, trades: list) -> BacktestResult:
     gross_profit = float(pnl_krw[win_mask].sum()) if win_count else 0.0
     gross_loss = float(-pnl_krw[loss_mask].sum()) if loss_count else 0.0
     pf = gross_profit / gross_loss if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0.0)
+    profit_concentration = _calc_profit_concentration(trades)
     std = float(pnl_pcts.std()) if len(pnl_pcts) > 1 else 1.0
     sharpe = avg_return / std if std > 0 else 0.0
     fitness = _calc_fitness(expectancy=expectancy, win_rate=win_rate, profit_factor=pf, mdd=mdd, trade_count=trade_count)
@@ -466,6 +503,7 @@ def _summarize(rb: Rulebook, trades: list) -> BacktestResult:
         expectancy_pct=expectancy,
         max_drawdown_pct=mdd,
         profit_factor=pf,
+        profit_concentration=profit_concentration,
         sharpe_like=sharpe,
         fitness=fitness,
     )
@@ -482,7 +520,14 @@ def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
-def _calc_fitness_swing(*, expectancy_pct: float, win_rate: float, profit_factor: float, max_drawdown_pct: float, trade_count: int, loss_count: int) -> float:
+def _calc_concentration_penalty(profit_concentration: float) -> float:
+    concentration = _clamp(float(profit_concentration or 0.0), 0.0, 1.0)
+    if concentration <= 0.50:
+        return 0.0
+    return _clamp((concentration - 0.50) / 0.25 * 20.0, 0.0, 20.0)
+
+
+def _calc_fitness_swing(*, expectancy_pct: float, win_rate: float, profit_factor: float, max_drawdown_pct: float, trade_count: int, loss_count: int, profit_concentration: float = 0.0) -> float:
     if trade_count <= 0:
         return -100.0
     exp = float(expectancy_pct or 0.0)
@@ -507,6 +552,7 @@ def _calc_fitness_swing(*, expectancy_pct: float, win_rate: float, profit_factor
     pf_score = _clamp((pf - 1.0) * 15.0, -20.0, 35.0)
     wr_score = _clamp((wr - 50.0) / 50.0 * 5.0, 0.0, 5.0)
     mdd_penalty = -_clamp(mdd_abs * 0.8, 0.0, 40.0)
+    concentration_penalty = _calc_concentration_penalty(profit_concentration)
     base = exp_score + pf_score + wr_score + mdd_penalty
     if trade_count < 5:
         trade_factor = 0.10
@@ -518,7 +564,7 @@ def _calc_fitness_swing(*, expectancy_pct: float, win_rate: float, profit_factor
         trade_factor = 1.00
     else:
         trade_factor = max(0.65, 1.0 - (trade_count - 80) / 250.0)
-    return float(base * trade_factor)
+    return float(base * trade_factor - concentration_penalty)
 
 
 def _calc_fitness(expectancy: float, win_rate: float, profit_factor: float, mdd: float, trade_count: int) -> float:

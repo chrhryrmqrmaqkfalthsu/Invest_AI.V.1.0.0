@@ -5,6 +5,7 @@ calling the legacy learn/true-WF/diagnostic orchestrators.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Iterable
 
 import pandas as pd
@@ -19,11 +20,15 @@ DEFAULT_HISTORY_YEARS = 6
 DEFAULT_MARKET_HISTORY_YEARS = 7
 DEFAULT_ADV_LOOKBACK_DAYS = 252
 DEFAULT_ROLLING_YEARS = (2023, 2024, 2025)
+DEFAULT_SELL_OMEN_SCORE_TABLE = Path("data/_system/ml_sell_omen/sell_omen_scores.csv")
+_SELL_OMEN_SCORE_CACHE: dict[str, pd.DataFrame] = {}
 
 
 def _date_series(df: pd.DataFrame) -> pd.Series:
     if "date" in df.columns:
         return pd.to_datetime(df["date"])
+    if "Date" in df.columns:
+        return pd.to_datetime(df["Date"])
     if isinstance(df.index, pd.DatetimeIndex):
         return pd.Series(df.index, index=df.index)
     return pd.to_datetime(pd.Series(df.index, index=df.index), errors="coerce")
@@ -68,6 +73,103 @@ def calculate_adv_usd_252d(df: pd.DataFrame, lookback_days: int = DEFAULT_ADV_LO
         return 0.0
     recent = adv.tail(max(1, int(lookback_days or DEFAULT_ADV_LOOKBACK_DAYS)))
     return float((recent["Close"] * recent["Volume"]).mean())
+
+
+def _load_sell_omen_score_table(path: str | Path = DEFAULT_SELL_OMEN_SCORE_TABLE) -> pd.DataFrame:
+    """Load the walk-forward sell-omen score table once per process.
+
+    The score table is intentionally optional. If it does not exist, the
+    pipeline behaves exactly as before and sell_omen rules simply do not fire.
+    """
+    p = Path(path)
+    key = str(p.resolve()) if p.exists() else str(p)
+    cached = _SELL_OMEN_SCORE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    required = {"ticker", "Date", "sell_omen_score"}
+    if not p.exists():
+        empty = pd.DataFrame(columns=["ticker", "Date", "sell_omen_score", "model_train_end", "score_year"])
+        _SELL_OMEN_SCORE_CACHE[key] = empty
+        return empty
+    try:
+        df = pd.read_csv(p)
+    except Exception:
+        empty = pd.DataFrame(columns=["ticker", "Date", "sell_omen_score", "model_train_end", "score_year"])
+        _SELL_OMEN_SCORE_CACHE[key] = empty
+        return empty
+    if not required.issubset(df.columns):
+        empty = pd.DataFrame(columns=["ticker", "Date", "sell_omen_score", "model_train_end", "score_year"])
+        _SELL_OMEN_SCORE_CACHE[key] = empty
+        return empty
+    out = df.copy()
+    out["ticker"] = out["ticker"].astype(str).str.upper().str.strip()
+    out["Date"] = pd.to_datetime(out["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    out["sell_omen_score"] = pd.to_numeric(out["sell_omen_score"], errors="coerce")
+    out = out.dropna(subset=["ticker", "Date", "sell_omen_score"])
+    out = out[(out["sell_omen_score"] >= 0.0) & (out["sell_omen_score"] <= 1.0)]
+    keep = [c for c in ["ticker", "Date", "sell_omen_score", "model_train_end", "score_year"] if c in out.columns]
+    out = out[keep].drop_duplicates(["ticker", "Date"], keep="last").reset_index(drop=True)
+    _SELL_OMEN_SCORE_CACHE[key] = out
+    return out
+
+
+def attach_sell_omen_scores(
+    df: pd.DataFrame,
+    ticker: str,
+    score_table_path: str | Path = DEFAULT_SELL_OMEN_SCORE_TABLE,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Left-join walk-forward sell_omen_score into one ticker OHLCV frame.
+
+    Merge key:
+        ticker + normalized date.
+
+    Rows without score, typically 2020-2023 training years or missing tickers,
+    are left as NaN. ``simulate_exit`` treats NaN as no score, so
+    sell_omen_enabled rules do not fire before OOS score coverage starts.
+    """
+    if df is None or len(df) == 0:
+        return df, {"available": False, "matched_rows": 0, "coverage": 0.0, "reason": "empty_df"}
+
+    scores = _load_sell_omen_score_table(score_table_path)
+    if scores.empty:
+        return df, {"available": False, "matched_rows": 0, "coverage": 0.0, "reason": "score_table_missing_or_empty"}
+
+    ticker_norm = str(ticker or "").upper().strip()
+    ticker_scores = scores[scores["ticker"] == ticker_norm].copy()
+    if ticker_scores.empty:
+        return df, {"available": True, "matched_rows": 0, "coverage": 0.0, "reason": "ticker_not_in_score_table"}
+
+    out = df.copy()
+    original_index = out.index
+    original_columns = set(out.columns)
+    for col in ("sell_omen_score", "sell_omen_model_train_end", "sell_omen_score_year"):
+        if col in out.columns:
+            out = out.drop(columns=[col])
+
+    out["_sell_omen_merge_date"] = _date_series(out).dt.strftime("%Y-%m-%d")
+    right = ticker_scores.rename(
+        columns={
+            "Date": "_sell_omen_merge_date",
+            "model_train_end": "sell_omen_model_train_end",
+            "score_year": "sell_omen_score_year",
+        }
+    )[[c for c in ["_sell_omen_merge_date", "sell_omen_score", "sell_omen_model_train_end", "sell_omen_score_year"] if c in ticker_scores.rename(columns={"Date": "_sell_omen_merge_date", "model_train_end": "sell_omen_model_train_end", "score_year": "sell_omen_score_year"}).columns]]
+    merged = out.merge(right, on="_sell_omen_merge_date", how="left", sort=False)
+    merged.index = original_index
+    merged = merged.drop(columns=["_sell_omen_merge_date"])
+
+    matched = int(pd.to_numeric(merged.get("sell_omen_score"), errors="coerce").notna().sum())
+    score_series = pd.to_numeric(merged.get("sell_omen_score"), errors="coerce")
+    info = {
+        "available": True,
+        "matched_rows": matched,
+        "coverage": float(matched / len(merged)) if len(merged) else 0.0,
+        "score_min": float(score_series.min()) if matched else None,
+        "score_max": float(score_series.max()) if matched else None,
+        "score_table_path": str(score_table_path),
+        "added_columns": sorted([c for c in set(merged.columns) - original_columns if c.startswith("sell_omen")]),
+    }
+    return merged, info
 
 
 def make_year_splits(
@@ -116,6 +218,7 @@ def prepare_ticker_context(ticker: str) -> dict[str, Any]:
     meta = adapter.meta
     # adapter.load_history already calls calc_indicators; do not call it again.
     df = adapter.load_history(years=DEFAULT_HISTORY_YEARS)
+    df, sell_omen_info = attach_sell_omen_scores(df, ticker)
     dates = _date_series(df).dropna()
     data_min = pd.Timestamp(dates.min()).normalize() if len(dates) else None
     data_max = pd.Timestamp(dates.max()).normalize() if len(dates) else None
@@ -159,4 +262,5 @@ def prepare_ticker_context(ticker: str) -> dict[str, Any]:
         "sector_name": sector_name,
         "base_rulebook": base_rulebook,
         "adv_usd_252d": adv_usd_252d,
+        "sell_omen_score": sell_omen_info,
     }

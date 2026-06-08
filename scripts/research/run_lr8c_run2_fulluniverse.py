@@ -128,6 +128,7 @@ def base_kwargs(ctx: dict[str, Any]) -> dict[str, Any]:
         "sector_name": ctx["sector_name"],
         "ticker_sentiment": ctx["ticker_sentiment"],
         "fitness_mode": "swing",
+        "use_llm_events": False,
     }
 
 
@@ -244,6 +245,7 @@ def run_one_period(ticker: str, ctx: dict[str, Any], split: dict[str, Any], seed
             "min_trades": MIN_TRADES,
             "min_member_score": MIN_MEMBER_SCORE,
             "max_candidates_per_period": MAX_CANDIDATES_PER_PERIOD,
+            "use_llm_events": False,
         },
         "timing": {
             "ga_seconds": round(ga_elapsed, 6),

@@ -49,6 +49,8 @@ class Trade:
     fill_price_stress: Optional[float] = None
     stress_pnl_pct: Optional[float] = None
     stress_pnl_krw: Optional[float] = None
+    max_profit_during_hold: Optional[float] = None
+    max_loss_during_hold: Optional[float] = None
     entry_market_score: Optional[float] = None
     entry_vix_level: Optional[float] = None
     entry_sector_score: Optional[float] = None
@@ -57,6 +59,7 @@ class Trade:
     target_price_at_entry: Optional[float] = None
     trailing_stop_at_entry: Optional[float] = None
     trailing_distance_at_entry: Optional[float] = None
+    trailing_activation_profit_pct: Optional[float] = None
     exit_strategy: Optional[str] = None
     rulebook_hash: Optional[str] = None
     member_hash: Optional[str] = None
@@ -86,6 +89,8 @@ class Trade:
             "fill_price_stress": self.fill_price_stress,
             "stress_pnl_pct": self.stress_pnl_pct,
             "stress_pnl_krw": self.stress_pnl_krw,
+            "max_profit_during_hold": self.max_profit_during_hold,
+            "max_loss_during_hold": self.max_loss_during_hold,
             "entry_market_score": self.entry_market_score,
             "entry_vix_level": self.entry_vix_level,
             "entry_sector_score": self.entry_sector_score,
@@ -94,10 +99,11 @@ class Trade:
             "target_price_at_entry": self.target_price_at_entry,
             "trailing_stop_at_entry": self.trailing_stop_at_entry,
             "trailing_distance_at_entry": self.trailing_distance_at_entry,
+            "trailing_activation_profit_pct": self.trailing_activation_profit_pct,
         }
         for key, value in optional_float_fields.items():
             if value is not None:
-                digits = 3 if key in {"stress_pnl_pct", "stress_pnl_krw"} else 4
+                digits = 3 if key in {"stress_pnl_pct", "stress_pnl_krw", "max_profit_during_hold", "max_loss_during_hold"} else 4
                 d[key] = round(float(value), digits)
         if self.exit_strategy is not None:
             d["exit_strategy"] = str(self.exit_strategy)
@@ -460,6 +466,7 @@ def _entry_context_from_position(
         "target_price_at_entry": float(position.target_price),
         "trailing_stop_at_entry": float(position.trailing_stop),
         "trailing_distance_at_entry": float(position.trailing_distance),
+        "trailing_activation_profit_pct": float(getattr(rb, "trailing_activation_profit_pct", 0.0) or 0.0),
         "exit_strategy": str(position.exit_strategy),
         "rulebook_hash": compute_rulebook_hash(rb),
         "member_hash": str(position.member_hash or ""),
@@ -505,7 +512,11 @@ def simulate_exit(
         vix_level=cur_vix_level,
         sector_score=cur_sector_score,
     )
-    execution_config = ExitExecutionConfig(trailing_activation_bars=2)
+    trailing_activation_profit_pct = float(getattr(rb, "trailing_activation_profit_pct", 0.0) or 0.0)
+    execution_config = ExitExecutionConfig(
+        trailing_activation_bars=2,
+        trailing_activation_profit_pct=trailing_activation_profit_pct,
+    )
     position = initialize_position_state(
         ticker=str(getattr(rb, "ticker", "") or ""),
         entry_price=entry_price,
@@ -525,6 +536,8 @@ def simulate_exit(
 
     used_krw = entry_price * initial_shares
     add_buys: list = []
+    max_profit_during_hold = 0.0
+    max_loss_during_hold = 0.0
 
     legacy_trace_by_day: dict[int, dict] = {}
     if _exit_shadow_enabled():
@@ -545,6 +558,19 @@ def simulate_exit(
         row = df.iloc[i]
         close = float(row["Close"])
         holding_days = i - entry_idx
+
+        price_snapshot = _make_price_snapshot(df, i)
+        if position.avg_cost > 0:
+            if price_snapshot.high is not None:
+                max_profit_during_hold = max(
+                    max_profit_during_hold,
+                    (float(price_snapshot.high) - position.avg_cost) / position.avg_cost * 100.0,
+                )
+            if price_snapshot.low is not None:
+                max_loss_during_hold = min(
+                    max_loss_during_hold,
+                    (float(price_snapshot.low) - position.avg_cost) / position.avg_cost * 100.0,
+                )
 
         current_pnl_pct = (close - position.avg_cost) / position.avg_cost * 100 if position.avg_cost > 0 else 0.0
         if (
@@ -570,7 +596,6 @@ def simulate_exit(
                         market_context=market_context,
                     )
 
-        price_snapshot = _make_price_snapshot(df, i)
         bar_context = MarketContext(
             market_score=cur_market_score,
             vix_level=cur_vix_level,
@@ -621,6 +646,8 @@ def simulate_exit(
                 fill_price_base=decision.fill_price_base,
                 fill_price_stress=decision.fill_price_stress,
                 entry_context=entry_context,
+                max_profit_during_hold=max_profit_during_hold,
+                max_loss_during_hold=max_loss_during_hold,
             )
 
     # 데이터가 max_holding_days 전에 끝난 경우의 안전 fallback.
@@ -636,6 +663,8 @@ def simulate_exit(
         fill_price_base=exit_price,
         fill_price_stress=exit_price,
         entry_context=entry_context,
+        max_profit_during_hold=max_profit_during_hold,
+        max_loss_during_hold=max_loss_during_hold,
     )
 
 
@@ -647,6 +676,8 @@ def _build_trade(
     fill_price_base: Optional[float] = None,
     fill_price_stress: Optional[float] = None,
     entry_context: Optional[dict[str, Any]] = None,
+    max_profit_during_hold: Optional[float] = None,
+    max_loss_during_hold: Optional[float] = None,
 ) -> Trade:
     if is_short:
         gross_pnl_pct = (avg_cost - exit_price) / avg_cost * 100
@@ -685,6 +716,8 @@ def _build_trade(
         fill_price_stress=fill_price_stress,
         stress_pnl_pct=stress_pnl_pct,
         stress_pnl_krw=stress_pnl_krw,
+        max_profit_during_hold=max_profit_during_hold,
+        max_loss_during_hold=max_loss_during_hold,
         entry_market_score=ctx.get("entry_market_score"),
         entry_vix_level=ctx.get("entry_vix_level"),
         entry_sector_score=ctx.get("entry_sector_score"),
@@ -693,6 +726,7 @@ def _build_trade(
         target_price_at_entry=ctx.get("target_price_at_entry"),
         trailing_stop_at_entry=ctx.get("trailing_stop_at_entry"),
         trailing_distance_at_entry=ctx.get("trailing_distance_at_entry"),
+        trailing_activation_profit_pct=ctx.get("trailing_activation_profit_pct"),
         exit_strategy=ctx.get("exit_strategy"),
         rulebook_hash=ctx.get("rulebook_hash"),
         member_hash=ctx.get("member_hash"),
@@ -726,6 +760,7 @@ if __name__ == "__main__":
     rb.stop_loss_atr = 2.0
     rb.take_profit_atr = 3.0
     rb.trailing_atr = 1.5
+    rb.trailing_activation_profit_pct = 3.0
     rb.max_holding_days = 20
     rb.add_buy_enabled = True
     rb.add_buy_trigger_profit_pct = 1.5

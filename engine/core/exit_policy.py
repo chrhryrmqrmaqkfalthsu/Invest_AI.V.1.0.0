@@ -32,6 +32,7 @@ class ExitExecutionConfig:
     use_next_open: bool = True
     fallback_to_trigger_price: bool = True
     trailing_activation_bars: int = 2
+    trailing_activation_profit_pct: float = 0.0
 
 
 @dataclass
@@ -328,7 +329,10 @@ def evaluate_exit(
     )
 
     strategy = str(position.exit_strategy or _get_attr(rulebook, "exit_strategy", "hybrid") or "hybrid").lower()
-    trailing_active = holding_days > cfg.trailing_activation_bars
+    current_profit_pct = (ref_price - position.avg_cost) / position.avg_cost * 100.0 if position.avg_cost > 0 else 0.0
+    highest_profit_pct = (highest - position.avg_cost) / position.avg_cost * 100.0 if position.avg_cost > 0 else 0.0
+    activation_profit_pct = _to_float(cfg.trailing_activation_profit_pct, 0.0)
+    trailing_active = holding_days > cfg.trailing_activation_bars and highest_profit_pct >= activation_profit_pct
 
     diagnostics: Dict[str, Any] = {
         "strategy": strategy,
@@ -337,8 +341,11 @@ def evaluate_exit(
         "reference_price": ref_price,
         "has_ohlc": has_ohlc,
         "holding_trading_days": holding_days,
+        "current_profit_pct": current_profit_pct,
+        "highest_profit_pct": highest_profit_pct,
         "trailing_active": trailing_active,
         "trailing_activation_bars": cfg.trailing_activation_bars,
+        "trailing_activation_profit_pct": activation_profit_pct,
         "stop_price": position.stop_price,
         "target_price": position.target_price,
         "trailing_stop": updated_trailing,

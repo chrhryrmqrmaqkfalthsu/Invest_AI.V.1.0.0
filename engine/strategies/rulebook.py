@@ -64,6 +64,7 @@ class Rulebook:
     stop_loss_atr: float = 2.0         # 손절: 진입가 - (ATR × N)
     take_profit_atr: float = 3.0       # 익절: 진입가 + (ATR × N)
     trailing_atr: float = 1.5          # 트레일링 스톱 거리
+    trailing_activation_profit_pct: float = 3.0  # 보유 중 최고수익률이 N% 이상일 때만 trailing 활성
     max_holding_days: int = 20
 
     # ===== 포지션 사이징 (v4 신규) =====
@@ -179,6 +180,7 @@ PARAM_RANGES = {
     "stop_loss_atr":          (1.0, 3.5),
     "take_profit_atr":        (1.5, 5.0),
     "trailing_atr":           (1.0, 3.0),
+    "trailing_activation_profit_pct": (1.0, 8.0),
     "max_holding_days":       (5, 30),
 
     # 포지션 사이징

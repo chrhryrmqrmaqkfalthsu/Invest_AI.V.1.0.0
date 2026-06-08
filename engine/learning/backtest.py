@@ -95,8 +95,7 @@ def _lookup_signal_context(
 ) -> tuple[float, float, float, float, dict]:
     event_flags = _zero_event_flags()
     if market_history_df is not None:
-        cur_date = df.index[idx]
-        mkt = lookup_market_at_lagged(market_history_df, cur_date, lag_days=FEATURE_LAG_DAYS)
+        mkt = lookup_market_at_lagged(market_history_df, df.index[idx], lag_days=FEATURE_LAG_DAYS)
         cur_market = float(mkt.get("score", market_score))
         cur_sector = float(mkt.get(f"sector_{sector_name}", sector_score))
         cur_vix = float(mkt.get("vix", vix_level))
@@ -111,14 +110,14 @@ def _lookup_signal_context(
     cur_sentiment = 0.0
     if ticker_sentiment:
         try:
-            _s = lookup_lagged_daily_dict(
+            s = lookup_lagged_daily_dict(
                 ticker_sentiment,
                 df.index[idx],
                 lag_days=FEATURE_LAG_DAYS,
                 max_age_days=FEATURE_LAG_MAX_AGE_DAYS,
             )
-            if _s:
-                cur_sentiment = float(_s.get('sentiment_avg', 0.0))
+            if s:
+                cur_sentiment = float(s.get("sentiment_avg", 0.0))
         except Exception:
             cur_sentiment = 0.0
     return cur_market, cur_sector, cur_vix, cur_sentiment, event_flags
@@ -126,10 +125,14 @@ def _lookup_signal_context(
 
 def _signal_snapshot(prefix: str, sig, *, sentiment: float, market: float, sector: float, vix: float, event_flags: dict) -> dict:
     reasons = list(getattr(sig, "reasons", []) or [])
-    reason_prefix = "entry" if prefix == "entry" else f"{prefix}_signal"
+    reason_key = f"{prefix}_reason"
+    reasons_key = f"{prefix}_reasons"
+    if prefix == "exit":
+        reason_key = "exit_signal_reason"
+        reasons_key = "exit_signal_reasons"
     return {
-        f"{reason_prefix}_reason": "; ".join(str(x) for x in reasons),
-        f"{reason_prefix}_reasons": reasons,
+        reason_key: "; ".join(str(x) for x in reasons),
+        reasons_key: reasons,
         f"{prefix}_signal_score": float(getattr(sig, "score", 0.0) or 0.0),
         f"{prefix}_signal_raw_score": float(getattr(sig, "raw_score", 0.0) or 0.0),
         f"{prefix}_signal_threshold": float(getattr(sig, "threshold", 0.0) or 0.0),
@@ -153,8 +156,7 @@ def _calc_complexity_penalty(active_count: int, coefficient: float) -> float:
 
 
 def _apply_complexity_penalty(rb: Rulebook, raw_fitness: float, coefficient: float) -> float:
-    penalty = _calc_complexity_penalty(_count_active_complexity_masks(rb), coefficient)
-    return float(raw_fitness) - penalty
+    return float(raw_fitness) - _calc_complexity_penalty(_count_active_complexity_masks(rb), coefficient)
 
 
 def run_backtest(
@@ -174,40 +176,41 @@ def run_backtest(
     ticker_sentiment: Optional[dict] = None,
     fitness_mode: str = "legacy",
     complexity_penalty_per_mask: float = 0.0,
-    use_llm_events: bool = False,
+    use_llm_events: bool = True,
 ) -> BacktestResult:
-    """Run point-in-time backtest. LLM-derived event flags are disabled by default."""
     trades: list = []
-    _start_ts = pd.Timestamp(start_date) if start_date else None
-    _end_ts = pd.Timestamp(end_date) if end_date else None
+    start_ts = pd.Timestamp(start_date) if start_date else None
+    end_ts = pd.Timestamp(end_date) if end_date else None
 
-    if 'date' in df.columns:
-        _date_series = pd.to_datetime(df['date'])
+    if "date" in df.columns:
+        date_series = pd.to_datetime(df["date"])
     elif isinstance(df.index, pd.DatetimeIndex):
-        _date_series = pd.Series(df.index, index=df.index)
+        date_series = pd.Series(df.index, index=df.index)
     else:
-        _date_series = None
+        date_series = None
 
     i = max(warmup, 0)
     n = len(df)
-    _all_scores: list = []
-    _all_rets: list = []
+    all_scores: list = []
+    all_rets: list = []
 
     if fitness_mode == "spread":
-        _ck = (id(df), start_date, end_date, FEATURE_LAG_DAYS, FEATURE_LAG_MAX_AGE_DAYS, bool(use_llm_events))
-        if _ck not in _SPREAD_CTX_CACHE:
-            _ctx_list = []
+        ck = (id(df), start_date, end_date, FEATURE_LAG_DAYS, FEATURE_LAG_MAX_AGE_DAYS, bool(use_llm_events))
+        if ck not in _SPREAD_CTX_CACHE:
+            ctx_list = []
             for j in range(max(warmup, 0), n):
-                if _date_series is not None:
+                if date_series is not None:
                     try:
-                        _cts = pd.Timestamp(_date_series.iloc[j] if hasattr(_date_series, 'iloc') else _date_series[j])
-                        if _start_ts is not None and _cts < _start_ts:
-                            _ctx_list.append(None); continue
-                        if _end_ts is not None and _cts > _end_ts:
-                            _ctx_list.append("BREAK"); break
+                        ts = pd.Timestamp(date_series.iloc[j] if hasattr(date_series, "iloc") else date_series[j])
+                        if start_ts is not None and ts < start_ts:
+                            ctx_list.append(None)
+                            continue
+                        if end_ts is not None and ts > end_ts:
+                            ctx_list.append("BREAK")
+                            break
                     except Exception:
                         pass
-                _cm, _cs, _cv, _snt, _ef = _lookup_signal_context(
+                cm, cs, cv, snt, ef = _lookup_signal_context(
                     df=df,
                     idx=j,
                     market_score=market_score,
@@ -218,13 +221,13 @@ def run_backtest(
                     ticker_sentiment=ticker_sentiment,
                     use_llm_events=use_llm_events,
                 )
-                _px = float(df.iloc[j]["Close"])
-                _sh = int(position_limit_krw / _px) if _px > 0 else 0
-                _ctx_list.append((j, _cm, _cs, _cv, _ef, _snt, _px, _sh))
-            _SPREAD_CTX_CACHE[_ck] = _ctx_list
-        _ctx_list = _SPREAD_CTX_CACHE[_ck]
+                px = float(df.iloc[j]["Close"])
+                sh = int(position_limit_krw / px) if px > 0 else 0
+                ctx_list.append((j, cm, cs, cv, ef, snt, px, sh))
+            _SPREAD_CTX_CACHE[ck] = ctx_list
+        ctx_list = _SPREAD_CTX_CACHE[ck]
 
-        _exit_key = (
+        exit_key = (
             getattr(rb, "direction", "long"),
             getattr(rb, "exit_strategy", "hybrid"),
             round(float(getattr(rb, "stop_loss_atr", 0) or 0), 4),
@@ -237,54 +240,55 @@ def run_backtest(
             round(float(getattr(rb, "add_buy_trigger_profit_pct", 0) or 0), 4),
             round(float(getattr(rb, "add_buy_size_ratio", 0) or 0), 4),
         )
-        _rk = (_ck, _exit_key)
-        _ret_map = _SPREAD_RET_CACHE.get(_rk)
-        if _ret_map is None:
-            _ret_map = {}
-            for _item in _ctx_list:
-                if _item is None or _item == "BREAK":
+        rk = (ck, exit_key)
+        ret_map = _SPREAD_RET_CACHE.get(rk)
+        if ret_map is None:
+            ret_map = {}
+            for item in ctx_list:
+                if item is None or item == "BREAK":
                     continue
-                j, _cm, _cs, _cv, _ef, _snt, _px, _sh = _item
-                if _sh <= 0:
+                j, cm, cs, cv, ef, snt, px, sh = item
+                if sh <= 0:
                     continue
-                _tr = simulate_exit(
-                    rb, df, j, _sh, position_limit_krw,
+                tr = simulate_exit(
+                    rb,
+                    df,
+                    j,
+                    sh,
+                    position_limit_krw,
                     commission_rate=commission_rate,
-                    cur_market_score=_cm,
-                    cur_vix_level=_cv,
-                    cur_sector_score=_cs,
+                    cur_market_score=cm,
+                    cur_vix_level=cv,
+                    cur_sector_score=cs,
                 )
-                if _tr is None:
+                if tr is None:
                     continue
-                _d = asdict(_tr) if hasattr(_tr, "__dataclass_fields__") else _tr
-                _pnl = _d.get("pnl_pct") if isinstance(_d, dict) else getattr(_tr, "pnl_pct", None)
-                if _pnl is not None:
-                    _ret_map[j] = float(_pnl)
-            _SPREAD_RET_CACHE[_rk] = _ret_map
+                d = asdict(tr) if hasattr(tr, "__dataclass_fields__") else tr
+                pnl = d.get("pnl_pct") if isinstance(d, dict) else getattr(tr, "pnl_pct", None)
+                if pnl is not None:
+                    ret_map[j] = float(pnl)
+            _SPREAD_RET_CACHE[rk] = ret_map
 
-        for _item in _ctx_list:
-            if _item is None:
+        for item in ctx_list:
+            if item is None:
                 continue
-            if _item == "BREAK":
+            if item == "BREAK":
                 break
-            j, _cm, _cs, _cv, _ef, _snt, _px, _sh = _item
-            if j not in _ret_map:
+            j, cm, cs, cv, ef, snt, px, sh = item
+            if j not in ret_map:
                 continue
-            _sig = evaluate_signal(rb, df.iloc[:j + 1], market_score=_cm,
-                                   sector_score=_cs, vix_level=_cv,
-                                   news_sentiment=_snt, event_flags=_ef)
-            _all_scores.append(float(_sig.score))
-            _all_rets.append(_ret_map[j])
+            sig = evaluate_signal(rb, df.iloc[:j + 1], market_score=cm, sector_score=cs, vix_level=cv, news_sentiment=snt, event_flags=ef)
+            all_scores.append(float(sig.score))
+            all_rets.append(ret_map[j])
 
     while i < n:
-        if _date_series is not None:
+        if date_series is not None:
             try:
-                cur_d = _date_series.iloc[i] if hasattr(_date_series, 'iloc') else _date_series[i]
-                cur_ts = pd.Timestamp(cur_d)
-                if _start_ts is not None and cur_ts < _start_ts:
+                cur_ts = pd.Timestamp(date_series.iloc[i] if hasattr(date_series, "iloc") else date_series[i])
+                if start_ts is not None and cur_ts < start_ts:
                     i += 1
                     continue
-                if _end_ts is not None and cur_ts > _end_ts:
+                if end_ts is not None and cur_ts > end_ts:
                     break
             except Exception:
                 pass
@@ -301,9 +305,9 @@ def run_backtest(
             ticker_sentiment=ticker_sentiment,
             use_llm_events=use_llm_events,
         )
-
         sig = evaluate_signal(
-            rb, sub_df,
+            rb,
+            sub_df,
             market_score=cur_market,
             sector_score=cur_sector,
             vix_level=cur_vix,
@@ -322,7 +326,11 @@ def run_backtest(
             continue
 
         trade_obj = simulate_exit(
-            rb, df, i, shares, position_limit_krw,
+            rb,
+            df,
+            i,
+            shares,
+            position_limit_krw,
             commission_rate=commission_rate,
             cur_market_score=cur_market,
             cur_vix_level=cur_vix,
@@ -330,6 +338,7 @@ def run_backtest(
         )
         if trade_obj is None:
             break
+
         trade = asdict(trade_obj) if hasattr(trade_obj, "__dataclass_fields__") else trade_obj
         if isinstance(trade, dict):
             trade.update(
@@ -343,7 +352,6 @@ def run_backtest(
                     event_flags=cur_event_flags,
                 )
             )
-
             exit_date = trade.get("exit_date")
             try:
                 exit_idx = df.index.get_loc(pd.Timestamp(exit_date)) if exit_date is not None else None
@@ -399,22 +407,22 @@ def run_backtest(
             exit_idx = i + 1
         i = max(exit_idx + 1 + cooldown_days, i + 1)
 
-    _res = _summarize(rb, trades)
+    res = _summarize(rb, trades)
     if fitness_mode == "spread":
-        _res.fitness = _calc_fitness_spread(_all_scores, _all_rets)
-        rb.fitness = _res.fitness
+        res.fitness = _calc_fitness_spread(all_scores, all_rets)
+        rb.fitness = res.fitness
     elif fitness_mode == "swing":
         raw_fitness = _calc_fitness_swing(
-            expectancy_pct=_res.expectancy_pct,
-            win_rate=_res.win_rate,
-            profit_factor=_res.profit_factor,
-            max_drawdown_pct=_res.max_drawdown_pct,
-            trade_count=_res.trade_count,
-            loss_count=_res.loss_count,
+            expectancy_pct=res.expectancy_pct,
+            win_rate=res.win_rate,
+            profit_factor=res.profit_factor,
+            max_drawdown_pct=res.max_drawdown_pct,
+            trade_count=res.trade_count,
+            loss_count=res.loss_count,
         )
-        _res.fitness = _apply_complexity_penalty(rb, raw_fitness, complexity_penalty_per_mask)
-        rb.fitness = _res.fitness
-    return _res
+        res.fitness = _apply_complexity_penalty(rb, raw_fitness, complexity_penalty_per_mask)
+        rb.fitness = res.fitness
+    return res
 
 
 def _summarize(rb: Rulebook, trades: list) -> BacktestResult:
@@ -423,13 +431,11 @@ def _summarize(rb: Rulebook, trades: list) -> BacktestResult:
 
     pnl_pcts = np.array([t.get("pnl_pct", 0.0) for t in trades], dtype=float)
     pnl_krw = np.array([t.get("pnl_krw", 0.0) for t in trades], dtype=float)
-
     win_mask = pnl_pcts > 0
     loss_mask = pnl_pcts <= 0
     win_count = int(win_mask.sum())
     loss_count = int(loss_mask.sum())
     trade_count = len(trades)
-
     win_rate = (win_count / trade_count) * 100.0 if trade_count else 0.0
     avg_return = float(pnl_pcts.mean())
     avg_win = float(pnl_pcts[win_mask].mean()) if win_count else 0.0
@@ -440,21 +446,12 @@ def _summarize(rb: Rulebook, trades: list) -> BacktestResult:
     running_max = np.maximum.accumulate(cum)
     drawdown = cum - running_max
     mdd = float(drawdown.min()) if len(drawdown) else 0.0
-
     gross_profit = float(pnl_krw[win_mask].sum()) if win_count else 0.0
     gross_loss = float(-pnl_krw[loss_mask].sum()) if loss_count else 0.0
     pf = gross_profit / gross_loss if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0.0)
-
     std = float(pnl_pcts.std()) if len(pnl_pcts) > 1 else 1.0
     sharpe = avg_return / std if std > 0 else 0.0
-
-    fitness = _calc_fitness(
-        expectancy=expectancy,
-        win_rate=win_rate,
-        profit_factor=pf,
-        mdd=mdd,
-        trade_count=trade_count,
-    )
+    fitness = _calc_fitness(expectancy=expectancy, win_rate=win_rate, profit_factor=pf, mdd=mdd, trade_count=trade_count)
 
     res = BacktestResult(
         rulebook=rb,
@@ -472,14 +469,12 @@ def _summarize(rb: Rulebook, trades: list) -> BacktestResult:
         sharpe_like=sharpe,
         fitness=fitness,
     )
-
     rb.fitness = fitness
     rb.win_rate = win_rate
     rb.avg_return_pct = avg_return
     rb.expectancy_pct = expectancy
     rb.max_drawdown_pct = mdd
     rb.trade_count = trade_count
-
     return res
 
 
@@ -487,22 +482,12 @@ def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
-def _calc_fitness_swing(
-    *,
-    expectancy_pct: float,
-    win_rate: float,
-    profit_factor: float,
-    max_drawdown_pct: float,
-    trade_count: int,
-    loss_count: int,
-) -> float:
+def _calc_fitness_swing(*, expectancy_pct: float, win_rate: float, profit_factor: float, max_drawdown_pct: float, trade_count: int, loss_count: int) -> float:
     if trade_count <= 0:
         return -100.0
-
     exp = float(expectancy_pct or 0.0)
     if exp <= 0.0:
         return -100.0 + max(exp * 10.0, -50.0)
-
     try:
         pf = float(profit_factor or 0.0)
     except Exception:
@@ -512,22 +497,17 @@ def _calc_fitness_swing(
     if loss_count == 0:
         pf = 1.5 if trade_count >= 10 else 1.0
     pf = max(0.0, min(pf, 4.0))
-
     wr = float(win_rate or 0.0)
     mdd_abs = abs(float(max_drawdown_pct or 0.0))
-
     exp_score = _clamp((exp / 2.0) * 60.0, 0.0, 120.0)
     if exp < 0.5:
         exp_score -= 25.0
     elif exp < 1.0:
         exp_score -= 10.0
-
     pf_score = _clamp((pf - 1.0) * 15.0, -20.0, 35.0)
     wr_score = _clamp((wr - 50.0) / 50.0 * 8.0, -8.0, 8.0)
     mdd_penalty = -_clamp(mdd_abs * 0.8, 0.0, 40.0)
-
     base = exp_score + pf_score + wr_score + mdd_penalty
-
     if trade_count < 5:
         trade_factor = 0.10
     elif trade_count < 10:
@@ -538,20 +518,12 @@ def _calc_fitness_swing(
         trade_factor = 1.00
     else:
         trade_factor = max(0.65, 1.0 - (trade_count - 80) / 250.0)
-
     return float(base * trade_factor)
 
 
-def _calc_fitness(
-    expectancy: float,
-    win_rate: float,
-    profit_factor: float,
-    mdd: float,
-    trade_count: int,
-) -> float:
+def _calc_fitness(expectancy: float, win_rate: float, profit_factor: float, mdd: float, trade_count: int) -> float:
     if trade_count == 0:
         return -50.0
-
     if trade_count < 5:
         sample_factor = trade_count / 5.0 * 0.2
     elif trade_count < 10:
@@ -562,14 +534,11 @@ def _calc_fitness(
         sample_factor = 0.9 + (trade_count - 20) / 80 * 0.1
     else:
         sample_factor = max(1.0 - (trade_count - 100) / 500, 0.85)
-
     exp_score = max(min(expectancy / 3.0 * 40.0, 50.0), -30.0)
     wr_score = max(min((win_rate - 50.0) / 50.0 * 30.0, 30.0), -30.0)
     pf_score = max(min((profit_factor - 1.0) / 2.0 * 20.0, 30.0), -20.0)
     mdd_penalty = max(min(mdd, 0.0), -30.0)
-
-    base = exp_score + wr_score + pf_score + mdd_penalty
-    return base * sample_factor
+    return (exp_score + wr_score + pf_score + mdd_penalty) * sample_factor
 
 
 def _calc_fitness_spread(scores: list, rets: list) -> float:
@@ -583,7 +552,6 @@ def _calc_fitness_spread(scores: list, rets: list) -> float:
     lo = float(rt[order[:k]].mean())
     hi = float(rt[order[-k:]].mean())
     spread = hi - lo
-
     if k < 5:
         sf = 0.3
     elif k < 10:
@@ -592,65 +560,10 @@ def _calc_fitness_spread(scores: list, rets: list) -> float:
         sf = 0.85
     else:
         sf = 1.0
-
     try:
         from scipy.stats import spearmanr as _sr
         rho, _ = _sr(sc, rt)
         rho = 0.0 if rho != rho else float(rho)
     except Exception:
         rho = 0.0
-
     return float(spread * sf + rho * 1.0)
-
-
-if __name__ == "__main__":
-    from engine.core.data_loader import load_ohlcv
-    from engine.core.indicators import calc_indicators
-    from engine.strategies.rulebook import default_rulebook
-    from engine.market.context import get_market_history
-
-    print("=== Backtest 테스트 (시계열 시장 컨텍스트 사용) ===")
-    df = load_ohlcv("379800", years=5)
-    df = calc_indicators(df)
-    print(f"OHLCV: {len(df)} rows")
-
-    market_hist = get_market_history(years=6)
-    print(f"market_history: {len(market_hist)} rows")
-
-    rb = default_rulebook("379800", asset_type="korean_etf", direction="long")
-    rb.signal_threshold = 2.0
-    rb.exit_strategy = "hybrid"
-    rb.stop_loss_atr = 2.0
-    rb.take_profit_atr = 3.0
-    rb.trailing_atr = 1.5
-    rb.trailing_activation_profit_pct = 3.0
-    rb.max_holding_days = 20
-    rb.base_position_ratio = 0.7
-    rb.add_buy_enabled = True
-    rb.add_buy_trigger_profit_pct = 1.5
-    rb.add_buy_max_count = 1
-    rb.add_buy_size_ratio = 0.5
-    rb.market_score_weight = 0.5
-
-    result = run_backtest(
-        rb, df,
-        position_limit_krw=120000,
-        market_history_df=market_hist,
-        sector_name="tech",
-        use_llm_events=False,
-    )
-    print(f"\n결과:")
-    print(f"  거래수: {result.trade_count} (승 {result.win_count} / 패 {result.loss_count})")
-    print(f"  승률: {result.win_rate:.2f}%")
-    print(f"  평균 수익률: {result.avg_return_pct:+.3f}%")
-    print(f"  기대값: {result.expectancy_pct:+.3f}%")
-    print(f"  MDD: {result.max_drawdown_pct:.2f}%")
-    print(f"  Profit Factor: {result.profit_factor:.3f}")
-    print(f"  Sharpe-like: {result.sharpe_like:.3f}")
-    print(f"  Fitness: {result.fitness:.3f}")
-    if result.trades:
-        print(f"\n샘플 거래:")
-        t = result.trades[0]
-        print(f"  진입 {t.get('entry_date')} @ {t.get('entry_price'):.0f} ({t.get('entry_shares')}주)")
-        print(f"  청산 {t.get('exit_date')} @ {t.get('exit_price'):.2f} ({t.get('exit_reason')})")
-        print(f"  PnL: {t.get('pnl_pct'):+.3f}% ({t.get('pnl_krw'):+.0f} KRW)")

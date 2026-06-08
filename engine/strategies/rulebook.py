@@ -68,6 +68,8 @@ class Rulebook:
     breakeven_enabled: bool = False
     breakeven_trigger_profit_pct: float = 0.0  # enabled=True일 때 MFE가 N% 이상이면 breakeven_stop 활성
     breakeven_floor_profit_pct: float = 0.0    # enabled=True일 때 breakeven_stop = avg_cost * (1 + floor/100)
+    sell_omen_enabled: bool = False
+    sell_omen_threshold: float = 1.0           # enabled=True일 때 ML sell_omen_score >= threshold면 청산
     max_holding_days: int = 20
 
     # ===== 포지션 사이징 =====
@@ -139,6 +141,8 @@ class Rulebook:
                 filtered["breakeven_enabled"] = float(d.get("breakeven_trigger_profit_pct", 0.0) or 0.0) > 0.0
             except Exception:
                 filtered["breakeven_enabled"] = False
+        if "sell_omen_enabled" not in d:
+            filtered["sell_omen_enabled"] = False
         return cls(**filtered)
 
 
@@ -182,6 +186,7 @@ PARAM_RANGES = {
     "trailing_activation_profit_pct": (1.0, 8.0),
     "breakeven_trigger_profit_pct": (4.0, 8.0),
     "breakeven_floor_profit_pct": (1.0, 3.0),
+    "sell_omen_threshold":    (0.50, 0.90),
     "max_holding_days":       (5, 30),
 
     "base_position_ratio":    (0.3, 1.0),
@@ -221,6 +226,7 @@ CATEGORICAL_PARAMS = {
     "position_sizing_strategy":      ["fixed", "signal_scaled", "kelly_lite"],
     "add_buy_enabled":               [False, True],
     "breakeven_enabled":             [False, True],
+    "sell_omen_enabled":             [False, True],
     "crash_buy_enabled":             [False, True],
     "use_news_global":               [False, True],
     "use_event_block":               [False, True],

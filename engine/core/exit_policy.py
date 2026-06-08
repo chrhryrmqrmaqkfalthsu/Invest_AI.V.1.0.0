@@ -36,6 +36,9 @@ class ExitExecutionConfig:
     breakeven_enabled: Optional[bool] = None
     breakeven_trigger_profit_pct: Optional[float] = None
     breakeven_floor_profit_pct: Optional[float] = None
+    sell_omen_enabled: Optional[bool] = None
+    sell_omen_score: Optional[float] = None
+    sell_omen_threshold: Optional[float] = None
 
 
 @dataclass
@@ -311,6 +314,26 @@ def _resolve_breakeven_settings(rulebook: Any, cfg: ExitExecutionConfig) -> tupl
     return True, float(trigger), float(floor)
 
 
+def _resolve_sell_omen_settings(rulebook: Any, cfg: ExitExecutionConfig) -> tuple[bool, Optional[float], float]:
+    raw_score = cfg.sell_omen_score
+    score = None if raw_score is None else _to_float(raw_score, 0.0)
+    if score is not None:
+        score = max(0.0, min(1.0, float(score)))
+
+    rb_threshold = _to_float(_get_attr(rulebook, "sell_omen_threshold", 1.0), 1.0)
+    threshold = _to_float(cfg.sell_omen_threshold, rb_threshold)
+    threshold = max(0.0, min(1.0, float(threshold)))
+
+    if cfg.sell_omen_enabled is None:
+        enabled = bool(_get_attr(rulebook, "sell_omen_enabled", False))
+    else:
+        enabled = bool(cfg.sell_omen_enabled)
+
+    if not enabled:
+        return False, score, threshold
+    return True, score, threshold
+
+
 def evaluate_exit(
     position: PositionState,
     price: PriceSnapshot,
@@ -321,7 +344,7 @@ def evaluate_exit(
     """Evaluate whether a long position should exit at this point.
 
     Ambiguous same-bar OHLC collisions are resolved conservatively:
-    stop_loss -> breakeven_stop -> trailing -> take_profit -> time_out.
+    stop_loss -> breakeven_stop -> sell_omen -> trailing -> take_profit -> time_out.
     """
     cfg = execution_config or ExitExecutionConfig()
     ctx = market_context or MarketContext()
@@ -356,6 +379,9 @@ def evaluate_exit(
     breakeven_stop = position.avg_cost * (1.0 + breakeven_floor_profit_pct / 100.0) if breakeven_enabled else None
     breakeven_hit = bool(breakeven_active and breakeven_stop is not None and low <= breakeven_stop)
 
+    sell_omen_enabled, sell_omen_score, sell_omen_threshold = _resolve_sell_omen_settings(rulebook, cfg)
+    sell_omen_hit = bool(sell_omen_enabled and sell_omen_score is not None and sell_omen_score >= sell_omen_threshold)
+
     diagnostics: Dict[str, Any] = {
         "strategy": strategy,
         "high": high,
@@ -373,6 +399,10 @@ def evaluate_exit(
         "breakeven_trigger_profit_pct": breakeven_trigger_profit_pct,
         "breakeven_floor_profit_pct": breakeven_floor_profit_pct,
         "breakeven_stop": breakeven_stop,
+        "sell_omen_enabled": sell_omen_enabled,
+        "sell_omen_score": sell_omen_score,
+        "sell_omen_threshold": sell_omen_threshold,
+        "sell_omen_hit": sell_omen_hit,
         "stop_price": position.stop_price,
         "target_price": position.target_price,
         "trailing_stop": updated_trailing,
@@ -391,6 +421,8 @@ def evaluate_exit(
             reason, trigger_price = "stop_loss", position.stop_price
         elif breakeven_hit and breakeven_stop is not None:
             reason, trigger_price = "breakeven_stop", breakeven_stop
+        elif sell_omen_hit:
+            reason, trigger_price = "sell_omen", ref_price
         elif target_hit:
             reason, trigger_price = "take_profit", position.target_price
         elif timeout_hit:
@@ -398,6 +430,8 @@ def evaluate_exit(
     elif strategy == "trailing":
         if breakeven_hit and breakeven_stop is not None:
             reason, trigger_price = "breakeven_stop", breakeven_stop
+        elif sell_omen_hit:
+            reason, trigger_price = "sell_omen", ref_price
         elif trailing_hit:
             reason, trigger_price = "trailing", updated_trailing
         elif timeout_hit:
@@ -407,6 +441,8 @@ def evaluate_exit(
             reason, trigger_price = "stop_loss", position.stop_price
         elif breakeven_hit and breakeven_stop is not None:
             reason, trigger_price = "breakeven_stop", breakeven_stop
+        elif sell_omen_hit:
+            reason, trigger_price = "sell_omen", ref_price
         elif trailing_hit:
             reason, trigger_price = "trailing", updated_trailing
         elif target_hit:
@@ -429,6 +465,7 @@ def evaluate_exit(
             "stop_hit": stop_hit,
             "target_hit": target_hit,
             "breakeven_hit": breakeven_hit,
+            "sell_omen_hit": sell_omen_hit,
             "trailing_hit": trailing_hit,
             "timeout_hit": timeout_hit,
         }

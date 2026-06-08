@@ -126,11 +126,17 @@ def _normalize_dependent_params(rb: Rulebook) -> None:
     if not bool(getattr(rb, "breakeven_enabled", False)):
         rb.breakeven_trigger_profit_pct = 0.0
         rb.breakeven_floor_profit_pct = 0.0
-        return
-    trig_lo, trig_hi = PARAM_RANGES["breakeven_trigger_profit_pct"]
-    floor_lo, floor_hi = PARAM_RANGES["breakeven_floor_profit_pct"]
-    rb.breakeven_trigger_profit_pct = _clamp_float(getattr(rb, "breakeven_trigger_profit_pct", trig_lo), trig_lo, trig_hi)
-    rb.breakeven_floor_profit_pct = _clamp_float(getattr(rb, "breakeven_floor_profit_pct", floor_lo), floor_lo, floor_hi)
+    else:
+        trig_lo, trig_hi = PARAM_RANGES["breakeven_trigger_profit_pct"]
+        floor_lo, floor_hi = PARAM_RANGES["breakeven_floor_profit_pct"]
+        rb.breakeven_trigger_profit_pct = _clamp_float(getattr(rb, "breakeven_trigger_profit_pct", trig_lo), trig_lo, trig_hi)
+        rb.breakeven_floor_profit_pct = _clamp_float(getattr(rb, "breakeven_floor_profit_pct", floor_lo), floor_lo, floor_hi)
+
+    if not bool(getattr(rb, "sell_omen_enabled", False)):
+        rb.sell_omen_threshold = 1.0
+    else:
+        th_lo, th_hi = PARAM_RANGES["sell_omen_threshold"]
+        rb.sell_omen_threshold = _clamp_float(getattr(rb, "sell_omen_threshold", th_hi), th_lo, th_hi)
 
 
 def _finalize_rulebook_genes(rb: Rulebook) -> Rulebook:

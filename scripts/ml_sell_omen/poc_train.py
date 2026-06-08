@@ -13,6 +13,8 @@ Split:
 
 Leakage guard:
     feature 이름에 fwd/future/forward/label/target가 포함되면 즉시 중단한다.
+    GPT 시장 이벤트 위험군인 has_*는 기본 제외한다.
+    절대 가격 레벨 Close도 기본 제외한다.
 """
 from __future__ import annotations
 
@@ -50,6 +52,8 @@ BASE_EXCLUDE_COLUMNS = {
     "label_sell_omen_10d_5pct",
     "label_window_end",
 }
+RISKY_GPT_MARKET_PREFIXES = ("has_",)
+ABSOLUTE_PRICE_COLUMNS = {"Close"}
 
 
 @dataclass
@@ -86,6 +90,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--drop-threshold-pct", type=float, default=DEFAULT_DROP_THRESHOLD_PCT)
     parser.add_argument("--top-pct", type=float, default=0.20)
     parser.add_argument("--permutation-repeats", type=int, default=5)
+    parser.add_argument("--include-gpt-market-events", action="store_true", help="위험군 has_* GPT 시장 이벤트 피처를 포함한다. 기본은 제외.")
+    parser.add_argument("--include-absolute-close", action="store_true", help="절대 가격 레벨 Close를 포함한다. 기본은 제외.")
     parser.add_argument("--write-report", type=Path, default=None)
     return parser.parse_args()
 
@@ -145,7 +151,7 @@ def _rolling_prev_max_by_ticker(df: pd.DataFrame, col: str, window: int) -> pd.S
     )
 
 
-def _add_past_only_features(df: pd.DataFrame) -> pd.DataFrame:
+def _add_past_only_features(df: pd.DataFrame, include_gpt_market_events: bool) -> pd.DataFrame:
     out = df.copy().sort_values(["ticker", "Date"]).reset_index(drop=True)
 
     out["ret_1d_pct"] = out.groupby("ticker")["Close"].pct_change(1) * 100.0
@@ -162,10 +168,11 @@ def _add_past_only_features(df: pd.DataFrame) -> pd.DataFrame:
         if col in {"news_count", "Volume_ratio"}:
             out[f"{col}_ratio_vs_prev5"] = (out[col].fillna(0.0) + 1.0) / (prev5.fillna(0.0) + 1.0)
 
-    has_cols = [c for c in out.columns if c.startswith("has_")]
-    for col in has_cols:
-        prev5_max = _rolling_prev_max_by_ticker(out, col, 5).fillna(0.0)
-        out[f"{col}_new_5d"] = ((out[col].fillna(0.0) > 0.0) & (prev5_max <= 0.0)).astype("int8")
+    if include_gpt_market_events:
+        has_cols = [c for c in out.columns if c.startswith("has_")]
+        for col in has_cols:
+            prev5_max = _rolling_prev_max_by_ticker(out, col, 5).fillna(0.0)
+            out[f"{col}_new_5d"] = ((out[col].fillna(0.0) > 0.0) & (prev5_max <= 0.0)).astype("int8")
 
     sent_topic_cols = [c for c in out.columns if c.startswith("sent_")]
     for col in sent_topic_cols:
@@ -175,8 +182,16 @@ def _add_past_only_features(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _candidate_feature_columns(df: pd.DataFrame) -> list[str]:
+def _candidate_feature_columns(
+    df: pd.DataFrame,
+    *,
+    include_gpt_market_events: bool,
+    include_absolute_close: bool,
+) -> list[str]:
     excluded = set(BASE_EXCLUDE_COLUMNS) | IDENTITY_COLUMNS
+    if not include_absolute_close:
+        excluded |= ABSOLUTE_PRICE_COLUMNS
+
     features: list[str] = []
     for col in df.columns:
         if col in excluded:
@@ -184,15 +199,21 @@ def _candidate_feature_columns(df: pd.DataFrame) -> list[str]:
         lower = col.lower()
         if any(keyword in lower for keyword in LEAK_KEYWORDS):
             continue
+        if not include_gpt_market_events and any(col.startswith(prefix) for prefix in RISKY_GPT_MARKET_PREFIXES):
+            continue
         if pd.api.types.is_numeric_dtype(df[col]):
             features.append(col)
     return sorted(features)
 
 
-def _assert_no_leakage(feature_cols: Iterable[str]) -> None:
+def _assert_no_leakage(feature_cols: Iterable[str], include_gpt_market_events: bool) -> None:
     leaked = [c for c in feature_cols if any(keyword in c.lower() for keyword in LEAK_KEYWORDS)]
     if leaked:
         raise RuntimeError(f"LEAKAGE_GUARD_FAILED: forbidden future/label columns in features: {leaked}")
+    if not include_gpt_market_events:
+        risky = [c for c in feature_cols if any(c.startswith(prefix) for prefix in RISKY_GPT_MARKET_PREFIXES)]
+        if risky:
+            raise RuntimeError(f"GPT_MARKET_GUARD_FAILED: risky GPT market columns in features: {risky}")
 
 
 def _split_time(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -289,9 +310,13 @@ def main() -> int:
     raw_tickers = df["ticker"].nunique()
 
     df = _add_label(df, horizon=args.horizon, threshold_pct=args.drop_threshold_pct)
-    df = _add_past_only_features(df)
-    feature_cols = _candidate_feature_columns(df)
-    _assert_no_leakage(feature_cols)
+    df = _add_past_only_features(df, include_gpt_market_events=bool(args.include_gpt_market_events))
+    feature_cols = _candidate_feature_columns(
+        df,
+        include_gpt_market_events=bool(args.include_gpt_market_events),
+        include_absolute_close=bool(args.include_absolute_close),
+    )
+    _assert_no_leakage(feature_cols, include_gpt_market_events=bool(args.include_gpt_market_events))
 
     train, valid, oos = _split_time(df)
     reports = [_split_report("train", train), _split_report("valid", valid), _split_report("oos", oos)]
@@ -342,7 +367,10 @@ def main() -> int:
     print(f"raw_rows={raw_rows} raw_tickers={raw_tickers}")
     print(f"label: future_min_{args.horizon}d_close_ret_pct <= {args.drop_threshold_pct}%")
     print(f"feature_count={len(feature_cols)}")
+    print(f"include_gpt_market_events={bool(args.include_gpt_market_events)}")
+    print(f"include_absolute_close={bool(args.include_absolute_close)}")
     print(f"leakage_guard=PASS forbidden_keywords={LEAK_KEYWORDS}")
+    print("gpt_market_guard=PASS" if not args.include_gpt_market_events else "gpt_market_guard=DISABLED_BY_FLAG")
     print(f"score_range_guard=PASS valid_min={valid_scores.min():.6f} valid_max={valid_scores.max():.6f} oos_min={oos_scores.min():.6f} oos_max={oos_scores.max():.6f}")
     _print_split_reports(reports)
 
@@ -370,6 +398,11 @@ def main() -> int:
             "horizon": int(args.horizon),
             "drop_threshold_pct": float(args.drop_threshold_pct),
             "label_column": "label_sell_omen_10d_5pct",
+        },
+        "policy": {
+            "include_gpt_market_events": bool(args.include_gpt_market_events),
+            "include_absolute_close": bool(args.include_absolute_close),
+            "default_excludes": sorted(list(ABSOLUTE_PRICE_COLUMNS)) + ["has_*"],
         },
         "feature_count": len(feature_cols),
         "feature_columns": feature_cols,

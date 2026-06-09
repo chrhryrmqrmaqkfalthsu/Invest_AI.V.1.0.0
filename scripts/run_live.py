@@ -6,7 +6,9 @@ run_live.py - 라이브 트레이딩 봇 엔트리포인트.
     ├─ once         → Runner.startup_check
     ├─ market_hours → Runner.tick_market
     ├─ interval     → Runner.tick_offmarket
-    └─ cron         → 장마감 일일 보고
+    ├─ cron         → 장마감 일일 보고
+    ├─ cron         → 주간 보고
+    └─ cron         → 월간 보고
 """
 from __future__ import annotations
 
@@ -16,10 +18,18 @@ import os
 import signal
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from engine.live.broker.factory import make_broker
-from engine.live.daily_report import send_daily_report_from_runner
+from engine.live.daily_report import (
+    send_daily_report_from_runner,
+    send_monthly_report_from_runner,
+    send_weekly_report_from_runner,
+    should_send_monthly_report,
+    should_send_weekly_report,
+)
 from engine.live.exit_policy_guard import validate_startup_exit_policy
 from engine.live.market_clock import select_market_clock, validate_broker_market_compatibility
 from engine.live.runner import Runner
@@ -100,8 +110,12 @@ def main():
     parser.add_argument("--sma-window", type=int, default=20)
     parser.add_argument("--stop-loss", type=float, default=0.03)
     parser.add_argument("--summary-hour", type=int, default=6)
-    parser.add_argument("--rulebook", choices=["learned", "demo"], default="learned")
     parser.add_argument("--summary-minute", type=int, default=15)
+    parser.add_argument("--weekly-summary-hour", type=int, default=6)
+    parser.add_argument("--weekly-summary-minute", type=int, default=30)
+    parser.add_argument("--monthly-summary-hour", type=int, default=6)
+    parser.add_argument("--monthly-summary-minute", type=int, default=45)
+    parser.add_argument("--rulebook", choices=["learned", "demo"], default="learned")
     args = parser.parse_args()
 
     logger.info("=" * 60)
@@ -169,7 +183,22 @@ def main():
     def daily_report_job():
         return send_daily_report_from_runner(runner)
 
+    def weekly_report_job():
+        now = datetime.now(ZoneInfo("Asia/Seoul"))
+        if should_send_weekly_report(clock, now=now):
+            return send_weekly_report_from_runner(runner, now=now)
+        return False
+
+    def monthly_report_job():
+        now = datetime.now(ZoneInfo("Asia/Seoul"))
+        if should_send_monthly_report(clock, now=now):
+            return send_monthly_report_from_runner(runner, now=now)
+        return False
+
     daily_report_job.__name__ = "daily_report"
+    weekly_report_job.__name__ = "weekly_report"
+    monthly_report_job.__name__ = "monthly_report"
+
     scheduler.add_cron_job(
         func=daily_report_job,
         hour=args.summary_hour,
@@ -177,6 +206,22 @@ def main():
         market=clock,
         weekdays_only=False,
         job_id="daily_summary",
+    )
+    scheduler.add_cron_job(
+        func=weekly_report_job,
+        hour=args.weekly_summary_hour,
+        minute=args.weekly_summary_minute,
+        market=clock,
+        weekdays_only=False,
+        job_id="weekly_summary",
+    )
+    scheduler.add_cron_job(
+        func=monthly_report_job,
+        hour=args.monthly_summary_hour,
+        minute=args.monthly_summary_minute,
+        market=clock,
+        weekdays_only=False,
+        job_id="monthly_summary",
     )
 
     stop_flag = {"stop": False}

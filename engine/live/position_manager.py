@@ -460,7 +460,6 @@ class PositionManager:
         )
         write_live_shadow_record(record)
 
-
     def _emergency_exit_policy_block(self, ticker: str, pos: PositionEntry, reason: str, notifier=None, pending_manager=None) -> None:
         """실계좌 silent legacy fallback을 막고 ticker 잠금을 영속화한다."""
         message = f"[CRITICAL][EXIT-POLICY-GUARD] {ticker} 실계좌 legacy 청산 fallback 차단: {reason}"
@@ -508,6 +507,20 @@ class PositionManager:
         if entry_dt.tzinfo is None:
             entry_dt = entry_dt.replace(tzinfo=KST)
         holding_calendar_days = (datetime.now(KST) - entry_dt).days
+
+        if notifier is not None:
+            try:
+                from engine.live.news_alerts import maybe_send_sell_omen_prealert
+
+                maybe_send_sell_omen_prealert(
+                    ticker=ticker,
+                    pos=pos,
+                    current_price=price,
+                    notifier=notifier,
+                    asof=datetime.now(KST),
+                )
+            except Exception as exc:
+                log.warning(f"{ticker} sell_omen 사전경고 실패(청산에는 영향 없음): {exc}")
 
         exit_reason: Optional[str] = None
         policy_evaluation = None
@@ -666,7 +679,6 @@ class PositionManager:
 
         self.unregister(ticker)
         return trade_record
-
 
     def finalize_sell_fill(self, order, exit_reason: str, broker: Broker, notifier=None) -> Optional[dict]:
         """pending SELL 체결분을 한 번만 포지션/trade_log에 반영한다.

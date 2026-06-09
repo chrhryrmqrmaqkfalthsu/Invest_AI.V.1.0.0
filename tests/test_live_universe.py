@@ -71,13 +71,16 @@ def test_repository_policy_counts() -> None:
     krx_parameters = load_live_universe(
         LiveUniverseConfig(market="KRX", universe_mode="parameters", symbols_dir=symbols_dir)
     )
-    assert_true(len(promoted.symbols) == 85, "exact promotion id must select 85 US tickers")
+    assert_true(DEFAULT_LIVE_PROMOTION_ID == "lr8d_stage1_20260609", "default live promotion must be LR8D stage1")
+    assert_true(len(promoted.symbols) == 16, "LR8D stage1 promotion id must select 16 US tickers")
     assert_true(len(us_parameters.symbols) == 89, "US parameters mode must select 89 tickers")
     assert_true(len(krx_parameters.symbols) == 4, "KRX parameters mode must select 4 tickers")
     assert_true("AMD" not in us_parameters.symbols, "parameters-missing AMD must be excluded")
     assert_true("143850" not in krx_parameters.symbols, "parameters-missing 143850 must be excluded")
+    for ticker in ("CAKE", "CRWD", "CW", "EME", "ETR", "HSBC", "ITT", "KT", "LASR", "MPC", "MPLX", "MTB", "NBIX", "WAB", "WELL", "WPM"):
+        assert_true(ticker in promoted.symbols, f"stage1 ticker {ticker} must be promoted")
     for ticker in ("AAPL", "AMZN", "GOOGL", "NVDA"):
-        assert_true(ticker not in promoted.symbols, f"non-promoted {ticker} must stay excluded")
+        assert_true(ticker not in promoted.symbols, f"non-stage1 {ticker} must stay excluded")
         assert_true(ticker in us_parameters.symbols, f"parameters mode must include {ticker}")
 
 

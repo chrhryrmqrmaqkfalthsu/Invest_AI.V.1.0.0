@@ -15,7 +15,7 @@ from typing import Any, Mapping
 from engine.live.market_clock import market_region_for_ticker
 from engine.strategies.rulebook import Rulebook
 
-DEFAULT_LIVE_PROMOTION_ID = "bo2_promote_85_20260605"
+DEFAULT_LIVE_PROMOTION_ID = "lr8d_stage1_20260609"
 DEFAULT_SYMBOLS_DIR = Path("data/symbols")
 VALID_MARKETS = {"US", "KRX"}
 VALID_UNIVERSE_MODES = {"promoted", "parameters"}
@@ -177,7 +177,7 @@ def load_live_universe(config: LiveUniverseConfig) -> LiveUniverseResult:
     """Load a strictly validated single-market live universe.
 
     Metadata inconsistencies are fatal.  Expected policy exclusions such as a
-    different market, missing parameters, or a different promotion id are
+different market, missing parameters, or a different promotion id are
     reported but do not fail the load.
     """
     config = config.normalized()

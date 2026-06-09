@@ -22,6 +22,10 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from engine.live.broker.factory import make_broker
 from engine.live.daily_report import (
     send_daily_report_from_runner,

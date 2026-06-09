@@ -20,12 +20,14 @@ from engine.live.market_clock import market_region_for_ticker
 log = logging.getLogger("live.news_alerts")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SELL_OMEN_SCORE_TABLE = PROJECT_ROOT / "data" / "_system" / "ml_sell_omen" / "sell_omen_scores.csv"
+# Live lr8d_stage1 universe is a subset of the LR8D85 sell_omen table.
+# The legacy sell_omen_scores.csv does not cover current promoted holdings such as MPC/NBIX.
+SELL_OMEN_SCORE_TABLE = PROJECT_ROOT / "data" / "_system" / "ml_sell_omen" / "sell_omen_scores_lr8d85.csv"
 NEWS_ALERT_STATE_PATH = PROJECT_ROOT / "data" / "_system" / "news_alert_state.json"
 KST = ZoneInfo("Asia/Seoul")
 NY = ZoneInfo("America/New_York")
 
-_SCORE_CACHE: dict[str, Any] = {"mtime": None, "rows_by_ticker": {}}
+_SCORE_CACHE: dict[str, Any] = {"path": None, "mtime": None, "rows_by_ticker": {}}
 
 
 def _float(value: Any, default: float = 0.0) -> float:
@@ -73,13 +75,15 @@ def _score_asof_date(ticker: str, asof: Any = None) -> str:
 
 
 def _load_score_rows(path: Path = SELL_OMEN_SCORE_TABLE) -> dict[str, list[dict[str, Any]]]:
+    path = Path(path)
     if not path.exists():
         return {}
     try:
+        cache_path = str(path.resolve())
         mtime = path.stat().st_mtime
     except OSError:
         return {}
-    if _SCORE_CACHE.get("mtime") == mtime:
+    if _SCORE_CACHE.get("path") == cache_path and _SCORE_CACHE.get("mtime") == mtime:
         return dict(_SCORE_CACHE.get("rows_by_ticker") or {})
 
     rows_by_ticker: dict[str, list[dict[str, Any]]] = {}
@@ -101,6 +105,7 @@ def _load_score_rows(path: Path = SELL_OMEN_SCORE_TABLE) -> dict[str, list[dict[
                 })
         for ticker in rows_by_ticker:
             rows_by_ticker[ticker].sort(key=lambda r: str(r.get("date") or ""))
+        _SCORE_CACHE["path"] = cache_path
         _SCORE_CACHE["mtime"] = mtime
         _SCORE_CACHE["rows_by_ticker"] = rows_by_ticker
     except Exception as exc:

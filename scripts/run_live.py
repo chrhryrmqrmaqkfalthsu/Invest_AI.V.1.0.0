@@ -39,6 +39,7 @@ from engine.live.market_clock import select_market_clock, validate_broker_market
 from engine.live.runner import Runner
 from engine.live.safety.layer import SafetyLayer
 from engine.live.scheduler import Scheduler
+from engine.live.telegram.dashboard import install_position_dashboard
 from engine.live.telegram.notifier import TelegramNotifier
 from engine.live.telegram.locked_bot import TelegramBot, is_process_alive
 from engine.live.universe import DEFAULT_LIVE_PROMOTION_ID, LiveUniverseConfig, load_live_universe
@@ -177,6 +178,8 @@ def main():
         order_notional=order_notional if order_notional > 0 else None,
         universe_config=universe.config,
     )
+    if hasattr(runner, "notifier") and hasattr(runner, "tick_market"):
+        install_position_dashboard(runner)
 
     try:
         bot = start_telegram_control(

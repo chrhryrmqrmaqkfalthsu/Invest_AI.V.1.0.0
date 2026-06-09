@@ -134,11 +134,15 @@ class TelegramNotifier:
         return f"{TelegramNotifier._float(value):.1f}%"
 
     @staticmethod
+    def _fmt_signed_pct(value: Any) -> str:
+        return f"{TelegramNotifier._float(value):+.1f}%"
+
+    @staticmethod
     def _fmt_shares(value: Any) -> str:
         shares = TelegramNotifier._float(value)
         if abs(shares - round(shares)) < 1e-6:
-            return f"{int(round(shares))} shares"
-        return f"{shares:.6f}".rstrip("0").rstrip(".") + " shares"
+            return f"{int(round(shares))}주"
+        return f"{shares:.6f}".rstrip("0").rstrip(".") + "주"
 
     @staticmethod
     def _level_prefix(level: str) -> str:
@@ -158,6 +162,30 @@ class TelegramNotifier:
         if 0 < v <= 1.0:
             return v * 100.0
         return v
+
+    @staticmethod
+    def _get_path_value(source: Any, name: str) -> Any:
+        cur = source
+        for part in str(name).split("."):
+            if cur is None:
+                return None
+            if isinstance(cur, dict):
+                cur = cur.get(part)
+            else:
+                cur = getattr(cur, part, None)
+        return cur
+
+    def _first_value(self, source: Any, names: tuple[str, ...], default: Any = None) -> Any:
+        for name in names:
+            value = self._get_path_value(source, name)
+            if value not in (None, ""):
+                return value
+        return default
+
+    def _metric_value(self, explicit: Any, rulebook: Any, names: tuple[str, ...], default: Any = None) -> Any:
+        if explicit not in (None, ""):
+            return explicit
+        return self._first_value(rulebook, names, default)
 
     def _rate_limited(self, event_key: str, rate_limit_seconds: Optional[int], bypass: bool = False) -> bool:
         if bypass or not event_key:
@@ -192,7 +220,7 @@ class TelegramNotifier:
             text += f"\n{body}"
         return self.send(text[:3900], parse_mode=parse_mode)
 
-    # ---------- 진입 사유 사람말 변환 ----------
+    # ---------- 진입 사유/통계/청산 계획 포맷 ----------
     @staticmethod
     def _clean_reason_token(reason: Any) -> str:
         text = str(reason or "").strip()
@@ -239,56 +267,106 @@ class TelegramNotifier:
                 mapped.append(human)
         if not mapped:
             return "진입 조건 충족"
-        visible = mapped[:max_items]
-        return " + ".join(visible)
+        return " + ".join(mapped[:max_items])
 
-    def _recent_win_rate_line(self, rulebook: Any = None, recent_win_rate: Any = None) -> str:
-        win_rate = recent_win_rate
-        if win_rate in (None, "") and rulebook is not None:
-            for attr in ("recent5_win_rate", "recent_win_rate", "last5_win_rate", "win_rate"):
-                if hasattr(rulebook, attr):
-                    win_rate = getattr(rulebook, attr)
-                    break
-        pct = self._pct_value(win_rate)
-        if pct <= 0:
-            return ""
-        wins = None
-        losses = None
-        if rulebook is not None:
-            for attr in ("recent5_wins", "last5_wins", "recent_wins"):
-                if hasattr(rulebook, attr):
-                    wins = int(self._float(getattr(rulebook, attr)))
-                    break
-            for attr in ("recent5_losses", "last5_losses", "recent_losses"):
-                if hasattr(rulebook, attr):
-                    losses = int(self._float(getattr(rulebook, attr)))
-                    break
-        if wins is not None and losses is not None:
-            return f"최근 5거래: {wins}승 {losses}패 (승률 {pct:.0f}%)"
-        return f"최근 5거래: 승률 {pct:.0f}%"
+    def _win_rate_value(self, rulebook: Any = None, recent_win_rate: Any = None) -> float:
+        value = self._metric_value(
+            recent_win_rate,
+            rulebook,
+            ("recent5_win_rate", "recent_win_rate", "last5_win_rate", "win_rate", "oos_metrics.win_rate"),
+            0.0,
+        )
+        return self._pct_value(value)
+
+    def _recent_trade_returns_line(
+        self,
+        rulebook: Any = None,
+        recent_trade_returns_pct: Any = None,
+        recent_win_rate: Any = None,
+    ) -> str:
+        returns = self._metric_value(
+            recent_trade_returns_pct,
+            rulebook,
+            (
+                "recent5_returns_pct",
+                "recent5_trade_returns_pct",
+                "last5_returns_pct",
+                "last5_trade_returns_pct",
+                "recent_trade_returns_pct",
+                "recent_returns_pct",
+                "pnl_history_pct",
+            ),
+            None,
+        )
+        win_rate = self._win_rate_value(rulebook=rulebook, recent_win_rate=recent_win_rate)
+        suffix = f" (승률 {win_rate:.0f}%)" if win_rate > 0 else ""
+        if isinstance(returns, str):
+            parts = [x.strip() for x in re.split(r"[,\s]+", returns) if x.strip()]
+        elif isinstance(returns, (list, tuple)):
+            parts = list(returns)[-5:]
+        else:
+            parts = []
+        if parts:
+            values = " ".join(self._fmt_signed_pct(x) for x in parts)
+            return f"최근 5거래: {values}{suffix}"
+        if suffix:
+            return f"최근 5거래: 수익률 기록 없음{suffix}"
+        return "최근 5거래: 수익률 기록 없음"
 
     def _trailing_line(self, rulebook: Any = None, trailing_activation_profit_pct: Any = None) -> str:
-        activation = trailing_activation_profit_pct
-        if activation in (None, "") and rulebook is not None:
-            activation = getattr(rulebook, "trailing_activation_profit_pct", None)
+        activation = self._metric_value(
+            trailing_activation_profit_pct,
+            rulebook,
+            ("trailing_activation_profit_pct",),
+            0.0,
+        )
         pct = self._float(activation)
         if pct <= 0:
-            return ""
+            return "트레일링: 비활성"
         return f"트레일링: +{pct:g}% 도달 시 활성"
 
     def _sell_omen_line(self, rulebook: Any = None, sell_omen_threshold: Any = None) -> str:
         enabled = True
         threshold = sell_omen_threshold
         if rulebook is not None:
-            enabled = bool(getattr(rulebook, "sell_omen_enabled", True))
+            enabled = bool(self._first_value(rulebook, ("sell_omen_enabled",), True))
             if threshold in (None, ""):
-                threshold = getattr(rulebook, "sell_omen_threshold", None)
+                threshold = self._first_value(rulebook, ("sell_omen_threshold",), None)
         if not enabled:
             return "sell_omen: 비활성"
         th = self._float(threshold)
         if th <= 0:
-            return ""
+            return "sell_omen: 기준값 없음"
         return f"sell_omen: 위험점수 {th:g}↑ 시 청산"
+
+    def _price_plan_line(
+        self,
+        label: str,
+        entry_price: float,
+        price_value: Any = None,
+        pct_value: Any = None,
+        fallback_text: str = "",
+    ) -> str:
+        target_price = self._float(price_value)
+        pct = self._float(pct_value)
+        if target_price <= 0 and entry_price > 0 and pct:
+            target_price = entry_price * (1.0 + pct / 100.0)
+        if target_price > 0:
+            if entry_price > 0:
+                pct = (target_price / entry_price - 1.0) * 100.0
+                return f"{label}: {self._fmt_usd(target_price)} ({pct:+.1f}%)"
+            return f"{label}: {self._fmt_usd(target_price)}"
+        return f"{label}: {fallback_text}" if fallback_text else ""
+
+    def _stat_line(self, label: str, value: Any, *, pct: bool = False, signed: bool = False, suffix: str = "") -> str:
+        if value in (None, ""):
+            return f"{label}: 데이터 없음"
+        if pct:
+            v = self._pct_value(value)
+            text = f"{v:+.1f}%" if signed else f"{v:.0f}%"
+        else:
+            text = f"{self._float(value):.2f}".rstrip("0").rstrip(".")
+        return f"{label}: {text}{suffix}"
 
     # ---------- 포맷된 알림 ----------
     def send_order(self, order) -> bool:
@@ -350,40 +428,85 @@ class TelegramNotifier:
         raw_reason: str = "",
         rulebook: Any = None,
         recent_win_rate: Any = None,
+        recent_trade_returns_pct: Any = None,
         trailing_activation_profit_pct: Any = None,
         sell_omen_threshold: Any = None,
+        stop_price: Any = None,
+        target_price: Any = None,
+        stop_pct: Any = None,
+        target_pct: Any = None,
+        expected_holding_days: Any = None,
+        expectancy_pct: Any = None,
+        profit_factor: Any = None,
     ) -> bool:
-        """실거래 진입 체결 알림. 진입사유만 사람말로 변환하고 청산 조건은 원문 의미를 보존한다."""
+        """실거래 매수 체결 알림. INFO prefix 없이 합의한 정본 포맷으로 전송한다."""
         ticker = ticker or str(getattr(order, "ticker", "") or getattr(signal_result, "ticker", "") or "")
         shares = self._float(shares) or self._float(getattr(order, "filled_shares", 0.0)) or self._float(getattr(order, "shares", 0.0))
         price = self._float(price) or self._float(getattr(order, "filled_avg_price", 0.0)) or self._float(getattr(order, "price", 0.0)) or self._float(getattr(signal_result, "price", 0.0))
         notional = self._float(notional) or (shares * price if shares and price else 0.0)
         reason_text = self._humanize_entry_reasons(signal_result=signal_result, raw_reason=raw_reason)
-        recent_line = self._recent_win_rate_line(rulebook=rulebook, recent_win_rate=recent_win_rate)
-        trailing_line = self._trailing_line(rulebook=rulebook, trailing_activation_profit_pct=trailing_activation_profit_pct)
-        sell_omen_line = self._sell_omen_line(rulebook=rulebook, sell_omen_threshold=sell_omen_threshold)
+
+        exp_value = self._metric_value(expectancy_pct, rulebook, ("expectancy_pct", "oos_metrics.expectancy_pct"), None)
+        wr_value = self._metric_value(recent_win_rate, rulebook, ("win_rate", "oos_metrics.win_rate"), None)
+        pf_value = self._metric_value(profit_factor, rulebook, ("profit_factor", "pf", "oos_metrics.profit_factor"), None)
+        recent_line = self._recent_trade_returns_line(
+            rulebook=rulebook,
+            recent_trade_returns_pct=recent_trade_returns_pct,
+            recent_win_rate=recent_win_rate,
+        )
+
+        rb_stop_pct = self._first_value(rulebook, ("stop_loss_pct", "stop_pct"), None)
+        rb_target_pct = self._first_value(rulebook, ("take_profit_pct", "target_profit_pct", "target_pct"), None)
+        stop_line = self._price_plan_line(
+            "손절",
+            price,
+            price_value=stop_price,
+            pct_value=stop_pct if stop_pct not in (None, "") else rb_stop_pct,
+            fallback_text=(
+                f"ATR×{self._float(self._first_value(rulebook, ('stop_loss_atr',), 0.0)):g} 기준"
+                if self._float(self._first_value(rulebook, ("stop_loss_atr",), 0.0)) > 0 else "데이터 없음"
+            ),
+        )
+        target_line = self._price_plan_line(
+            "익절",
+            price,
+            price_value=target_price,
+            pct_value=target_pct if target_pct not in (None, "") else rb_target_pct,
+            fallback_text=(
+                f"ATR×{self._float(self._first_value(rulebook, ('take_profit_atr',), 0.0)):g} 기준"
+                if self._float(self._first_value(rulebook, ("take_profit_atr",), 0.0)) > 0 else "데이터 없음"
+            ),
+        )
+        holding_days = self._metric_value(
+            expected_holding_days,
+            rulebook,
+            ("expected_holding_days", "avg_holding_days", "max_holding_days"),
+            None,
+        )
+        holding_line = ""
+        if holding_days not in (None, ""):
+            holding_line = f"예상 보유: ~{self._float(holding_days):g}일"
 
         lines = [
-            f"종목: {ticker}",
-            f"수량: {self._fmt_shares(shares)}",
+            f"🟢 매수 체결 — {ticker}",
+            f"수량/금액: {self._fmt_shares(shares)} / {self._fmt_usd(notional)}",
             f"진입가: {self._fmt_usd(price)}",
-            f"진입금액: {self._fmt_usd(notional)}",
             f"진입사유: {reason_text}",
+            "",
+            "📋 해당 룰북 통계",
+            self._stat_line("기대수익", exp_value, pct=True, signed=True),
+            self._stat_line("승률", wr_value, pct=True, suffix=" (OOS 2024~)"),
+            self._stat_line("손익비(PF)", pf_value),
             recent_line,
-            trailing_line,
-            sell_omen_line,
+            "",
+            "🎯 청산 계획",
+            stop_line,
+            target_line,
+            self._trailing_line(rulebook=rulebook, trailing_activation_profit_pct=trailing_activation_profit_pct),
+            self._sell_omen_line(rulebook=rulebook, sell_omen_threshold=sell_omen_threshold),
+            holding_line,
         ]
-        score = self._float(getattr(signal_result, "score", 0.0))
-        threshold = self._float(getattr(signal_result, "threshold", 0.0))
-        if score or threshold:
-            lines.append(f"신호점수: {score:.2f} / 임계 {threshold:.2f}")
-        return self._send_event(
-            title="🟢 진입 체결",
-            lines=lines,
-            level="INFO",
-            event_key=f"trade_entry:{ticker}",
-            rate_limit_seconds=0,
-        )
+        return self.send("\n".join(str(x) for x in lines if str(x).strip())[:3900])
 
     def send_error(self, message: str) -> bool:
         return self._send_event(

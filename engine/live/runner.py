@@ -769,6 +769,11 @@ class Runner:
             self.notifier.send_safety_block(check.code, f"{ticker} {side}: {check.reason}")
             return
 
+        order_metadata = {"reason": reason, "reference_price": float(price or 0.0)}
+        if side == "BUY":
+            reserved_notional = self.order_notional if self.order_notional and self.order_notional > 0 else order_shares * price
+            order_metadata["reserved_notional"] = float(reserved_notional or 0.0)
+
         try:
             order = self._submit_order_with_intent(
                 side=side,
@@ -776,7 +781,7 @@ class Runner:
                 shares=order_shares,
                 purpose="entry",
                 order_type=OrderType.MARKET,
-                metadata={"reason": reason},
+                metadata=order_metadata,
                 seed=f"signal|{ticker}|{side}|{reason}|{self.stats.market_ticks}",
             )
             self.safety.record_order(order, side, purpose="entry")
@@ -784,7 +789,12 @@ class Runner:
                 self._tick_locked_tickers = set()
             self._tick_locked_tickers.add(ticker)
             if order.status != OrderStatus.FILLED and pending_mgr is not None:
-                pending_mgr.track_order(order, purpose="entry", metadata={"reason": reason})
+                try:
+                    if float(getattr(order, "price", 0.0) or 0.0) <= 0 and price > 0:
+                        order.price = float(price)
+                except Exception:
+                    pass
+                pending_mgr.track_order(order, purpose="entry", metadata=order_metadata)
                 self.notifier.send_order(order)
                 logger.info(f"{ticker} {side} pending 추적 시작: id={order.order_id} status={order.status.value}")
                 return
@@ -806,7 +816,7 @@ class Runner:
                             order,
                             purpose="entry",
                             error=reconcile_exc,
-                            metadata={"reason": reason},
+                            metadata=order_metadata,
                         )
                         return
                 else:

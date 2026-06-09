@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from engine.portfolio.capital_allocation_probe import run_capital_allocation_reweight_probe
 from engine.portfolio.conservative_core_exit_gate import run_conservative_core_exit_gate
 from engine.portfolio.noop_gate import (
     run_comparison_infra_gate,
@@ -31,6 +32,7 @@ def main() -> None:
             "live_current_proxy",
             "tplus1_entry",
             "conservative_core_exit",
+            "capital_reweight_probe",
         ],
         default="comparison_infra_v0",
     )
@@ -93,6 +95,8 @@ def main() -> None:
             warmup=args.warmup,
             years=args.years,
         )
+    elif args.mode == "capital_reweight_probe":
+        summary = run_capital_allocation_reweight_probe()
     else:
         summary = run_comparison_infra_gate(
             start_date=args.start_date,
@@ -107,14 +111,15 @@ def main() -> None:
     print(json.dumps(summary, indent=2, default=str))
     if not summary["passed"]:
         print(
-            f"\n[FAIL] {summary['gate']} mismatch_count={summary['mismatch_count']} "
+            f"\n[FAIL] {summary['gate']} mismatch_count={summary.get('mismatch_count', 'n/a')} "
             "— v2 진행 전 원인 확인 필요.",
             file=sys.stderr,
         )
         sys.exit(1)
     print(
         f"\n[PASS] {summary['gate']} 통과. "
-        f"ref_trades={summary['ref_trade_count']}, candidate_trades={summary['candidate_trade_count']}."
+        f"ref_trades={summary.get('ref_trade_count', summary.get('trade_count', 'n/a'))}, "
+        f"candidate_trades={summary.get('candidate_trade_count', summary.get('trade_count', 'n/a'))}."
     )
 
 

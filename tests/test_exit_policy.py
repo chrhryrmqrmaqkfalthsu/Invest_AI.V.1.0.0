@@ -52,6 +52,15 @@ def make_position(strategy: str = "hybrid", holding_days: int = 3):
     return rb, pos
 
 
+def conservative_gap_config() -> ExitExecutionConfig:
+    return ExitExecutionConfig(
+        mode="conservative_gap_fill",
+        base_slippage_bps=0.0,
+        stress_slippage_bps=0.0,
+        use_next_open=True,
+    )
+
+
 def test_fixed_long_stop_only() -> None:
     rb, pos = make_position("fixed")
     decision = evaluate_exit(
@@ -190,6 +199,77 @@ def test_base_stress_fill_slippage_difference() -> None:
     assert_true((decision.fill_price_stress or 0.0) < (decision.fill_price_base or 0.0), "stress fill must be more conservative than base")
 
 
+def test_conservative_gap_fill_stop_uses_trigger_without_gap() -> None:
+    rb, pos = make_position("fixed", holding_days=3)
+    decision = evaluate_exit(
+        pos,
+        PriceSnapshot(date="2026-01-03", open=100.0, high=101.0, low=95.0, close=95.5, next_open=94.0),
+        rb,
+        execution_config=conservative_gap_config(),
+    )
+    assert_true(decision.should_exit, "stop touch must exit")
+    assert_true(decision.reason == "stop_loss", "stop touch must be stop_loss")
+    assert_true(decision.trigger_price == 96.0, "stop trigger must remain stop price")
+    assert_true(decision.fill_price_base == 96.0, "non-gap stop must fill at trigger")
+
+
+def test_conservative_gap_fill_stop_uses_open_on_gap_down() -> None:
+    rb, pos = make_position("fixed", holding_days=3)
+    decision = evaluate_exit(
+        pos,
+        PriceSnapshot(date="2026-01-03", open=95.0, high=98.0, low=94.0, close=97.0, next_open=99.0),
+        rb,
+        execution_config=conservative_gap_config(),
+    )
+    assert_true(decision.should_exit, "gap-down stop must exit")
+    assert_true(decision.reason == "stop_loss", "gap-down stop must be stop_loss")
+    assert_true(decision.trigger_price == 96.0, "stop trigger must remain stop price")
+    assert_true(decision.fill_price_base == 95.0, "gap-down stop must fill at open")
+
+
+def test_conservative_gap_fill_target_uses_trigger_without_gap() -> None:
+    rb, pos = make_position("fixed", holding_days=3)
+    decision = evaluate_exit(
+        pos,
+        PriceSnapshot(date="2026-01-03", open=104.0, high=107.0, low=103.0, close=106.5, next_open=105.0),
+        rb,
+        execution_config=conservative_gap_config(),
+    )
+    assert_true(decision.should_exit, "target touch must exit")
+    assert_true(decision.reason == "take_profit", "target touch must be take_profit")
+    assert_true(decision.trigger_price == 106.0, "target trigger must remain target price")
+    assert_true(decision.fill_price_base == 106.0, "non-gap target must fill at trigger")
+
+
+def test_conservative_gap_fill_target_uses_open_on_gap_up() -> None:
+    rb, pos = make_position("fixed", holding_days=3)
+    decision = evaluate_exit(
+        pos,
+        PriceSnapshot(date="2026-01-03", open=107.0, high=108.0, low=105.5, close=106.5, next_open=105.0),
+        rb,
+        execution_config=conservative_gap_config(),
+    )
+    assert_true(decision.should_exit, "gap-up target must exit")
+    assert_true(decision.reason == "take_profit", "gap-up target must be take_profit")
+    assert_true(decision.trigger_price == 106.0, "target trigger must remain target price")
+    assert_true(decision.fill_price_base == 107.0, "gap-up target must fill at open")
+
+
+def test_conservative_gap_fill_keeps_decision_exit_next_open() -> None:
+    rb, pos = make_position("fixed", holding_days=5)
+    decision = evaluate_exit(
+        pos,
+        PriceSnapshot(date="2026-01-09", open=101.5, high=103.0, low=98.0, close=101.0, next_open=100.0),
+        rb,
+        market_context=MarketContext(holding_trading_days=5),
+        execution_config=conservative_gap_config(),
+    )
+    assert_true(decision.should_exit, "timeout must exit")
+    assert_true(decision.reason == "time_out", "decision exit must be time_out")
+    assert_true(decision.trigger_price == 101.0, "timeout trigger must use reference close")
+    assert_true(decision.fill_price_base == 100.0, "decision exit must keep next-open fill")
+
+
 def run_all() -> None:
     tests = [
         test_fixed_long_stop_only,
@@ -201,6 +281,11 @@ def run_all() -> None:
         test_normal_market_uses_fixed_atr_values,
         test_trailing_activation_delay_two_bars,
         test_base_stress_fill_slippage_difference,
+        test_conservative_gap_fill_stop_uses_trigger_without_gap,
+        test_conservative_gap_fill_stop_uses_open_on_gap_down,
+        test_conservative_gap_fill_target_uses_trigger_without_gap,
+        test_conservative_gap_fill_target_uses_open_on_gap_up,
+        test_conservative_gap_fill_keeps_decision_exit_next_open,
     ]
     for test in tests:
         test()

@@ -494,6 +494,7 @@ def compare_legacy_and_exit_policy(
     diagnostics["trailing_delay_difference"] = bool(
         diagnostics.get("trailing_delay_difference")
         or ({legacy_reason, policy_reason} == {"trailing", None} and int(holding_trading_days) <= int(diagnostics.get("trailing_activation_bars", 2)))
+        or ({legacy_reason, policy_reason} == {"trailing", None} and bool(legacy_hits.get("trailing_hit")) and not bool(diagnostics.get("trailing_active")))
     )
     diagnostics["timeout_boundary"] = bool(
         diagnostics.get("timeout_boundary")

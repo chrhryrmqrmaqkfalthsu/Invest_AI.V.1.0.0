@@ -26,7 +26,7 @@ class MarketContext:
 class ExitExecutionConfig:
     """Execution-price estimation settings."""
 
-    mode: str = "base"  # "base" | "stress" | "live"
+    mode: str = "base"  # "base" | "stress" | "live" | "conservative_gap_fill" | "conservative_core"
     base_slippage_bps: float = 5.0
     stress_slippage_bps: float = 25.0
     use_next_open: bool = True
@@ -321,18 +321,51 @@ def _snapshot_values(price: PriceSnapshot) -> Tuple[float, float, float, bool]:
     return high, low, ref_value, has_ohlc
 
 
+def _uses_conservative_gap_fill(cfg: ExitExecutionConfig) -> bool:
+    return str(getattr(cfg, "mode", "") or "").lower() in {"conservative_gap_fill", "conservative_core"}
+
+
+def _conservative_gap_fill_basis(
+    trigger_price: float,
+    price: PriceSnapshot,
+    reason: Optional[str],
+) -> Optional[float]:
+    """Return same-bar gap-aware basis for long price-trigger exits.
+
+    Decision exits such as sell_omen/time_out intentionally return None so they
+    keep the legacy next-open fill path.
+    """
+    normalized = str(reason or "").lower()
+    open_value = None if price.open is None else _to_float(price.open, trigger_price)
+
+    if normalized in {"stop_loss", "trailing", "breakeven_stop"}:
+        if open_value is not None and open_value <= trigger_price:
+            return float(open_value)
+        return float(trigger_price)
+
+    if normalized == "take_profit":
+        if open_value is not None and open_value >= trigger_price:
+            return float(open_value)
+        return float(trigger_price)
+
+    return None
+
+
 def estimate_exit_fills(
     trigger_price: float,
     price: PriceSnapshot,
     execution_config: Optional[ExitExecutionConfig] = None,
     direction: str = "long",
+    reason: Optional[str] = None,
 ) -> Tuple[float, float]:
     """Estimate base/stress exit fills from a trigger price."""
     _assert_long_only(direction)
     cfg = execution_config or ExitExecutionConfig()
 
     basis = None
-    if cfg.use_next_open and price.next_open is not None:
+    if _uses_conservative_gap_fill(cfg):
+        basis = _conservative_gap_fill_basis(trigger_price, price, reason)
+    if basis is None and cfg.use_next_open and price.next_open is not None:
         basis = price.next_open
     if basis is None and cfg.fallback_to_trigger_price:
         basis = trigger_price
@@ -463,6 +496,16 @@ def evaluate_exit(
     target_hit = high >= position.target_price
     trailing_hit = trailing_active and low <= updated_trailing
     timeout_hit = holding_days >= position.max_holding_days
+    diagnostics.update(
+        {
+            "stop_hit": stop_hit,
+            "target_hit": target_hit,
+            "breakeven_hit": breakeven_hit,
+            "sell_omen_hit": sell_omen_hit,
+            "trailing_hit": trailing_hit,
+            "timeout_hit": timeout_hit,
+        }
+    )
 
     reason: Optional[str] = None
     trigger_price: Optional[float] = None
@@ -510,17 +553,7 @@ def evaluate_exit(
             diagnostics=diagnostics,
         )
 
-    fill_base, fill_stress = estimate_exit_fills(trigger_price, price, cfg, direction=position.direction)
-    diagnostics.update(
-        {
-            "stop_hit": stop_hit,
-            "target_hit": target_hit,
-            "breakeven_hit": breakeven_hit,
-            "sell_omen_hit": sell_omen_hit,
-            "trailing_hit": trailing_hit,
-            "timeout_hit": timeout_hit,
-        }
-    )
+    fill_base, fill_stress = estimate_exit_fills(trigger_price, price, cfg, direction=position.direction, reason=reason)
 
     return ExitDecision(
         should_exit=True,

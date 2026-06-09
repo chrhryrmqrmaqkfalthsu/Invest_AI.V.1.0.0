@@ -246,6 +246,31 @@ def apply_state_to_position_entry(pos: Any, state: PositionState) -> Any:
     return pos
 
 
+def _live_sell_omen_kwargs(ticker: str, rulebook: Any, timestamp: Optional[str]) -> dict[str, Any]:
+    """Resolve live sell_omen score for ExitExecutionConfig.
+
+    score가 없으면 enabled/threshold는 유지하되 score=None으로 넘겨 기존 청산
+    판단을 보수적으로 유지한다.
+    """
+    enabled = bool(_get(rulebook, "sell_omen_enabled", False))
+    threshold = _safe_float(_get(rulebook, "sell_omen_threshold", 1.0), 1.0)
+    score = None
+    if enabled:
+        try:
+            from engine.live.news_alerts import lookup_live_sell_omen_score
+
+            row = lookup_live_sell_omen_score(ticker, asof=timestamp)
+            if row:
+                score = _safe_float(row.get("score"), None)
+        except Exception:
+            score = None
+    return {
+        "sell_omen_enabled": enabled,
+        "sell_omen_score": score,
+        "sell_omen_threshold": threshold,
+    }
+
+
 def evaluate_live_policy(
     *,
     ticker: str,
@@ -266,6 +291,7 @@ def evaluate_live_policy(
         current_trade_date=timestamp,
     )
     state = position_entry_to_state(pos, rulebook, holding_trading_days)
+    sell_omen_kwargs = _live_sell_omen_kwargs(ticker, rulebook, timestamp)
     decision = evaluate_exit(
         state,
         PriceSnapshot(date=timestamp or "", current_price=float(price), close=float(price)),
@@ -277,6 +303,7 @@ def evaluate_live_policy(
             stress_slippage_bps=0.0,
             use_next_open=False,
             trailing_activation_bars=2,
+            **sell_omen_kwargs,
         ),
     )
     return LivePolicyEvaluation(
@@ -549,6 +576,7 @@ def evaluate_live_shadow(
     )
     static_state = position_entry_to_state(pos, rulebook, holding_trading_days)
     dynamic_state = position_entry_to_dynamic_state(pos, rulebook, holding_trading_days, exit_ctx)
+    sell_omen_kwargs = _live_sell_omen_kwargs(ticker, rulebook, timestamp)
     decision = evaluate_exit(
         dynamic_state,
         PriceSnapshot(date=timestamp or "", current_price=float(price), close=float(price)),
@@ -560,6 +588,7 @@ def evaluate_live_shadow(
             stress_slippage_bps=0.0,
             use_next_open=False,
             trailing_activation_bars=2,
+            **sell_omen_kwargs,
         ),
     )
     legacy = legacy_live_decision(pos, price, holding_calendar_days)

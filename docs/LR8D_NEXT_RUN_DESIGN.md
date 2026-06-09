@@ -305,3 +305,25 @@ order_notional=30 USD
 4. `sell_omen_scores_lr8d85.csv` freshness 문제 검토.
 5. ticker_sentiment 최신화로 KT/MPLX stale 해소.
 6. pending fill metadata의 `signal_score_at_entry` / `signal_threshold_at_entry` 0.0 기록 문제 개선.
+
+## [추가] T+1 진입 정렬 + 종목 재선정 (다음 RUN 품질 개선 항목)
+
+위치: 이 항목은 중앙 포트폴리오 시스템 구현의 선행조건이 아니다.
+      (중앙 시스템은 현 16종목을 "감사 대상"으로 쓰며, 별도로 진행 가능)
+      이것은 다음 lr8d RUN의 백테스트 품질을 높이기 위한 항목이다.
+
+배경: 현재 run_backtest()는 진입을 T일 종가(신호 계산에 쓴 바로 그 종가)로 체결한다.
+      이는 look-ahead이며, 현 16종목 expectancy(예: CRWD 14.3%)가 실현불가 프리미엄을
+      머금었을 가능성이 있다.
+      (참조: docs/CENTRAL_PORTFOLIO_BACKTEST_DESIGN.md §14 백로그)
+
+차기 RUN 반영:
+1. 진입 체결을 T+1 open으로 정렬 (신호=T close, 체결=T+1 open → look-ahead 제거).
+2. 청산 체결 정합: backtest(next_open) vs live(당일 trigger) 비대칭 해소 방향 결정.
+3. 위 1·2 적용 후 expectancy / win_rate / fitness 재산출 → 종목 재선정.
+   ※ 현 16종목은 "감사 대상"일 뿐. T+1 기준 재선정 결과가 진짜 검증 universe.
+4. (기 등록) shared core trailing hard stop invariant 추가.
+5. (기 등록) sell_omen threshold 0.30~0.70 산출물 검증 (0.70 초과 없는지).
+
+검증 게이트: T+1 정렬 후 survivor가 여전히 OOS 기준을 통과하는지,
+            expectancy 하락폭이 운용 가능 수준인지 확인.

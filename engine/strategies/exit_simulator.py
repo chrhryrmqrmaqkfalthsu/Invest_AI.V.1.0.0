@@ -20,13 +20,13 @@ from engine.strategies.rulebook import Rulebook
 class Trade:
     entry_date: str
     entry_price: float
-    entry_shares: int
+    entry_shares: float
     exit_date: str
     exit_price: float
     exit_reason: str
     holding_days: int
     add_buys: list = field(default_factory=list)
-    total_shares: int = 0
+    total_shares: float = 0.0
     avg_cost: float = 0.0
     pnl_pct: float = 0.0
     pnl_krw: float = 0.0
@@ -198,13 +198,13 @@ def _build_trade(
     *,
     entry_date: str,
     entry_price: float,
-    entry_shares: int,
+    entry_shares: float,
     exit_date,
     exit_price: float,
     exit_reason: str,
     holding_days: int,
     add_buys: list,
-    total_shares: int,
+    total_shares: float,
     avg_cost: float,
     commission_rate: float,
     trigger_price: Optional[float],
@@ -271,13 +271,15 @@ def simulate_exit(
     rb: Rulebook,
     df: pd.DataFrame,
     entry_idx: int,
-    initial_shares: int,
+    initial_shares: float,
     initial_budget_krw: float,
     commission_rate: float = 0.0005,
     cur_market_score: float = 50.0,
     cur_vix_level: float = 18.0,
     cur_sector_score: float = 50.0,
     sell_omen_scores: Any = None,
+    fractional_shares: bool = False,
+    disable_add_buy: bool = False,
 ) -> Optional[Trade]:
     if entry_idx + 1 >= len(df):
         return None
@@ -334,7 +336,12 @@ def simulate_exit(
                 mae = min(mae, (float(snap.low) - position.avg_cost) / position.avg_cost * 100.0)
 
         current_pnl_pct = (close - position.avg_cost) / position.avg_cost * 100 if position.avg_cost > 0 else 0.0
-        if rb.add_buy_enabled and position.add_buy_count < rb.add_buy_max_count and current_pnl_pct >= rb.add_buy_trigger_profit_pct:
+        if (
+            not disable_add_buy
+            and rb.add_buy_enabled
+            and position.add_buy_count < rb.add_buy_max_count
+            and current_pnl_pct >= rb.add_buy_trigger_profit_pct
+        ):
             add_budget = used_krw * rb.add_buy_size_ratio
             remaining = initial_budget_krw - used_krw
             if remaining > add_budget * 0.5:
@@ -370,7 +377,7 @@ def simulate_exit(
                 exit_reason=str(decision.reason),
                 holding_days=holding_days,
                 add_buys=add_buys,
-                total_shares=int(position.shares),
+                total_shares=(float(position.shares) if fractional_shares else int(position.shares)),
                 avg_cost=float(position.avg_cost),
                 commission_rate=commission_rate,
                 trigger_price=decision.trigger_price,
@@ -395,7 +402,7 @@ def simulate_exit(
         exit_reason="time_out",
         holding_days=last_idx - entry_idx,
         add_buys=add_buys,
-        total_shares=int(position.shares),
+        total_shares=(float(position.shares) if fractional_shares else int(position.shares)),
         avg_cost=float(position.avg_cost),
         commission_rate=commission_rate,
         trigger_price=float(last_row["Close"]),

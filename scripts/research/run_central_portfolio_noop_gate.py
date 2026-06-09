@@ -10,14 +10,18 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from engine.portfolio.noop_gate import run_comparison_infra_gate, run_engine_noop_gate_v1
+from engine.portfolio.noop_gate import (
+    run_comparison_infra_gate,
+    run_engine_noop_gate_v1,
+    run_fractional_gate_v2,
+)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=["comparison_infra_v0", "engine_noop_v1"],
+        choices=["comparison_infra_v0", "engine_noop_v1", "fractional_v2"],
         default="comparison_infra_v0",
     )
     parser.add_argument("--start-date", default="2024-01-01")
@@ -31,6 +35,16 @@ def main() -> None:
 
     if args.mode == "engine_noop_v1":
         summary = run_engine_noop_gate_v1(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            history_end_date=args.history_end_date,
+            position_limit_krw=args.position_limit,
+            commission_rate=args.commission_rate,
+            warmup=args.warmup,
+            years=args.years,
+        )
+    elif args.mode == "fractional_v2":
+        summary = run_fractional_gate_v2(
             start_date=args.start_date,
             end_date=args.end_date,
             history_end_date=args.history_end_date,
@@ -60,7 +74,7 @@ def main() -> None:
         sys.exit(1)
     print(
         f"\n[PASS] {summary['gate']} 통과. "
-        f"trades={summary['ref_trade_count']}, mismatches=0."
+        f"ref_trades={summary['ref_trade_count']}, candidate_trades={summary['candidate_trade_count']}."
     )
 
 

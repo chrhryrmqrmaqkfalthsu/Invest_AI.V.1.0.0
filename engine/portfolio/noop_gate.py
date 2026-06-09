@@ -10,6 +10,10 @@ v1 engine_noop_gate:
   switch/kill/shared cash/proportional sizing은 모두 끄고, 종목별 next_scan_index만
   기존 run_backtest()의 i 점프 방식과 동일하게 관리한다.
   reference는 기존 run_backtest()의 16종목 독립 합산, candidate는 날짜축 루프다.
+
+v2 fractional_gate:
+  동일한 날짜축 루프에서 integer sizing과 fractional sizing을 비교한다.
+  목표는 0 mismatch가 아니라, 차이가 fractional shares 전환으로만 생기는지 확인하는 것이다.
 """
 from __future__ import annotations
 
@@ -52,8 +56,10 @@ STRING_FIELDS = [
     "exit_signal_reason",
     "exit_snapshot_date",
 ]
-INT_FIELDS = ["trade_index", "entry_shares", "total_shares", "holding_days"]
+INT_FIELDS = ["trade_index", "holding_days"]
 FLOAT_FIELDS = [
+    "entry_shares",
+    "total_shares",
     "entry_price",
     "exit_price",
     "fill_price_base",
@@ -377,12 +383,16 @@ def run_legacy_compat_daily_loop(
     market_history_df: Optional[Any] = None,
     ticker_sentiments: Optional[dict[str, dict]] = None,
     use_llm_events: bool = True,
+    sizing_mode: str = "integer",
 ) -> dict[str, list[dict[str, Any]]]:
     """날짜축 포트폴리오 루프의 no-op legacy 호환 후보.
 
     종목 간 cash/switch/kill 상호작용은 의도적으로 없다. 각 종목은 독립적인
     next_scan_index를 가지며, 기존 run_backtest()의 i 점프 규칙을 재현한다.
     """
+    if sizing_mode not in {"integer", "fractional"}:
+        raise ValueError(f"unsupported sizing_mode={sizing_mode!r}")
+
     start_ts = pd.Timestamp(start_date) if start_date else None
     end_ts = pd.Timestamp(end_date) if end_date else None
     ticker_sentiments = ticker_sentiments or {}
@@ -464,7 +474,10 @@ def run_legacy_compat_daily_loop(
 
                 amt_krw = calc_position_size_krw(rb, sig.score, position_limit_krw)
                 entry_price = float(df.iloc[idx]["Close"])
-                shares = int(amt_krw / entry_price) if entry_price > 0 else 0
+                if sizing_mode == "fractional":
+                    shares = amt_krw / entry_price if entry_price > 0 else 0.0
+                else:
+                    shares = int(amt_krw / entry_price) if entry_price > 0 else 0
                 if shares <= 0:
                     state["next_idx"] = idx + 1
                     continue
@@ -479,6 +492,8 @@ def run_legacy_compat_daily_loop(
                     cur_market_score=cur_market,
                     cur_vix_level=cur_vix,
                     cur_sector_score=cur_sector,
+                    fractional_shares=(sizing_mode == "fractional"),
+                    disable_add_buy=(sizing_mode == "fractional"),
                 )
                 if trade_obj is None:
                     state["done"] = True
@@ -607,6 +622,23 @@ def write_gate_outputs(ref_rows, cand_rows, mismatches, summary, out_dir: Path =
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
 
 
+def _fractional_summary(ref_rows: list[dict[str, Any]], cand_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    ref_tickers = {row["ticker"] for row in ref_rows}
+    cand_tickers = {row["ticker"] for row in cand_rows}
+    zero_pnl_count = sum(1 for row in cand_rows if abs(float(row.get("pnl_krw") or 0.0)) < 1e-9)
+    non_positive_shares = sum(1 for row in cand_rows if float(row.get("total_shares") or 0.0) <= 0.0)
+    min_total_shares = min((float(row.get("total_shares") or 0.0) for row in cand_rows), default=0.0)
+    return {
+        "ref_ticker_count": len(ref_tickers),
+        "candidate_ticker_count": len(cand_tickers),
+        "new_ticker_count": len(cand_tickers - ref_tickers),
+        "new_tickers": sorted(cand_tickers - ref_tickers),
+        "zero_pnl_count": zero_pnl_count,
+        "non_positive_shares_count": non_positive_shares,
+        "min_total_shares": min_total_shares,
+    }
+
+
 def run_comparison_infra_gate(
     start_date: str,
     end_date: str,
@@ -689,6 +721,7 @@ def run_engine_noop_gate_v1(
         position_limit_krw=position_limit_krw,
         commission_rate=commission_rate,
         warmup=warmup,
+        sizing_mode="integer",
     )
 
     ref_rows = normalize_trade_map(rulebooks, ref_trades_by_ticker)
@@ -697,6 +730,7 @@ def run_engine_noop_gate_v1(
     summary = {
         "gate": "engine_noop_gate_v1",
         "legacy_compat_daily_loop": True,
+        "sizing_mode": "integer",
         "start_date": start_date,
         "end_date": end_date,
         "history_end_date": history_end_date,
@@ -706,6 +740,71 @@ def run_engine_noop_gate_v1(
         "candidate_trade_count": len(cand_rows),
         "mismatch_count": len(mismatches),
         "passed": len(mismatches) == 0 and len(ref_rows) == len(cand_rows),
+    }
+    write_gate_outputs(ref_rows, cand_rows, mismatches, summary, out_dir)
+    return summary
+
+
+def run_fractional_gate_v2(
+    start_date: str,
+    end_date: str,
+    history_end_date: str,
+    position_limit_krw: float = 30.0,
+    commission_rate: float = 0.0005,
+    warmup: int = 200,
+    years: int = 3,
+    out_dir: Path = OUT_DIR,
+) -> dict[str, Any]:
+    rulebooks = load_promoted_rulebooks()
+    histories = load_fixed_histories(rulebooks, years=years, history_end_date=history_end_date)
+
+    ref_trades_by_ticker = run_legacy_compat_daily_loop(
+        rulebooks,
+        histories,
+        start_date=start_date,
+        end_date=end_date,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        warmup=warmup,
+        sizing_mode="integer",
+    )
+    cand_trades_by_ticker = run_legacy_compat_daily_loop(
+        rulebooks,
+        histories,
+        start_date=start_date,
+        end_date=end_date,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        warmup=warmup,
+        sizing_mode="fractional",
+    )
+
+    ref_rows = normalize_trade_map(rulebooks, ref_trades_by_ticker)
+    cand_rows = normalize_trade_map(rulebooks, cand_trades_by_ticker)
+    mismatches = compare_trade_rows(ref_rows, cand_rows)
+    fractional_stats = _fractional_summary(ref_rows, cand_rows)
+    passed = (
+        len(cand_rows) > len(ref_rows)
+        and fractional_stats["candidate_ticker_count"] >= fractional_stats["ref_ticker_count"]
+        and fractional_stats["zero_pnl_count"] == 0
+        and fractional_stats["non_positive_shares_count"] == 0
+    )
+    summary = {
+        "gate": "fractional_gate_v2",
+        "reference_sizing_mode": "integer",
+        "candidate_sizing_mode": "fractional",
+        "fractional_shares": True,
+        "disable_add_buy": True,
+        "start_date": start_date,
+        "end_date": end_date,
+        "history_end_date": history_end_date,
+        "position_limit_krw": position_limit_krw,
+        "tickers": [ticker for ticker, _ in rulebooks],
+        "ref_trade_count": len(ref_rows),
+        "candidate_trade_count": len(cand_rows),
+        "mismatch_count": len(mismatches),
+        "passed": passed,
+        **fractional_stats,
     }
     write_gate_outputs(ref_rows, cand_rows, mismatches, summary, out_dir)
     return summary

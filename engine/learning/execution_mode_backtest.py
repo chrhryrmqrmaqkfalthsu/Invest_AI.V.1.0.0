@@ -23,6 +23,8 @@ import pandas as pd
 
 from engine.learning.backtest import (
     BacktestResult,
+    _apply_complexity_penalty,
+    _calc_fitness_swing,
     _find_df_index_by_date,
     _lookup_signal_context,
     _news_zscore_window,
@@ -103,13 +105,14 @@ def _entry_plan(
         fill_ts = _date_at(date_series, entry_idx)
         if end_ts is not None and fill_ts is not None and fill_ts > end_ts:
             return None
+        signal_ts = _date_at(date_series, signal_idx)
         return {
             "signal_idx": int(signal_idx),
             "entry_idx": entry_idx,
             "entry_price": float(df.iloc[entry_idx]["Close"]),
             "entry_atr": None,
             "entry_execution_mode": "close",
-            "entry_signal_date": str(_date_at(date_series, signal_idx).date()) if _date_at(date_series, signal_idx) is not None else "",
+            "entry_signal_date": str(signal_ts.date()) if signal_ts is not None else "",
             "entry_fill_date": str(fill_ts.date()) if fill_ts is not None else "",
         }
     if mode in {"t_plus_1_open", "next_open"}:
@@ -166,6 +169,34 @@ def _maybe_relabel_fold_mtm(
     return trade
 
 
+def _apply_fitness_mode(
+    rb: Rulebook,
+    result: BacktestResult,
+    *,
+    fitness_mode: str,
+    complexity_penalty_per_mask: float,
+) -> BacktestResult:
+    mode = str(fitness_mode or "legacy")
+    if mode == "legacy":
+        return result
+    if mode == "swing":
+        raw_fitness = _calc_fitness_swing(
+            expectancy_pct=result.expectancy_pct,
+            win_rate=result.win_rate,
+            profit_factor=result.profit_factor,
+            max_drawdown_pct=result.max_drawdown_pct,
+            trade_count=result.trade_count,
+            loss_count=result.loss_count,
+            profit_concentration=result.profit_concentration,
+        )
+        result.fitness = _apply_complexity_penalty(rb, raw_fitness, complexity_penalty_per_mask)
+        rb.fitness = result.fitness
+        return result
+    if mode == "spread":
+        raise ValueError("spread fitness_mode is not supported by execution_mode_backtest yet")
+    raise ValueError(f"unsupported fitness_mode={fitness_mode}")
+
+
 def run_backtest_execution_mode(
     rb: Rulebook,
     df: pd.DataFrame,
@@ -181,6 +212,8 @@ def run_backtest_execution_mode(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     ticker_sentiment: Optional[dict] = None,
+    fitness_mode: str = "legacy",
+    complexity_penalty_per_mask: float = 0.0,
     use_llm_events: bool = True,
     entry_execution_mode: str = "close",
     exit_execution_mode: str = "base",
@@ -304,7 +337,13 @@ def run_backtest_execution_mode(
             exit_idx = entry_idx + 1
         i = max(int(exit_idx) + 1 + cooldown_days, entry_idx + 1)
 
-    return _summarize(rb, trades)
+    result = _summarize(rb, trades)
+    return _apply_fitness_mode(
+        rb,
+        result,
+        fitness_mode=fitness_mode,
+        complexity_penalty_per_mask=complexity_penalty_per_mask,
+    )
 
 
 def _synthetic_df() -> pd.DataFrame:
@@ -394,6 +433,19 @@ def run_learning_execution_mode_gate() -> dict[str, Any]:
         exit_execution_mode="conservative_core",
         fold_exit_policy="fold_end_mark_to_market",
     )
+    rb_swing = _synthetic_rulebook()
+    swing_res = run_backtest_execution_mode(
+        rb_swing,
+        df,
+        start_date=start_date,
+        end_date=fold_end_date,
+        warmup=60,
+        position_limit_krw=10_000.0,
+        entry_execution_mode="t_plus_1_open",
+        exit_execution_mode="conservative_core",
+        fold_exit_policy="fold_end_mark_to_market",
+        fitness_mode="swing",
+    )
 
     close_trade = close_res.trades[0] if close_res.trades else {}
     t1_trade = t1_res.trades[0] if t1_res.trades else {}
@@ -408,6 +460,7 @@ def run_learning_execution_mode_gate() -> dict[str, Any]:
         "fold_end_exit_reason": t1_trade.get("exit_reason"),
         "fold_end_no_future_exit": bool(t1_trade) and str(t1_trade.get("exit_date")) <= fold_end_date,
         "fill_after_fold_end_skipped": skip_res.trade_count == 0,
+        "swing_fitness_applied": swing_res.fitness != t1_res.fitness,
     }
     checks["passed"] = (
         checks["close_mode_has_trade"]
@@ -420,6 +473,7 @@ def run_learning_execution_mode_gate() -> dict[str, Any]:
         and checks["fold_end_exit_reason"] == "fold_end_mark_to_market"
         and checks["fold_end_no_future_exit"]
         and checks["fill_after_fold_end_skipped"]
+        and checks["swing_fitness_applied"]
     )
     summary = {
         "gate": "learning_execution_mode_gate",
@@ -431,6 +485,8 @@ def run_learning_execution_mode_gate() -> dict[str, Any]:
         "close_trade_count": close_res.trade_count,
         "tplus1_trade_count": t1_res.trade_count,
         "skip_trade_count": skip_res.trade_count,
+        "legacy_fitness": t1_res.fitness,
+        "swing_fitness": swing_res.fitness,
         "checks": checks,
         "passed": bool(checks["passed"]),
     }

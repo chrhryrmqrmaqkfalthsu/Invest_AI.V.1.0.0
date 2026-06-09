@@ -34,6 +34,7 @@ POLICY_PATH = Path.home() / "kingmaker" / "config" / "policy.yaml"
 SYMBOLS_DIR = Path.home() / "kingmaker" / "data" / "symbols"
 POSITIONS_PATH = Path.home() / "kingmaker" / "data" / "_system" / "positions.json"
 SHARE_EPS = 1e-6
+NOTIONAL_EPS = 1e-6
 DEFAULT_MIN_NOTIONAL_PER_ORDER = 1.0
 DEFAULT_MIN_FRACTIONAL_SHARES_PER_ORDER = 0.001
 
@@ -156,7 +157,8 @@ class SafetyLayer:
         except Exception:
             raise RuntimeError("pending 주문 상태 조회 실패")
         for record in records:
-            if str(getattr(record, "side", "")).lower() != "buy" or str(getattr(record, "state", "")) == "DONE":
+            state_text = str(getattr(record, "state", "")).upper()
+            if str(getattr(record, "side", "")).lower() != "buy" or state_text == "DONE":
                 continue
             md = getattr(record, "metadata", {}) or {}
             reserved = md.get("approved_krw") or md.get("reserved_notional")
@@ -166,7 +168,16 @@ class SafetyLayer:
                     continue
             except Exception:
                 pass
-            px = float(getattr(record, "filled_avg_price", 0.0) or 0.0) or float(reference_price or 0.0)
+            px = float(getattr(record, "filled_avg_price", 0.0) or 0.0)
+            if px <= 0 and self.broker is not None:
+                try:
+                    pending_ticker = str(getattr(record, "ticker", "") or "").strip().upper()
+                    if pending_ticker:
+                        px = float(self.broker.get_current_price(pending_ticker) or 0.0)
+                except Exception:
+                    px = 0.0
+            if px <= 0:
+                px = float(reference_price or 0.0)
             total += max(0.0, float(getattr(record, "requested_shares", 0.0) or 0.0) * px)
         return total
 
@@ -339,7 +350,7 @@ class SafetyLayer:
         order_notional = shares_f * price_f
         if side_lower == "buy":
             min_notional = float(getattr(self, "min_notional_per_order", 0.0) or 0.0)
-            if min_notional > 0 and order_notional + 1e-9 < min_notional:
+            if min_notional > 0 and order_notional + NOTIONAL_EPS < min_notional:
                 return SafetyDecision(
                     False,
                     f"주문금액 {order_notional:,.4f} < 최소 {min_notional:,.2f}",
@@ -357,7 +368,7 @@ class SafetyLayer:
             return SafetyDecision(False, f"수량 {shares_f:g} > 한도 {self.max_shares:g}주", "LIMIT_SHARES")
 
         max_notional = self._current_order_notional_limit()
-        if max_notional > 0 and order_notional > max_notional:
+        if max_notional > 0 and order_notional > max_notional + NOTIONAL_EPS:
             return SafetyDecision(False, f"주문금액 {order_notional:,.2f} > 한도 {max_notional:,.2f}", "LIMIT_NOTIONAL")
 
         if st.orders_today >= self.max_orders_per_day:
@@ -366,7 +377,7 @@ class SafetyLayer:
         if side_lower == "buy":
             daily_limit = float(getattr(self, "max_bought_notional_per_day", 0.0) or 0.0)
             daily_total = st.invested_krw_today + order_notional
-            if daily_limit > 0 and daily_total > daily_limit:
+            if daily_limit > 0 and daily_total > daily_limit + NOTIONAL_EPS:
                 return SafetyDecision(False, f"당일 매수금액 {daily_total:,.2f} > 한도 {daily_limit:,.2f}", "LIMIT_DAILY_BUY_NOTIONAL")
 
             max_total = self._current_total_notional_limit()
@@ -375,7 +386,7 @@ class SafetyLayer:
                 if exposure_error:
                     return SafetyDecision(False, f"전체 노출 조회 실패: {exposure_error}", "EXPOSURE_CHECK_FAILED")
                 projected = exposure + order_notional
-                if projected > max_total:
+                if projected > max_total + NOTIONAL_EPS:
                     return SafetyDecision(False, f"전체 노출 {projected:,.2f} > 한도 {max_total:,.2f}", "LIMIT_TOTAL_EXPOSURE")
 
         return SafetyDecision(True, reason="모든 안전장치 통과")

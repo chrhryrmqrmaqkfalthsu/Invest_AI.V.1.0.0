@@ -1,11 +1,15 @@
 """
-Central Portfolio — v0 comparison_infra_gate.
+Central Portfolio no-op gates.
 
-목적: 진짜 중앙 시뮬레이터 검증이 아니다.
+v0 comparison_infra_gate:
   데이터 결정성 + trade 정규화 + row-level comparator + 결과 저장 구조를 검증한다.
-  reference/candidate 모두 run_backtest()를 "같은 df 객체"로 호출하는 self-vs-self.
-  → 반드시 0 mismatch로 통과해야 정상. mismatch가 나오면 데이터 비결정성 또는 comparator 버그.
-참조: docs/CENTRAL_PORTFOLIO_BACKTEST_DESIGN.md §4a (engine_noop 게이트의 선행 인프라)
+  reference/candidate 모두 run_backtest()를 같은 df 객체로 호출하는 self-vs-self다.
+
+v1 engine_noop_gate:
+  포트폴리오 날짜축 루프 골격을 legacy_compat/no-op 모드로 실행한다.
+  switch/kill/shared cash/proportional sizing은 모두 끄고, 종목별 next_scan_index만
+  기존 run_backtest()의 i 점프 방식과 동일하게 관리한다.
+  reference는 기존 run_backtest()의 16종목 독립 합산, candidate는 날짜축 루프다.
 """
 from __future__ import annotations
 
@@ -14,18 +18,40 @@ import json
 import math
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
+
+import pandas as pd
 
 from engine.core.data_loader import load_ohlcv
 from engine.core.indicators import calc_indicators
-from engine.learning.backtest import run_backtest
+from engine.learning.backtest import (
+    _attach_full_trade_dump,
+    _find_df_index_by_date,
+    _full_context_snapshot,
+    _lookup_signal_context,
+    _news_zscore_window,
+    _precompute_topic_feature_map,
+    _signal_snapshot,
+    run_backtest,
+)
+from engine.strategies.evaluator import calc_position_size_krw, evaluate_signal
+from engine.strategies.exit_simulator import simulate_exit
 from engine.strategies.rulebook import Rulebook
 
 MANIFEST_PATH = Path("data/_system/live_universe_lr8d_stage1_manifest.json")
 PARAMS_PATH_TMPL = "data/symbols/{ticker}/parameters.json"
 OUT_DIR = Path("data/_system/research/central_portfolio/noop_gate")
+OUT_DIR_V1 = Path("data/_system/research/central_portfolio/engine_noop_gate_v1")
 
-STRING_FIELDS = ["ticker", "entry_date", "exit_date", "exit_reason"]
+STRING_FIELDS = [
+    "ticker",
+    "entry_date",
+    "exit_date",
+    "exit_reason",
+    "entry_reason",
+    "exit_signal_reason",
+    "exit_snapshot_date",
+]
 INT_FIELDS = ["trade_index", "entry_shares", "total_shares", "holding_days"]
 FLOAT_FIELDS = [
     "entry_price",
@@ -36,6 +62,20 @@ FLOAT_FIELDS = [
     "pnl_pct",
     "commission",
     "avg_cost",
+    "entry_signal_score",
+    "entry_signal_raw_score",
+    "entry_signal_threshold",
+    "entry_market_adjustment",
+    "entry_market_score",
+    "entry_sector_score",
+    "entry_vix_level",
+    "exit_signal_score",
+    "exit_signal_raw_score",
+    "exit_signal_threshold",
+    "exit_market_adjustment",
+    "exit_market_score",
+    "exit_sector_score",
+    "exit_vix_level",
 ]
 ALL_FIELDS = STRING_FIELDS + INT_FIELDS + FLOAT_FIELDS
 FLOAT_ABS_TOL = 1e-6
@@ -65,6 +105,15 @@ def load_fixed_history(ticker: str, years: int, history_end_date: str) -> Any:
     return df
 
 
+def load_fixed_histories(
+    rulebooks: list[tuple[str, Rulebook]],
+    *,
+    years: int,
+    history_end_date: str,
+) -> dict[str, Any]:
+    return {ticker: load_fixed_history(ticker, years=years, history_end_date=history_end_date) for ticker, _ in rulebooks}
+
+
 def _trade_get(trade: Any, key: str, default=None):
     """dict / dataclass 모두 지원."""
     if isinstance(trade, dict):
@@ -78,20 +127,28 @@ def normalize_trade_row(ticker: str, idx: int, trade: Any) -> dict[str, Any]:
     if hasattr(trade, "__dataclass_fields__") and not isinstance(trade, dict):
         trade = asdict(trade)
     row: dict[str, Any] = {"ticker": ticker, "trade_index": idx}
-    for f in STRING_FIELDS:
-        if f == "ticker":
+    for field in STRING_FIELDS:
+        if field == "ticker":
             continue
-        v = _trade_get(trade, f)
-        row[f] = "" if v is None else str(v)
-    for f in INT_FIELDS:
-        if f == "trade_index":
+        value = _trade_get(trade, field)
+        row[field] = "" if value is None else str(value)
+    for field in INT_FIELDS:
+        if field == "trade_index":
             continue
-        v = _trade_get(trade, f)
-        row[f] = None if v is None else int(v)
-    for f in FLOAT_FIELDS:
-        v = _trade_get(trade, f)
-        row[f] = None if v is None else float(v)
+        value = _trade_get(trade, field)
+        row[field] = None if value is None else int(value)
+    for field in FLOAT_FIELDS:
+        value = _trade_get(trade, field)
+        row[field] = None if value is None else float(value)
     return row
+
+
+def normalize_trade_map(rulebooks: list[tuple[str, Rulebook]], trades_by_ticker: dict[str, list[Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for ticker, _ in rulebooks:
+        for idx, trade in enumerate(trades_by_ticker.get(ticker, [])):
+            rows.append(normalize_trade_row(ticker, idx, trade))
+    return rows
 
 
 def run_reference_backtest(
@@ -117,63 +174,413 @@ def run_reference_backtest(
     return list(result.trades)
 
 
+def run_reference_backtests_by_ticker(
+    rulebooks: list[tuple[str, Rulebook]],
+    histories: dict[str, Any],
+    *,
+    start_date: str,
+    end_date: str,
+    position_limit_krw: float,
+    commission_rate: float,
+    warmup: int,
+) -> dict[str, list[Any]]:
+    out: dict[str, list[Any]] = {}
+    for ticker, rb in rulebooks:
+        out[ticker] = run_reference_backtest(
+            rb,
+            histories[ticker],
+            start_date,
+            end_date,
+            position_limit_krw,
+            commission_rate,
+            warmup,
+        )
+    return out
+
+
+def _date_series_for_df(df: Any):
+    if "date" in df.columns:
+        return pd.to_datetime(df["date"])
+    if isinstance(df.index, pd.DatetimeIndex):
+        return pd.Series(df.index, index=df.index)
+    return None
+
+
+def _date_at(date_series: Any, idx: int) -> Optional[pd.Timestamp]:
+    if date_series is None:
+        return None
+    value = date_series.iloc[idx] if hasattr(date_series, "iloc") else date_series[idx]
+    return pd.Timestamp(value)
+
+
+def _global_date_axis(states: dict[str, dict[str, Any]], warmup: int) -> list[pd.Timestamp]:
+    dates: set[pd.Timestamp] = set()
+    for state in states.values():
+        date_series = state["date_series"]
+        if date_series is None:
+            continue
+        n = state["n"]
+        for idx in range(max(warmup, 0), n):
+            try:
+                dates.add(_date_at(date_series, idx))
+            except Exception:
+                continue
+    return sorted(dates)
+
+
+def _attach_legacy_trade_metadata(
+    *,
+    rb: Rulebook,
+    df: Any,
+    entry_idx: int,
+    trade_obj: Any,
+    sig: Any,
+    cur_sentiment: float,
+    cur_market: float,
+    cur_sector: float,
+    cur_vix: float,
+    cur_event_flags: dict,
+    cur_topic_features: dict,
+    market_score: float,
+    sector_score: float,
+    vix_level: float,
+    market_history_df: Optional[Any],
+    sector_name: str,
+    ticker_sentiment: Optional[dict],
+    topic_feature_map: Optional[dict],
+    position_limit_krw: float,
+    commission_rate: float,
+    cooldown_days: int,
+    warmup: int,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    topic_window: int,
+    use_llm_events: bool,
+) -> tuple[dict[str, Any], Optional[int]]:
+    trade = asdict(trade_obj) if hasattr(trade_obj, "__dataclass_fields__") else trade_obj
+    if not isinstance(trade, dict):
+        return {"raw_trade": trade}, None
+
+    entry_context_full = _full_context_snapshot(
+        role="entry",
+        df=df,
+        idx=entry_idx,
+        sig=sig,
+        sentiment=cur_sentiment,
+        market=cur_market,
+        sector=cur_sector,
+        vix=cur_vix,
+        event_flags=cur_event_flags,
+        topic_features=cur_topic_features,
+    )
+    trade.update(
+        _signal_snapshot(
+            "entry",
+            sig,
+            sentiment=cur_sentiment,
+            market=cur_market,
+            sector=cur_sector,
+            vix=cur_vix,
+            event_flags=cur_event_flags,
+            topic_features=cur_topic_features,
+        )
+    )
+
+    exit_date = trade.get("exit_date")
+    exit_idx = _find_df_index_by_date(df, exit_date)
+    exit_context_full: Optional[dict] = None
+    try:
+        if exit_idx is not None:
+            ex_market, ex_sector, ex_vix, ex_sentiment, ex_event_flags, ex_topic_features = _lookup_signal_context(
+                df=df,
+                idx=exit_idx,
+                market_score=market_score,
+                sector_score=sector_score,
+                vix_level=vix_level,
+                market_history_df=market_history_df,
+                sector_name=sector_name,
+                ticker_sentiment=ticker_sentiment,
+                topic_feature_map=topic_feature_map,
+                use_llm_events=use_llm_events,
+            )
+            ex_sig = evaluate_signal(
+                rb,
+                df.iloc[: exit_idx + 1],
+                market_score=ex_market,
+                sector_score=ex_sector,
+                vix_level=ex_vix,
+                news_sentiment=ex_sentiment,
+                event_flags=ex_event_flags,
+                topic_features=ex_topic_features,
+            )
+            exit_context_full = _full_context_snapshot(
+                role="exit",
+                df=df,
+                idx=exit_idx,
+                sig=ex_sig,
+                sentiment=ex_sentiment,
+                market=ex_market,
+                sector=ex_sector,
+                vix=ex_vix,
+                event_flags=ex_event_flags,
+                topic_features=ex_topic_features,
+            )
+            trade.update(
+                _signal_snapshot(
+                    "exit",
+                    ex_sig,
+                    sentiment=ex_sentiment,
+                    market=ex_market,
+                    sector=ex_sector,
+                    vix=ex_vix,
+                    event_flags=ex_event_flags,
+                    topic_features=ex_topic_features,
+                )
+            )
+            trade["exit_snapshot_date"] = str(pd.Timestamp(df.index[exit_idx]).date())
+    except Exception as exc:
+        trade["exit_snapshot_error"] = str(exc)
+
+    _attach_full_trade_dump(
+        trade=trade,
+        rb=rb,
+        df=df,
+        entry_idx=entry_idx,
+        exit_idx=exit_idx,
+        entry_context_full=entry_context_full,
+        exit_context_full=exit_context_full,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        cooldown_days=cooldown_days,
+        warmup=warmup,
+        start_date=start_date,
+        end_date=end_date,
+        topic_window=topic_window,
+        use_llm_events=use_llm_events,
+    )
+    return trade, exit_idx
+
+
+def run_legacy_compat_daily_loop(
+    rulebooks: list[tuple[str, Rulebook]],
+    histories: dict[str, Any],
+    *,
+    start_date: str,
+    end_date: str,
+    position_limit_krw: float,
+    commission_rate: float,
+    warmup: int,
+    cooldown_days: int = 1,
+    market_score: float = 50.0,
+    sector_score: float = 50.0,
+    vix_level: float = 18.0,
+    market_history_df: Optional[Any] = None,
+    ticker_sentiments: Optional[dict[str, dict]] = None,
+    use_llm_events: bool = True,
+) -> dict[str, list[dict[str, Any]]]:
+    """날짜축 포트폴리오 루프의 no-op legacy 호환 후보.
+
+    종목 간 cash/switch/kill 상호작용은 의도적으로 없다. 각 종목은 독립적인
+    next_scan_index를 가지며, 기존 run_backtest()의 i 점프 규칙을 재현한다.
+    """
+    start_ts = pd.Timestamp(start_date) if start_date else None
+    end_ts = pd.Timestamp(end_date) if end_date else None
+    ticker_sentiments = ticker_sentiments or {}
+
+    states: dict[str, dict[str, Any]] = {}
+    for ticker, rb in rulebooks:
+        df = histories[ticker]
+        ticker_sentiment = ticker_sentiments.get(ticker)
+        topic_window = _news_zscore_window(rb)
+        states[ticker] = {
+            "ticker": ticker,
+            "rb": rb,
+            "df": df,
+            "n": len(df),
+            "date_series": _date_series_for_df(df),
+            "next_idx": max(warmup, 0),
+            "done": False,
+            "trades": [],
+            "ticker_sentiment": ticker_sentiment,
+            "topic_window": topic_window,
+            "topic_feature_map": _precompute_topic_feature_map(ticker_sentiment, topic_window),
+            "sector_name": getattr(rb, "sector_name", "tech") or "tech",
+        }
+
+    for current_ts in _global_date_axis(states, warmup):
+        for ticker, _ in rulebooks:
+            state = states[ticker]
+            if state["done"]:
+                continue
+            rb = state["rb"]
+            df = state["df"]
+            date_series = state["date_series"]
+            ticker_sentiment = state["ticker_sentiment"]
+            topic_feature_map = state["topic_feature_map"]
+            sector_name = state["sector_name"]
+
+            while state["next_idx"] < state["n"]:
+                idx = int(state["next_idx"])
+                if date_series is not None:
+                    try:
+                        cur_ts = _date_at(date_series, idx)
+                        if cur_ts is not None and cur_ts > current_ts:
+                            break
+                        if start_ts is not None and cur_ts is not None and cur_ts < start_ts:
+                            state["next_idx"] = idx + 1
+                            continue
+                        if end_ts is not None and cur_ts is not None and cur_ts > end_ts:
+                            state["done"] = True
+                            break
+                    except Exception:
+                        pass
+
+                sub_df = df.iloc[: idx + 1]
+                cur_market, cur_sector, cur_vix, cur_sentiment, cur_event_flags, cur_topic_features = _lookup_signal_context(
+                    df=df,
+                    idx=idx,
+                    market_score=market_score,
+                    sector_score=sector_score,
+                    vix_level=vix_level,
+                    market_history_df=market_history_df,
+                    sector_name=sector_name,
+                    ticker_sentiment=ticker_sentiment,
+                    topic_feature_map=topic_feature_map,
+                    use_llm_events=use_llm_events,
+                )
+                sig = evaluate_signal(
+                    rb,
+                    sub_df,
+                    market_score=cur_market,
+                    sector_score=cur_sector,
+                    vix_level=cur_vix,
+                    news_sentiment=cur_sentiment,
+                    event_flags=cur_event_flags,
+                    topic_features=cur_topic_features,
+                )
+                if not sig.should_buy:
+                    state["next_idx"] = idx + 1
+                    continue
+
+                amt_krw = calc_position_size_krw(rb, sig.score, position_limit_krw)
+                entry_price = float(df.iloc[idx]["Close"])
+                shares = int(amt_krw / entry_price) if entry_price > 0 else 0
+                if shares <= 0:
+                    state["next_idx"] = idx + 1
+                    continue
+
+                trade_obj = simulate_exit(
+                    rb,
+                    df,
+                    idx,
+                    shares,
+                    position_limit_krw,
+                    commission_rate=commission_rate,
+                    cur_market_score=cur_market,
+                    cur_vix_level=cur_vix,
+                    cur_sector_score=cur_sector,
+                )
+                if trade_obj is None:
+                    state["done"] = True
+                    break
+
+                trade, exit_idx = _attach_legacy_trade_metadata(
+                    rb=rb,
+                    df=df,
+                    entry_idx=idx,
+                    trade_obj=trade_obj,
+                    sig=sig,
+                    cur_sentiment=cur_sentiment,
+                    cur_market=cur_market,
+                    cur_sector=cur_sector,
+                    cur_vix=cur_vix,
+                    cur_event_flags=cur_event_flags,
+                    cur_topic_features=cur_topic_features,
+                    market_score=market_score,
+                    sector_score=sector_score,
+                    vix_level=vix_level,
+                    market_history_df=market_history_df,
+                    sector_name=sector_name,
+                    ticker_sentiment=ticker_sentiment,
+                    topic_feature_map=topic_feature_map,
+                    position_limit_krw=position_limit_krw,
+                    commission_rate=commission_rate,
+                    cooldown_days=cooldown_days,
+                    warmup=warmup,
+                    start_date=start_date,
+                    end_date=end_date,
+                    topic_window=state["topic_window"],
+                    use_llm_events=use_llm_events,
+                )
+                state["trades"].append(trade)
+
+                if exit_idx is None:
+                    exit_date = trade.get("exit_date") if isinstance(trade, dict) else None
+                    exit_idx = _find_df_index_by_date(df, exit_date)
+                if exit_idx is None:
+                    exit_idx = idx + 1
+                state["next_idx"] = max(exit_idx + 1 + cooldown_days, idx + 1)
+
+    return {ticker: list(state["trades"]) for ticker, state in states.items()}
+
+
 def compare_trade_rows(ref_rows: list[dict], cand_rows: list[dict]) -> list[dict[str, Any]]:
     """ticker+trade_index 키로 매칭. 불일치 목록 반환."""
     mismatches: list[dict[str, Any]] = []
 
-    def key(r):
-        return (r["ticker"], r["trade_index"])
+    def key(row):
+        return (row["ticker"], row["trade_index"])
 
-    ref_map = {key(r): r for r in ref_rows}
-    cand_map = {key(r): r for r in cand_rows}
+    ref_map = {key(row): row for row in ref_rows}
+    cand_map = {key(row): row for row in cand_rows}
     all_keys = sorted(set(ref_map) | set(cand_map))
 
-    for k in all_keys:
-        r = ref_map.get(k)
-        c = cand_map.get(k)
-        if r is None or c is None:
+    for key_value in all_keys:
+        ref = ref_map.get(key_value)
+        cand = cand_map.get(key_value)
+        if ref is None or cand is None:
             mismatches.append(
                 {
-                    "ticker": k[0],
-                    "trade_index": k[1],
+                    "ticker": key_value[0],
+                    "trade_index": key_value[1],
                     "field": "_row_presence",
-                    "ref": "missing" if r is None else "present",
-                    "candidate": "missing" if c is None else "present",
+                    "ref": "missing" if ref is None else "present",
+                    "candidate": "missing" if cand is None else "present",
                     "diff": "row count mismatch",
                 }
             )
             continue
-        for f in ALL_FIELDS:
-            rv, cv = r.get(f), c.get(f)
-            if f in FLOAT_FIELDS:
-                if rv is None and cv is None:
+        for field in ALL_FIELDS:
+            ref_value, cand_value = ref.get(field), cand.get(field)
+            if field in FLOAT_FIELDS:
+                if ref_value is None and cand_value is None:
                     continue
-                if rv is None or cv is None:
+                if ref_value is None or cand_value is None:
                     ok = False
                     diff = "one-side None"
                 else:
-                    diff = abs(float(rv) - float(cv))
+                    diff = abs(float(ref_value) - float(cand_value))
                     ok = (not math.isnan(diff)) and diff <= FLOAT_ABS_TOL
                 if not ok:
                     mismatches.append(
                         {
-                            "ticker": k[0],
-                            "trade_index": k[1],
-                            "field": f,
-                            "ref": rv,
-                            "candidate": cv,
+                            "ticker": key_value[0],
+                            "trade_index": key_value[1],
+                            "field": field,
+                            "ref": ref_value,
+                            "candidate": cand_value,
                             "diff": diff,
                         }
                     )
             else:
-                if rv != cv:
+                if ref_value != cand_value:
                     mismatches.append(
                         {
-                            "ticker": k[0],
-                            "trade_index": k[1],
-                            "field": f,
-                            "ref": rv,
-                            "candidate": cv,
+                            "ticker": key_value[0],
+                            "trade_index": key_value[1],
+                            "field": field,
+                            "ref": ref_value,
+                            "candidate": cand_value,
                             "diff": "neq",
                         }
                     )
@@ -210,36 +617,30 @@ def run_comparison_infra_gate(
     years: int = 3,
     out_dir: Path = OUT_DIR,
 ) -> dict[str, Any]:
-    rbs = load_promoted_rulebooks()
-    ref_rows: list[dict] = []
-    cand_rows: list[dict] = []
+    rulebooks = load_promoted_rulebooks()
+    histories = load_fixed_histories(rulebooks, years=years, history_end_date=history_end_date)
 
-    for ticker, rb in rbs:
-        df = load_fixed_history(ticker, years=years, history_end_date=history_end_date)
-        # reference / candidate 모두 동일한 df 객체 사용 (v0 self-vs-self)
-        ref_trades = run_reference_backtest(
-            rb,
-            df,
-            start_date,
-            end_date,
-            position_limit_krw,
-            commission_rate,
-            warmup,
-        )
-        cand_trades = run_reference_backtest(
-            rb,
-            df,
-            start_date,
-            end_date,
-            position_limit_krw,
-            commission_rate,
-            warmup,
-        )
-        for i, trade in enumerate(ref_trades):
-            ref_rows.append(normalize_trade_row(ticker, i, trade))
-        for i, trade in enumerate(cand_trades):
-            cand_rows.append(normalize_trade_row(ticker, i, trade))
+    ref_trades_by_ticker = run_reference_backtests_by_ticker(
+        rulebooks,
+        histories,
+        start_date=start_date,
+        end_date=end_date,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        warmup=warmup,
+    )
+    cand_trades_by_ticker = run_reference_backtests_by_ticker(
+        rulebooks,
+        histories,
+        start_date=start_date,
+        end_date=end_date,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        warmup=warmup,
+    )
 
+    ref_rows = normalize_trade_map(rulebooks, ref_trades_by_ticker)
+    cand_rows = normalize_trade_map(rulebooks, cand_trades_by_ticker)
     mismatches = compare_trade_rows(ref_rows, cand_rows)
     summary = {
         "gate": "comparison_infra_gate_v0",
@@ -248,7 +649,59 @@ def run_comparison_infra_gate(
         "end_date": end_date,
         "history_end_date": history_end_date,
         "position_limit_krw": position_limit_krw,
-        "tickers": [tk for tk, _ in rbs],
+        "tickers": [ticker for ticker, _ in rulebooks],
+        "ref_trade_count": len(ref_rows),
+        "candidate_trade_count": len(cand_rows),
+        "mismatch_count": len(mismatches),
+        "passed": len(mismatches) == 0 and len(ref_rows) == len(cand_rows),
+    }
+    write_gate_outputs(ref_rows, cand_rows, mismatches, summary, out_dir)
+    return summary
+
+
+def run_engine_noop_gate_v1(
+    start_date: str,
+    end_date: str,
+    history_end_date: str,
+    position_limit_krw: float = 120000.0,
+    commission_rate: float = 0.0005,
+    warmup: int = 200,
+    years: int = 3,
+    out_dir: Path = OUT_DIR_V1,
+) -> dict[str, Any]:
+    rulebooks = load_promoted_rulebooks()
+    histories = load_fixed_histories(rulebooks, years=years, history_end_date=history_end_date)
+
+    ref_trades_by_ticker = run_reference_backtests_by_ticker(
+        rulebooks,
+        histories,
+        start_date=start_date,
+        end_date=end_date,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        warmup=warmup,
+    )
+    cand_trades_by_ticker = run_legacy_compat_daily_loop(
+        rulebooks,
+        histories,
+        start_date=start_date,
+        end_date=end_date,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        warmup=warmup,
+    )
+
+    ref_rows = normalize_trade_map(rulebooks, ref_trades_by_ticker)
+    cand_rows = normalize_trade_map(rulebooks, cand_trades_by_ticker)
+    mismatches = compare_trade_rows(ref_rows, cand_rows)
+    summary = {
+        "gate": "engine_noop_gate_v1",
+        "legacy_compat_daily_loop": True,
+        "start_date": start_date,
+        "end_date": end_date,
+        "history_end_date": history_end_date,
+        "position_limit_krw": position_limit_krw,
+        "tickers": [ticker for ticker, _ in rulebooks],
         "ref_trade_count": len(ref_rows),
         "candidate_trade_count": len(cand_rows),
         "mismatch_count": len(mismatches),

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
+from engine.live.exit_policy_guard import exit_live_policy_enabled
 from engine.live.market_clock import market_region_for_ticker
 
 log = logging.getLogger("live.news_alerts")
@@ -237,6 +238,7 @@ def maybe_send_sell_omen_prealert(
         holding_days = max(0, (datetime.now(KST) - entry_dt.astimezone(KST)).days)
     except Exception:
         holding_days = 0
+    live_exit_wired = bool(exit_live_policy_enabled() and getattr(pos, "rulebook_snapshot", None))
     return send_sell_omen_prealert(
         notifier,
         ticker=ticker,
@@ -247,7 +249,7 @@ def maybe_send_sell_omen_prealert(
         holding_days=holding_days,
         score_date=score_date,
         model_train_end=str(score_row.get("model_train_end") or ""),
-        live_exit_wired=False,
+        live_exit_wired=live_exit_wired,
     )
 
 

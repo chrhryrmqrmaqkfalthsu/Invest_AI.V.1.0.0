@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from engine.learning.execution_mode_backtest import run_learning_execution_mode_gate
 from engine.portfolio.capital_allocation_probe import run_capital_allocation_reweight_probe
 from engine.portfolio.conservative_core_exit_gate import run_conservative_core_exit_gate
 from engine.portfolio.noop_gate import (
@@ -41,6 +42,7 @@ def main() -> None:
             "pit_universe_manifest",
             "pit_universe_bias_probe",
             "pit_executable_rulebook_probe",
+            "learning_execution_mode_gate",
         ],
         default="comparison_infra_v0",
     )
@@ -127,6 +129,8 @@ def main() -> None:
             warmup=args.warmup,
             years=args.years,
         )
+    elif args.mode == "learning_execution_mode_gate":
+        summary = run_learning_execution_mode_gate()
     else:
         summary = run_comparison_infra_gate(
             start_date=args.start_date,

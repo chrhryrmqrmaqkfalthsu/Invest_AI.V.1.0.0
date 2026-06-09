@@ -120,11 +120,12 @@ def build_replay_position(snapshot: dict[str, Any], rulebook: Rulebook, current_
         entry_date=snapshot["entry_date"],
     )
     highest = max(100.0, float(current_price))
+    lowest = min(100.0, float(current_price))
     return PositionEntry(
         ticker=snapshot["ticker"], entry_date=snapshot["entry_date"], entry_price=100.0, shares=1.0,
         atr_at_entry=2.0, stop_price=base.stop_price, target_price=base.target_price,
         trailing_distance=base.trailing_distance, trailing_stop=max(base.trailing_stop, highest - base.trailing_distance),
-        highest_price=highest, exit_strategy=rulebook.exit_strategy, max_holding_days=rulebook.max_holding_days,
+        highest_price=highest, lowest_price=lowest, exit_strategy=rulebook.exit_strategy, max_holding_days=rulebook.max_holding_days,
         rulebook_direction="long",
     )
 

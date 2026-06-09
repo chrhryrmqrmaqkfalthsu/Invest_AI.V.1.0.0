@@ -50,9 +50,34 @@ def _to_shares(value) -> float:
         return 0.0
 
 
+def _to_float(value, default: float = 0.0) -> float:
+    try:
+        if value in (None, ""):
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
 def _normalize_shares(value: float) -> float:
     v = round(float(value), SHARE_ROUND_DIGITS)
     return 0.0 if abs(v) <= SHARE_EPS else v
+
+
+def _mfe_pct(pos) -> Optional[float]:
+    entry = _to_float(getattr(pos, "entry_price", 0.0), 0.0)
+    high = _to_float(getattr(pos, "highest_price", entry), entry)
+    if entry <= 0 or high <= 0:
+        return None
+    return (high / entry - 1.0) * 100.0
+
+
+def _mae_pct(pos) -> Optional[float]:
+    entry = _to_float(getattr(pos, "entry_price", 0.0), 0.0)
+    low = _to_float(getattr(pos, "lowest_price", entry), entry)
+    if entry <= 0 or low <= 0:
+        return None
+    return (low / entry - 1.0) * 100.0
 
 
 def _resolve_rulebook_for_alert(pos) -> Optional[Rulebook]:
@@ -78,6 +103,7 @@ class PositionEntry:
     trailing_distance: float
     trailing_stop: float
     highest_price: float
+    lowest_price: float
     exit_strategy: str
     max_holding_days: int
     rulebook_direction: str
@@ -96,13 +122,20 @@ class PositionEntry:
     def to_dict(self) -> dict:
         d = asdict(self)
         d["shares"] = _normalize_shares(d.get("shares", 0.0))
+        entry_price = _to_float(d.get("entry_price"), 0.0)
+        if _to_float(d.get("lowest_price"), 0.0) <= 0 and entry_price > 0:
+            d["lowest_price"] = entry_price
         return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "PositionEntry":
         known = set(cls.__dataclass_fields__)
-        data = {k: v for k, v in dict(d).items() if k in known}
+        raw = dict(d)
+        data = {k: v for k, v in raw.items() if k in known}
         data["shares"] = _normalize_shares(_to_shares(data.get("shares", 0.0)))
+        entry_price = _to_float(data.get("entry_price"), 0.0)
+        if "lowest_price" not in data or _to_float(data.get("lowest_price"), 0.0) <= 0:
+            data["lowest_price"] = entry_price or _to_float(data.get("highest_price"), 0.0)
         return cls(**data)
 
 
@@ -133,6 +166,19 @@ class PositionManager:
                 json.dump({t: p.to_dict() for t, p in self._positions.items()}, f, ensure_ascii=False, indent=2)
         except Exception as e:
             log.error(f"positions.json 저장 실패: {e}")
+
+    def _ensure_lowest_price(self, pos: PositionEntry) -> None:
+        if _to_float(getattr(pos, "lowest_price", 0.0), 0.0) <= 0:
+            pos.lowest_price = _to_float(pos.entry_price, 0.0)
+
+    def _track_lowest_price(self, pos: PositionEntry, price: float) -> bool:
+        self._ensure_lowest_price(pos)
+        cur = _to_float(price, 0.0)
+        if cur > 0 and (pos.lowest_price <= 0 or cur < pos.lowest_price):
+            pos.lowest_price = cur
+            self._save()
+            return True
+        return False
 
     def register_entry(
         self,
@@ -191,6 +237,7 @@ class PositionManager:
             trailing_distance=trail_dist,
             trailing_stop=trailing,
             highest_price=entry_price,
+            lowest_price=entry_price,
             exit_strategy=rulebook.exit_strategy,
             max_holding_days=int(rulebook.max_holding_days),
             rulebook_direction=rulebook.direction,
@@ -232,6 +279,7 @@ class PositionManager:
         if pos is None:
             log.error(f"{ticker} add_to_position: 기존 포지션 없음 → stale 추가매수 차단")
             return None
+        self._ensure_lowest_price(pos)
 
         # Snapshot-backed long positions use the same add-buy state transition as backtests.
         if pos.rulebook_snapshot and str(pos.rulebook_direction).lower() == "long":
@@ -247,6 +295,7 @@ class PositionManager:
                 snapshot_rulebook, _ = resolve_position_rulebook(pos)
                 if snapshot_rulebook is None:
                     raise ValueError("position snapshot unavailable")
+                prev_lowest = pos.lowest_price
                 state = position_entry_to_state(pos, snapshot_rulebook, holding_trading_days=0)
                 updated = update_position_for_add_buy(
                     state,
@@ -257,6 +306,7 @@ class PositionManager:
                     market_context=entry_context_from_position(pos),
                 )
                 apply_state_to_position_entry(pos, updated)
+                pos.lowest_price = min(prev_lowest, _to_float(add_price, prev_lowest), _to_float(pos.entry_price, prev_lowest))
                 pos.shares = _normalize_shares(pos.shares)
                 pos.total_invested_krw = float(pos.entry_price * pos.shares)
                 self._save()
@@ -287,6 +337,7 @@ class PositionManager:
         pos.trailing_distance = trail_dist
         pos.trailing_stop = max(pos.trailing_stop, new_trailing)
         pos.highest_price = max(pos.highest_price, add_price)
+        pos.lowest_price = min(pos.lowest_price, _to_float(add_price, pos.lowest_price), _to_float(new_avg, pos.lowest_price))
         pos.total_invested_krw = float(new_invested)
         pos.add_buy_count += 1
         self._save()
@@ -321,12 +372,19 @@ class PositionManager:
 
     def _legacy_exit_reason(self, pos: PositionEntry, price: float, holding_days: int) -> Optional[str]:
         """Original live decision/update path used for rollback and old positions."""
+        changed = False
+        self._ensure_lowest_price(pos)
+        if price < pos.lowest_price:
+            pos.lowest_price = price
+            changed = True
         if price > pos.highest_price:
             pos.highest_price = price
+            changed = True
             new_trailing = price - pos.trailing_distance
             if new_trailing > pos.trailing_stop:
                 pos.trailing_stop = new_trailing
-                self._save()
+        if changed:
+            self._save()
 
         strategy = pos.exit_strategy
         if strategy == "fixed":
@@ -392,6 +450,7 @@ class PositionManager:
             return
         before = (
             pos.highest_price,
+            pos.lowest_price,
             pos.trailing_stop,
             pos.stop_price,
             pos.target_price,
@@ -399,10 +458,13 @@ class PositionManager:
             pos.shares,
             pos.add_buy_count,
         )
+        prev_lowest = pos.lowest_price
         apply_state_to_position_entry(pos, updated)
+        pos.lowest_price = prev_lowest
         pos.shares = _normalize_shares(pos.shares)
         after = (
             pos.highest_price,
+            pos.lowest_price,
             pos.trailing_stop,
             pos.stop_price,
             pos.target_price,
@@ -511,6 +573,7 @@ class PositionManager:
             self.unregister(ticker)
             return None
         actual_shares = _normalize_shares(held.shares)
+        self._track_lowest_price(pos, price)
 
         entry_dt = datetime.fromisoformat(pos.entry_date)
         if entry_dt.tzinfo is None:
@@ -652,6 +715,8 @@ class PositionManager:
         filled_shares = _normalize_shares(order.filled_shares or actual_shares)
         pnl_pct = (filled_price - pos.entry_price) / pos.entry_price * 100
         pnl_krw = (filled_price - pos.entry_price) * filled_shares
+        mfe_pct = _mfe_pct(pos)
+        mae_pct = _mae_pct(pos)
         holding_trading_days = (
             int(policy_evaluation.holding_trading_days)
             if policy_evaluation is not None else holding_calendar_days
@@ -667,6 +732,9 @@ class PositionManager:
             "exit_reason": exit_reason,
             "holding_days": holding_trading_days,
             "highest_price": pos.highest_price,
+            "lowest_price": pos.lowest_price,
+            "mfe_pct": round(mfe_pct, 3) if mfe_pct is not None else "",
+            "mae_pct": round(mae_pct, 3) if mae_pct is not None else "",
             "pnl_pct": round(pnl_pct, 3),
             "pnl_krw": round(pnl_krw, 2),
             "exit_strategy": pos.exit_strategy,
@@ -679,7 +747,8 @@ class PositionManager:
                     trade_record,
                     order=order,
                     rulebook=_resolve_rulebook_for_alert(pos),
-                    mfe_pct=(pos.highest_price / pos.entry_price - 1.0) * 100.0 if pos.entry_price > 0 else None,
+                    mfe_pct=mfe_pct,
+                    mae_pct=mae_pct,
                 )
             except Exception as e:
                 log.warning(f"청산 정본 알림 실패: {e}")
@@ -698,14 +767,19 @@ class PositionManager:
         if pos is None:
             log.warning(f"{ticker} pending SELL 정산 스킵: PositionEntry 없음")
             return None
+        self._ensure_lowest_price(pos)
         filled_shares = _normalize_shares(float(order.filled_shares or 0.0))
         if filled_shares <= SHARE_EPS:
             return None
         filled_price = float(order.filled_avg_price or 0.0)
         if filled_price <= 0:
             filled_price = broker.get_current_price(ticker) or pos.entry_price
+        if filled_price > 0 and filled_price < pos.lowest_price:
+            pos.lowest_price = filled_price
         pnl_pct = (filled_price - pos.entry_price) / pos.entry_price * 100
         pnl_krw = (filled_price - pos.entry_price) * filled_shares
+        mfe_pct = _mfe_pct(pos)
+        mae_pct = _mae_pct(pos)
         trade_record = {
             "exited_at": datetime.now(KST).isoformat(),
             "ticker": ticker,
@@ -717,6 +791,9 @@ class PositionManager:
             "exit_reason": exit_reason or "pending_sell",
             "holding_days": max(0, (datetime.now(KST) - datetime.fromisoformat(pos.entry_date).replace(tzinfo=KST) if datetime.fromisoformat(pos.entry_date).tzinfo is None else datetime.now(KST) - datetime.fromisoformat(pos.entry_date)).days),
             "highest_price": pos.highest_price,
+            "lowest_price": pos.lowest_price,
+            "mfe_pct": round(mfe_pct, 3) if mfe_pct is not None else "",
+            "mae_pct": round(mae_pct, 3) if mae_pct is not None else "",
             "pnl_pct": round(pnl_pct, 3),
             "pnl_krw": round(pnl_krw, 2),
             "exit_strategy": pos.exit_strategy,
@@ -724,7 +801,6 @@ class PositionManager:
         self._append_trade_log(trade_record)
 
         rulebook_for_alert = _resolve_rulebook_for_alert(pos)
-        mfe_pct = (pos.highest_price / pos.entry_price - 1.0) * 100.0 if pos.entry_price > 0 else None
 
         remaining = _normalize_shares(float(pos.shares or 0.0) - filled_shares)
         broker_remaining = None
@@ -748,6 +824,7 @@ class PositionManager:
                     order=order,
                     rulebook=rulebook_for_alert,
                     mfe_pct=mfe_pct,
+                    mae_pct=mae_pct,
                 )
             except Exception as e:
                 log.warning(f"pending SELL 정본 알림 실패: {e}")

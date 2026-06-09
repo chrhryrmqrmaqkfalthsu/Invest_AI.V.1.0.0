@@ -87,7 +87,8 @@ def snapshot_position(target: float = 106.0, strategy: str = "hybrid") -> Positi
     return PositionEntry(
         ticker="TEST", entry_date=datetime.now().isoformat(), entry_price=100.0, shares=2.0,
         atr_at_entry=2.0, stop_price=96.0, target_price=target, trailing_distance=3.0,
-        trailing_stop=97.0, highest_price=100.0, exit_strategy=strategy, max_holding_days=20,
+        trailing_stop=97.0, highest_price=100.0, lowest_price=100.0,
+        exit_strategy=strategy, max_holding_days=20,
         rulebook_direction="long", rulebook_snapshot=rb.to_dict(), member_hash="a" * 64,
         entry_market_score=50.0, entry_vix_level=18.0, entry_sector_score=50.0,
     )
@@ -103,6 +104,7 @@ def test_register_entry_uses_entry_context_and_snapshot() -> None:
     assert_close(pos.target_price, 110.0, "bull target uses entry-time dynamic parameter")
     assert_close(pos.trailing_distance, 6.0, "volatile trailing uses entry-time dynamic parameter")
     assert_close(pos.trailing_stop, 94.0, "entry trailing stop")
+    assert_close(pos.lowest_price, 100.0, "entry lowest price starts at entry")
     assert_true(bool(pos.rulebook_snapshot), "snapshot must be stored")
     assert_true(len(pos.member_hash) == 64, "member hash must be stored")
     assert_close(pos.entry_market_score, 75.0, "entry market score")
@@ -122,6 +124,7 @@ def test_old_position_json_is_backward_compatible() -> None:
     assert_true(pos.rulebook_snapshot == {}, "old position defaults to no snapshot")
     assert_true(pos.member_hash == "", "old position hash default")
     assert_true(pos.add_buy_count == 0, "old position add count default")
+    assert_close(pos.lowest_price, 100.0, "old position lowest defaults to entry")
 
 
 def test_policy_on_uses_snapshot_and_actual_fill() -> None:
@@ -130,6 +133,7 @@ def test_policy_on_uses_snapshot_and_actual_fill() -> None:
     result = run_check(manager, pos, FakeBroker(price=95.0, fill_price=94.5))
     assert_true(result is not None and result["exit_reason"] == "stop_loss", "policy stop must place sell")
     assert_close(result["exit_price"], 94.5, "trade must use actual filled price")
+    assert_true("lowest_price" in result and "mae_pct" in result, "trade must include MAE fields")
     assert_true("TEST" not in manager._positions, "FILLED policy exit must unregister")
 
 
@@ -168,6 +172,7 @@ def test_policy_state_update_is_single_authority() -> None:
     result = run_check(manager, pos, broker)
     assert_true(result is None, "no exit expected")
     assert_close(pos.highest_price, 105.0, "policy updates highest")
+    assert_close(pos.lowest_price, 100.0, "policy preserves lowest when no new low")
     assert_close(pos.trailing_stop, 102.0, "policy ratchets trailing once")
     assert_true(len(broker.sell_calls) == 0, "no order expected")
 

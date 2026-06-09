@@ -118,6 +118,7 @@ def seed_position(pm: PositionManager, ticker="AAA", shares=1.0):
         trailing_distance=3.0,
         trailing_stop=96.0,
         highest_price=105.0,
+        lowest_price=100.0,
         exit_strategy="fixed",
         max_holding_days=99,
         rulebook_direction="long",

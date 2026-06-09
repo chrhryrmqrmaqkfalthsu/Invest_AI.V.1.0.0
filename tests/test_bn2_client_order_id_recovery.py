@@ -98,7 +98,7 @@ def test_recovered_filled_emits_event_without_get_order_and_keeps_lock_until_fin
     assert not m.is_ticker_locked('AAA')
 def test_auto_exit_sell_intent_first(tmp_path,monkeypatch):
     monkeypatch.setenv('EXIT_LIVE_POLICY','0'); b=B(); b.get_current_price=lambda t: 94.0; p=PendingOrderManager(b,path=tmp_path/'p.json'); pm=PositionManager.__new__(PositionManager)
-    pos=PositionEntry('AAA',datetime.now().isoformat(),100,1,1,95,110,2,95,100,'fixed',99,'long',member_hash='mh')
+    pos=PositionEntry('AAA',datetime.now().isoformat(),100,1,1,95,110,2,95,100,100,'fixed',99,'long',member_hash='mh')
     pm._positions={'AAA':pos}; pm._save=lambda: None
     assert pm._check_one('AAA',pos,b,notifier=N(),pending_manager=p) is None
     assert b.sell_calls==1; assert p.get_record('S1').client_order_id; assert p.get_record('S1').state==STATE_OPEN

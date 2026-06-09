@@ -58,7 +58,8 @@ def make_pos(*, snapshot=True):
     return PositionEntry(
         ticker="AAA", entry_date=datetime.now().isoformat(), entry_price=100.0, shares=1.0,
         atr_at_entry=2.0, stop_price=96.0, target_price=106.0, trailing_distance=3.0,
-        trailing_stop=97.0, highest_price=100.0, exit_strategy="hybrid", max_holding_days=20,
+        trailing_stop=97.0, highest_price=100.0, lowest_price=100.0,
+        exit_strategy="hybrid", max_holding_days=20,
         rulebook_direction="long", rulebook_snapshot=rb.to_dict() if snapshot else {}, member_hash="a" * 64,
     )
 

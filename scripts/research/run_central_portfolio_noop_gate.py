@@ -19,6 +19,7 @@ from engine.portfolio.noop_gate import (
     run_live_current_proxy_baseline,
     run_tplus1_entry_gate,
 )
+from engine.portfolio.pit_universe_bias_probe import run_pit_universe_manifest_builder
 
 
 def main() -> None:
@@ -33,6 +34,7 @@ def main() -> None:
             "tplus1_entry",
             "conservative_core_exit",
             "capital_reweight_probe",
+            "pit_universe_manifest",
         ],
         default="comparison_infra_v0",
     )
@@ -97,6 +99,8 @@ def main() -> None:
         )
     elif args.mode == "capital_reweight_probe":
         summary = run_capital_allocation_reweight_probe()
+    elif args.mode == "pit_universe_manifest":
+        summary = run_pit_universe_manifest_builder()
     else:
         summary = run_comparison_infra_gate(
             start_date=args.start_date,

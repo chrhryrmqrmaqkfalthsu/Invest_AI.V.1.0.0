@@ -171,9 +171,104 @@ as_of=2024-12-31용 2022/2023/2024 evidence도 충분하다.
 
 ---
 
-## 3. probe 범위
+## 3. strict_k3 실제 정의와 PIT 변환
 
-### 3.1 이 probe가 하는 것
+### 3.1 기존 strict_k3 정의
+
+`engine/pipeline/topn_survivor.py::evaluate_survivors()` 기준 strict_k3는 다음 구조다.
+
+```text
+combo_id: strict_k3
+survivor_k: 3
+group_by: ticker
+min_trades: 5
+min_member_score: 10.0
+min_expectancy_pct: 1.0
+min_stress_expectancy_pct: 0.0
+```
+
+일반 OOS label:
+
+```text
+2022
+2023
+2024
+```
+
+stress label:
+
+```text
+2025H2
+```
+
+일반 label pass 조건:
+
+```text
+trade_count >= 5
+oos_member_score >= 10.0
+expectancy_pct >= 1.0
+```
+
+일반 label별로 통과 후보 중 expectancy가 가장 높은 candidate를 그 label의 대표로 삼는다.
+
+survivor 조건:
+
+```text
+eligible_year_count >= survivor_k
+```
+
+즉 strict_k3는 2022/2023/2024 중 3개 label 모두에서 pass해야 한다. “연속” 조건이 별도로 있는 것이 아니라, 사용 가능한 일반 label 3개 중 3개를 통과하는 구조다.
+
+stress 조건:
+
+```text
+2025H2에서 min_trades / min_member_score 통과 후보가 있어야 함
+stress_avg_expectancy_pct >= 0.0
+selected executable rulebook = stress row 중 expectancy가 가장 높은 candidate
+```
+
+중요:
+
+```text
+기존 promoted 16종목의 executable rulebook은 stress label, 즉 2025H2 source일 수 있다.
+```
+
+### 3.2 PIT에서 strict_k3를 그대로 쓸 수 없는 이유
+
+PIT as_of에서는 2025H2 stress를 사용할 수 없다.
+
+```text
+as_of=2023-12-31:
+  2024, 2025H2 사용 금지
+
+as_of=2024-12-31:
+  2025H2 사용 금지
+```
+
+또한 as_of=2023-12-31에는 일반 label이 2022/2023 두 개뿐이다. strict_k3의 `survivor_k=3`을 그대로 적용하면 2024 거래 universe가 비어버린다.
+
+따라서 이 probe에서는 strict_k3의 철학을 유지하되, as_of 시점에 사용 가능한 label 수에 맞춰 다음처럼 변환한다.
+
+```text
+strict_k3 원칙:
+  사용 가능한 일반 OOS label을 모두 통과한 ticker를 우선한다.
+
+PIT v0 변환:
+  as_of=2023-12-31 → 2022/2023 둘 다 통과해야 함
+  as_of=2024-12-31 → 2022/2023/2024 셋 다 통과해야 함
+```
+
+stress gate는 PIT v0에서 금지한다.
+
+```text
+2025H2 stress는 2024/2025 trading universe selection에 사용하지 않는다.
+```
+
+---
+
+## 4. probe 범위
+
+### 4.1 이 probe가 하는 것
 
 ```text
 1. 기존 lr8d_abcd_topn.jsonl을 label별로 파싱한다.
@@ -186,7 +281,7 @@ as_of=2024-12-31용 2022/2023/2024 evidence도 충분하다.
 8. current fixed 16 baseline과 성과를 비교한다.
 ```
 
-### 3.2 이 probe가 하지 않는 것
+### 4.2 이 probe가 하지 않는 것
 
 ```text
 룰북 재학습 없음
@@ -196,7 +291,7 @@ sell_omen threshold 재최적화 없음
 capital allocation sizing 없음
 ```
 
-### 3.3 중요한 제한
+### 4.3 중요한 제한
 
 이 probe는 universe selection bias의 크기를 빠르게 측정하기 위한 0단계다.
 
@@ -227,57 +322,91 @@ baseline이 얼마나 흔들리는지 먼저 볼 수 있다.
 
 ---
 
-## 4. PIT selection rule v0
+## 5. 사전 고정 PIT selection rule v0
 
 selection rule은 결과를 보기 전에 고정한다.
 
-### 4.1 as_of dates
+### 5.1 rule id
+
+```text
+rule_id: pit_all_available_labels_top16_v0
+```
+
+이름의 의미:
+
+```text
+as_of 시점에 사용 가능한 일반 OOS label을 모두 통과한 ticker 중
+strict_k3와 같은 정렬 철학으로 top 16을 고른다.
+```
+
+### 5.2 as_of dates
 
 ```text
 as_of=2023-12-31 → 2024 trading universe
 as_of=2024-12-31 → 2025 trading universe
 ```
 
-### 4.2 allowed labels
+### 5.3 allowed / forbidden labels
 
 ```text
 as_of=2023-12-31:
   allowed_labels = [2022, 2023]
+  required_pass_count = 2
   forbidden_labels = [2024, 2025H2]
 
 as_of=2024-12-31:
   allowed_labels = [2022, 2023, 2024]
+  required_pass_count = 3
   forbidden_labels = [2025H2]
 ```
 
-### 4.3 per-period pass condition
+### 5.4 per-label pass condition
 
-각 ticker/label의 top candidate 중 하나라도 아래를 만족하면 해당 label pass로 본다.
+각 ticker/label의 candidates 중 하나라도 아래를 만족하면 해당 label pass로 본다.
 
 ```text
 trade_count >= 5
-expectancy_pct >= 1.0
 oos_member_score >= 10.0
-max_drawdown_pct > -25.0
+expectancy_pct >= 1.0
 ```
 
-### 4.4 ticker selection
+`max_drawdown_pct > -25.0`은 기존 strict_k3 survivor 함수의 per-label eligibility에는 들어있지 않다. 따라서 PIT v0 selection에도 per-label pass 조건으로 넣지 않는다.
 
-v0 후보:
+단, drawdown은 tie-breaker와 manifest diagnostic에는 기록한다.
+
+### 5.5 label 대표 candidate 선택
+
+label별 pass candidate가 여러 개면 기존 `evaluate_survivors()`와 동일하게 expectancy가 가장 높은 candidate를 대표로 고른다.
+
+정렬:
 
 ```text
-rule_id: pit_k2_topN_v0
+1. expectancy_pct 높은 순
+2. profit_factor 높은 순
+3. oos_member_score 높은 순
+4. rank_is 낮은 순
 ```
 
-규칙:
+### 5.6 ticker ranking
+
+required_pass_count를 충족한 ticker가 16개보다 많으면 다음 기준으로 정렬해 상위 16개를 고른다.
+
+기존 `evaluate_survivors()`의 sort key 철학을 최대한 유지한다.
 
 ```text
-1. allowed_labels 중 pass_label_count >= 2인 ticker를 후보로 삼는다.
-2. 후보가 너무 많으면 pit_score 기준 상위 N개를 선택한다.
-3. N은 결과 보기 전에 고정한다.
+1. eligible_label_count 높은 순
+2. min_expectancy_pct 높은 순
+3. avg_expectancy_pct 높은 순
+4. avg_profit_factor 높은 순
+5. avg_rank_is 낮은 순
+6. ticker alphabetic
 ```
 
-초기 N:
+stress_avg_expectancy_pct는 PIT v0에서 사용할 수 없으므로 제외한다.
+
+### 5.7 N 고정
+
+primary probe:
 
 ```text
 N = 16
@@ -286,44 +415,27 @@ N = 16
 이유:
 
 ```text
-현재 fixed 16 baseline과 직접 비교하려면 universe size를 먼저 동일하게 맞춘다.
+current fixed 16 baseline과 universe size를 맞춰 survivorship bias를 직접 비교한다.
 ```
 
-추가 분석 후보:
+sensitivity는 별도 report로만 허용한다.
 
 ```text
 N = 30
 N = all_pass
 ```
 
-단, N=30/all_pass는 수익률 개선 주장이 아니라 sensitivity report로만 둔다.
-
-### 4.5 pit_score
-
-초기 score:
-
-```text
-pit_score = average(oos_member_score over passed allowed labels)
-```
-
-tie-breaker:
-
-```text
-1. avg_expectancy_pct over passed labels 높은 순
-2. min_expectancy_pct over passed labels 높은 순
-3. avg_trade_count 높은 순
-4. ticker alphabetic
-```
+단, N=30/all_pass 결과가 좋아도 primary 결론을 바꾸지 않는다.
 
 ---
 
-## 5. executable rulebook 문제
+## 6. executable rulebook 문제
 
 PIT manifest에는 ticker만 있으면 부족하다. 중앙 baseline runner는 실제 `Rulebook`이 필요하다.
 
 v0 probe에서는 다음 두 가지를 분리한다.
 
-### 5.1 universe-only probe
+### 6.1 universe-only probe
 
 목표:
 
@@ -344,7 +456,7 @@ rulebook 자체는 point-in-time이 아닐 수 있다.
 따라서 이 결과는 full PIT baseline이 아니라 universe-only bias probe다.
 ```
 
-### 5.2 full PIT rerun
+### 6.2 full PIT rerun
 
 목표:
 
@@ -364,13 +476,13 @@ central runner가 manifest의 rulebook ref를 직접 로드
 판정:
 
 ```text
-v0 probe는 5.1만 한다.
-5.2는 결과를 본 뒤 full RUN 재설계 단계에서 수행한다.
+v0 probe는 6.1만 한다.
+6.2는 결과를 본 뒤 full RUN 재설계 단계에서 수행한다.
 ```
 
 ---
 
-## 6. conservative_core runner 주입점
+## 7. conservative_core runner 주입점
 
 현재 loader:
 
@@ -409,7 +521,7 @@ run_conservative_core_exit_gate(manifest_path: Path | None = None)
 
 ---
 
-## 7. 산출물
+## 8. 산출물
 
 예상 출력:
 
@@ -443,7 +555,7 @@ passed
 
 ---
 
-## 8. 판정 기준
+## 9. 판정 기준
 
 이 probe는 수익률이 좋아야 통과하는 게 아니다.
 
@@ -473,10 +585,37 @@ PIT 성과가 fixed16보다 좋아짐:
 
 ---
 
-## 9. 다음 구현 순서
+## 10. 결과 해석 threshold
+
+수익률만 보지 않고 win_rate/PF/trade_count/active_ticker/time_out도 같이 본다.
+
+사전 해석 기준:
+
+```text
+bias small:
+  PIT win_rate가 fixed16 대비 -5pp 이내이고
+  PIT profit_factor가 fixed16 대비 -20% 이내이며
+  total_return_on_gross_entry_pct가 -1.0pp 이내
+
+bias material:
+  PIT win_rate가 fixed16 대비 -5pp 초과 하락하거나
+  PIT profit_factor가 fixed16 대비 -20% 초과 하락하거나
+  total_return_on_gross_entry_pct가 -1.0pp 초과 하락
+
+bias severe:
+  PIT win_rate <= 60% 또는
+  PIT profit_factor <= 2.0 또는
+  total_return_on_gross_entry_pct <= 0
+```
+
+이 기준은 probe 결과를 본 뒤 바꾸지 않는다.
+
+---
+
+## 11. 다음 구현 순서
 
 1. `lr8d_abcd_topn.jsonl` parser 작성.
-2. `pit_k2_topN_v0` selection 함수 작성.
+2. `pit_all_available_labels_top16_v0` selection 함수 작성.
 3. `universe_asof_2023-12-31.json`, `universe_asof_2024-12-31.json` 생성.
 4. manifest integrity gate 작성.
 5. conservative_core daily loop가 연도별 universe를 바꿔 쓰는 runner 작성.
@@ -485,7 +624,7 @@ PIT 성과가 fixed16보다 좋아짐:
 
 ---
 
-## 10. 최종 판단
+## 12. 최종 판단
 
 PIT universe bias probe는 차기 RUN의 0단계다.
 

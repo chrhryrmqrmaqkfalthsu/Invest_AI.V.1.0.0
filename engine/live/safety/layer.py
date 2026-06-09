@@ -34,7 +34,7 @@ POLICY_PATH = Path.home() / "kingmaker" / "config" / "policy.yaml"
 SYMBOLS_DIR = Path.home() / "kingmaker" / "data" / "symbols"
 POSITIONS_PATH = Path.home() / "kingmaker" / "data" / "_system" / "positions.json"
 SHARE_EPS = 1e-6
-NOTIONAL_EPS = 1e-6
+NOTIONAL_EPS = 0.01
 DEFAULT_MIN_NOTIONAL_PER_ORDER = 1.0
 DEFAULT_MIN_FRACTIONAL_SHARES_PER_ORDER = 0.001
 

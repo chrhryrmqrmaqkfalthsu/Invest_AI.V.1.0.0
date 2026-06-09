@@ -59,6 +59,7 @@ from engine.pipeline.full_training import (
 )
 from engine.pipeline.scoring import score_full_training_members
 from engine.strategies.rulebook import Rulebook, default_rulebook
+from scripts.research.honest_run_notifications import HonestRunNotifier
 
 DEFAULT_OUTPUT_ROOT = Path("data/_system/research/honest_full_6174_20260610")
 DEFAULT_OHLCV_CACHE = DEFAULT_OUTPUT_ROOT / "stage0" / "ohlcv_cache"
@@ -713,6 +714,12 @@ def save_progress(progress_path: Path, progress: dict[str, dict[str, Any]]) -> N
     atomic_json_write(progress_path, progress)
 
 
+def count_jsonl(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+
 def build_summary(batch_dir: Path, progress: dict[str, dict[str, Any]], rows: list[dict[str, Any]], args: argparse.Namespace, batch_index: str) -> dict[str, Any]:
     topn_rows = 0
     labels = set()
@@ -743,6 +750,7 @@ def build_summary(batch_dir: Path, progress: dict[str, dict[str, Any]], rows: li
             "terminal": done + errors,
             "input_tickers": len(progress),
             "topn_rows": topn_rows,
+            "selected_rows": count_jsonl(batch_dir / "selected.jsonl"),
             "expected_topn_rows_if_complete": len(progress) * len(FOLDS),
         },
         "labels_seen": sorted([str(x) for x in labels if x]),
@@ -773,6 +781,23 @@ def build_summary(batch_dir: Path, progress: dict[str, dict[str, Any]], rows: li
     }
 
 
+def honesty_flags_ok(summary: dict[str, Any]) -> bool:
+    flags = summary.get("honesty_flags") or {}
+    return (
+        flags.get("stock_score_gate_used") is False
+        and flags.get("stock_score_cutoff_used") is False
+        and flags.get("rolling_oos_score_used") is False
+        and flags.get("uses_member_score") is False
+        and flags.get("candidate_filter_score_used") is False
+        and flags.get("uses_train_internal_windows_only") is True
+        and flags.get("selection_rule_id") == SELECTION_RULE_ID
+        and flags.get("promoted_rulebook_used") is False
+        and flags.get("parameters_json_rulebook_used") is False
+        and flags.get("load_live_universe_used") is False
+        and flags.get("oos_member_score_gate_used") is False
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tickers", type=Path, required=True)
@@ -785,6 +810,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--batch-index", default=None)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--notify-every", type=int, default=100, help="telegram progress interval by completed ticker count")
+    parser.add_argument("--notify-pct", type=float, default=5.0, help="telegram progress interval by percent bucket")
     return parser.parse_args()
 
 
@@ -793,12 +820,33 @@ def main() -> int:
     batch_index = infer_batch_index(args.run_id, args.tickers, args.batch_index)
     batch_dir = Path(args.output_root) / f"stage2_batch_{batch_index}"
     batch_dir.mkdir(parents=True, exist_ok=True)
+    started_at = time.time()
+    notifier: HonestRunNotifier | None = None
     lock_fh = acquire_parent_lock(batch_dir / ".stage2_parent.lock")
     try:
         tickers = load_tickers(args.tickers)
         if args.limit and args.limit > 0:
             tickers = tickers[: args.limit]
         tickers = list(dict.fromkeys(tickers))
+        notifier = HonestRunNotifier(
+            run_id=args.run_id,
+            stage="stage2_full_ga_4fold",
+            batch_index=batch_index,
+            total=len(tickers),
+            notify_every=args.notify_every,
+            notify_pct=args.notify_pct,
+        )
+        notifier.start(
+            total=len(tickers),
+            batch_index=batch_index,
+            extra={
+                "population": args.population,
+                "generations": args.generations,
+                "max_workers": args.max_workers,
+                "resume": bool(args.resume),
+                "ohlcv_cache": str(args.ohlcv_cache),
+            },
+        )
         progress_path = batch_dir / "progress.json"
         progress = load_progress(progress_path, tickers)
         for ticker in tickers:
@@ -807,6 +855,12 @@ def main() -> int:
         for ticker in pending:
             progress[ticker] = {"status": "RUNNING", "claimed_at": utc_now(), "run_id": args.run_id}
         save_progress(progress_path, progress)
+
+        completed_count = len(tickers) - len(pending)
+        error_count = sum(1 for item in progress.values() if item.get("status") == "ERROR")
+        selected_count = count_jsonl(batch_dir / "selected.jsonl")
+        if notifier and completed_count:
+            notifier.progress(done=completed_count, selected=selected_count, errors=error_count, force=True)
 
         rows: list[dict[str, Any]] = []
         args_dict = {
@@ -837,6 +891,14 @@ def main() -> int:
                     progress[ticker]["error"] = row.get("error")
                 save_progress(progress_path, progress)
                 rows.append(row)
+                completed_count += 1
+                if row.get("status") != "DONE":
+                    error_count += 1
+                    if notifier:
+                        notifier.error(ticker=ticker, error=(row.get("error") or {}).get("message") or row.get("status"), context="stage2_worker")
+                selected_count = count_jsonl(batch_dir / "selected.jsonl")
+                if notifier:
+                    notifier.progress(done=completed_count, selected=selected_count, errors=error_count)
         if (batch_dir / "ticker_results.jsonl").exists():
             all_rows = []
             for line in (batch_dir / "ticker_results.jsonl").read_text(encoding="utf-8").splitlines():
@@ -849,8 +911,24 @@ def main() -> int:
             all_rows = rows
         summary = build_summary(batch_dir, progress, all_rows, args, batch_index)
         atomic_json_write(batch_dir / "summary.json", summary)
+        if notifier:
+            notifier.complete(
+                total=summary["counts"]["input_tickers"],
+                selected=summary["counts"].get("selected_rows", 0),
+                errors=summary["counts"].get("errors", 0),
+                elapsed_sec=time.time() - started_at,
+                honesty_ok=honesty_flags_ok(summary),
+                extra={
+                    "topn_rows": summary["counts"].get("topn_rows"),
+                    "labels_seen": ",".join(summary.get("labels_seen") or []),
+                },
+            )
         print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True, default=str))
         return 0 if summary["counts"]["terminal"] == summary["counts"]["input_tickers"] and summary["counts"]["errors"] == 0 else 1
+    except Exception as exc:
+        if notifier:
+            notifier.error(ticker="-", error=f"{type(exc).__name__}: {exc}", context="stage2_main_crash")
+        raise
     finally:
         try:
             fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)

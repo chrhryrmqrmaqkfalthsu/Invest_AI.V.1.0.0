@@ -40,6 +40,7 @@ from engine.pipeline.context import (
 )
 from engine.pipeline.screening import run_screening
 from engine.strategies.rulebook import default_rulebook
+from scripts.research.honest_run_notifications import HonestRunNotifier
 
 DEFAULT_OUTPUT_ROOT = Path("data/_system/research/honest_full_6174_20260610")
 TERMINAL_STATUSES = {"DONE", "FAILED", "ERROR"}
@@ -335,6 +336,20 @@ def build_summary(rows: list[dict[str, Any]], progress: dict[str, dict[str, Any]
     }
 
 
+def honesty_flags_ok(summary: dict[str, Any]) -> bool:
+    flags = summary.get("honesty_flags") or {}
+    return (
+        flags.get("stock_score_gate_used") is False
+        and flags.get("stock_score_cutoff_used") is False
+        and flags.get("rolling_oos_score_used") is False
+        and flags.get("viability_backtest_used") is False
+        and flags.get("promoted_rulebook_used") is False
+        and flags.get("parameters_json_rulebook_used") is False
+        and flags.get("load_live_universe_used") is False
+        and flags.get("cheap_filter_only") is True
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tickers", type=Path, default=Path("data/_system/screening_universe_all.txt"))
@@ -343,6 +358,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-viability", default="false")
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--limit", type=int, default=0, help="optional smoke limit from the input ticker file")
+    parser.add_argument("--notify-every", type=int, default=100, help="telegram progress interval by completed ticker count")
+    parser.add_argument("--notify-pct", type=float, default=5.0, help="telegram progress interval by percent bucket")
     args = parser.parse_args()
     args.run_viability = str(args.run_viability).strip().lower() in {"1", "true", "yes", "y"}
     return args
@@ -355,12 +372,31 @@ def main() -> int:
     stage1 = root / "stage1"
     stage0.mkdir(parents=True, exist_ok=True)
     stage1.mkdir(parents=True, exist_ok=True)
+    started_at = time.time()
+    notifier: HonestRunNotifier | None = None
     lock_fh = acquire_parent_lock(stage0 / ".stage0_parent.lock")
     try:
         tickers = load_tickers(args.tickers)
         if args.limit and args.limit > 0:
             tickers = tickers[: args.limit]
         tickers = list(dict.fromkeys(tickers))
+        notifier = HonestRunNotifier(
+            run_id=args.run_id,
+            stage="stage0_screening",
+            batch_index="stage0",
+            total=len(tickers),
+            notify_every=args.notify_every,
+            notify_pct=args.notify_pct,
+        )
+        notifier.start(
+            total=len(tickers),
+            batch_index="stage0",
+            extra={
+                "max_workers": args.max_workers,
+                "run_viability": bool(args.run_viability),
+                "output_root": str(root),
+            },
+        )
         progress_path = stage0 / "stage0_progress.json"
         progress = load_progress(progress_path, tickers)
         for ticker in tickers:
@@ -380,6 +416,12 @@ def main() -> int:
                         existing_rows.append(json.loads(line))
                     except Exception:
                         pass
+
+        completed_count = len(tickers) - len(pending)
+        passed_count = sum(1 for row in existing_rows if row.get("screening_passed"))
+        error_count = sum(1 for item in progress.values() if item.get("status") == "ERROR")
+        if notifier and completed_count:
+            notifier.progress(done=completed_count, passed=passed_count, errors=error_count, force=True)
 
         with ProcessPoolExecutor(max_workers=max(1, int(args.max_workers))) as executor:
             futures = {
@@ -411,6 +453,15 @@ def main() -> int:
                 }
                 save_progress(progress_path, progress)
                 existing_rows.append(row)
+                completed_count += 1
+                if row.get("screening_passed"):
+                    passed_count += 1
+                if row.get("status") == "ERROR":
+                    error_count += 1
+                    if notifier:
+                        notifier.error(ticker=ticker, error=(row.get("error") or {}).get("message") or row.get("fail_reason"), context="stage0_worker")
+                if notifier:
+                    notifier.progress(done=completed_count, passed=passed_count, errors=error_count)
 
         latest_by_ticker: dict[str, dict[str, Any]] = {}
         for row in existing_rows:
@@ -421,8 +472,24 @@ def main() -> int:
         (stage1 / "stage1_pass_tickers.txt").write_text("\n".join(pass_tickers) + ("\n" if pass_tickers else ""), encoding="utf-8")
         summary = build_summary(list(latest_by_ticker.values()), progress, args)
         atomic_json_write(stage0 / "stage0_summary.json", summary)
+        if notifier:
+            notifier.complete(
+                total=summary["counts"]["input_tickers"],
+                passed=summary["counts"]["screening_passed"],
+                errors=summary["status_counts"].get("ERROR", 0),
+                elapsed_sec=time.time() - started_at,
+                honesty_ok=honesty_flags_ok(summary),
+                extra={
+                    "ready_for_stage2": summary.get("passed_ready_for_stage2"),
+                    "cache_format": summary.get("cache_format"),
+                },
+            )
         print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True, default=str))
         return 0 if summary["counts"]["terminal_progress"] == summary["counts"]["input_tickers"] else 1
+    except Exception as exc:
+        if notifier:
+            notifier.error(ticker="-", error=f"{type(exc).__name__}: {exc}", context="stage0_main_crash")
+        raise
     finally:
         try:
             fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)

@@ -48,6 +48,7 @@ logging.basicConfig(
 logger = logging.getLogger("run_live")
 
 RUN_BOT_PID_PATH = Path("data/_system/run_bot.pid")
+DEFAULT_ORDER_NOTIONAL_USD = 30.0
 
 
 def assert_no_legacy_run_bot(pid_path: Path | str = RUN_BOT_PID_PATH) -> None:
@@ -109,6 +110,8 @@ def main():
     parser.add_argument("--offmarket-tick", type=int, default=3600)
     parser.add_argument("--sma-window", type=int, default=20)
     parser.add_argument("--stop-loss", type=float, default=0.03)
+    parser.add_argument("--order-notional", type=float, default=DEFAULT_ORDER_NOTIONAL_USD, help="기본 신규 매수 주문 금액(USD notional). 0 이하이면 --order-shares 사용")
+    parser.add_argument("--order-shares", type=float, default=1.0, help="--order-notional이 0 이하일 때만 쓰는 fallback 수량")
     parser.add_argument("--summary-hour", type=int, default=6)
     parser.add_argument("--summary-minute", type=int, default=15)
     parser.add_argument("--weekly-summary-hour", type=int, default=6)
@@ -152,6 +155,13 @@ def main():
     rulebook = LearnedRuleBook() if args.rulebook == "learned" else DemoRuleBook(window=args.sma_window, stop_loss_pct=args.stop_loss)
     logger.info(f"RuleBook: {rulebook.name()}")
 
+    order_notional = float(args.order_notional or 0.0)
+    order_shares = float(args.order_shares or 1.0)
+    if order_notional > 0:
+        logger.info(f"Order sizing: notional={order_notional:g} USD")
+    else:
+        logger.warning(f"Order sizing: shares fallback={order_shares:g} (--order-notional<=0)")
+
     runner = Runner(
         broker=broker,
         safety=safety,
@@ -159,7 +169,8 @@ def main():
         clock=clock,
         rulebook=rulebook,
         symbols=symbols,
-        order_shares=1,
+        order_shares=order_shares,
+        order_notional=order_notional if order_notional > 0 else None,
         universe_config=universe.config,
     )
 

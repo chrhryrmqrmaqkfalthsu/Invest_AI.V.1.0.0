@@ -55,6 +55,15 @@ def _normalize_shares(value: float) -> float:
     return 0.0 if abs(v) <= SHARE_EPS else v
 
 
+def _resolve_rulebook_for_alert(pos) -> Optional[Rulebook]:
+    try:
+        from engine.live.exit_policy_adapter import resolve_position_rulebook
+        rulebook, _ = resolve_position_rulebook(pos)
+        return rulebook
+    except Exception:
+        return None
+
+
 @dataclass
 class PositionEntry:
     """단일 포지션의 청산 메타데이터."""
@@ -666,16 +675,14 @@ class PositionManager:
 
         if notifier:
             try:
-                emoji = {"take_profit": "🟢", "stop_loss": "🔴", "trailing": "🟡", "time_out": "⏰"}.get(exit_reason, "⚪")
-                msg = (
-                    f"{emoji} 자동 청산: {ticker}\n사유: {exit_reason}\n"
-                    f"진입 {pos.entry_price:,.4f} → 청산 {filled_price:,.4f}\n"
-                    f"손익: {pnl_krw:+,.2f} ({pnl_pct:+.2f}%)\n보유: {holding_trading_days}일\n"
-                    f"최고가: {pos.highest_price:,.4f}"
+                notifier.send_trade_exit(
+                    trade_record,
+                    order=order,
+                    rulebook=_resolve_rulebook_for_alert(pos),
+                    mfe_pct=(pos.highest_price / pos.entry_price - 1.0) * 100.0 if pos.entry_price > 0 else None,
                 )
-                notifier.send(msg)
             except Exception as e:
-                log.warning(f"청산 알림 실패: {e}")
+                log.warning(f"청산 정본 알림 실패: {e}")
 
         self.unregister(ticker)
         return trade_record
@@ -716,6 +723,9 @@ class PositionManager:
         }
         self._append_trade_log(trade_record)
 
+        rulebook_for_alert = _resolve_rulebook_for_alert(pos)
+        mfe_pct = (pos.highest_price / pos.entry_price - 1.0) * 100.0 if pos.entry_price > 0 else None
+
         remaining = _normalize_shares(float(pos.shares or 0.0) - filled_shares)
         broker_remaining = None
         try:
@@ -733,12 +743,14 @@ class PositionManager:
 
         if notifier:
             try:
-                notifier.send(
-                    f"✅ pending SELL 정산: {ticker} {filled_shares:g}주 @ {filled_price:,.4f} "
-                    f"손익 {pnl_krw:+,.2f} ({pnl_pct:+.2f}%)"
+                notifier.send_trade_exit(
+                    trade_record,
+                    order=order,
+                    rulebook=rulebook_for_alert,
+                    mfe_pct=mfe_pct,
                 )
             except Exception as e:
-                log.warning(f"pending SELL 정산 알림 실패: {e}")
+                log.warning(f"pending SELL 정본 알림 실패: {e}")
         return trade_record
 
     def _append_trade_log(self, record: dict) -> None:

@@ -620,6 +620,39 @@ class Runner:
         except Exception as e:
             logger.error(f"{ticker} _maybe_request_approval 예외: {e}")
 
+    def _notify_trade_entry(self, order, *, signal_result=None, raw_reason: str = "", rulebook=None, position_entry=None) -> None:
+        """BUY 체결 후 실제 PositionEntry 값으로 정본 진입 알림을 보낸다."""
+        try:
+            pos = position_entry or self.position_manager.get(str(getattr(order, "ticker", "") or ""))
+            rb = rulebook
+            if rb is None and pos is not None:
+                try:
+                    from engine.live.exit_policy_adapter import resolve_position_rulebook
+                    rb, _ = resolve_position_rulebook(pos)
+                except Exception:
+                    rb = None
+            self.notifier.send_trade_entry(
+                order=order,
+                signal_result=signal_result,
+                raw_reason=raw_reason,
+                rulebook=rb,
+                stop_price=getattr(pos, "stop_price", None) if pos is not None else None,
+                target_price=getattr(pos, "target_price", None) if pos is not None else None,
+                expected_holding_days=getattr(pos, "max_holding_days", None) if pos is not None else None,
+                trailing_activation_profit_pct=getattr(rb, "trailing_activation_profit_pct", None) if rb is not None else None,
+                sell_omen_threshold=getattr(rb, "sell_omen_threshold", None) if rb is not None else None,
+                expectancy_pct=getattr(rb, "expectancy_pct", None) if rb is not None else None,
+                recent_win_rate=getattr(rb, "win_rate", None) if rb is not None else None,
+                profit_factor=getattr(rb, "profit_factor", None) if rb is not None else None,
+                recent_trade_returns_pct=getattr(rb, "recent5_returns_pct", None) if rb is not None else None,
+            )
+        except Exception as exc:
+            logger.warning("%s 진입 정본 알림 실패 → send_order fallback: %s", getattr(order, "ticker", "?"), exc)
+            try:
+                self.notifier.send_order(order)
+            except Exception:
+                pass
+
     def _try_order(self, side: str, ticker: str, price: float, reason: str, signal_result=None) -> None:
         self.stats.orders_attempted += 1
         pending_mgr = getattr(self, "pending_order_manager", None)
@@ -677,7 +710,14 @@ class Runner:
                 self.stats.orders_filled += 1
                 if side == "BUY":
                     try:
-                        self._get_buy_reconciler().reconcile(order, purpose="entry", preflight=buy_preflight)
+                        position_entry = self._get_buy_reconciler().reconcile(order, purpose="entry", preflight=buy_preflight)
+                        self._notify_trade_entry(
+                            order,
+                            signal_result=signal_result,
+                            raw_reason=reason,
+                            rulebook=buy_preflight.rulebook if buy_preflight else None,
+                            position_entry=position_entry,
+                        )
                         self._maybe_request_approval(ticker, float(order.filled_avg_price or price), buy_preflight.rulebook if buy_preflight else None, signal_result)
                     except Exception as reconcile_exc:
                         self._get_buy_reconciler().track_failure(
@@ -687,7 +727,8 @@ class Runner:
                             metadata={"reason": reason},
                         )
                         return
-            self.notifier.send_order(order)
+                else:
+                    self.notifier.send_order(order)
             logger.info(f"{ticker} {side} 발주 완료: shares={order_shares:g} id={order.order_id} status={order.status.value}")
         except Exception as e:
             self.stats.orders_blocked += 1
@@ -761,6 +802,14 @@ class Runner:
                 if req is not None:
                     req.status = "executed"
                     self.approval_manager._save()
+            if purpose == "entry":
+                metadata = dict(getattr(record, "metadata", {}) or {})
+                self._notify_trade_entry(
+                    order,
+                    raw_reason=str(metadata.get("reason", "") or ""),
+                    rulebook=None,
+                    position_entry=result,
+                )
             logger.info("[BUY-RECONCILED] %s purpose=%s result=%s", order.ticker, purpose, result)
         elif side == "sell":
             trade_record = self.position_manager.finalize_sell_fill(

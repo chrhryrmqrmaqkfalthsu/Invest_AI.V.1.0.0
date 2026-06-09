@@ -123,6 +123,45 @@ elif strategy == "trailing":
 
 주의: 이 변경은 shared core 변경이므로 기존 survivor의 성능 전제를 바꾼다. 라이브에는 이미 live-only hard stop guard가 있으나, shared core 정식 변경은 반드시 RUN 재검증과 같이 처리한다.
 
+### 2.3 구조적 결함: same-bar trailing/breakeven 활성화에 의한 exit look-ahead
+
+다음 RUN에서 반드시 수정해야 할 구조적 결함으로 격상한다.
+
+현재 일봉 백테스트는 같은 bar 안에서 `High`와 `Low`의 선후관계를 알 수 없는데, shared core는 당일 `High`로 trailing 또는 breakeven을 활성화한 뒤 같은 날 `Low`가 새 trailing/breakeven stop을 터치하면 즉시 청산을 허용할 수 있다.
+
+예시:
+
+```text
+T일 일봉만 관측 가능: High >= trailing/breakeven 활성화 조건, Low <= 새 trailing/breakeven stop
+현재 로직: T일 High로 활성화 → 같은 T일 Low로 trailing/breakeven 청산 가능
+문제: 실제 장중 경로가 Low 먼저, High 나중이었다면 해당 청산은 발생할 수 없었음
+```
+
+이 문제는 단순한 conservative same-bar 우선순위 문제가 아니라 exit 쪽 look-ahead다. 일어나지 않았을 수도 있는 trailing/breakeven 익절 청산을 백테스트가 만들어낼 수 있으므로, 기존 `lr8d` survivor 72 룰북의 expectancy 5.04%에도 이 프리미엄이 섞여 있을 수 있다.
+
+수정 원칙:
+
+1. 일봉에서 당일 `High`로 새로 활성화된 trailing/breakeven stop은 같은 bar의 `Low` 청산 판정에 사용하지 않는다.
+2. trailing/breakeven 활성화는 path-dependent 상태로 기록하고, 실제 청산 가능 시점은 최소 T+1 bar부터 허용한다.
+3. 기존에 이미 활성화돼 있던 trailing/breakeven stop만 해당 bar의 `Low`와 충돌시킬 수 있다.
+4. 이 변경은 shared core 성능 전제를 바꾸므로, live 즉시 변경이 아니라 다음 LR8D RUN의 `conservative_core_exit` 축에서 재검증한다.
+5. 이후 `live hard-stop guard 포함 현재 live`와 `look-ahead 제거 conservative core`를 비교해 이 결함이 expectancy, win rate, exit_reason 분포에 준 실제 영향을 수치화한다.
+
+구현 후보명:
+
+```text
+conservative_core_exit
+```
+
+핵심 검증 포인트:
+
+```text
+same-bar high 활성화 → same-bar low trailing/breakeven 청산 금지
+T-1까지 활성화된 trailing/breakeven stop → T일 low 청산 허용
+stop_loss hard stop → 여전히 same-bar 최우선 보수 판정 유지
+sell_omen/time_out decision exit → b1에서 next_open 체결 정합 별도 확인
+```
+
 ## 3. 현재 live 안전 상태
 
 현재 라이브는 shared core를 수정하지 않고, `engine/live/exit_policy_adapter.py`에서 live-only hard stop guard를 적용 중이다.
@@ -194,9 +233,10 @@ lr8d_hardstop_threshold_recheck_YYYYMMDD
 필수 변경:
 
 1. shared core `engine/core/exit_policy.py`의 `trailing` 분기에 `stop_hit` 우선조건 추가.
-2. `sell_omen_threshold` 탐색 범위는 현재 코드의 `0.30~0.70`을 사용한다.
-3. RUN 후 산출물에서 `sell_omen_enabled=True`인 룰북의 threshold가 0.70을 넘지 않는지 검증한다.
-4. live-only hard stop guard는 RUN 완료 전까지 유지한다.
+2. `conservative_core_exit` 축에서 same-bar trailing/breakeven 활성화 look-ahead 제거.
+3. `sell_omen_threshold` 탐색 범위는 현재 코드의 `0.30~0.70`을 사용한다.
+4. RUN 후 산출물에서 `sell_omen_enabled=True`인 룰북의 threshold가 0.70을 넘지 않는지 검증한다.
+5. live-only hard stop guard는 RUN 완료 전까지 유지한다.
 
 선택 변경:
 
@@ -238,6 +278,8 @@ python -m pytest -q tests/test_live_exit_policy_cutover.py
 1. `exit_strategy=trailing`, `price < stop_price`, `highest_profit_pct < activation_pct`에서도 shared core가 `stop_loss` 반환.
 2. `exit_strategy=trailing`, `price > target_price`는 현재 설계상 즉시 `take_profit`이 아님을 명시.
 3. `hybrid/fixed` 기존 우선순위가 깨지지 않음.
+4. same-bar `High`로 trailing/breakeven이 새로 활성화된 경우 같은 bar `Low`로 즉시 trailing/breakeven 청산되지 않음.
+5. T-1까지 이미 활성화된 trailing/breakeven stop은 T일 `Low` 터치 시 정상 청산됨.
 
 ### 6.2 RUN 전 preflight
 
@@ -263,6 +305,7 @@ strict_k3 coverage 100%
 4. `sell_omen_threshold`가 실제로 0.30~0.70 범위에서 선택되는지.
 5. live 후보 16개가 새 기준에서도 생존하는지.
 6. MPC/NBIX처럼 기존 live에서 0.80대였던 threshold가 새 RUN에서 0.70 이하로 내려오는지.
+7. same-bar trailing/breakeven look-ahead 제거 전후의 expectancy, win_rate, DD, exit_reason 분포 차이.
 
 검증용 스니펫:
 
@@ -299,12 +342,13 @@ order_notional=30 USD
 
 ## 8. 남은 백로그
 
-1. shared core hard stop invariant 적용 branch 작성.
-2. hard stop invariant 기준 LR8D 재검증 RUN.
-3. 새 RUN 산출물의 sell_omen threshold 분포 검증.
-4. `sell_omen_scores_lr8d85.csv` freshness 문제 검토.
-5. ticker_sentiment 최신화로 KT/MPLX stale 해소.
-6. pending fill metadata의 `signal_score_at_entry` / `signal_threshold_at_entry` 0.0 기록 문제 개선.
+1. same-bar trailing/breakeven 활성화 exit look-ahead 제거용 `conservative_core_exit` 구현.
+2. shared core hard stop invariant 적용 branch 작성.
+3. hard stop invariant + conservative_core_exit 기준 LR8D 재검증 RUN.
+4. 새 RUN 산출물의 sell_omen threshold 분포 검증.
+5. `sell_omen_scores_lr8d85.csv` freshness 문제 검토.
+6. ticker_sentiment 최신화로 KT/MPLX stale 해소.
+7. pending fill metadata의 `signal_score_at_entry` / `signal_threshold_at_entry` 0.0 기록 문제 개선.
 
 ## [추가] T+1 진입 정렬 + 종목 재선정 (다음 RUN 품질 개선 항목)
 
@@ -320,10 +364,13 @@ order_notional=30 USD
 차기 RUN 반영:
 1. 진입 체결을 T+1 open으로 정렬 (신호=T close, 체결=T+1 open → look-ahead 제거).
 2. 청산 체결 정합: backtest(next_open) vs live(당일 trigger) 비대칭 해소 방향 결정.
-3. 위 1·2 적용 후 expectancy / win_rate / fitness 재산출 → 종목 재선정.
+   - T+1-b1: 현재 `use_next_open=True` 경로에서 sell_omen/time_out 같은 decision exit의 `fill_price_base`가 실제 trigger 다음 거래일 open인지 확인.
+   - 필요 시 `exit_date`를 trigger 날짜로 유지하되 `exit_signal_date`/`exit_fill_date` 또는 동등 필드를 분리한다.
+3. exit 경로 look-ahead 제거: 당일 `High`로 새로 활성화된 trailing/breakeven은 같은 날 `Low` 청산에 쓰지 않고, 최소 T+1부터 활성 stop으로 취급한다.
+4. 위 1·2·3 적용 후 expectancy / win_rate / fitness 재산출 → 종목 재선정.
    ※ 현 16종목은 "감사 대상"일 뿐. T+1 기준 재선정 결과가 진짜 검증 universe.
-4. (기 등록) shared core trailing hard stop invariant 추가.
-5. (기 등록) sell_omen threshold 0.30~0.70 산출물 검증 (0.70 초과 없는지).
+5. (기 등록) shared core trailing hard stop invariant 추가.
+6. (기 등록) sell_omen threshold 0.30~0.70 산출물 검증 (0.70 초과 없는지).
 
 검증 게이트: T+1 정렬 후 survivor가 여전히 OOS 기준을 통과하는지,
             expectancy 하락폭이 운용 가능 수준인지 확인.

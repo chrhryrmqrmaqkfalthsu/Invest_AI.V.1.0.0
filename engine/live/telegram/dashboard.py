@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from engine.live.exit_policy_adapter import count_holding_trading_days
 from engine.live.safety import state as state_mod
 from engine.live.telegram.notifier import API_BASE
 
@@ -26,6 +27,7 @@ STATE_PATH = ROOT / "data" / "_system" / "telegram_position_dashboard.json"
 KST = ZoneInfo("Asia/Seoul")
 MAX_TEXT_LEN = 3900
 MIN_EDIT_INTERVAL_SEC = 20
+TRAILING_ACTIVATION_BARS = 2
 
 
 def _float(value: Any, default: float = 0.0) -> float:
@@ -203,6 +205,53 @@ class PositionDashboardController:
         except Exception:
             return {}
 
+    def _holding_trading_days(self, pos: Any, ticker: str) -> int:
+        try:
+            return int(count_holding_trading_days(str(getattr(pos, "entry_date", "")), ticker=ticker))
+        except Exception:
+            return 0
+
+    def _trailing_status_line(
+        self,
+        *,
+        ticker: str,
+        pos: Any,
+        entry: float,
+        stop: float,
+        target: float,
+        trail: float,
+    ) -> str:
+        rb = getattr(pos, "rulebook_snapshot", {}) or {}
+        strategy = str(rb.get("exit_strategy") or getattr(pos, "exit_strategy", "") or "").lower()
+        stop_pct = (stop / entry - 1.0) * 100.0 if entry > 0 and stop > 0 else 0.0
+        target_pct = (target / entry - 1.0) * 100.0 if entry > 0 and target > 0 else 0.0
+        base = f"진입 {entry:,.2f} / 손절 {stop:,.2f}({stop_pct:+.1f}%) / 익절 {target:,.2f}({target_pct:+.1f}%)"
+
+        if strategy == "fixed":
+            return f"  {base} / 실손절 {stop:,.2f} / trail 비활성(고정)"
+        if trail <= 0 or entry <= 0:
+            return f"  {base} / 실손절 {stop:,.2f} / trail 없음"
+
+        highest = _float(getattr(pos, "highest_price", entry), entry)
+        highest_profit_pct = (highest / entry - 1.0) * 100.0 if entry > 0 and highest > 0 else 0.0
+        activation_pct = _float(rb.get("trailing_activation_profit_pct"), 0.0)
+        holding_days = self._holding_trading_days(pos, ticker)
+        bars_ok = holding_days > TRAILING_ACTIVATION_BARS
+        price_ok = highest_profit_pct >= activation_pct
+        active = bars_ok and price_ok
+
+        if active:
+            effective_stop = max(stop, trail)
+            return f"  {base} / 실손절 {effective_stop:,.2f} / trail {trail:,.2f} 활성✓"
+
+        notes: list[str] = []
+        if not price_ok:
+            notes.append(f"최고 {highest_profit_pct:+.1f}%<{activation_pct:+.1f}%")
+        if not bars_ok:
+            notes.append(f"보유 {holding_days}d≤{TRAILING_ACTIVATION_BARS}d")
+        reason = ", ".join(notes) if notes else "대기"
+        return f"  {base} / 실손절 {stop:,.2f} / trail {trail:,.2f} 비활성({reason})"
+
     def _holding_lines(self, holdings: list[Any], positions: dict[str, Any]) -> list[str]:
         if not holdings:
             return ["보유: 없음"]
@@ -238,11 +287,15 @@ class PositionDashboardController:
                 stop = _float(getattr(pos, "stop_price", 0.0))
                 target = _float(getattr(pos, "target_price", 0.0))
                 trail = _float(getattr(pos, "trailing_stop", 0.0))
-                stop_pct = (stop / entry - 1.0) * 100.0 if entry > 0 and stop > 0 else 0.0
-                target_pct = (target / entry - 1.0) * 100.0 if entry > 0 and target > 0 else 0.0
                 lines.append(
-                    f"  진입 {entry:,.2f} / 손절 {stop:,.2f}({stop_pct:+.1f}%) / "
-                    f"익절 {target:,.2f}({target_pct:+.1f}%) / trail {trail:,.2f}"
+                    self._trailing_status_line(
+                        ticker=ticker,
+                        pos=pos,
+                        entry=entry,
+                        stop=stop,
+                        target=target,
+                        trail=trail,
+                    )
                 )
         return lines
 

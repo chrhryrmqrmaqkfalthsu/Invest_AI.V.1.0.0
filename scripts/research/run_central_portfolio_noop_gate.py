@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from engine.portfolio.conservative_core_exit_gate import run_conservative_core_exit_gate
 from engine.portfolio.noop_gate import (
     run_comparison_infra_gate,
     run_engine_noop_gate_v1,
@@ -29,6 +30,7 @@ def main() -> None:
             "fractional_v2",
             "live_current_proxy",
             "tplus1_entry",
+            "conservative_core_exit",
         ],
         default="comparison_infra_v0",
     )
@@ -73,6 +75,16 @@ def main() -> None:
         )
     elif args.mode == "tplus1_entry":
         summary = run_tplus1_entry_gate(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            history_end_date=args.history_end_date,
+            position_limit_krw=args.position_limit,
+            commission_rate=args.commission_rate,
+            warmup=args.warmup,
+            years=args.years,
+        )
+    elif args.mode == "conservative_core_exit":
+        summary = run_conservative_core_exit_gate(
             start_date=args.start_date,
             end_date=args.end_date,
             history_end_date=args.history_end_date,

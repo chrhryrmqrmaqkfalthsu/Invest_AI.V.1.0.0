@@ -19,6 +19,7 @@ from engine.portfolio.noop_gate import (
     run_live_current_proxy_baseline,
     run_tplus1_entry_gate,
 )
+from engine.portfolio.pit_executable_rulebook_probe import run_pit_executable_rulebook_probe
 from engine.portfolio.pit_universe_bias_probe import (
     run_pit_universe_bias_probe,
     run_pit_universe_manifest_builder,
@@ -39,6 +40,7 @@ def main() -> None:
             "capital_reweight_probe",
             "pit_universe_manifest",
             "pit_universe_bias_probe",
+            "pit_executable_rulebook_probe",
         ],
         default="comparison_infra_v0",
     )
@@ -107,6 +109,16 @@ def main() -> None:
         summary = run_pit_universe_manifest_builder()
     elif args.mode == "pit_universe_bias_probe":
         summary = run_pit_universe_bias_probe(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            history_end_date=args.history_end_date,
+            position_limit_krw=args.position_limit,
+            commission_rate=args.commission_rate,
+            warmup=args.warmup,
+            years=args.years,
+        )
+    elif args.mode == "pit_executable_rulebook_probe":
+        summary = run_pit_executable_rulebook_probe(
             start_date=args.start_date,
             end_date=args.end_date,
             history_end_date=args.history_end_date,

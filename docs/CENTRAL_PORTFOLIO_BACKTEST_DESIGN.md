@@ -678,6 +678,13 @@ expectancy percentile 보정 전후 비교
 
 live exit adapter는 `use_next_open=False`다. backtest exit는 기본 `use_next_open=True`다. 중앙 시스템 설계와 별도로 exit 체결 정합 이슈를 추적해야 한다.
 
+
+### 14.6 T+1 체결일 당일 청산 평가 누락
+
+T+1-a 진입 전환은 `entry_idx=fill_idx`로 넘겨 체결일과 holding_days 기준을 T+1로 이동한다. 현재 `simulate_exit()`은 `entry_idx + 1`부터 청산 scan을 시작하므로, T+1 시가 매수 직후 같은 날 stop을 터치하는 케이스는 이 단계에서 평가하지 않는다.
+
+이 누락은 T+1-a의 범위 밖이다. T+1-a는 진입 체결만 T+1 open으로 옮기는 단일 변화 검증 단계이며, 체결일 당일 stop/TP 충돌은 T+1-b `conservative_core_exit` 또는 capital allocation 단계에서 별도 구현한다.
+
 ---
 
 ## 15. 구현 단계

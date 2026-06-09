@@ -282,6 +282,8 @@ def simulate_exit(
     fractional_shares: bool = False,
     disable_add_buy: bool = False,
     live_hard_stop_guard: bool = False,
+    entry_price_override: Optional[float] = None,
+    entry_atr_override: Optional[float] = None,
 ) -> Optional[Trade]:
     if entry_idx + 1 >= len(df):
         return None
@@ -289,10 +291,13 @@ def simulate_exit(
         raise NotImplementedError("ExitPolicy cutover supports long-only backtests; short/inverse is deferred.")
 
     entry_row = df.iloc[entry_idx]
-    entry_price = float(entry_row["Close"])
+    entry_price = float(entry_price_override) if entry_price_override is not None else float(entry_row["Close"])
     if entry_price <= 0 or pd.isna(entry_price):
         return None
-    atr = float(entry_row.get("ATR", entry_price * 0.02))
+    if entry_atr_override is not None:
+        atr = float(entry_atr_override)
+    else:
+        atr = float(entry_row.get("ATR", entry_price * 0.02))
     if pd.isna(atr) or atr <= 0:
         atr = entry_price * 0.02
 

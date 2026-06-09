@@ -15,6 +15,7 @@ from engine.portfolio.noop_gate import (
     run_engine_noop_gate_v1,
     run_fractional_gate_v2,
     run_live_current_proxy_baseline,
+    run_tplus1_entry_gate,
 )
 
 
@@ -22,7 +23,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=["comparison_infra_v0", "engine_noop_v1", "fractional_v2", "live_current_proxy"],
+        choices=[
+            "comparison_infra_v0",
+            "engine_noop_v1",
+            "fractional_v2",
+            "live_current_proxy",
+            "tplus1_entry",
+        ],
         default="comparison_infra_v0",
     )
     parser.add_argument("--start-date", default="2024-01-01")
@@ -56,6 +63,16 @@ def main() -> None:
         )
     elif args.mode == "live_current_proxy":
         summary = run_live_current_proxy_baseline(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            history_end_date=args.history_end_date,
+            position_limit_krw=args.position_limit,
+            commission_rate=args.commission_rate,
+            warmup=args.warmup,
+            years=args.years,
+        )
+    elif args.mode == "tplus1_entry":
+        summary = run_tplus1_entry_gate(
             start_date=args.start_date,
             end_date=args.end_date,
             history_end_date=args.history_end_date,

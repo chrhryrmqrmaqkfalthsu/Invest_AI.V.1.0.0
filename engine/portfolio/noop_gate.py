@@ -3,17 +3,18 @@ Central Portfolio no-op gates.
 
 v0 comparison_infra_gate:
   데이터 결정성 + trade 정규화 + row-level comparator + 결과 저장 구조를 검증한다.
-  reference/candidate 모두 run_backtest()를 같은 df 객체로 호출하는 self-vs-self다.
 
 v1 engine_noop_gate:
   포트폴리오 날짜축 루프 골격을 legacy_compat/no-op 모드로 실행한다.
-  switch/kill/shared cash/proportional sizing은 모두 끄고, 종목별 next_scan_index만
-  기존 run_backtest()의 i 점프 방식과 동일하게 관리한다.
-  reference는 기존 run_backtest()의 16종목 독립 합산, candidate는 날짜축 루프다.
 
 v2 fractional_gate:
   동일한 날짜축 루프에서 integer sizing과 fractional sizing을 비교한다.
-  목표는 0 mismatch가 아니라, 차이가 fractional shares 전환으로만 생기는지 확인하는 것이다.
+
+live_current_proxy_baseline:
+  fractional + live hard-stop guard wrapper로 현재 라이브 exit 감시를 재현한다.
+
+T+1-a tplus1_entry_gate:
+  신호 결정일(T)과 체결일(T+1 open)을 분리하되, exit는 기존 simulate_exit를 유지한다.
 """
 from __future__ import annotations
 
@@ -47,6 +48,7 @@ PARAMS_PATH_TMPL = "data/symbols/{ticker}/parameters.json"
 OUT_DIR = Path("data/_system/research/central_portfolio/noop_gate")
 OUT_DIR_V1 = Path("data/_system/research/central_portfolio/engine_noop_gate_v1")
 OUT_DIR_LIVE_PROXY = Path("data/_system/research/central_portfolio/live_current_proxy_baseline")
+OUT_DIR_TPLUS1 = Path("data/_system/research/central_portfolio/tplus1_entry_gate")
 
 STRING_FIELDS = [
     "ticker",
@@ -90,39 +92,23 @@ FLOAT_ABS_TOL = 1e-6
 
 def load_promoted_rulebooks(manifest_path: Path = MANIFEST_PATH) -> list[tuple[str, Rulebook]]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    tickers = manifest["tickers"]
     out: list[tuple[str, Rulebook]] = []
-    for tk in tickers:
-        payload = json.loads(Path(PARAMS_PATH_TMPL.format(ticker=tk)).read_text(encoding="utf-8"))
-        rb = Rulebook.from_dict(payload["rulebook"])
-        out.append((tk, rb))
+    for ticker in manifest["tickers"]:
+        payload = json.loads(Path(PARAMS_PATH_TMPL.format(ticker=ticker)).read_text(encoding="utf-8"))
+        out.append((ticker, Rulebook.from_dict(payload["rulebook"])))
     return out
 
 
 def load_fixed_history(ticker: str, years: int, history_end_date: str) -> Any:
-    """종목별 1회 로드. reference/candidate가 동일 객체를 공유하도록 호출측에서 캐싱."""
-    df = load_ohlcv(
-        ticker,
-        years=years,
-        end_date=history_end_date,
-        use_cache=True,
-        max_retries=1,
-    ).sort_index()
-    df = calc_indicators(df).sort_index()
-    return df
+    df = load_ohlcv(ticker, years=years, end_date=history_end_date, use_cache=True, max_retries=1).sort_index()
+    return calc_indicators(df).sort_index()
 
 
-def load_fixed_histories(
-    rulebooks: list[tuple[str, Rulebook]],
-    *,
-    years: int,
-    history_end_date: str,
-) -> dict[str, Any]:
+def load_fixed_histories(rulebooks: list[tuple[str, Rulebook]], *, years: int, history_end_date: str) -> dict[str, Any]:
     return {ticker: load_fixed_history(ticker, years=years, history_end_date=history_end_date) for ticker, _ in rulebooks}
 
 
 def _trade_get(trade: Any, key: str, default=None):
-    """dict / dataclass 모두 지원."""
     if isinstance(trade, dict):
         return trade.get(key, default)
     if hasattr(trade, "__dataclass_fields__"):
@@ -147,6 +133,8 @@ def normalize_trade_row(ticker: str, idx: int, trade: Any) -> dict[str, Any]:
     for field in FLOAT_FIELDS:
         value = _trade_get(trade, field)
         row[field] = None if value is None else float(value)
+    decision_date = _trade_get(trade, "decision_date")
+    row["decision_date"] = "" if decision_date is None else str(decision_date)
     return row
 
 
@@ -191,9 +179,8 @@ def run_reference_backtests_by_ticker(
     commission_rate: float,
     warmup: int,
 ) -> dict[str, list[Any]]:
-    out: dict[str, list[Any]] = {}
-    for ticker, rb in rulebooks:
-        out[ticker] = run_reference_backtest(
+    return {
+        ticker: run_reference_backtest(
             rb,
             histories[ticker],
             start_date,
@@ -202,7 +189,8 @@ def run_reference_backtests_by_ticker(
             commission_rate,
             warmup,
         )
-    return out
+        for ticker, rb in rulebooks
+    }
 
 
 def _date_series_for_df(df: Any):
@@ -226,8 +214,7 @@ def _global_date_axis(states: dict[str, dict[str, Any]], warmup: int) -> list[pd
         date_series = state["date_series"]
         if date_series is None:
             continue
-        n = state["n"]
-        for idx in range(max(warmup, 0), n):
+        for idx in range(max(warmup, 0), state["n"]):
             try:
                 dates.add(_date_at(date_series, idx))
             except Exception:
@@ -368,6 +355,17 @@ def _attach_legacy_trade_metadata(
     return trade, exit_idx
 
 
+def _entry_open_on_date(histories: dict[str, Any], ticker: str, entry_date: str) -> Optional[float]:
+    df = histories[ticker]
+    idx = _find_df_index_by_date(df, entry_date)
+    if idx is None:
+        return None
+    try:
+        return float(df.iloc[idx]["Open"])
+    except Exception:
+        return None
+
+
 def run_legacy_compat_daily_loop(
     rulebooks: list[tuple[str, Rulebook]],
     histories: dict[str, Any],
@@ -386,14 +384,12 @@ def run_legacy_compat_daily_loop(
     use_llm_events: bool = True,
     sizing_mode: str = "integer",
     live_hard_stop_guard: bool = False,
+    entry_execution_mode: str = "legacy_t_close",
 ) -> dict[str, list[dict[str, Any]]]:
-    """날짜축 포트폴리오 루프의 no-op legacy 호환 후보.
-
-    종목 간 cash/switch/kill 상호작용은 의도적으로 없다. 각 종목은 독립적인
-    next_scan_index를 가지며, 기존 run_backtest()의 i 점프 규칙을 재현한다.
-    """
     if sizing_mode not in {"integer", "fractional"}:
         raise ValueError(f"unsupported sizing_mode={sizing_mode!r}")
+    if entry_execution_mode not in {"legacy_t_close", "t_plus_1_open"}:
+        raise ValueError(f"unsupported entry_execution_mode={entry_execution_mode!r}")
 
     start_ts = pd.Timestamp(start_date) if start_date else None
     end_ts = pd.Timestamp(end_date) if end_date else None
@@ -474,8 +470,29 @@ def run_legacy_compat_daily_loop(
                     state["next_idx"] = idx + 1
                     continue
 
+                entry_exec_idx = idx
+                entry_price_override = None
+                entry_atr_override = None
+                if entry_execution_mode == "t_plus_1_open":
+                    fill_idx = idx + 1
+                    if fill_idx >= state["n"]:
+                        state["done"] = True
+                        break
+                    fill_ts = _date_at(date_series, fill_idx) if date_series is not None else None
+                    if end_ts is not None and fill_ts is not None and fill_ts > end_ts:
+                        state["done"] = True
+                        break
+                    entry_exec_idx = fill_idx
+                    entry_price = float(df.iloc[fill_idx]["Open"])
+                    try:
+                        entry_atr_override = float(df.iloc[idx].get("ATR", entry_price * 0.02))
+                    except Exception:
+                        entry_atr_override = entry_price * 0.02
+                    entry_price_override = entry_price
+                else:
+                    entry_price = float(df.iloc[idx]["Close"])
+
                 amt_krw = calc_position_size_krw(rb, sig.score, position_limit_krw)
-                entry_price = float(df.iloc[idx]["Close"])
                 if sizing_mode == "fractional":
                     shares = amt_krw / entry_price if entry_price > 0 else 0.0
                 else:
@@ -487,7 +504,7 @@ def run_legacy_compat_daily_loop(
                 trade_obj = simulate_exit(
                     rb,
                     df,
-                    idx,
+                    entry_exec_idx,
                     shares,
                     position_limit_krw,
                     commission_rate=commission_rate,
@@ -497,6 +514,8 @@ def run_legacy_compat_daily_loop(
                     fractional_shares=(sizing_mode == "fractional"),
                     disable_add_buy=(sizing_mode == "fractional"),
                     live_hard_stop_guard=live_hard_stop_guard,
+                    entry_price_override=entry_price_override,
+                    entry_atr_override=entry_atr_override,
                 )
                 if trade_obj is None:
                     state["done"] = True
@@ -505,7 +524,7 @@ def run_legacy_compat_daily_loop(
                 trade, exit_idx = _attach_legacy_trade_metadata(
                     rb=rb,
                     df=df,
-                    entry_idx=idx,
+                    entry_idx=entry_exec_idx,
                     trade_obj=trade_obj,
                     sig=sig,
                     cur_sentiment=cur_sentiment,
@@ -530,20 +549,23 @@ def run_legacy_compat_daily_loop(
                     topic_window=state["topic_window"],
                     use_llm_events=use_llm_events,
                 )
+                try:
+                    trade["decision_date"] = str(pd.Timestamp(df.index[idx]).date())
+                except Exception:
+                    trade["decision_date"] = ""
                 state["trades"].append(trade)
 
                 if exit_idx is None:
                     exit_date = trade.get("exit_date") if isinstance(trade, dict) else None
                     exit_idx = _find_df_index_by_date(df, exit_date)
                 if exit_idx is None:
-                    exit_idx = idx + 1
-                state["next_idx"] = max(exit_idx + 1 + cooldown_days, idx + 1)
+                    exit_idx = entry_exec_idx + 1
+                state["next_idx"] = max(exit_idx + 1 + cooldown_days, entry_exec_idx + 1)
 
     return {ticker: list(state["trades"]) for ticker, state in states.items()}
 
 
 def compare_trade_rows(ref_rows: list[dict], cand_rows: list[dict]) -> list[dict[str, Any]]:
-    """ticker+trade_index 키로 매칭. 불일치 목록 반환."""
     mismatches: list[dict[str, Any]] = []
 
     def key(row):
@@ -552,7 +574,6 @@ def compare_trade_rows(ref_rows: list[dict], cand_rows: list[dict]) -> list[dict
     ref_map = {key(row): row for row in ref_rows}
     cand_map = {key(row): row for row in cand_rows}
     all_keys = sorted(set(ref_map) | set(cand_map))
-
     for key_value in all_keys:
         ref = ref_map.get(key_value)
         cand = cand_map.get(key_value)
@@ -642,6 +663,72 @@ def _fractional_summary(ref_rows: list[dict[str, Any]], cand_rows: list[dict[str
     }
 
 
+def _common_entry_shift_summary(
+    ref_rows: list[dict[str, Any]],
+    cand_rows: list[dict[str, Any]],
+    histories: dict[str, Any],
+) -> dict[str, Any]:
+    ref_map = {(row["ticker"], row["trade_index"]): row for row in ref_rows}
+    cand_map = {(row["ticker"], row["trade_index"]): row for row in cand_rows}
+    common = sorted(set(ref_map) & set(cand_map))
+    common_same_entry_date = 0
+    common_later_entry_date = 0
+    common_not_later_entry_date = 0
+    decision_entry_same = 0
+    decision_entry_later = 0
+    decision_entry_not_later = 0
+    open_price_mismatch = 0
+    samples: list[dict[str, Any]] = []
+
+    for row in cand_rows:
+        decision_date = str(row.get("decision_date") or "")
+        entry_date = str(row.get("entry_date") or "")
+        if entry_date == decision_date:
+            decision_entry_same += 1
+        if entry_date > decision_date:
+            decision_entry_later += 1
+        else:
+            decision_entry_not_later += 1
+        expected_open = _entry_open_on_date(histories, row["ticker"], entry_date)
+        if expected_open is None or abs(float(row["entry_price"]) - expected_open) > FLOAT_ABS_TOL:
+            open_price_mismatch += 1
+
+    for key in common:
+        ref = ref_map[key]
+        cand = cand_map[key]
+        if cand["entry_date"] == ref["entry_date"]:
+            common_same_entry_date += 1
+        if cand["entry_date"] > ref["entry_date"]:
+            common_later_entry_date += 1
+        else:
+            common_not_later_entry_date += 1
+        expected_open = _entry_open_on_date(histories, cand["ticker"], cand["entry_date"])
+        if len(samples) < 8:
+            samples.append(
+                {
+                    "ticker": key[0],
+                    "trade_index": key[1],
+                    "candidate_decision_date": cand.get("decision_date", ""),
+                    "ref_entry_date": ref["entry_date"],
+                    "ref_entry_price": ref["entry_price"],
+                    "candidate_entry_date": cand["entry_date"],
+                    "candidate_entry_price": cand["entry_price"],
+                    "candidate_expected_open": expected_open,
+                }
+            )
+    return {
+        "common_trade_key_count": len(common),
+        "common_candidate_entry_date_later_count": common_later_entry_date,
+        "common_candidate_entry_date_same_count": common_same_entry_date,
+        "common_candidate_entry_date_not_later_count": common_not_later_entry_date,
+        "candidate_decision_entry_later_count": decision_entry_later,
+        "candidate_decision_entry_same_count": decision_entry_same,
+        "candidate_decision_entry_not_later_count": decision_entry_not_later,
+        "candidate_entry_open_mismatch_count": open_price_mismatch,
+        "entry_shift_samples": samples,
+    }
+
+
 def run_comparison_infra_gate(
     start_date: str,
     end_date: str,
@@ -654,7 +741,6 @@ def run_comparison_infra_gate(
 ) -> dict[str, Any]:
     rulebooks = load_promoted_rulebooks()
     histories = load_fixed_histories(rulebooks, years=years, history_end_date=history_end_date)
-
     ref_trades_by_ticker = run_reference_backtests_by_ticker(
         rulebooks,
         histories,
@@ -673,7 +759,6 @@ def run_comparison_infra_gate(
         commission_rate=commission_rate,
         warmup=warmup,
     )
-
     ref_rows = normalize_trade_map(rulebooks, ref_trades_by_ticker)
     cand_rows = normalize_trade_map(rulebooks, cand_trades_by_ticker)
     mismatches = compare_trade_rows(ref_rows, cand_rows)
@@ -706,7 +791,6 @@ def run_engine_noop_gate_v1(
 ) -> dict[str, Any]:
     rulebooks = load_promoted_rulebooks()
     histories = load_fixed_histories(rulebooks, years=years, history_end_date=history_end_date)
-
     ref_trades_by_ticker = run_reference_backtests_by_ticker(
         rulebooks,
         histories,
@@ -726,7 +810,6 @@ def run_engine_noop_gate_v1(
         warmup=warmup,
         sizing_mode="integer",
     )
-
     ref_rows = normalize_trade_map(rulebooks, ref_trades_by_ticker)
     cand_rows = normalize_trade_map(rulebooks, cand_trades_by_ticker)
     mismatches = compare_trade_rows(ref_rows, cand_rows)
@@ -734,6 +817,7 @@ def run_engine_noop_gate_v1(
         "gate": "engine_noop_gate_v1",
         "legacy_compat_daily_loop": True,
         "sizing_mode": "integer",
+        "entry_execution_mode": "legacy_t_close",
         "start_date": start_date,
         "end_date": end_date,
         "history_end_date": history_end_date,
@@ -760,7 +844,6 @@ def run_fractional_gate_v2(
 ) -> dict[str, Any]:
     rulebooks = load_promoted_rulebooks()
     histories = load_fixed_histories(rulebooks, years=years, history_end_date=history_end_date)
-
     ref_trades_by_ticker = run_legacy_compat_daily_loop(
         rulebooks,
         histories,
@@ -781,7 +864,6 @@ def run_fractional_gate_v2(
         warmup=warmup,
         sizing_mode="fractional",
     )
-
     ref_rows = normalize_trade_map(rulebooks, ref_trades_by_ticker)
     cand_rows = normalize_trade_map(rulebooks, cand_trades_by_ticker)
     mismatches = compare_trade_rows(ref_rows, cand_rows)
@@ -798,6 +880,7 @@ def run_fractional_gate_v2(
         "candidate_sizing_mode": "fractional",
         "fractional_shares": True,
         "disable_add_buy": True,
+        "entry_execution_mode": "legacy_t_close",
         "start_date": start_date,
         "end_date": end_date,
         "history_end_date": history_end_date,
@@ -825,7 +908,6 @@ def run_live_current_proxy_baseline(
 ) -> dict[str, Any]:
     rulebooks = load_promoted_rulebooks()
     histories = load_fixed_histories(rulebooks, years=years, history_end_date=history_end_date)
-
     ref_trades_by_ticker = run_legacy_compat_daily_loop(
         rulebooks,
         histories,
@@ -848,12 +930,10 @@ def run_live_current_proxy_baseline(
         sizing_mode="fractional",
         live_hard_stop_guard=True,
     )
-
     ref_rows = normalize_trade_map(rulebooks, ref_trades_by_ticker)
     cand_rows = normalize_trade_map(rulebooks, cand_trades_by_ticker)
     mismatches = compare_trade_rows(ref_rows, cand_rows)
     guard_stop_loss_rows = [row for row in cand_rows if row.get("exit_reason") == "stop_loss"]
-    guard_stop_loss_count = len(guard_stop_loss_rows)
     guard_affected_tickers = sorted({row["ticker"] for row in guard_stop_loss_rows})
     mismatch_tickers = sorted({row.get("ticker") for row in mismatches if row.get("ticker")})
     mismatch_tickers_without_guard = sorted(set(mismatch_tickers) - set(guard_affected_tickers))
@@ -867,6 +947,7 @@ def run_live_current_proxy_baseline(
         "fractional_shares": True,
         "disable_add_buy": True,
         "live_hard_stop_guard": True,
+        "entry_execution_mode": "legacy_t_close",
         "start_date": start_date,
         "end_date": end_date,
         "history_end_date": history_end_date,
@@ -876,11 +957,81 @@ def run_live_current_proxy_baseline(
         "candidate_trade_count": len(cand_rows),
         "mismatch_count": len(mismatches),
         "timing_mismatch_count": timing_mismatch_count,
-        "candidate_stop_loss_count": guard_stop_loss_count,
+        "candidate_stop_loss_count": len(guard_stop_loss_rows),
         "guard_affected_tickers": guard_affected_tickers,
         "mismatch_tickers": mismatch_tickers,
         "mismatch_tickers_without_guard": mismatch_tickers_without_guard,
-        "passed": len(cand_rows) > 0 and guard_stop_loss_count > 0 and not mismatch_tickers_without_guard,
+        "passed": len(cand_rows) > 0 and len(guard_stop_loss_rows) > 0 and not mismatch_tickers_without_guard,
     }
+    write_gate_outputs(ref_rows, cand_rows, mismatches, summary, out_dir)
+    return summary
+
+
+def run_tplus1_entry_gate(
+    start_date: str,
+    end_date: str,
+    history_end_date: str,
+    position_limit_krw: float = 30.0,
+    commission_rate: float = 0.0005,
+    warmup: int = 200,
+    years: int = 3,
+    out_dir: Path = OUT_DIR,
+) -> dict[str, Any]:
+    rulebooks = load_promoted_rulebooks()
+    histories = load_fixed_histories(rulebooks, years=years, history_end_date=history_end_date)
+    ref_trades_by_ticker = run_legacy_compat_daily_loop(
+        rulebooks,
+        histories,
+        start_date=start_date,
+        end_date=end_date,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        warmup=warmup,
+        sizing_mode="fractional",
+        live_hard_stop_guard=False,
+        entry_execution_mode="legacy_t_close",
+    )
+    cand_trades_by_ticker = run_legacy_compat_daily_loop(
+        rulebooks,
+        histories,
+        start_date=start_date,
+        end_date=end_date,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        warmup=warmup,
+        sizing_mode="fractional",
+        live_hard_stop_guard=False,
+        entry_execution_mode="t_plus_1_open",
+    )
+    ref_rows = normalize_trade_map(rulebooks, ref_trades_by_ticker)
+    cand_rows = normalize_trade_map(rulebooks, cand_trades_by_ticker)
+    mismatches = compare_trade_rows(ref_rows, cand_rows)
+    entry_shift = _common_entry_shift_summary(ref_rows, cand_rows, histories)
+    summary = {
+        "gate": "tplus1_entry_gate",
+        "reference_mode": "fractional_legacy_t_close",
+        "candidate_mode": "fractional_t_plus_1_open",
+        "fractional_shares": True,
+        "disable_add_buy": True,
+        "live_hard_stop_guard": False,
+        "entry_execution_mode": "t_plus_1_open",
+        "entry_atr_source": "decision_day_atr",
+        "start_date": start_date,
+        "end_date": end_date,
+        "history_end_date": history_end_date,
+        "position_limit_krw": position_limit_krw,
+        "tickers": [ticker for ticker, _ in rulebooks],
+        "ref_trade_count": len(ref_rows),
+        "candidate_trade_count": len(cand_rows),
+        "mismatch_count": len(mismatches),
+        **entry_shift,
+    }
+    summary["passed"] = (
+        len(cand_rows) > 0
+        and entry_shift["common_trade_key_count"] > 0
+        and entry_shift["candidate_decision_entry_same_count"] == 0
+        and entry_shift["candidate_decision_entry_not_later_count"] == 0
+        and entry_shift["candidate_entry_open_mismatch_count"] == 0
+    )
     write_gate_outputs(ref_rows, cand_rows, mismatches, summary, out_dir)
     return summary

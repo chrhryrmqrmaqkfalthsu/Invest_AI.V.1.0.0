@@ -36,7 +36,8 @@ def assert_close(actual: float, expected: float, message: str, tolerance: float 
 def make_rulebook(strategy: str = "hybrid") -> Rulebook:
     return Rulebook(
         ticker="TEST", asset_type="us_stock", direction="long", exit_strategy=strategy,
-        stop_loss_atr=2.0, take_profit_atr=3.0, trailing_atr=1.5, max_holding_days=20,
+        stop_loss_atr=2.0, take_profit_atr=3.0, trailing_atr=1.5,
+        trailing_activation_profit_pct=4.0, max_holding_days=20,
         stop_loss_atr_bear=1.0, take_profit_atr_bull=5.0, trailing_atr_volatile=3.0,
         sector_name="tech",
     )
@@ -185,6 +186,38 @@ def test_policy_off_keeps_legacy_authority() -> None:
     assert_true(result is not None and result["exit_reason"] == "take_profit", "OFF must preserve legacy")
 
 
+def test_live_policy_passes_rulebook_trailing_activation_pct() -> None:
+    pos = snapshot_position(strategy="trailing")
+    rb, source = resolve_position_rulebook(pos)
+    assert_true(rb is not None, "snapshot rulebook must resolve")
+    evaluation = evaluate_live_policy(
+        ticker="TEST", pos=pos, price=98.0, rulebook=rb, raw_market_context=None,
+        holding_trading_days=3, timestamp="2026-06-04T00:00:00Z", rulebook_source=source,
+    )
+    diagnostics = evaluation.decision.diagnostics
+    assert_close(diagnostics.get("trailing_activation_profit_pct"), 4.0, "live must pass rulebook trailing activation")
+    assert_true(diagnostics.get("trailing_active") is False, "trailing must remain inactive below activation threshold")
+    assert_true(evaluation.decision.should_exit is False, "no exit when above stop and trailing inactive")
+
+
+def test_live_hard_stop_guard_backstops_trailing_strategy() -> None:
+    pos = snapshot_position(strategy="trailing")
+    pos.trailing_stop = 90.0
+    pos.highest_price = 100.0
+    rb, source = resolve_position_rulebook(pos)
+    assert_true(rb is not None, "snapshot rulebook must resolve")
+    evaluation = evaluate_live_policy(
+        ticker="TEST", pos=pos, price=95.0, rulebook=rb, raw_market_context=None,
+        holding_trading_days=3, timestamp="2026-06-04T00:00:00Z", rulebook_source=source,
+    )
+    diagnostics = evaluation.decision.diagnostics
+    assert_true(evaluation.decision.should_exit is True, "live guard must exit below stored stop")
+    assert_true(evaluation.decision.reason == "stop_loss", "live guard must report stop_loss")
+    assert_true(diagnostics.get("live_hard_stop_override") is True, "live guard override marker")
+    assert_true(diagnostics.get("live_hard_stop_hit") is True, "live guard hit marker")
+    assert_true(diagnostics.get("trailing_active") is False, "guard must work even before trailing activation")
+
+
 def test_shadow_record_uses_same_cutover_decision() -> None:
     pos = snapshot_position()
     rb, source = resolve_position_rulebook(pos)
@@ -264,6 +297,8 @@ def run_all() -> None:
         test_policy_exception_falls_back_to_legacy,
         test_policy_state_update_is_single_authority,
         test_policy_off_keeps_legacy_authority,
+        test_live_policy_passes_rulebook_trailing_activation_pct,
+        test_live_hard_stop_guard_backstops_trailing_strategy,
         test_shadow_record_uses_same_cutover_decision,
         test_learned_rulebook_caches_exact_signal_context,
         test_runner_passes_cached_context_to_register_entry,

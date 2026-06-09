@@ -271,6 +271,66 @@ def _live_sell_omen_kwargs(ticker: str, rulebook: Any, timestamp: Optional[str])
     }
 
 
+def _rulebook_trailing_activation_profit_pct(rulebook: Any) -> float:
+    return _safe_float(_get(rulebook, "trailing_activation_profit_pct", 0.0), 0.0)
+
+
+def _live_execution_config(rulebook: Any, sell_omen_kwargs: Mapping[str, Any]) -> ExitExecutionConfig:
+    return ExitExecutionConfig(
+        mode="live",
+        base_slippage_bps=0.0,
+        stress_slippage_bps=0.0,
+        use_next_open=False,
+        trailing_activation_bars=2,
+        trailing_activation_profit_pct=_rulebook_trailing_activation_profit_pct(rulebook),
+        **dict(sell_omen_kwargs),
+    )
+
+
+def _apply_live_hard_stop_guard(
+    decision: ExitDecision,
+    *,
+    state: PositionState,
+    price: float,
+) -> ExitDecision:
+    """Live-only catastrophe guard: stop_price is a hard backstop for every strategy.
+
+    This intentionally does not modify the shared backtest/core policy. It only
+    wraps live authority so trailing-only strategies cannot remain open below the
+    stored entry-time stop_price when their trailing activation is still waiting.
+    """
+    current = _safe_float(price, 0.0)
+    stop_price = _safe_float(state.stop_price, 0.0)
+    diagnostics = dict(decision.diagnostics or {})
+    hit = bool(current > 0 and stop_price > 0 and current <= stop_price)
+    diagnostics["live_hard_stop_guard"] = True
+    diagnostics["live_hard_stop_hit"] = hit
+    if not hit:
+        return replace(decision, diagnostics=diagnostics)
+
+    if decision.should_exit and decision.reason == "stop_loss":
+        diagnostics["live_hard_stop_override"] = False
+        return replace(decision, diagnostics=diagnostics)
+
+    diagnostics.update(
+        {
+            "live_hard_stop_override": True,
+            "live_hard_stop_previous_reason": decision.reason,
+            "stop_hit": True,
+            "trigger_source": "live_hard_stop_guard",
+        }
+    )
+    return ExitDecision(
+        should_exit=True,
+        reason="stop_loss",
+        trigger_price=stop_price,
+        fill_price_base=stop_price,
+        fill_price_stress=stop_price,
+        updated_position=decision.updated_position,
+        diagnostics=diagnostics,
+    )
+
+
 def evaluate_live_policy(
     *,
     ticker: str,
@@ -292,20 +352,15 @@ def evaluate_live_policy(
     )
     state = position_entry_to_state(pos, rulebook, holding_trading_days)
     sell_omen_kwargs = _live_sell_omen_kwargs(ticker, rulebook, timestamp)
+    execution_config = _live_execution_config(rulebook, sell_omen_kwargs)
     decision = evaluate_exit(
         state,
         PriceSnapshot(date=timestamp or "", current_price=float(price), close=float(price)),
         rulebook,
         market_context=exit_ctx,
-        execution_config=ExitExecutionConfig(
-            mode="live",
-            base_slippage_bps=0.0,
-            stress_slippage_bps=0.0,
-            use_next_open=False,
-            trailing_activation_bars=2,
-            **sell_omen_kwargs,
-        ),
+        execution_config=execution_config,
     )
+    decision = _apply_live_hard_stop_guard(decision, state=state, price=price)
     return LivePolicyEvaluation(
         decision=decision,
         position_state=state,
@@ -577,19 +632,13 @@ def evaluate_live_shadow(
     static_state = position_entry_to_state(pos, rulebook, holding_trading_days)
     dynamic_state = position_entry_to_dynamic_state(pos, rulebook, holding_trading_days, exit_ctx)
     sell_omen_kwargs = _live_sell_omen_kwargs(ticker, rulebook, timestamp)
+    execution_config = _live_execution_config(rulebook, sell_omen_kwargs)
     decision = evaluate_exit(
         dynamic_state,
         PriceSnapshot(date=timestamp or "", current_price=float(price), close=float(price)),
         rulebook,
         market_context=exit_ctx,
-        execution_config=ExitExecutionConfig(
-            mode="live",
-            base_slippage_bps=0.0,
-            stress_slippage_bps=0.0,
-            use_next_open=False,
-            trailing_activation_bars=2,
-            **sell_omen_kwargs,
-        ),
+        execution_config=execution_config,
     )
     legacy = legacy_live_decision(pos, price, holding_calendar_days)
     if actual_legacy_reason is not None or legacy.get("reason") is not None:

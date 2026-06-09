@@ -21,11 +21,29 @@
   최악 5거래 중 4거래가 time_out이다.
 ```
 
-따라서 capital allocation의 1차 목표는 단순히 강신호에 더 배정하는 것이 아니다.
+power check 이후 capital allocation의 방향은 다음처럼 수정한다.
 
 ```text
-목표:
-  time_out drag를 키우지 않으면서 trailing winner를 키운다.
+확정:
+  진입 신호 세기만으로 수익률을 올리는 sizing은 정당화되지 않는다.
+  entry_signal_score 단독 배분은 금지한다.
+  live_strength도 단조성이 약하므로 바로 sizing engine 구현에 쓰지 않는다.
+
+1차 목표:
+  fixed_30 realistic baseline을 중앙 simulator에서 정확히 재현한다.
+
+2차 목표:
+  실제 구현 전 offline reweighting probe로 sizing 후보가 noise보다 큰 개선을 낼 수 있는지 확인한다.
+
+3차 목표:
+  time_out drag를 키우지 않으면서 trailing winner를 키울 수 있는 후보만 구현한다.
+```
+
+즉 v7 capital allocation은 “강신호에 더 준다”가 아니라 다음 가설을 검증하는 연구 단계로 시작한다.
+
+```text
+진입 시점 정보만으로 차별화할 수 있는가?
+아니면 진입 sizing은 fixed로 두고, universe 확대 / 차기 RUN / post-entry add_buy·리밸런싱이 더 큰 레버인가?
 ```
 
 ---
@@ -98,7 +116,7 @@ stop_loss, sell_omen, time_out 같은 path-independent 사유에서 최초 분�
 ```text
 신뢰 가능.
 한 해에만 몰린 성과는 아니다.
-두 해 모두 PF 3 이상으로, capital allocation 설계로 넘어갈 수 있다.
+두 해 모두 PF 3 이상으로, capital allocation 연구로 넘어갈 수 있다.
 ```
 
 ### 2.2 exit_reason별 손익
@@ -138,7 +156,7 @@ capital allocation은 time_out으로 끌려갈 거래를 키우면 안 된다.
 
 ---
 
-## 3. 신호세기와 time_out 가설 검증
+## 3. 진입 시점 변수 power check
 
 ### 3.1 사용 가능한 로그 필드
 
@@ -154,7 +172,7 @@ entry_sector_score
 entry_vix_level
 ```
 
-따라서 capital allocation 입력으로 다음 값을 계산할 수 있다.
+계산 가능 파생값:
 
 ```text
 live_strength = entry_signal_score / entry_signal_threshold
@@ -169,6 +187,7 @@ live_strength = entry_signal_score / entry_signal_threshold
 ```text
 약신호 n=35, score 2.0660~3.2676, time_out 12건(34%), trailing 23건, 손실 10건, 평균 +2.51%
 강신호 n=36, score 3.2676~4.7284, time_out 16건(44%), trailing 14건, 손실 10건, 평균 +3.41%
+차이 +0.90%p
 ```
 
 사분위 비교:
@@ -188,12 +207,94 @@ entry_signal_score 단독으로는 time_out 위험을 단조롭게 설명하지 
 Q2가 가장 좋고 Q3가 가장 나쁘다.
 ```
 
-따라서 v1 capital allocation에서 다음은 금지한다.
+### 3.3 market/sector/vix 필드 주의
+
+초기 상·하위 절반 비교에서 다음 필드들이 큰 차이를 보이는 듯했다.
+
+```text
+entry_market_adjustment
+entry_market_score
+entry_sector_score
+entry_vix_level
+```
+
+하지만 추가 확인 결과, baseline trade log에서는 모두 상수다.
+
+```text
+entry_market_adjustment: unique 1, value 1.0
+entry_market_score:      unique 1, value 50.0
+entry_sector_score:      unique 1, value 50.0
+entry_vix_level:         unique 1, value 18.0
+```
+
+따라서 이 필드들의 상·하위 절반 차이는 정렬 tie와 row order 때문에 생긴 가짜 신호다.
+
+판정:
+
+```text
+현재 baseline trade log의 market/sector/vix 필드는 capital allocation 입력으로 쓸 수 없다.
+시장 국면 기반 총노출 조절을 검증하려면 실제 market_history 기반 값이 daily loop에 연결되어야 한다.
+```
+
+### 3.4 live_strength 검증 결과
+
+`live_strength = entry_signal_score / entry_signal_threshold` 기준 하위 절반과 상위 절반:
+
+```text
+하위 절반 n=35, 평균 +1.92%, time_out 9건
+상위 절반 n=36, 평균 +3.98%, time_out 19건
+차이 +2.05%p
+```
+
+표면적으로는 평균 차이가 2%p를 넘지만, 사분위는 단조적이지 않다.
+
+```text
+Q1 n=17, live_strength 1.0195~1.0195, 평균 +0.47%, time_out 3건, 손실 7건, 주요 ticker EME 17건
+Q2 n=17, live_strength 1.0195~1.0922, 평균 +3.05%, time_out 6건, 손실 4건
+Q3 n=17, live_strength 1.0922~1.2813, 평균 +5.82%, time_out 6건, 손실 2건
+Q4 n=20, live_strength 1.2891~1.5407, 평균 +2.58%, time_out 13건, 손실 7건, 주요 ticker MPLX 9건
+```
+
+판정:
+
+```text
+live_strength는 entry_signal_score보다 약간 낫지만, 단조 관계가 아니다.
+최상위 Q4는 time_out이 가장 많고 평균도 Q3보다 낮다.
+Q1과 Q4 모두 ticker 구성에 크게 오염되어 있다.
+```
+
+따라서 다음은 금지한다.
 
 ```text
 금지:
-  target_notional을 entry_signal_score에만 비례시킨다.
-  score가 높다는 이유만으로 무제한 과배정한다.
+  live_strength가 높을수록 자동으로 더 크게 배정한다.
+  live_strength_bucket을 구현 전 검증 없이 바로 production candidate로 둔다.
+```
+
+허용:
+
+```text
+live_strength는 offline reweighting probe의 후보 입력으로만 둔다.
+실제 sizing 구현은 probe에서 baseline 대비 noise 이상 개선을 보인 뒤 진행한다.
+```
+
+### 3.5 표본 식별력
+
+baseline 분포:
+
+```text
+거래수: 71
+평균 pnl_pct: +2.96%
+표준편차: 6.35%
+평균의 표준오차: 약 0.75%
+```
+
+판정:
+
+```text
+두 sizing 후보의 평균 차이가 약 1.5%p 미만이면 noise와 구분하기 어렵다.
+entry_signal_score 차이 +0.90%p는 식별력이 부족하다.
+live_strength 차이 +2.05%p는 관찰할 가치는 있으나, 사분위 비단조성과 ticker composition 때문에 구현 전 probe가 필요하다.
 ```
 
 ---
@@ -210,7 +311,7 @@ Q2가 가장 좋고 Q3가 가장 나쁘다.
 5. 룰북/종목 특성을 분리한다.
 ```
 
-baseline 건강검진을 반영한 해석:
+power check 이후 수정된 해석:
 
 ```text
 다 굴린다:
@@ -220,14 +321,19 @@ baseline 건강검진을 반영한 해석:
   총노출, 종목별 cap, stop-risk stress, time_out drag cap을 둔다.
 
 약신호는 적게 배정한다:
-  live_strength가 낮으면 notional을 줄인다.
-  단, entry_signal_score 단독이 아닌 threshold 정규화값과 룰북 품질을 함께 본다.
+  원칙으로는 유지한다.
+  하지만 baseline 데이터에서는 약신호 축소가 time_out 감소로 직접 이어진다는 증거가 약하다.
+  따라서 v1에서는 hard rule이 아니라 probe 대상이다.
 
 분산한다:
   특정 ticker, sector, exit profile에 과집중하지 않는다.
+  특히 Q1/Q4 live_strength 결과가 ticker composition에 오염되어 있으므로 concentration guard가 필수다.
 
 룰북/종목 특성을 분리한다:
-  live_strength는 현재 신호 세기, historical_quality는 룰북 품질, time_out_risk는 exit profile 위험으로 분리한다.
+  live_strength는 현재 신호 세기,
+  historical_quality는 룰북 품질,
+  time_out_risk는 exit profile 위험,
+  concentration은 포트폴리오 위험으로 분리한다.
 ```
 
 ---
@@ -244,23 +350,23 @@ live_strength = entry_signal_score / entry_signal_threshold
 
 ```text
 entry_signal_threshold <= 0 이면 live_strength = 0
-BUY 후보가 아니면 신규 진입 후보에서 제외
+BUY가 아닌 신호는 신규 진입 후보에서 제외
 ```
 
-초기 bucket:
+초기 bucket은 구현 전 probe 전용이다.
 
 ```text
-weak:        live_strength < 1.10
-normal:      1.10 <= live_strength < 1.30
-strong:      1.30 <= live_strength < 1.60
-very_strong: live_strength >= 1.60
+weak:        live_strength < 1.05
+normal:      1.05 <= live_strength < 1.10
+strong:      1.10 <= live_strength < 1.30
+very_strong: live_strength >= 1.30
 ```
 
 주의:
 
 ```text
-기존 문서의 1.20 / 1.50 / 2.00 bucket은 유지 후보로 남기되,
-16종목 baseline에서는 실제 분포가 좁을 수 있으므로 sweep으로 확인한다.
+기존 문서의 1.20 / 1.50 / 2.00 bucket은 현재 16종목 baseline 분포에서는 너무 높다.
+현재 baseline의 live_strength 최대값은 약 1.54다.
 ```
 
 ### 5.2 historical_quality
@@ -279,10 +385,11 @@ win_rate_percentile
 trade_count_reliability
 ```
 
-v1에서는 과최적화를 막기 위해 다음처럼 단순화한다.
+주의:
 
 ```text
-historical_quality_v1 = expectancy_pct_percentile
+historical_quality는 아직 baseline trade 결과와 power check가 끝나지 않았다.
+entry_signal_score처럼 단독 사용은 금지한다.
 ```
 
 ### 5.3 time_out_risk
@@ -300,10 +407,16 @@ time_out_total_pnl_pct_sum
 
 단, 16종목 2년 baseline만으로 ticker별 time_out risk를 강하게 학습하면 과적합 위험이 크다. 따라서 v1에서는 penalty가 아니라 검증/리포트 지표로 먼저 둔다.
 
-v1.5 후보:
+### 5.4 market_regime_quality
+
+현재 baseline trade log의 `entry_market_score`, `entry_sector_score`, `entry_vix_level`은 상수라 사용할 수 없다.
+
+시장 국면 기반 총노출 조절을 실험하려면 다음 선행 작업이 필요하다.
 
 ```text
-time_out_risk_penalty = f(ticker historical time_out_loss_rate, rulebook max_holding_days, low live_strength)
+market_history 기반 daily market_score / regime / vix를 central daily loop에 연결
+trade log에 실제 entry_market_score / entry_regime / entry_vix_level 저장
+power check 재실행
 ```
 
 ---
@@ -323,36 +436,59 @@ exit = conservative_core
 
 이 값은 `realistic_research_baseline`과 일치해야 한다.
 
-### 6.2 live_strength bucket sizing
+### 6.2 offline reweighting probe
 
-가장 단순한 v1 후보:
+실제 sizing engine 구현 전 반드시 실행한다.
 
-```text
-weak:        0.50x base_notional
-normal:      0.75x base_notional
-strong:      1.00x base_notional
-very_strong: 1.25x base_notional
-```
-
-예시:
+목표:
 
 ```text
-base_notional = 30 USD
-weak = 15 USD
-normal = 22.5 USD
-strong = 30 USD
-very_strong = 37.5 USD
+기존 71거래의 realized pnl에 가상의 notional multiplier를 적용했을 때,
+수익률 개선이 noise보다 큰지 확인한다.
 ```
 
-방어 규칙:
+probe 후보:
 
 ```text
-min_order_notional 미만이면 주문하지 않음
-per_position_cap <= 45 USD 또는 60 USD sweep
-총노출 cap <= 480 USD strict 또는 600 USD live_policy sweep
+fixed_30
+entry_signal_score_bucket
+live_strength_bucket
+historical_quality_bucket
+live_strength * historical_quality
+capped_floor_and_cap
 ```
 
-### 6.3 capped signal_power proportional
+통과 조건 초안:
+
+```text
+candidate total_pnl 개선폭 >= baseline gross_entry 기준 +1.5%p
+candidate time_out_total_pnl 악화 없음
+candidate worst_5 손실 악화 없음
+candidate max_ticker_gross_entry_share cap 충족
+```
+
+이 probe가 실패하면 variable entry sizing 구현은 보류한다.
+
+### 6.3 live_strength bucket sizing
+
+구현 후보가 아니라 probe 후보로 둔다.
+
+예시 multiplier:
+
+```text
+weak:        0.75x base_notional
+normal:      1.00x base_notional
+strong:      1.10x base_notional
+very_strong: 1.00x base_notional
+```
+
+중요:
+
+```text
+Q4가 가장 좋은 bucket이 아니므로 very_strong을 1.25x로 자동 확대하지 않는다.
+```
+
+### 6.4 capped signal_power proportional
 
 기존 v7 문서의 `signal_power`를 사용하되 강한 cap을 둔다.
 
@@ -363,27 +499,18 @@ weight_i = raw_weight_i / sum(raw_weight)
 target_notional_i = total_exposure_cap * weight_i
 ```
 
-cap:
+주의:
 
 ```text
-target_notional_i <= per_position_cap
-약신호 target_notional_i <= base_notional * 0.50
-normal target_notional_i <= base_notional * 0.75
+이 방식은 concentration 위험이 가장 크다.
+probe에서 ticker concentration과 time_out drag가 악화되면 구현하지 않는다.
 ```
 
-즉 proportional sizing이어도 약신호가 전체 후보 부족 때문에 과대배정되는 것을 금지한다.
+### 6.5 hybrid floor-and-cap
 
-### 6.4 hybrid floor-and-cap
+사용자 원칙인 “다 굴리되, 안 위험하게”에 가장 잘 맞는 후보지만, 구현은 probe 이후다.
 
-사용자 원칙인 “다 굴리되, 안 위험하게”에 가장 잘 맞는 후보:
-
-```text
-eligible BUY 후보는 최소 small allocation을 받을 수 있다.
-단, live_strength와 historical_quality가 모두 낮으면 minimum만 받는다.
-상위 후보도 per_position_cap 이상 받지 못한다.
-```
-
-공식:
+공식 후보:
 
 ```text
 base = 30 USD
@@ -391,19 +518,19 @@ multiplier = bucket_multiplier(live_strength) * quality_multiplier(historical_qu
 target_notional = clamp(base * multiplier, min_notional, per_position_cap)
 ```
 
-초기 multiplier:
+초기 multiplier는 보수적으로 시작한다.
 
 ```text
 bucket_multiplier:
-  weak        0.50
-  normal      0.75
-  strong      1.00
-  very_strong 1.25
+  weak        0.75
+  normal      1.00
+  strong      1.10
+  very_strong 1.00
 
 quality_multiplier:
-  bottom 25%  0.75
+  bottom 25%  0.90
   middle 50%  1.00
-  top 25%     1.15
+  top 25%     1.10
 ```
 
 ---
@@ -513,22 +640,37 @@ exit_reason 분포 동일
 
 이 게이트가 실패하면 sizing/switch/kill 구현 금지.
 
-### 9.2 capital_allocation_sizing_gate
+### 9.2 capital_allocation_reweight_probe_gate
 
 목표:
 
 ```text
-fixed_30 대비 sizing 후보가 time_out drag를 키우지 않고 성과를 개선하는지 검증한다.
+실제 simulator 구현 전, 기존 baseline 거래에 가상 multiplier를 적용해
+variable sizing이 식별 가능한 개선 여지가 있는지 확인한다.
 ```
 
-비교 후보:
+출력:
 
 ```text
-fixed_30
-live_strength_bucket
-capped_signal_power_proportional
-hybrid_floor_and_cap
+reference_fixed_30_metrics
+candidate_reweighted_metrics
+return_delta_pct_of_gross_entry
+time_out_drag_delta
+worst_5_delta
+concentration_delta
+passed
 ```
+
+통과 조건:
+
+```text
+수익 개선폭이 평균 표준오차 × 2 수준보다 커야 한다.
+time_out drag와 worst loss가 악화되면 실패다.
+```
+
+### 9.3 capital_allocation_sizing_gate
+
+이 게이트는 `reweight_probe_gate`를 통과한 sizing 후보에 대해서만 만든다.
 
 summary 필수 필드:
 
@@ -547,7 +689,7 @@ concentration_summary
 passed
 ```
 
-### 9.3 concentration guard
+### 9.4 concentration guard
 
 필수 지표:
 
@@ -568,21 +710,20 @@ max_single_trade_notional <= base_notional * 2.0
 
 ---
 
-## 10. 초기 sweep 후보
+## 10. 초기 실험 후보
 
 ```text
 base_notional: 30
 min_notional: 10, 15
 per_position_cap: 45, 60
 total_exposure_cap: 480, 600
-sizing_mode:
+probe_mode:
   fixed_30
+  entry_signal_score_bucket
   live_strength_bucket
-  capped_signal_power_proportional
+  live_strength_mid_bucket_boost
+  historical_quality_bucket
   hybrid_floor_and_cap
-live_strength_bucket:
-  conservative: [1.10, 1.30, 1.60]
-  original_doc: [1.20, 1.50, 2.00]
 historical_quality:
   off
   expectancy_percentile
@@ -593,12 +734,12 @@ slippage_bps:
   0, 5, 10, 25
 ```
 
-첫 구현은 sweep 전체가 아니라 다음 3개만 비교한다.
+첫 구현은 sweep 전체가 아니라 다음 순서로 진행한다.
 
 ```text
 A. fixed_30 no-op
-B. live_strength_bucket with per_position_cap=45, total_cap=480
-C. hybrid_floor_and_cap with per_position_cap=45, total_cap=480, expectancy_quality on
+B. offline reweighting probe
+C. probe 통과 후보만 central simulator sizing으로 구현
 ```
 
 ---
@@ -607,7 +748,18 @@ C. hybrid_floor_and_cap with per_position_cap=45, total_cap=480, expectancy_qual
 
 1. `capital_allocation_noop_gate`를 만든다.
 2. no-op에서 `realistic_research_baseline`을 정확히 재현한다.
-3. central trade log에 다음 필드를 추가한다.
+3. `capital_allocation_reweight_probe_gate`를 만든다.
+4. 기존 baseline 71거래에 offline multiplier를 적용해 다음을 검증한다.
+
+```text
+entry_signal_score_bucket
+live_strength_bucket
+historical_quality_bucket
+hybrid_floor_and_cap
+```
+
+5. probe가 실패하면 variable entry sizing 구현을 보류한다.
+6. probe가 통과하면 central trade log에 다음 필드를 추가한다.
 
 ```text
 entry_signal_score
@@ -622,10 +774,16 @@ allocation_multiplier
 allocation_reason
 ```
 
-4. `live_strength_bucket` sizing만 먼저 구현한다.
-5. baseline 대비 수익률, PF, MDD, time_out drag를 비교한다.
-6. guard stress를 추가한다.
-7. 그 다음에만 `hybrid_floor_and_cap`과 `capped_signal_power_proportional`을 구현한다.
+7. 통과 후보만 실제 simulator sizing으로 구현한다.
+8. guard stress와 concentration guard를 추가한다.
+9. sizing이 noise 수준이면 다음 레버로 이동한다.
+
+```text
+universe 확대
+T+1 기준 차기 RUN / 룰북 재선정
+post-entry add_buy 또는 winner scaling
+market_history 기반 총노출 조절
+```
 
 ---
 
@@ -635,12 +793,19 @@ capital allocation 후보는 다음을 모두 만족해야 live 후보가 된다
 
 ```text
 1. no-op 재현 성공
-2. 동일 총노출 기준 baseline 대비 수익률 또는 방어 지표 개선
-3. time_out drag 악화 없음
-4. stop-risk stress에서 붕괴하지 않음
-5. 연도별 2024/2025 모두 성과가 극단적으로 무너지지 않음
-6. 특정 ticker 과집중 없음
-7. turnover/slippage 반영 후에도 우위 유지
+2. offline reweighting probe에서 noise보다 큰 개선 확인
+3. 동일 총노출 기준 baseline 대비 수익률 또는 방어 지표 개선
+4. time_out drag 악화 없음
+5. stop-risk stress에서 붕괴하지 않음
+6. 연도별 2024/2025 모두 성과가 극단적으로 무너지지 않음
+7. 특정 ticker 과집중 없음
+8. turnover/slippage 반영 후에도 우위 유지
 ```
 
-위 조건을 만족하지 못하면 자동 자본 배분은 연구 모드로 유지한다.
+위 조건을 만족하지 못하면 자동 자본 배분은 연구 모드로 유지하고, 수익률 개선의 주 레버를 다음으로 옮긴다.
+
+```text
+universe 확대
+차기 RUN에서 T+1/conservative_core 기준 룰북 재선정
+post-entry winner scaling
+```

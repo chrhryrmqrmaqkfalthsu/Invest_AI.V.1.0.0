@@ -34,6 +34,8 @@ POLICY_PATH = Path.home() / "kingmaker" / "config" / "policy.yaml"
 SYMBOLS_DIR = Path.home() / "kingmaker" / "data" / "symbols"
 POSITIONS_PATH = Path.home() / "kingmaker" / "data" / "_system" / "positions.json"
 SHARE_EPS = 1e-6
+DEFAULT_MIN_NOTIONAL_PER_ORDER = 1.0
+DEFAULT_MIN_FRACTIONAL_SHARES_PER_ORDER = 0.001
 
 
 @dataclass
@@ -53,6 +55,20 @@ class SafetyLayer:
         add_buy = self.policy.get("add_buy", {}) or {}
 
         self.enabled = bool(sa.get("enabled", True))
+        self.min_notional_per_order = float(
+            sa.get(
+                "min_notional_per_order",
+                sa.get("min_order_notional", sa.get("min_krw_per_order", DEFAULT_MIN_NOTIONAL_PER_ORDER)),
+            )
+            or 0.0
+        )
+        self.min_fractional_shares_per_order = float(
+            sa.get(
+                "min_fractional_shares_per_order",
+                sa.get("min_fractional_shares", DEFAULT_MIN_FRACTIONAL_SHARES_PER_ORDER),
+            )
+            or 0.0
+        )
         self.max_shares = self._optional_float(sa.get("max_shares_per_order", 1))
         self.max_notional_per_order = float(sa.get("max_notional_per_order", sa.get("max_krw_per_order", 10000)))
         self.max_krw = self.max_notional_per_order
@@ -320,10 +336,26 @@ class SafetyLayer:
         if not self.enabled:
             return SafetyDecision(True, reason="운영 필수 게이트 통과; 소액 한도 비활성")
 
+        order_notional = shares_f * price_f
+        if side_lower == "buy":
+            min_notional = float(getattr(self, "min_notional_per_order", 0.0) or 0.0)
+            if min_notional > 0 and order_notional + 1e-9 < min_notional:
+                return SafetyDecision(
+                    False,
+                    f"주문금액 {order_notional:,.4f} < 최소 {min_notional:,.2f}",
+                    "MIN_NOTIONAL",
+                )
+            min_fractional = float(getattr(self, "min_fractional_shares_per_order", 0.0) or 0.0)
+            if min_fractional > 0 and 0 < shares_f < min_fractional:
+                return SafetyDecision(
+                    False,
+                    f"fractional 수량 {shares_f:.6f}주 < 최소 {min_fractional:.6f}주",
+                    "MIN_FRACTIONAL_SHARES",
+                )
+
         if self.max_shares is not None and shares_f > self.max_shares:
             return SafetyDecision(False, f"수량 {shares_f:g} > 한도 {self.max_shares:g}주", "LIMIT_SHARES")
 
-        order_notional = shares_f * price_f
         max_notional = self._current_order_notional_limit()
         if max_notional > 0 and order_notional > max_notional:
             return SafetyDecision(False, f"주문금액 {order_notional:,.2f} > 한도 {max_notional:,.2f}", "LIMIT_NOTIONAL")

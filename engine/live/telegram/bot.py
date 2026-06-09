@@ -252,16 +252,9 @@ class TelegramBot:
             "/clear_queue — 대기열 비우기\n"
             "💡 자유 텍스트도 가능: '코덱스200, 나스닥100 학습해'\n\n"
             "[승인]\n"
-            "/approve — 오늘 첫 매수 승인\n"
-            "/approve_20k — 추가매수 2만원\n"
-            "/approve_30k — 추가매수 3만원\n"
-            "/approve_50k — 추가매수 5만원\n"
-            "/approve_100k — 추가매수 10만원\n"
-            "/approve_200k — 추가매수 20만원\n"
-            "/approve_500k — 추가매수 50만원\n"
+            "/approve — 오늘 첫 매수 승인(완전 자동 설정이면 불필요)\n"
             "/reject — 현재 대기중인 추가매수 거부\n\n"
-            "💡 강한 시그널 감지 시 추가매수 옵션을 알려드립니다.\n"
-            "60초 이내 응답 시 즉시, 초과 시 재평가 후 진행됩니다."
+            "💡 추가매수 수동 승인은 현재 비활성화되어 있습니다."
         )
 
     def _cmd_status(self, msg: dict) -> str:
@@ -271,12 +264,12 @@ class TelegramBot:
         st = state_mod.load()
         return (
             "📊 *현황*\n"
-            f"가용 현금: {bal.cash_krw:,.0f}원\n"
-            f"총 평가금: {bal.total_value_krw:,.0f}원\n"
-            f"매수 원금: {bal.invested_krw:,.0f}원\n"
+            f"가용 현금: {bal.cash_krw:,.2f} USD\n"
+            f"총 평가금: {bal.total_value_krw:,.2f} USD\n"
+            f"매수 원금: {bal.invested_krw:,.2f} USD\n"
             f"보유 종목: {len(bal.holdings)}개\n"
             f"오늘 주문: {st.orders_today}건\n"
-            f"오늘 손익: {st.realized_pnl_today:+,.0f}원\n"
+            f"오늘 손익: {st.realized_pnl_today:+,.2f} USD\n"
             f"연속 손실: {st.consecutive_losses}건\n"
             f"승인 상태: {'✅ 승인됨' if st.first_order_approved else '⏳ 미승인'}"
         )
@@ -303,7 +296,7 @@ class TelegramBot:
             block = [
                 f"\n▸ `{h.ticker}` ({h.shares}주)",
                 f"  매수 {avg:,.0f} → 현재 {cur:,.0f} ({pnl_pct:+.2f}%) {pnl_emoji}",
-                f"  평가금: {h.market_value:,.0f}원 ({h.unrealized_pnl:+,.0f}원)",
+                f"  평가금: {h.market_value:,.2f} USD ({h.unrealized_pnl:+,.2f} USD)",
             ]
 
             # PositionManager 메타 (있으면 강화)
@@ -476,7 +469,7 @@ class TelegramBot:
         # 3) 옵션에 없는 금액이면 경고
         if amount_krw not in target.options_krw:
             return (
-                f"⚠️ `{target.ticker}` 요청의 옵션이 아님: {amount_krw:,}원\n"
+                f"⚠️ `{target.ticker}` 요청의 옵션이 아님: {amount_krw:,.2f} USD notional\n"
                 f"  유효 옵션: {target.options_krw}"
             )
 
@@ -485,19 +478,19 @@ class TelegramBot:
             ok, msg_text, req = self.approval_manager.approve(target.request_id, amount_krw)
             if ok:
                 return (
-                    f"✅ `{target.ticker}` 추가매수 승인: {amount_krw:,}원\n"
+                    f"✅ `{target.ticker}` 추가매수 승인: {amount_krw:,.2f} USD notional\n"
                     f"Runner가 다음 tick에 실행합니다."
                 )
             # 재평가 라우팅
             return (
                 f"⏱ `{target.ticker}` {msg_text}\n"
                 f"Runner가 현재 시그널 재평가 후 자동 진행/거부합니다.\n"
-                f"  요청 금액: {amount_krw:,}원"
+                f"  요청 금액: {amount_krw:,.2f} USD notional"
             )
         else:  # reevaluating 상태 — 이미 재평가 대기 중
             return (
                 f"⏱ `{target.ticker}` 이미 재평가 대기 중\n"
-                f"  요청 금액: {amount_krw:,}원\n"
+                f"  요청 금액: {amount_krw:,.2f} USD notional\n"
                 f"  Runner가 다음 tick에 처리합니다."
             )
 

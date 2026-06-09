@@ -72,11 +72,25 @@ class Holding:
 
 @dataclass
 class Balance:
+    # Legacy field names are kept for compatibility. In the US/Alpaca path these
+    # values are USD notional, not KRW. Prefer the *_usd aliases in new code.
     cash_krw: float
     total_value_krw: float
     invested_krw: float
     holdings: List[Holding] = field(default_factory=list)
     fetched_at: str = ""
+
+    @property
+    def cash_usd(self) -> float:
+        return self.cash_krw
+
+    @property
+    def total_value_usd(self) -> float:
+        return self.total_value_krw
+
+    @property
+    def invested_usd(self) -> float:
+        return self.invested_krw
 
     def to_dict(self) -> dict:
         d = asdict(self)

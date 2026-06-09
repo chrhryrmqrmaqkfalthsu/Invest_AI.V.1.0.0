@@ -189,7 +189,7 @@ class Runner:
             return
         try:
             pnl = float(trade_record.get("pnl_usd", trade_record.get("pnl_notional", trade_record.get("pnl_krw", 0.0))) or 0.0)
-            self.safety.record_realized_pnl(pnl, total_value_krw=self._account_total_value_notional())
+            self.safety.record_realized_pnl(pnl, total_value_usd=self._account_total_value_notional())
             logger.info("[RISK-PNL] realized pnl recorded: %+.2f", pnl)
         except Exception as exc:
             logger.error("실현손익 SafetyLayer 기록 실패: %s", exc)
@@ -261,11 +261,11 @@ class Runner:
             warmup = []
             for t in self.symbols:
                 p = self.broker.get_current_price(t)
-                warmup.append(f"  {t}: {p:,.0f}원" if p else f"  {t}: 조회 실패")
+                warmup.append(f"  {t}: {p:,.2f} USD" if p else f"  {t}: 조회 실패")
             msg = (
                 f"🚀 Kingmaker 가동\n모드: {self.broker.mode}\n룰북: {self.rulebook.name()}\n"
-                f"종목: {len(self.symbols)}개\n현금: {balance.cash_krw:,.0f}원\n"
-                f"평가: {balance.total_value_krw:,.0f}원\n보유: {len(balance.holdings)}개\n"
+                f"종목: {len(self.symbols)}개\n현금: {balance.cash_krw:,.2f} USD\n"
+                f"평가: {balance.total_value_krw:,.2f} USD\n보유: {len(balance.holdings)}개\n"
                 f"--- 현재가 ---\n" + "\n".join(warmup)
             )
             self.notifier.send(msg)
@@ -908,13 +908,13 @@ class Runner:
             holdings = balance.holdings
             pnl_total = sum(h.unrealized_pnl for h in holdings)
             holdings_lines = [
-                f"  {h.ticker}: {h.shares:g}주 평가 {h.market_value:,.0f}원 ({h.unrealized_pnl_pct:+.2f}%)"
+                f"  {h.ticker}: {h.shares:g}주 평가 {h.market_value:,.2f} USD ({h.unrealized_pnl_pct:+.2f}%)"
                 for h in holdings
             ] or ["  (없음)"]
             msg = (
                 f"📊 일일 요약 ({datetime.now(ZoneInfo('Asia/Seoul')):%Y-%m-%d})\n--- 잔고 ---\n"
-                f"현금: {balance.cash_krw:,.0f}원\n평가: {balance.total_value_krw:,.0f}원\n"
-                f"평가손익: {pnl_total:+,.0f}원\n--- 보유 ---\n" + "\n".join(holdings_lines)
+                f"현금: {balance.cash_krw:,.2f} USD\n평가: {balance.total_value_krw:,.2f} USD\n"
+                f"평가손익: {pnl_total:+,.2f} USD\n--- 보유 ---\n" + "\n".join(holdings_lines)
                 + "\n--- 활동 ---\n"
                 f"장중 tick: {self.stats.market_ticks}회\n시그널: BUY {self.stats.signals_buy} / "
                 f"SELL {self.stats.signals_sell} / HOLD {self.stats.signals_hold}\n"

@@ -186,7 +186,7 @@ PARAM_RANGES = {
     "trailing_activation_profit_pct": (1.0, 8.0),
     "breakeven_trigger_profit_pct": (4.0, 8.0),
     "breakeven_floor_profit_pct": (1.0, 3.0),
-    "sell_omen_threshold":    (0.50, 0.90),
+    "sell_omen_threshold":    (0.30, 0.70),
     "max_holding_days":       (5, 30),
 
     "base_position_ratio":    (0.3, 1.0),

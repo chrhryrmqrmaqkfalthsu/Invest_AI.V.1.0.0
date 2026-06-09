@@ -23,7 +23,6 @@ log = logging.getLogger("telegram.notifier")
 
 
 class TelegramNotifier:
-
     def __init__(
         self,
         env_path: Optional[str] = None,
@@ -31,7 +30,7 @@ class TelegramNotifier:
         default_rate_limit_seconds: int = 600,
     ):
         env = dotenv_values(env_path or str(ENV_PATH))
-        self.token   = (env.get("TELEGRAM_BOT_TOKEN") or "").strip()
+        self.token = (env.get("TELEGRAM_BOT_TOKEN") or "").strip()
         self.chat_id = (env.get("TELEGRAM_CHAT_ID") or "").strip()
         self.silent_on_error = silent_on_error
         self.default_rate_limit_seconds = max(0, int(default_rate_limit_seconds or 0))
@@ -108,7 +107,7 @@ class TelegramNotifier:
             log.warning(f"edit_message 실패: {e}")
             return False
 
-    # ---------- 표준 이벤트 알림 공통 헬퍼 ----------
+    # ---------- 공통 포맷/값 추출 헬퍼 ----------
     @staticmethod
     def _enum_value(value: Any) -> str:
         return str(getattr(value, "value", value) or "")
@@ -368,6 +367,39 @@ class TelegramNotifier:
             text = f"{self._float(value):.2f}".rstrip("0").rstrip(".")
         return f"{label}: {text}{suffix}"
 
+    def _exit_reason_text(self, reason: Any) -> str:
+        key = str(reason or "").strip().lower()
+        return {
+            "stop_loss": "손절 (손실 제한)",
+            "take_profit": "익절 (목표가 도달)",
+            "trailing": "트레일링 스탑 (고점 대비 하락)",
+            "breakeven": "본전 보호 (수익 반납 방지)",
+            "breakeven_stop": "본전 보호 (수익 반납 방지)",
+            "sell_omen": "위험 신호 조기 매도 (뉴스·시장 악화)",
+            "time_out": "보유기간 만료",
+            "pending_sell": "대기 주문 체결 정산",
+            "manual": "수동 청산",
+        }.get(key, key or "청산")
+
+    def _exit_outcome_line(self, reason: Any, pnl_pct: float) -> str:
+        key = str(reason or "").strip().lower()
+        if key == "stop_loss":
+            return "이번 거래: 계획된 손절 ✓"
+        if key == "sell_omen":
+            return "이번 거래: 위험 회피 ✓"
+        if key in {"breakeven", "breakeven_stop"}:
+            return "이번 거래: 본전 보호 ✓"
+        if key == "time_out":
+            return "이번 거래: 보유기간 만료 정리 ✓"
+        if pnl_pct >= 0:
+            return "이번 거래: 계획대로 ✓"
+        return "이번 거래: 리스크 관리 실행 ✓"
+
+    def _mfe_mae_line(self, label: str, value: Any, suffix: str) -> str:
+        if value in (None, ""):
+            return f"{label}: 기록 없음 ({suffix})"
+        return f"{label}: {self._fmt_signed_pct(value)} ({suffix})"
+
     # ---------- 포맷된 알림 ----------
     def send_order(self, order) -> bool:
         """주문 체결/접수 알림. 기존 호출 호환 유지, USD notional 표기."""
@@ -375,12 +407,12 @@ class TelegramNotifier:
         side_kr = "🟢 BUY" if side_raw.endswith("buy") else "🔴 SELL"
         status_raw = self._enum_value(getattr(order, "status", "")).lower().split(".")[-1]
         status_emoji = {
-            "pending":   "⏳",
-            "filled":    "✅",
-            "partial":   "🟡",
+            "pending": "⏳",
+            "filled": "✅",
+            "partial": "🟡",
             "cancelled": "⚪",
-            "rejected":  "❌",
-            "failed":    "❌",
+            "rejected": "❌",
+            "failed": "❌",
         }.get(status_raw, "❓")
 
         requested_shares = self._float(getattr(order, "shares", 0.0))
@@ -505,6 +537,88 @@ class TelegramNotifier:
             self._trailing_line(rulebook=rulebook, trailing_activation_profit_pct=trailing_activation_profit_pct),
             self._sell_omen_line(rulebook=rulebook, sell_omen_threshold=sell_omen_threshold),
             holding_line,
+        ]
+        return self.send("\n".join(str(x) for x in lines if str(x).strip())[:3900])
+
+    def send_trade_exit(
+        self,
+        trade_record: Any = None,
+        *,
+        order: Any = None,
+        rulebook: Any = None,
+        ticker: str = "",
+        exit_reason: str = "",
+        entry_price: Any = None,
+        exit_price: Any = None,
+        shares: Any = None,
+        pnl_usd: Any = None,
+        pnl_pct: Any = None,
+        holding_days: Any = None,
+        mfe_pct: Any = None,
+        mae_pct: Any = None,
+        highest_price: Any = None,
+        lowest_price: Any = None,
+        expectancy_pct: Any = None,
+        win_rate: Any = None,
+    ) -> bool:
+        """실거래 매도 체결 알림. 청산사유와 거래 결과를 정본 포맷으로 전송한다."""
+        rec = trade_record or {}
+        ticker = ticker or str(self._first_value(rec, ("ticker",), "") or getattr(order, "ticker", "") or "")
+        exit_reason = exit_reason or str(self._first_value(rec, ("exit_reason", "reason"), "") or "")
+        entry = self._float(entry_price if entry_price not in (None, "") else self._first_value(rec, ("entry_price",), 0.0))
+        exit_px = self._float(
+            exit_price if exit_price not in (None, "") else self._first_value(rec, ("exit_price",), None),
+            0.0,
+        )
+        if exit_px <= 0:
+            exit_px = self._float(getattr(order, "filled_avg_price", 0.0)) or self._float(getattr(order, "price", 0.0))
+        shares_value = self._float(shares if shares not in (None, "") else self._first_value(rec, ("shares",), None))
+        if shares_value <= 0:
+            shares_value = self._float(getattr(order, "filled_shares", 0.0)) or self._float(getattr(order, "shares", 0.0))
+        pnl_value = self._metric_value(
+            pnl_usd,
+            rec,
+            ("pnl_usd", "pnl_notional", "pnl_krw", "realized_pnl", "realized_pnl_usd"),
+            None,
+        )
+        if pnl_value in (None, "") and entry > 0 and exit_px > 0 and shares_value > 0:
+            pnl_value = (exit_px - entry) * shares_value
+        pnl_pct_value = self._metric_value(pnl_pct, rec, ("pnl_pct", "return_pct", "realized_pnl_pct"), None)
+        if pnl_pct_value in (None, "") and entry > 0 and exit_px > 0:
+            pnl_pct_value = (exit_px / entry - 1.0) * 100.0
+        pnl_pct_float = self._float(pnl_pct_value)
+        holding = self._metric_value(holding_days, rec, ("holding_days", "holding_trading_days", "hold_days"), None)
+
+        highest = self._float(highest_price if highest_price not in (None, "") else self._first_value(rec, ("highest_price",), None))
+        lowest = self._float(lowest_price if lowest_price not in (None, "") else self._first_value(rec, ("lowest_price",), None))
+        mfe_value = self._metric_value(mfe_pct, rec, ("mfe_pct", "max_profit_pct", "max_favorable_excursion_pct"), None)
+        mae_value = self._metric_value(mae_pct, rec, ("mae_pct", "max_loss_pct", "max_adverse_excursion_pct"), None)
+        if mfe_value in (None, "") and entry > 0 and highest > 0:
+            mfe_value = (highest / entry - 1.0) * 100.0
+        if mae_value in (None, "") and entry > 0 and lowest > 0:
+            mae_value = (lowest / entry - 1.0) * 100.0
+        elif mae_value not in (None, "") and self._float(mae_value) > 0:
+            mae_value = -abs(self._float(mae_value))
+
+        exp_value = self._metric_value(expectancy_pct, rulebook, ("expectancy_pct", "oos_metrics.expectancy_pct"), None)
+        wr_value = self._metric_value(win_rate, rulebook, ("win_rate", "oos_metrics.win_rate"), None)
+        outcome_line = self._exit_outcome_line(exit_reason, pnl_pct_float)
+
+        lines = [
+            f"🔴 매도 체결 — {ticker}",
+            f"청산사유: {self._exit_reason_text(exit_reason)}",
+            f"실현손익: {self._fmt_usd(pnl_value, signed=True)} ({self._fmt_signed_pct(pnl_pct_float)})",
+            f"보유기간: {self._float(holding):g}일" if holding not in (None, "") else "보유기간: 기록 없음",
+            "",
+            "📊 거래 요약",
+            f"진입가: {self._fmt_usd(entry)} → 청산가: {self._fmt_usd(exit_px)}",
+            self._mfe_mae_line("최고수익", mfe_value, "MFE"),
+            self._mfe_mae_line("최저수익", mae_value, "MAE"),
+            "",
+            "📋 이 룰북 누적",
+            self._stat_line("승률", wr_value, pct=True, suffix=" (OOS 2024~)"),
+            self._stat_line("기대수익", exp_value, pct=True, signed=True),
+            outcome_line,
         ]
         return self.send("\n".join(str(x) for x in lines if str(x).strip())[:3900])
 
@@ -732,8 +846,11 @@ if __name__ == "__main__":
 
     print("\n[4] 일일 요약...")
     ok = n.send_daily_summary({
-        "cash_usd": 100.0, "total_value_usd": 125.61,
-        "realized_pnl_today_usd": -3.50, "orders_today": 2, "holdings_count": 1,
+        "cash_usd": 100.0,
+        "total_value_usd": 125.61,
+        "realized_pnl_today_usd": -3.50,
+        "orders_today": 2,
+        "holdings_count": 1,
     })
     print(f"  결과: {'✅' if ok else '❌'}")
 

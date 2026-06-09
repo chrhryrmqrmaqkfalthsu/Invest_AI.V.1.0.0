@@ -1,7 +1,7 @@
 # LR8D Next RUN Design — hard stop invariant + sell_omen threshold 재검증
 
-작성시각: 2026-06-10 KST  
-상태: 설계서 초안  
+작성시각: 2026-06-10 KST
+상태: 설계서 초안, threshold 모순 정정 반영
 현재 live 모드: `alpaca_paper`, `EXIT_LIVE_POLICY=1`, 관찰 모드 유지
 
 ## 1. 목적
@@ -11,14 +11,14 @@
 핵심 목표는 세 가지다.
 
 1. `exit_strategy=trailing`에도 shared core 수준의 hard stop 백스톱을 정식 포함한다.
-2. `sell_omen_threshold` 탐색 범위는 현재 점수 분포에 맞춘 `0.30~0.70`을 유지한다.
-3. 기존 LR8D survivor 라벨을 새 invariant 기준으로 재검증하고, 기존 성능지표와의 차이를 명시한다.
+2. 현재 코드의 `sell_omen_threshold` 탐색 범위 `0.30~0.70`이 실제 새 RUN 산출물에 반영되는지 확인한다.
+3. 기존 LR8D survivor 라벨을 새 invariant와 새 threshold 범위 기준으로 재검증하고, 기존 성능지표와의 차이를 명시한다.
 
-## 2. 현재 확인된 코드 상태
+## 2. 현재 확인된 코드/산출물 상태
 
-### 2.1 sell_omen threshold 유전자 범위
+### 2.1 sell_omen threshold 유전자 범위 — 코드와 현재 live 산출물이 다름
 
-현재 범위는 이미 수정 완료되어 있다.
+현재 코드 범위는 이미 수정 완료되어 있다.
 
 ```python
 # engine/strategies/rulebook.py
@@ -33,7 +33,54 @@ th_lo, th_hi = PARAM_RANGES["sell_omen_threshold"]
 rb.sell_omen_threshold = _clamp_float(getattr(rb, "sell_omen_threshold", th_hi), th_lo, th_hi)
 ```
 
-따라서 다음 RUN에서는 threshold 범위를 추가로 바꾸지 않고, 이 범위가 실제 survivor에 반영되는지 검증한다.
+하지만 현재 live에 올라간 `lr8d_stage1_20260609` 룰북은 이 수정 전 산출물이다.
+
+확인된 타임라인:
+
+```text
+LR8D artifact 생성: 2026-06-09 12:48:31Z
+live parameters export: 2026-06-09 13:42:04Z
+threshold 범위 수정 커밋/파일시각: 2026-06-09 15:24:52Z
+```
+
+즉 현재 live 룰북의 0.80대 threshold는 표시/스케일 변환값이 아니라, 수정 전 RUN 산출물에 실제로 저장된 값이다.
+
+현재 live 5종목 중 sell_omen 관련 값:
+
+| Symbol | sell_omen_enabled | sell_omen_threshold | 비고 |
+|---|---:|---:|---|
+| MPC | true | 0.809468 | 현재 score 0.2793, hit=false |
+| NBIX | true | 0.804269 | 현재 score 0.2481, hit=false |
+| CAKE | false | 1.0 | sell_omen OFF |
+| CW | false | 1.0 | sell_omen OFF |
+| LASR | false | 1.0 | sell_omen OFF |
+
+현재 `data/_system/research/lr8d_abcd_20260608/lr8d_abcd_topn_rulebooks.jsonl` 분포:
+
+```text
+rows=10573
+sell_omen ON rulebooks=5468
+threshold min=0.5000 median=0.9000 max=0.9000
+threshold > 0.70: 5155개
+all threshold values: n=10573 min=0.5000 median=0.9000 max=1.0000
+```
+
+현재 `data/symbols/*/parameters.json` 분포:
+
+```text
+symbols files=93
+sell_omen ON=9
+threshold min=0.5000 median=0.8114 max=0.9000
+threshold > 0.70: 8개
+```
+
+결론:
+
+```text
+threshold 재설계 버그가 아니라, 현재 live artifact가 threshold 범위 수정 전 old range 산출물이다.
+다음 RUN을 현재 코드로 다시 돌리면 새 산출물은 0.30~0.70 범위가 반영될 가능성이 높다.
+그래도 RUN 후 산출물 분포 검증은 필수다.
+```
 
 ### 2.2 shared core trailing 분기
 
@@ -147,8 +194,9 @@ lr8d_hardstop_threshold_recheck_YYYYMMDD
 필수 변경:
 
 1. shared core `engine/core/exit_policy.py`의 `trailing` 분기에 `stop_hit` 우선조건 추가.
-2. `sell_omen_threshold` 탐색 범위 `0.30~0.70` 유지 확인.
-3. live-only hard stop guard는 RUN 완료 전까지 유지.
+2. `sell_omen_threshold` 탐색 범위는 현재 코드의 `0.30~0.70`을 사용한다.
+3. RUN 후 산출물에서 `sell_omen_enabled=True`인 룰북의 threshold가 0.70을 넘지 않는지 검증한다.
+4. live-only hard stop guard는 RUN 완료 전까지 유지한다.
 
 선택 변경:
 
@@ -162,6 +210,7 @@ lr8d_hardstop_threshold_recheck_YYYYMMDD
 1. strict_k3 survivor가 충분히 남아야 한다.
 2. promoted live 후보군 16개 중 대체 가능한 종목 수가 유지되어야 한다.
 3. 기존 LR8D 결과 대비 expectancy/DD 악화가 허용범위 안이어야 한다.
+4. 새 산출물의 sell_omen threshold 범위가 `0.30~0.70` 안에 있어야 한다.
 
 권장 기준:
 
@@ -170,6 +219,7 @@ expectancy_pct: 기존 대비 큰 폭 악화 없음
 worst DD: 개선 또는 동등 수준
 trade count: 종목별 최소 표본 유지
 sell_omen coverage: target/stage1/survivor/strict_k3 모두 PASS 유지
+sell_omen threshold: enabled 룰북 min/max가 0.30~0.70 안에 위치
 ```
 
 정확한 수치 기준은 기존 `lr8d_postrun_analysis.py` 출력 형식에 맞춰 비교한다.
@@ -212,6 +262,26 @@ strict_k3 coverage 100%
 3. `stop_loss` 증가로 expectancy가 개선됐는지 악화됐는지.
 4. `sell_omen_threshold`가 실제로 0.30~0.70 범위에서 선택되는지.
 5. live 후보 16개가 새 기준에서도 생존하는지.
+6. MPC/NBIX처럼 기존 live에서 0.80대였던 threshold가 새 RUN에서 0.70 이하로 내려오는지.
+
+검증용 스니펫:
+
+```bash
+venv/bin/python - <<'PY'
+import json
+path='data/_system/research/<NEW_RUN>/lr8d_abcd_topn_rulebooks.jsonl'
+vals=[]
+with open(path) as f:
+    for line in f:
+        rb=json.loads(line).get('rulebook',{})
+        if rb.get('sell_omen_enabled') and rb.get('sell_omen_threshold') is not None:
+            vals.append(float(rb['sell_omen_threshold']))
+vals.sort()
+print('sell_omen ON:', len(vals))
+print('min/median/max:', vals[0], vals[len(vals)//2], vals[-1])
+print('over0.70:', sum(v > 0.70 for v in vals))
+PY
+```
 
 ## 7. 라이브 운영 방침
 
@@ -231,6 +301,7 @@ order_notional=30 USD
 
 1. shared core hard stop invariant 적용 branch 작성.
 2. hard stop invariant 기준 LR8D 재검증 RUN.
-3. `sell_omen_scores_lr8d85.csv` freshness 문제 검토.
-4. ticker_sentiment 최신화로 KT/MPLX stale 해소.
-5. pending fill metadata의 `signal_score_at_entry` / `signal_threshold_at_entry` 0.0 기록 문제 개선.
+3. 새 RUN 산출물의 sell_omen threshold 분포 검증.
+4. `sell_omen_scores_lr8d85.csv` freshness 문제 검토.
+5. ticker_sentiment 최신화로 KT/MPLX stale 해소.
+6. pending fill metadata의 `signal_score_at_entry` / `signal_threshold_at_entry` 0.0 기록 문제 개선.

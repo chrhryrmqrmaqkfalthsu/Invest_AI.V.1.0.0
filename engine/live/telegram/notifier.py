@@ -8,6 +8,7 @@ TelegramNotifier - 단방향 알림 전송 (봇 → 사용자)
 from __future__ import annotations
 
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -150,6 +151,14 @@ class TelegramNotifier:
             "ERROR": "🚨 CRITICAL",
         }.get(lvl, f"ℹ️ {lvl}")
 
+    @staticmethod
+    def _pct_value(value: Any) -> float:
+        """Accept either 0.8 or 80.0 and return percent scale."""
+        v = TelegramNotifier._float(value)
+        if 0 < v <= 1.0:
+            return v * 100.0
+        return v
+
     def _rate_limited(self, event_key: str, rate_limit_seconds: Optional[int], bypass: bool = False) -> bool:
         if bypass or not event_key:
             return False
@@ -182,6 +191,104 @@ class TelegramNotifier:
         if body:
             text += f"\n{body}"
         return self.send(text[:3900], parse_mode=parse_mode)
+
+    # ---------- 진입 사유 사람말 변환 ----------
+    @staticmethod
+    def _clean_reason_token(reason: Any) -> str:
+        text = str(reason or "").strip()
+        text = re.sub(r"\([^)]*\)", "", text).strip()
+        return text
+
+    def _extract_signal_reasons(self, signal_result: Any = None, raw_reason: str = "") -> list[str]:
+        reasons = list(getattr(signal_result, "reasons", []) or []) if signal_result is not None else []
+        if reasons:
+            return [str(r) for r in reasons if str(r).strip()]
+        text = str(raw_reason or getattr(signal_result, "reason", "") or "")
+        matched = re.search(r"reasons=\[([^\]]*)\]", text)
+        if matched:
+            return [x.strip() for x in matched.group(1).split(",") if x.strip()]
+        return [text] if text.strip() else []
+
+    def _humanize_entry_reasons(self, signal_result: Any = None, raw_reason: str = "", max_items: int = 3) -> str:
+        raw_reasons = self._extract_signal_reasons(signal_result=signal_result, raw_reason=raw_reason)
+        mapped: list[str] = []
+        for raw in raw_reasons:
+            token = self._clean_reason_token(raw)
+            human = ""
+            if "정배열" in token:
+                human = "상승 추세"
+            elif "MACD" in token or "크로스" in token:
+                human = "상승 전환 신호"
+            elif "RSI" in token:
+                human = "아직 과열 이전"
+            elif "BB" in token or "볼린저" in token:
+                human = "눌림목 매수 구간"
+            elif "거래량" in token:
+                human = "거래량 증가"
+            elif "전체톤" in token:
+                human = "개별 뉴스 톤 보조"
+            elif "토픽뉴스" in token:
+                human = "토픽 뉴스 보조"
+            elif "이벤트반응" in token:
+                human = "이벤트 반응 보조"
+            elif "폭락매수" in token:
+                human = "급락 후 반등 후보"
+            elif "시장보정" in token:
+                human = "시장 환경 보정"
+            if human and human not in mapped:
+                mapped.append(human)
+        if not mapped:
+            return "진입 조건 충족"
+        visible = mapped[:max_items]
+        return " + ".join(visible)
+
+    def _recent_win_rate_line(self, rulebook: Any = None, recent_win_rate: Any = None) -> str:
+        win_rate = recent_win_rate
+        if win_rate in (None, "") and rulebook is not None:
+            for attr in ("recent5_win_rate", "recent_win_rate", "last5_win_rate", "win_rate"):
+                if hasattr(rulebook, attr):
+                    win_rate = getattr(rulebook, attr)
+                    break
+        pct = self._pct_value(win_rate)
+        if pct <= 0:
+            return ""
+        wins = None
+        losses = None
+        if rulebook is not None:
+            for attr in ("recent5_wins", "last5_wins", "recent_wins"):
+                if hasattr(rulebook, attr):
+                    wins = int(self._float(getattr(rulebook, attr)))
+                    break
+            for attr in ("recent5_losses", "last5_losses", "recent_losses"):
+                if hasattr(rulebook, attr):
+                    losses = int(self._float(getattr(rulebook, attr)))
+                    break
+        if wins is not None and losses is not None:
+            return f"최근 5거래: {wins}승 {losses}패 (승률 {pct:.0f}%)"
+        return f"최근 5거래: 승률 {pct:.0f}%"
+
+    def _trailing_line(self, rulebook: Any = None, trailing_activation_profit_pct: Any = None) -> str:
+        activation = trailing_activation_profit_pct
+        if activation in (None, "") and rulebook is not None:
+            activation = getattr(rulebook, "trailing_activation_profit_pct", None)
+        pct = self._float(activation)
+        if pct <= 0:
+            return ""
+        return f"트레일링: +{pct:g}% 도달 시 활성"
+
+    def _sell_omen_line(self, rulebook: Any = None, sell_omen_threshold: Any = None) -> str:
+        enabled = True
+        threshold = sell_omen_threshold
+        if rulebook is not None:
+            enabled = bool(getattr(rulebook, "sell_omen_enabled", True))
+            if threshold in (None, ""):
+                threshold = getattr(rulebook, "sell_omen_threshold", None)
+        if not enabled:
+            return "sell_omen: 비활성"
+        th = self._float(threshold)
+        if th <= 0:
+            return ""
+        return f"sell_omen: 위험점수 {th:g}↑ 시 청산"
 
     # ---------- 포맷된 알림 ----------
     def send_order(self, order) -> bool:
@@ -229,6 +336,53 @@ class TelegramNotifier:
             level=level,
             event_key=f"order:{getattr(order, 'ticker', '')}:{side_raw}:{status_raw}",
             rate_limit_seconds=0 if status_raw in {"filled", "rejected", "failed"} else 300,
+        )
+
+    def send_trade_entry(
+        self,
+        order=None,
+        *,
+        ticker: str = "",
+        shares: float = 0.0,
+        price: float = 0.0,
+        notional: float = 0.0,
+        signal_result: Any = None,
+        raw_reason: str = "",
+        rulebook: Any = None,
+        recent_win_rate: Any = None,
+        trailing_activation_profit_pct: Any = None,
+        sell_omen_threshold: Any = None,
+    ) -> bool:
+        """실거래 진입 체결 알림. 진입사유만 사람말로 변환하고 청산 조건은 원문 의미를 보존한다."""
+        ticker = ticker or str(getattr(order, "ticker", "") or getattr(signal_result, "ticker", "") or "")
+        shares = self._float(shares) or self._float(getattr(order, "filled_shares", 0.0)) or self._float(getattr(order, "shares", 0.0))
+        price = self._float(price) or self._float(getattr(order, "filled_avg_price", 0.0)) or self._float(getattr(order, "price", 0.0)) or self._float(getattr(signal_result, "price", 0.0))
+        notional = self._float(notional) or (shares * price if shares and price else 0.0)
+        reason_text = self._humanize_entry_reasons(signal_result=signal_result, raw_reason=raw_reason)
+        recent_line = self._recent_win_rate_line(rulebook=rulebook, recent_win_rate=recent_win_rate)
+        trailing_line = self._trailing_line(rulebook=rulebook, trailing_activation_profit_pct=trailing_activation_profit_pct)
+        sell_omen_line = self._sell_omen_line(rulebook=rulebook, sell_omen_threshold=sell_omen_threshold)
+
+        lines = [
+            f"종목: {ticker}",
+            f"수량: {self._fmt_shares(shares)}",
+            f"진입가: {self._fmt_usd(price)}",
+            f"진입금액: {self._fmt_usd(notional)}",
+            f"진입사유: {reason_text}",
+            recent_line,
+            trailing_line,
+            sell_omen_line,
+        ]
+        score = self._float(getattr(signal_result, "score", 0.0))
+        threshold = self._float(getattr(signal_result, "threshold", 0.0))
+        if score or threshold:
+            lines.append(f"신호점수: {score:.2f} / 임계 {threshold:.2f}")
+        return self._send_event(
+            title="🟢 진입 체결",
+            lines=lines,
+            level="INFO",
+            event_key=f"trade_entry:{ticker}",
+            rate_limit_seconds=0,
         )
 
     def send_error(self, message: str) -> bool:

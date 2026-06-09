@@ -321,8 +321,16 @@ def _snapshot_values(price: PriceSnapshot) -> Tuple[float, float, float, bool]:
     return high, low, ref_value, has_ohlc
 
 
+def _config_mode(cfg: ExitExecutionConfig) -> str:
+    return str(getattr(cfg, "mode", "") or "").lower()
+
+
 def _uses_conservative_gap_fill(cfg: ExitExecutionConfig) -> bool:
-    return str(getattr(cfg, "mode", "") or "").lower() in {"conservative_gap_fill", "conservative_core"}
+    return _config_mode(cfg) in {"conservative_gap_fill", "conservative_core"}
+
+
+def _uses_conservative_core(cfg: ExitExecutionConfig) -> bool:
+    return _config_mode(cfg) == "conservative_core"
 
 
 def _conservative_gap_fill_basis(
@@ -439,21 +447,26 @@ def evaluate_exit(
     holding_days = ctx.holding_trading_days if ctx.holding_trading_days is not None else position.holding_trading_days
     holding_days = _to_int(holding_days, position.holding_trading_days)
 
-    highest = max(position.highest_price, high, ref_price)
+    conservative_core = _uses_conservative_core(cfg)
+    propagation_peak = max(position.highest_price, high, ref_price)
     updated_trailing = position.trailing_stop
-    if highest > position.highest_price:
-        updated_trailing = max(position.trailing_stop, highest - position.trailing_distance)
+    if propagation_peak > position.highest_price:
+        updated_trailing = max(position.trailing_stop, propagation_peak - position.trailing_distance)
+
+    activation_peak = position.highest_price if conservative_core else propagation_peak
+    decision_trailing = position.trailing_stop if conservative_core else updated_trailing
 
     updated_position = replace(
         position,
-        highest_price=highest,
+        highest_price=propagation_peak,
         trailing_stop=updated_trailing,
         holding_trading_days=holding_days,
     )
 
     strategy = str(position.exit_strategy or _get_attr(rulebook, "exit_strategy", "hybrid") or "hybrid").lower()
     current_profit_pct = (ref_price - position.avg_cost) / position.avg_cost * 100.0 if position.avg_cost > 0 else 0.0
-    highest_profit_pct = (highest - position.avg_cost) / position.avg_cost * 100.0 if position.avg_cost > 0 else 0.0
+    highest_profit_pct = (activation_peak - position.avg_cost) / position.avg_cost * 100.0 if position.avg_cost > 0 else 0.0
+    propagation_profit_pct = (propagation_peak - position.avg_cost) / position.avg_cost * 100.0 if position.avg_cost > 0 else 0.0
 
     activation_profit_pct = _to_float(cfg.trailing_activation_profit_pct, 0.0)
     trailing_active = holding_days > cfg.trailing_activation_bars and highest_profit_pct >= activation_profit_pct
@@ -468,6 +481,8 @@ def evaluate_exit(
 
     diagnostics: Dict[str, Any] = {
         "strategy": strategy,
+        "mode": _config_mode(cfg),
+        "conservative_core": conservative_core,
         "high": high,
         "low": low,
         "reference_price": ref_price,
@@ -475,6 +490,9 @@ def evaluate_exit(
         "holding_trading_days": holding_days,
         "current_profit_pct": current_profit_pct,
         "highest_profit_pct": highest_profit_pct,
+        "propagation_profit_pct": propagation_profit_pct,
+        "activation_peak": activation_peak,
+        "propagation_peak": propagation_peak,
         "trailing_active": trailing_active,
         "trailing_activation_bars": cfg.trailing_activation_bars,
         "trailing_activation_profit_pct": activation_profit_pct,
@@ -489,12 +507,13 @@ def evaluate_exit(
         "sell_omen_hit": sell_omen_hit,
         "stop_price": position.stop_price,
         "target_price": position.target_price,
-        "trailing_stop": updated_trailing,
+        "trailing_stop": decision_trailing,
+        "updated_trailing_stop": updated_trailing,
     }
 
     stop_hit = low <= position.stop_price
     target_hit = high >= position.target_price
-    trailing_hit = trailing_active and low <= updated_trailing
+    trailing_hit = trailing_active and low <= decision_trailing
     timeout_hit = holding_days >= position.max_holding_days
     diagnostics.update(
         {
@@ -527,7 +546,7 @@ def evaluate_exit(
         elif sell_omen_hit:
             reason, trigger_price = "sell_omen", ref_price
         elif trailing_hit:
-            reason, trigger_price = "trailing", updated_trailing
+            reason, trigger_price = "trailing", decision_trailing
         elif timeout_hit:
             reason, trigger_price = "time_out", ref_price
     elif strategy == "hybrid":
@@ -538,7 +557,7 @@ def evaluate_exit(
         elif sell_omen_hit:
             reason, trigger_price = "sell_omen", ref_price
         elif trailing_hit:
-            reason, trigger_price = "trailing", updated_trailing
+            reason, trigger_price = "trailing", decision_trailing
         elif target_hit:
             reason, trigger_price = "take_profit", position.target_price
         elif timeout_hit:

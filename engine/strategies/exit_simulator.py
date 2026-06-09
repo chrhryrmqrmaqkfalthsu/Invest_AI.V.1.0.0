@@ -284,6 +284,7 @@ def simulate_exit(
     live_hard_stop_guard: bool = False,
     entry_price_override: Optional[float] = None,
     entry_atr_override: Optional[float] = None,
+    exit_execution_mode: str = "base",
 ) -> Optional[Trade]:
     if entry_idx + 1 >= len(df):
         return None
@@ -306,6 +307,7 @@ def simulate_exit(
     breakeven_enabled = _rulebook_breakeven_enabled(rb)
     sell_omen_enabled = _rulebook_sell_omen_enabled(rb)
     exec_cfg = ExitExecutionConfig(
+        mode=str(exit_execution_mode or "base"),
         trailing_activation_bars=2,
         trailing_activation_profit_pct=float(getattr(rb, "trailing_activation_profit_pct", 0.0) or 0.0),
         breakeven_enabled=breakeven_enabled,

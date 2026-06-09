@@ -11,15 +11,17 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 
+from engine.core.feature_lag import DEFAULT_LAG_DAYS, DEFAULT_MAX_AGE_DAYS, lookup_lagged_daily_dict
 from engine.core.indicators import calc_indicators
-from engine.live.per_ticker_news import get_news_score
 from engine.market.context import MarketContext, get_market_context
+from engine.market.ticker_sentiment import load_csv as load_ticker_sentiment
 from engine.strategies.demo_rulebook import RuleBook, Signal, SignalResult
 from engine.strategies.evaluator import evaluate_signal
+from engine.strategies.news_features import precompute_topic_features
 from engine.strategies.rulebook import Rulebook as LearnedRule
 
 log = logging.getLogger("learned_rulebook")
@@ -42,6 +44,8 @@ class LearnedRuleBook(RuleBook):
         self._rulebook_cache: Dict[str, LearnedRule] = {}
         self._adapter_cache: Dict[str, object] = {}
         self._ohlcv_cache: Dict[str, tuple[pd.DataFrame, float]] = {}
+        self._sentiment_cache: Dict[str, tuple[dict, float]] = {}
+        self._topic_feature_cache: Dict[tuple[str, int, int, str], tuple[dict, float]] = {}
         self._last_atr: dict[str, float] = {}
         self._rulebook_by_ticker: dict[str, LearnedRule] = {}
         self._last_market_context: dict[str, dict] = {}
@@ -122,6 +126,110 @@ class LearnedRuleBook(RuleBook):
             log.error(f"{ticker} OHLCV 조달 실패: {e}")
             return None
 
+    def _load_ticker_sentiment(self, ticker: str) -> dict:
+        """Load ticker_sentiment daily CSV with the same source used by backtests."""
+        now = time.time()
+        cached = self._sentiment_cache.get(ticker)
+        if cached is not None:
+            data, ts = cached
+            if now - ts < self.cache_ttl:
+                return data
+        try:
+            data = load_ticker_sentiment(ticker) or {}
+            if not isinstance(data, dict):
+                data = {}
+        except Exception as exc:
+            log.warning(f"{ticker} ticker_sentiment 로드 실패: {exc}")
+            data = {}
+        self._sentiment_cache[ticker] = (data, now)
+        return data
+
+    def _news_zscore_window(self, rb: LearnedRule) -> int:
+        try:
+            window = int(getattr(rb, "news_zscore_window", 60) or 60)
+        except Exception:
+            window = 60
+        return max(1, min(window, 252))
+
+    def _precompute_topic_feature_map(self, ticker: str, sentiment: dict, window: int) -> dict:
+        """Precompute topic features from ticker_sentiment and cache briefly."""
+        if not isinstance(sentiment, dict) or not sentiment:
+            return {}
+        latest_key = ""
+        try:
+            latest_key = max(str(k)[:10] for k in sentiment.keys())
+        except Exception:
+            latest_key = ""
+        cache_key = (ticker, int(window), len(sentiment), latest_key)
+        now = time.time()
+        cached = self._topic_feature_cache.get(cache_key)
+        if cached is not None:
+            features, ts = cached
+            if now - ts < self.cache_ttl:
+                return features
+        try:
+            features = precompute_topic_features(sentiment, int(window))
+            if not isinstance(features, dict):
+                features = {}
+        except Exception as exc:
+            log.warning(f"{ticker} topic_features 계산 실패: {exc}")
+            features = {}
+        self._topic_feature_cache[cache_key] = (features, now)
+        return features
+
+    def _signal_date(self, df: pd.DataFrame) -> Any:
+        """Return the date key used for lagged live feature lookup.
+
+        Backtests use the OHLCV row date. Live mirrors that policy by preferring
+        the latest row's date column when present, otherwise the index.
+        """
+        try:
+            if "Date" in df.columns:
+                return df["Date"].iloc[-1]
+            if "date" in df.columns:
+                return df["date"].iloc[-1]
+            return df.index[-1]
+        except Exception:
+            return None
+
+    def _lookup_lagged_news_context(self, ticker: str, rb: LearnedRule, signal_date: Any) -> tuple[float, dict, str]:
+        """Return backtest-aligned global sentiment and topic features for live.
+
+        Policy is intentionally identical to engine.learning.backtest:
+        D-day signal may use newest ticker_sentiment row at or before D-1, and
+        stale rows older than DEFAULT_MAX_AGE_DAYS are ignored.
+        """
+        sentiment = self._load_ticker_sentiment(ticker)
+        if not sentiment:
+            return 0.0, {}, "ticker_sentiment_missing"
+
+        row = lookup_lagged_daily_dict(
+            sentiment,
+            signal_date,
+            lag_days=DEFAULT_LAG_DAYS,
+            max_age_days=DEFAULT_MAX_AGE_DAYS,
+        )
+        try:
+            news_sentiment = float(row.get("sentiment_avg", 0.0)) if row else 0.0
+        except Exception:
+            news_sentiment = 0.0
+
+        window = self._news_zscore_window(rb)
+        topic_map = self._precompute_topic_feature_map(ticker, sentiment, window)
+        topic_features = lookup_lagged_daily_dict(
+            topic_map,
+            signal_date,
+            lag_days=DEFAULT_LAG_DAYS,
+            max_age_days=DEFAULT_MAX_AGE_DAYS,
+        ) if topic_map else {}
+        if not isinstance(topic_features, dict):
+            topic_features = {}
+        note = (
+            f"lag={DEFAULT_LAG_DAYS} max_age={DEFAULT_MAX_AGE_DAYS} "
+            f"sent={'yes' if row else 'no'} topic_n={len(topic_features)} window={window}"
+        )
+        return news_sentiment, dict(topic_features), note
+
     def evaluate(self, ticker: str, price: float, df=None) -> SignalResult:
         rb = self._load_rulebook(ticker)
         if rb is None:
@@ -163,18 +271,12 @@ class LearnedRuleBook(RuleBook):
             "timestamp": context_timestamp,
         }
 
-        news_normalized = 0.0
-        try:
-            meta = getattr(self, "meta", None)
-            news_data = get_news_score(ticker, meta=meta)
-            news_normalized = news_data.get("normalized_score", 0.0)
-            log.info(
-                f"{ticker} 뉴스 sentiment: raw={news_data.get('sentiment_score', 0):+.2f}, "
-                f"normalized={news_normalized:+.3f} "
-                f"(호재 {news_data.get('bullish_count', 0)}/악재 {news_data.get('bearish_count', 0)})"
-            )
-        except Exception as e:
-            log.warning(f"{ticker} 뉴스 점수 조회 실패 (중립 0.0 사용): {e}")
+        signal_date = self._signal_date(df)
+        news_normalized, topic_features, news_note = self._lookup_lagged_news_context(ticker, rb, signal_date)
+        log.info(
+            f"{ticker} 뉴스 context(backtest-aligned): sentiment_avg={news_normalized:+.3f}, "
+            f"topic_features={len(topic_features)} ({news_note})"
+        )
 
         try:
             active = getattr(ctx, "active_events", {}) or {}
@@ -202,6 +304,7 @@ class LearnedRuleBook(RuleBook):
                 vix_level=vix_level,
                 news_sentiment=news_normalized,
                 event_flags=event_flags,
+                topic_features=topic_features,
             )
         except Exception as e:
             log.error(f"{ticker} evaluate_signal 실패: {e}")
@@ -211,9 +314,10 @@ class LearnedRuleBook(RuleBook):
         if abs(news_normalized) >= 0.1:
             kind = "호재" if news_normalized > 0 else "악재"
             news_tag = f" 뉴스{kind}({news_normalized:+.2f})"
+        topic_tag = f" topic_n={len(topic_features)}" if topic_features else ""
         reason_str = (
             f"score={res.score:.2f}/threshold={res.threshold:.2f} "
-            f"raw={res.raw_score:.2f} mkt_adj×{res.market_adjustment:.2f}{news_tag} "
+            f"raw={res.raw_score:.2f} mkt_adj×{res.market_adjustment:.2f}{news_tag}{topic_tag} "
             f"reasons=[{', '.join(res.reasons[:4])}]"
         )
         signal_kwargs = {

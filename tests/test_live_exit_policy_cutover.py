@@ -208,7 +208,7 @@ def test_learned_rulebook_caches_exact_signal_context() -> None:
     ctx = SimpleNamespace(score=73.0, vix_level=27.0, sector_strength={"tech": 64.0}, timestamp="ctx-ts", active_events={})
     result = SimpleNamespace(should_buy=True, score=3.0, raw_score=3.0, threshold=2.0, market_adjustment=1.0, reasons=[])
     with patch("engine.strategies.learned_rulebook.get_market_context", return_value=ctx), \
-         patch("engine.strategies.learned_rulebook.get_news_score", return_value={"normalized_score": 0.0}), \
+         patch.object(learned, "_lookup_lagged_news_context", return_value=(0.0, {}, "test")), \
          patch("engine.strategies.learned_rulebook.evaluate_signal", return_value=result):
         learned.evaluate("TEST", 100.0, df=df)
     cached = learned.get_last_market_context("TEST")

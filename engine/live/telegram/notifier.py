@@ -3,12 +3,14 @@ TelegramNotifier - 단방향 알림 전송 (봇 → 사용자)
 - 외부 라이브러리 없이 requests만 사용
 - TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 필수
 - 토큰 없으면 silent fail (운영 중 알림 실패로 봇이 죽지 않게)
+- 실거래 알림은 USD notional 기준으로 표준 이벤트/레벨/rate-limit를 적용
 """
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from dotenv import dotenv_values
 
 import requests
@@ -21,11 +23,18 @@ log = logging.getLogger("telegram.notifier")
 
 class TelegramNotifier:
 
-    def __init__(self, env_path: Optional[str] = None, silent_on_error: bool = True):
+    def __init__(
+        self,
+        env_path: Optional[str] = None,
+        silent_on_error: bool = True,
+        default_rate_limit_seconds: int = 600,
+    ):
         env = dotenv_values(env_path or str(ENV_PATH))
         self.token   = (env.get("TELEGRAM_BOT_TOKEN") or "").strip()
         self.chat_id = (env.get("TELEGRAM_CHAT_ID") or "").strip()
         self.silent_on_error = silent_on_error
+        self.default_rate_limit_seconds = max(0, int(default_rate_limit_seconds or 0))
+        self._last_event_sent_at: dict[str, float] = {}
 
         self.enabled = bool(self.token and self.chat_id)
         if not self.enabled:
@@ -91,7 +100,6 @@ class TelegramNotifier:
         try:
             res = requests.post(url, json=payload, timeout=5)
             if res.status_code != 200:
-                # 본문이 동일하면 텔레그램이 400 반환 — 무시
                 log.debug(f"edit_message {res.status_code}: {res.text[:100]}")
                 return False
             return True
@@ -99,10 +107,88 @@ class TelegramNotifier:
             log.warning(f"edit_message 실패: {e}")
             return False
 
+    # ---------- 표준 이벤트 알림 공통 헬퍼 ----------
+    @staticmethod
+    def _enum_value(value: Any) -> str:
+        return str(getattr(value, "value", value) or "")
+
+    @staticmethod
+    def _float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value or 0.0)
+        except Exception:
+            return default
+
+    @staticmethod
+    def _fmt_usd(value: Any, signed: bool = False) -> str:
+        amount = TelegramNotifier._float(value)
+        if signed and amount > 0:
+            return f"+${amount:,.2f}"
+        if amount < 0:
+            return f"-${abs(amount):,.2f}"
+        return f"${amount:,.2f}"
+
+    @staticmethod
+    def _fmt_pct(value: Any) -> str:
+        return f"{TelegramNotifier._float(value):.1f}%"
+
+    @staticmethod
+    def _fmt_shares(value: Any) -> str:
+        shares = TelegramNotifier._float(value)
+        if abs(shares - round(shares)) < 1e-6:
+            return f"{int(round(shares))} shares"
+        return f"{shares:.6f}".rstrip("0").rstrip(".") + " shares"
+
+    @staticmethod
+    def _level_prefix(level: str) -> str:
+        lvl = str(level or "INFO").upper()
+        return {
+            "INFO": "ℹ️ INFO",
+            "WARN": "⚠️ WARN",
+            "WARNING": "⚠️ WARN",
+            "CRITICAL": "🚨 CRITICAL",
+            "ERROR": "🚨 CRITICAL",
+        }.get(lvl, f"ℹ️ {lvl}")
+
+    def _rate_limited(self, event_key: str, rate_limit_seconds: Optional[int], bypass: bool = False) -> bool:
+        if bypass or not event_key:
+            return False
+        limit = self.default_rate_limit_seconds if rate_limit_seconds is None else int(rate_limit_seconds or 0)
+        if limit <= 0:
+            return False
+        now = time.time()
+        last = self._last_event_sent_at.get(event_key, 0.0)
+        if now - last < limit:
+            return True
+        self._last_event_sent_at[event_key] = now
+        return False
+
+    def _send_event(
+        self,
+        *,
+        title: str,
+        lines: list[str],
+        level: str = "INFO",
+        event_key: str = "",
+        rate_limit_seconds: Optional[int] = None,
+        parse_mode: str = "",
+    ) -> bool:
+        lvl = str(level or "INFO").upper()
+        if self._rate_limited(event_key, rate_limit_seconds, bypass=lvl in {"CRITICAL", "ERROR"}):
+            log.info("Telegram event rate-limited: %s", event_key)
+            return False
+        body = "\n".join(str(x) for x in lines if str(x).strip())
+        text = f"{self._level_prefix(lvl)} | {title}"
+        if body:
+            text += f"\n{body}"
+        return self.send(text[:3900], parse_mode=parse_mode)
+
     # ---------- 포맷된 알림 ----------
     def send_order(self, order) -> bool:
-        """주문 체결/접수 알림"""
-        side_kr = "🟢 매수" if str(order.side).lower().endswith("buy") else "🔴 매도"
+        """주문 체결/접수 알림. 기존 호출 호환 유지, USD notional 표기."""
+        side_raw = self._enum_value(getattr(order, "side", "")).lower()
+        side_kr = "🟢 BUY" if side_raw.endswith("buy") else "🔴 SELL"
+        status_raw = self._enum_value(getattr(order, "status", "")).lower().split(".")[-1]
         status_emoji = {
             "pending":   "⏳",
             "filled":    "✅",
@@ -110,38 +196,172 @@ class TelegramNotifier:
             "cancelled": "⚪",
             "rejected":  "❌",
             "failed":    "❌",
-        }.get(str(order.status).lower().split(".")[-1], "❓")
+        }.get(status_raw, "❓")
 
-        text = (
-            f"{side_kr} *{order.ticker}*\n"
-            f"수량: {order.shares}주 @ {order.price:,.0f}원\n"
-            f"상태: {status_emoji} `{order.status}`\n"
+        requested_shares = self._float(getattr(order, "shares", 0.0))
+        requested_price = self._float(getattr(order, "price", 0.0))
+        filled_shares = self._float(getattr(order, "filled_shares", 0.0))
+        filled_avg_price = self._float(getattr(order, "filled_avg_price", 0.0))
+        requested_notional = requested_shares * requested_price if requested_price > 0 else 0.0
+        filled_notional = filled_shares * filled_avg_price if filled_shares > 0 and filled_avg_price > 0 else 0.0
+        effective_price = filled_avg_price or requested_price
+        effective_notional = filled_notional or requested_notional
+
+        lines = [
+            f"종목: {getattr(order, 'ticker', '')}",
+            f"수량: {self._fmt_shares(requested_shares)}",
+            f"요청가/기준가: {self._fmt_usd(effective_price)}",
+            f"예상/체결 금액: {self._fmt_usd(effective_notional)}",
+            f"상태: {status_emoji} {self._enum_value(getattr(order, 'status', ''))}",
+        ]
+        if filled_shares > 0:
+            lines.append(f"체결: {self._fmt_shares(filled_shares)} @ {self._fmt_usd(filled_avg_price)}")
+        commission = self._float(getattr(order, "commission", 0.0))
+        if commission:
+            lines.append(f"수수료: {self._fmt_usd(commission)}")
+        message = str(getattr(order, "message", "") or "").strip()
+        if message:
+            lines.append(f"메시지: {message[:180]}")
+        level = "WARN" if status_raw in {"pending", "partial"} else "CRITICAL" if status_raw in {"rejected", "failed"} else "INFO"
+        return self._send_event(
+            title=f"{side_kr} 주문",
+            lines=lines,
+            level=level,
+            event_key=f"order:{getattr(order, 'ticker', '')}:{side_raw}:{status_raw}",
+            rate_limit_seconds=0 if status_raw in {"filled", "rejected", "failed"} else 300,
         )
-        if order.filled_shares > 0:
-            text += f"체결: {order.filled_shares}주 @ {order.filled_avg_price:,.0f}원\n"
-        if order.message:
-            text += f"_{order.message[:120]}_\n"
-        return self.send(text)
 
     def send_error(self, message: str) -> bool:
-        return self.send(f"⚠️ *오류*\n```\n{message[:500]}\n```")
+        return self._send_event(
+            title="오류",
+            lines=[str(message)[:700]],
+            level="CRITICAL",
+            event_key=f"error:{str(message)[:120]}",
+            rate_limit_seconds=300,
+        )
 
     def send_info(self, message: str) -> bool:
-        return self.send(f"ℹ️ {message}")
+        return self._send_event(title="정보", lines=[str(message)], level="INFO", event_key=f"info:{str(message)[:120]}")
 
     def send_safety_block(self, code: str, reason: str) -> bool:
-        return self.send(f"🛑 *주문 차단* `{code}`\n{reason}")
+        return self.send_order_rejected(
+            code=code,
+            reason=reason,
+            level="WARN" if str(code).upper() not in {"DAILY_LOSS", "KILL_SWITCH", "COOLDOWN"} else "CRITICAL",
+        )
+
+    def send_order_rejected(
+        self,
+        *,
+        code: str,
+        reason: str,
+        ticker: str = "",
+        side: str = "",
+        shares: float = 0.0,
+        price: float = 0.0,
+        purpose: str = "",
+        level: str = "WARN",
+        event_key: str = "",
+    ) -> bool:
+        notional = self._float(shares) * self._float(price)
+        lines = [
+            f"코드: {code or 'UNKNOWN'}",
+            f"사유: {reason}",
+        ]
+        if ticker or side or purpose:
+            lines.insert(0, f"주문: {side or '?'} {ticker or '?'} ({purpose or 'unknown'})")
+        if shares or price:
+            lines.append(f"요청: {self._fmt_shares(shares)} @ {self._fmt_usd(price)} = {self._fmt_usd(notional)}")
+        return self._send_event(
+            title="주문 차단/거부",
+            lines=lines,
+            level=level,
+            event_key=event_key or f"order_rejected:{ticker}:{side}:{code}",
+            rate_limit_seconds=300,
+        )
+
+    def send_risk_alert(
+        self,
+        *,
+        realized_pnl_today: float,
+        daily_loss_limit_usd: float,
+        daily_loss_limit_pct: float = 0.0,
+        total_value_usd: float = 0.0,
+        consecutive_losses: int = 0,
+        consecutive_loss_limit: int = 0,
+        orders_today: int = 0,
+        kill_until: str = "",
+        cooldown_until: str = "",
+        last_trade_pnl_usd: float = 0.0,
+        ticker: str = "",
+        exit_reason: str = "",
+        event_key: str = "",
+    ) -> bool:
+        loss_today = max(0.0, -self._float(realized_pnl_today))
+        abs_limit = max(0.0, self._float(daily_loss_limit_usd))
+        abs_ratio = loss_today / abs_limit if abs_limit > 0 else 0.0
+        pct_ratio = 0.0
+        if total_value_usd > 0 and daily_loss_limit_pct > 0:
+            pct_ratio = (loss_today / total_value_usd * 100.0) / daily_loss_limit_pct
+        ratio = max(abs_ratio, pct_ratio)
+        if kill_until or ratio >= 1.0:
+            level, title = "CRITICAL", "일일 손실 한도 도달"
+        elif cooldown_until or (consecutive_loss_limit > 0 and consecutive_losses >= consecutive_loss_limit):
+            level, title = "CRITICAL", "연속 손실 쿨다운"
+        elif ratio >= 0.9:
+            level, title = "WARN", "일일 손실 한도 90% 근접"
+        elif ratio >= 0.7:
+            level, title = "WARN", "일일 손실 한도 70% 근접"
+        else:
+            level, title = "INFO", "실현손익 업데이트"
+
+        pct_line = ""
+        if total_value_usd > 0 and daily_loss_limit_pct > 0:
+            cur_pct = loss_today / total_value_usd * 100.0
+            pct_line = f"손실률: {cur_pct:.2f}% / 한도 {daily_loss_limit_pct:.2f}%"
+        lines = [
+            f"누적 손익: {self._fmt_usd(realized_pnl_today, signed=True)}",
+            f"누적 손실: -{self._fmt_usd(loss_today)} / -{self._fmt_usd(abs_limit)} ({ratio * 100.0:.0f}%)",
+            pct_line,
+            f"연속 손실: {consecutive_losses}회 / 한도 {consecutive_loss_limit}회",
+            f"오늘 주문: {orders_today}건",
+        ]
+        if last_trade_pnl_usd:
+            trade = f"최근 청산 손익: {self._fmt_usd(last_trade_pnl_usd, signed=True)}"
+            if ticker:
+                trade += f" ({ticker})"
+            if exit_reason:
+                trade += f" / {exit_reason}"
+            lines.append(trade)
+        if kill_until:
+            lines.append(f"신규 주문 차단 해제 예정: {kill_until}")
+        if cooldown_until:
+            lines.append(f"쿨다운 해제 예정: {cooldown_until}")
+        if level == "CRITICAL":
+            lines.append("→ 신규 매수 차단 상태를 반드시 확인하세요.")
+        return self._send_event(
+            title=title,
+            lines=lines,
+            level=level,
+            event_key=event_key or f"risk:{title}",
+            rate_limit_seconds=900,
+        )
 
     def send_daily_summary(self, summary: dict) -> bool:
-        text = (
-            "📊 *일일 요약*\n"
-            f"가용 현금: {summary.get('cash_krw', 0):,.0f}원\n"
-            f"총 평가금: {summary.get('total_value_krw', 0):,.0f}원\n"
-            f"오늘 손익: {summary.get('realized_pnl_today', 0):+,.0f}원\n"
-            f"오늘 주문: {summary.get('orders_today', 0)}건\n"
-            f"보유 종목: {summary.get('holdings_count', 0)}개"
-        )
-        return self.send(text)
+        cash = summary.get("cash_usd", summary.get("cash_notional", summary.get("cash_krw", 0)))
+        total_value = summary.get("total_value_usd", summary.get("total_value", summary.get("total_value_krw", 0)))
+        pnl = summary.get("realized_pnl_today_usd", summary.get("realized_pnl_today", 0))
+        lines = [
+            f"가용 현금: {self._fmt_usd(cash)}",
+            f"총 평가금: {self._fmt_usd(total_value)}",
+            f"오늘 손익: {self._fmt_usd(pnl, signed=True)}",
+            f"오늘 주문: {summary.get('orders_today', 0)}건",
+            f"보유 종목: {summary.get('holdings_count', 0)}개",
+        ]
+        return self._send_event(title="일일 요약", lines=lines, level="INFO", event_key="daily_summary", rate_limit_seconds=0)
+
+    def send_system_alert(self, title: str, message: str, level: str = "WARN", event_key: str = "") -> bool:
+        return self._send_event(title=title, lines=[message], level=level, event_key=event_key or f"system:{title}")
 
     # ---------- Phase E: 추가 매수 승인 요청 ----------
     def send_approval_request(self, req) -> bool:
@@ -151,30 +371,27 @@ class TelegramNotifier:
         emoji = emoji_map.get(req.strength, "🟡")
         level = level_kr.get(req.strength, req.strength)
 
-        # 가격 변화율
         try:
             target_pct = (req.target_price / req.current_price - 1) * 100
             stop_pct = (req.stop_price / req.current_price - 1) * 100
         except Exception:
             target_pct = stop_pct = 0.0
 
-        # 시그널 근거 (최대 3개)
         reasons = req.signal_reasons[:3] if req.signal_reasons else []
         reasons_str = "\n".join(f"    • {r}" for r in reasons) if reasons else "    • (근거 없음)"
 
-        # 한도 옵션 명령어
         opt_lines = []
-        for krw in req.options_krw:
-            shares = int(krw / req.current_price) if req.current_price > 0 else 0
-            label = f"{krw // 1000}k"
-            opt_lines.append(f"/approve_{label} — {krw:,}원 (≈{shares}주)")
+        for amount in req.options_krw:
+            shares = amount / req.current_price if req.current_price > 0 else 0.0
+            label = f"{int(amount // 1000)}k"
+            opt_lines.append(f"/approve_{label} — {self._fmt_usd(amount)} (≈{self._fmt_shares(shares)})")
         opt_str = "\n".join(opt_lines)
 
         text = (
-            f"{emoji} *{level} BUY 시그널*: `{req.ticker}`\n"
-            f"현재가: {req.current_price:,.0f}원\n"
+            f"{emoji} {level} BUY 시그널: {req.ticker}\n"
+            f"현재가: {self._fmt_usd(req.current_price)}\n"
             f"\n"
-            f"📊 *분석 근거*\n"
+            f"📊 분석 근거\n"
             f"  점수: {req.signal_score:.2f} / 임계 {req.signal_threshold:.2f} "
             f"(×{req.signal_score/req.signal_threshold:.2f})\n"
             f"{reasons_str}\n"
@@ -183,19 +400,19 @@ class TelegramNotifier:
             f"buy_mult ×{req.buy_multiplier:.2f})\n"
             f"  섹터 강도: {req.sector_score:.0f}/100\n"
             f"\n"
-            f"🎯 *목표/손절*\n"
-            f"  목표가: {req.target_price:,.0f}원 ({target_pct:+.2f}%)\n"
-            f"  손절가: {req.stop_price:,.0f}원 ({stop_pct:+.2f}%)\n"
+            f"🎯 목표/손절\n"
+            f"  목표가: {self._fmt_usd(req.target_price)} ({target_pct:+.2f}%)\n"
+            f"  손절가: {self._fmt_usd(req.stop_price)} ({stop_pct:+.2f}%)\n"
             f"  최대 보유: {req.max_holding_days}일\n"
             f"\n"
-            f"💰 *추가 매수 옵션*\n"
+            f"💰 추가 매수 옵션\n"
             f"{opt_str}\n"
             f"/reject — 거부\n"
             f"\n"
             f"⏱ 60초 내 미응답 시 재평가 후 진행\n"
-            f"🔖 ID: `{req.request_id}`"
+            f"🔖 ID: {req.request_id}"
         )
-        return self.send(text, parse_mode="Markdown")
+        return self.send(text)
 
     # ---------- Phase E: 보유 포지션 대시보드 ----------
     def send_position_dashboard(self, dashboard_text: str) -> bool:
@@ -204,13 +421,12 @@ class TelegramNotifier:
 
     # ---------- Phase E: regime 변경 알림 ----------
     def send_regime_change(self, prev: str, new: str, score: float, buy_mult: float) -> bool:
-        text = (
-            "📈 *시장 국면 변경*\n"
-            f"  {prev} → *{new}*\n"
-            f"  score: {score:.1f}\n"
-            f"  buy_multiplier: ×{buy_mult:.2f}"
-        )
-        return self.send(text, parse_mode="Markdown")
+        lines = [
+            f"국면: {prev} → {new}",
+            f"score: {score:.1f}",
+            f"buy_multiplier: ×{buy_mult:.2f}",
+        ]
+        return self._send_event(title="시장 국면 변경", lines=lines, level="INFO", event_key="regime_change", rate_limit_seconds=0)
 
 
 if __name__ == "__main__":
@@ -226,7 +442,7 @@ if __name__ == "__main__":
         raise SystemExit(1)
 
     print("\n[1] 기본 메시지 전송...")
-    ok = n.send("🤖 *Kingmaker* 봇 연결 테스트\n_TelegramNotifier 검증 중_")
+    ok = n.send("🤖 Kingmaker 봇 연결 테스트\nTelegramNotifier 검증 중")
     print(f"  결과: {'✅' if ok else '❌'}")
 
     print("\n[2] 정보 메시지...")
@@ -234,13 +450,13 @@ if __name__ == "__main__":
     print(f"  결과: {'✅' if ok else '❌'}")
 
     print("\n[3] 차단 알림...")
-    ok = n.send_safety_block("LIMIT_KRW", "주문금액 15,000원 > 한도 10,000원")
+    ok = n.send_safety_block("LIMIT_NOTIONAL", "주문금액 $15.00 > 한도 $10.00")
     print(f"  결과: {'✅' if ok else '❌'}")
 
     print("\n[4] 일일 요약...")
     ok = n.send_daily_summary({
-        "cash_krw": 100000, "total_value_krw": 125615,
-        "realized_pnl_today": -3500, "orders_today": 2, "holdings_count": 1,
+        "cash_usd": 100.0, "total_value_usd": 125.61,
+        "realized_pnl_today_usd": -3.50, "orders_today": 2, "holdings_count": 1,
     })
     print(f"  결과: {'✅' if ok else '❌'}")
 

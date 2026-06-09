@@ -4,6 +4,7 @@
 - bulk_swing_diagnostic.py 본체를 수정하지 않고 _progress.json / _summary.csv / results/*.json만 읽는다.
 - data/symbols, ga_population_dump, _progress.json에는 절대 쓰지 않는다.
 - 기본 2시간마다 텔레그램으로 진행률을 보낸다.
+- 완료 또는 작업 중단 상태를 감지하면 마지막 알림 1회 후 자동 종료한다.
 """
 from __future__ import annotations
 
@@ -176,7 +177,7 @@ def _latest_failed(failed: dict[str, Any], limit: int = 5) -> list[str]:
     return out
 
 
-def build_message(progress_file: Path, prev_finished: int | None = None) -> tuple[str, int, bool]:
+def build_message(progress_file: Path, prev_finished: int | None = None) -> tuple[str, int, bool, bool]:
     progress = _load_json(progress_file, {})
     base_dir = progress_file.parent
 
@@ -186,7 +187,7 @@ def build_message(progress_file: Path, prev_finished: int | None = None) -> tupl
             f"progress_file: {progress_file}\n"
             f"시각: {_now_iso()}"
         )
-        return msg, 0, False
+        return msg, 0, False, False
 
     completed = progress.get("completed") or {}
     failed = progress.get("failed") or {}
@@ -246,7 +247,7 @@ def build_message(progress_file: Path, prev_finished: int | None = None) -> tupl
         f"프로세스:\n{proc_text}\n"
         f"progress updated_at: {progress.get('updated_at', '?')}"
     )
-    return msg[:3900], finished_n, complete
+    return msg[:3900], finished_n, complete, interrupted
 
 
 def parse_args() -> argparse.Namespace:
@@ -267,7 +268,7 @@ def main() -> int:
     prev_finished: int | None = None
 
     if args.once:
-        msg, _, _ = build_message(progress_file, prev_finished=None)
+        msg, _, _, _ = build_message(progress_file, prev_finished=None)
         ok = notifier.send(msg)
         print(f"telegram_sent={ok}")
         print(msg)
@@ -278,11 +279,14 @@ def main() -> int:
 
     while True:
         time.sleep(args.interval_sec)
-        msg, finished, complete = build_message(progress_file, prev_finished=prev_finished)
+        msg, finished, complete, interrupted = build_message(progress_file, prev_finished=prev_finished)
         prev_finished = finished
         ok = notifier.send(msg)
-        print(f"{_now_iso()} telegram_sent={ok} finished={finished} complete={complete}", flush=True)
-        if complete:
+        print(
+            f"{_now_iso()} telegram_sent={ok} finished={finished} complete={complete} interrupted={interrupted}",
+            flush=True,
+        )
+        if complete or interrupted:
             break
     return 0
 

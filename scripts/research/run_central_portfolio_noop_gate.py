@@ -19,7 +19,10 @@ from engine.portfolio.noop_gate import (
     run_live_current_proxy_baseline,
     run_tplus1_entry_gate,
 )
-from engine.portfolio.pit_universe_bias_probe import run_pit_universe_manifest_builder
+from engine.portfolio.pit_universe_bias_probe import (
+    run_pit_universe_bias_probe,
+    run_pit_universe_manifest_builder,
+)
 
 
 def main() -> None:
@@ -35,6 +38,7 @@ def main() -> None:
             "conservative_core_exit",
             "capital_reweight_probe",
             "pit_universe_manifest",
+            "pit_universe_bias_probe",
         ],
         default="comparison_infra_v0",
     )
@@ -101,6 +105,16 @@ def main() -> None:
         summary = run_capital_allocation_reweight_probe()
     elif args.mode == "pit_universe_manifest":
         summary = run_pit_universe_manifest_builder()
+    elif args.mode == "pit_universe_bias_probe":
+        summary = run_pit_universe_bias_probe(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            history_end_date=args.history_end_date,
+            position_limit_krw=args.position_limit,
+            commission_rate=args.commission_rate,
+            warmup=args.warmup,
+            years=args.years,
+        )
     else:
         summary = run_comparison_infra_gate(
             start_date=args.start_date,
@@ -122,7 +136,7 @@ def main() -> None:
         sys.exit(1)
     print(
         f"\n[PASS] {summary['gate']} 통과. "
-        f"ref_trades={summary.get('ref_trade_count', summary.get('trade_count', 'n/a'))}, "
+        f"ref_trades={summary.get('ref_trade_count', summary.get('fixed16_ref_trade_count', summary.get('trade_count', 'n/a')))}, "
         f"candidate_trades={summary.get('candidate_trade_count', summary.get('trade_count', 'n/a'))}."
     )
 

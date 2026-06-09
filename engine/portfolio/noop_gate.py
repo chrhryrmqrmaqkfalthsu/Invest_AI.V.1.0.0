@@ -46,6 +46,7 @@ MANIFEST_PATH = Path("data/_system/live_universe_lr8d_stage1_manifest.json")
 PARAMS_PATH_TMPL = "data/symbols/{ticker}/parameters.json"
 OUT_DIR = Path("data/_system/research/central_portfolio/noop_gate")
 OUT_DIR_V1 = Path("data/_system/research/central_portfolio/engine_noop_gate_v1")
+OUT_DIR_LIVE_PROXY = Path("data/_system/research/central_portfolio/live_current_proxy_baseline")
 
 STRING_FIELDS = [
     "ticker",
@@ -384,6 +385,7 @@ def run_legacy_compat_daily_loop(
     ticker_sentiments: Optional[dict[str, dict]] = None,
     use_llm_events: bool = True,
     sizing_mode: str = "integer",
+    live_hard_stop_guard: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     """날짜축 포트폴리오 루프의 no-op legacy 호환 후보.
 
@@ -494,6 +496,7 @@ def run_legacy_compat_daily_loop(
                     cur_sector_score=cur_sector,
                     fractional_shares=(sizing_mode == "fractional"),
                     disable_add_buy=(sizing_mode == "fractional"),
+                    live_hard_stop_guard=live_hard_stop_guard,
                 )
                 if trade_obj is None:
                     state["done"] = True
@@ -805,6 +808,79 @@ def run_fractional_gate_v2(
         "mismatch_count": len(mismatches),
         "passed": passed,
         **fractional_stats,
+    }
+    write_gate_outputs(ref_rows, cand_rows, mismatches, summary, out_dir)
+    return summary
+
+
+def run_live_current_proxy_baseline(
+    start_date: str,
+    end_date: str,
+    history_end_date: str,
+    position_limit_krw: float = 30.0,
+    commission_rate: float = 0.0005,
+    warmup: int = 200,
+    years: int = 3,
+    out_dir: Path = OUT_DIR_LIVE_PROXY,
+) -> dict[str, Any]:
+    rulebooks = load_promoted_rulebooks()
+    histories = load_fixed_histories(rulebooks, years=years, history_end_date=history_end_date)
+
+    ref_trades_by_ticker = run_legacy_compat_daily_loop(
+        rulebooks,
+        histories,
+        start_date=start_date,
+        end_date=end_date,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        warmup=warmup,
+        sizing_mode="fractional",
+        live_hard_stop_guard=False,
+    )
+    cand_trades_by_ticker = run_legacy_compat_daily_loop(
+        rulebooks,
+        histories,
+        start_date=start_date,
+        end_date=end_date,
+        position_limit_krw=position_limit_krw,
+        commission_rate=commission_rate,
+        warmup=warmup,
+        sizing_mode="fractional",
+        live_hard_stop_guard=True,
+    )
+
+    ref_rows = normalize_trade_map(rulebooks, ref_trades_by_ticker)
+    cand_rows = normalize_trade_map(rulebooks, cand_trades_by_ticker)
+    mismatches = compare_trade_rows(ref_rows, cand_rows)
+    guard_stop_loss_rows = [row for row in cand_rows if row.get("exit_reason") == "stop_loss"]
+    guard_stop_loss_count = len(guard_stop_loss_rows)
+    guard_affected_tickers = sorted({row["ticker"] for row in guard_stop_loss_rows})
+    mismatch_tickers = sorted({row.get("ticker") for row in mismatches if row.get("ticker")})
+    mismatch_tickers_without_guard = sorted(set(mismatch_tickers) - set(guard_affected_tickers))
+    timing_mismatch_count = sum(
+        1 for row in mismatches if row.get("field") in {"entry_date", "exit_date", "exit_reason"}
+    )
+    summary = {
+        "gate": "live_current_proxy_baseline",
+        "reference_mode": "fractional_guard_off",
+        "candidate_mode": "fractional_live_hard_stop_guard_on",
+        "fractional_shares": True,
+        "disable_add_buy": True,
+        "live_hard_stop_guard": True,
+        "start_date": start_date,
+        "end_date": end_date,
+        "history_end_date": history_end_date,
+        "position_limit_krw": position_limit_krw,
+        "tickers": [ticker for ticker, _ in rulebooks],
+        "ref_trade_count": len(ref_rows),
+        "candidate_trade_count": len(cand_rows),
+        "mismatch_count": len(mismatches),
+        "timing_mismatch_count": timing_mismatch_count,
+        "candidate_stop_loss_count": guard_stop_loss_count,
+        "guard_affected_tickers": guard_affected_tickers,
+        "mismatch_tickers": mismatch_tickers,
+        "mismatch_tickers_without_guard": mismatch_tickers_without_guard,
+        "passed": len(cand_rows) > 0 and guard_stop_loss_count > 0 and not mismatch_tickers_without_guard,
     }
     write_gate_outputs(ref_rows, cand_rows, mismatches, summary, out_dir)
     return summary

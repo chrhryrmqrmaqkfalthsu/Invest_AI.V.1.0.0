@@ -22,6 +22,7 @@ from engine.core.exit_policy import (
     MarketContext as ExitMarketContext,
     PositionState,
     PriceSnapshot,
+    apply_hard_stop_guard,
     evaluate_exit,
     initialize_position_state,
 )
@@ -293,41 +294,14 @@ def _apply_live_hard_stop_guard(
     state: PositionState,
     price: float,
 ) -> ExitDecision:
-    """Live-only catastrophe guard: stop_price is a hard backstop for every strategy.
-
-    This intentionally does not modify the shared backtest/core policy. It only
-    wraps live authority so trailing-only strategies cannot remain open below the
-    stored entry-time stop_price when their trailing activation is still waiting.
-    """
-    current = _safe_float(price, 0.0)
-    stop_price = _safe_float(state.stop_price, 0.0)
-    diagnostics = dict(decision.diagnostics or {})
-    hit = bool(current > 0 and stop_price > 0 and current <= stop_price)
-    diagnostics["live_hard_stop_guard"] = True
-    diagnostics["live_hard_stop_hit"] = hit
-    if not hit:
-        return replace(decision, diagnostics=diagnostics)
-
-    if decision.should_exit and decision.reason == "stop_loss":
-        diagnostics["live_hard_stop_override"] = False
-        return replace(decision, diagnostics=diagnostics)
-
-    diagnostics.update(
-        {
-            "live_hard_stop_override": True,
-            "live_hard_stop_previous_reason": decision.reason,
-            "stop_hit": True,
-            "trigger_source": "live_hard_stop_guard",
-        }
-    )
-    return ExitDecision(
-        should_exit=True,
-        reason="stop_loss",
-        trigger_price=stop_price,
-        fill_price_base=stop_price,
-        fill_price_stress=stop_price,
-        updated_position=decision.updated_position,
-        diagnostics=diagnostics,
+    """Live-only wrapper around the shared hard-stop guard core."""
+    return apply_hard_stop_guard(
+        decision,
+        state=state,
+        probe_price=price,
+        fill_price=state.stop_price,
+        trigger_source="live_hard_stop_guard",
+        diagnostics_prefix="live_hard_stop",
     )
 
 

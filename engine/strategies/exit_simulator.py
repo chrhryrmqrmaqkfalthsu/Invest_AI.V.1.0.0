@@ -8,6 +8,7 @@ from engine.core.exit_policy import (
     ExitExecutionConfig,
     MarketContext,
     PriceSnapshot,
+    apply_hard_stop_guard,
     evaluate_exit,
     initialize_position_state,
     update_position_for_add_buy,
@@ -280,6 +281,7 @@ def simulate_exit(
     sell_omen_scores: Any = None,
     fractional_shares: bool = False,
     disable_add_buy: bool = False,
+    live_hard_stop_guard: bool = False,
 ) -> Optional[Trade]:
     if entry_idx + 1 >= len(df):
         return None
@@ -362,6 +364,18 @@ def simulate_exit(
         sell_omen_score = _lookup_sell_omen_score(sell_omen_scores, str(getattr(rb, "ticker", "") or ""), snap, row)
         day_exec_cfg = replace(exec_cfg, sell_omen_score=sell_omen_score)
         decision = evaluate_exit(position, snap, rb, bctx, day_exec_cfg)
+        if live_hard_stop_guard:
+            stop_price = float(position.stop_price)
+            snap_open = snap.open if snap.open is not None else None
+            guard_fill = float(snap_open) if snap_open is not None and float(snap_open) <= stop_price else stop_price
+            decision = apply_hard_stop_guard(
+                decision,
+                state=position,
+                probe_price=(snap.low if snap.low is not None else 0.0),
+                fill_price=guard_fill,
+                trigger_source="backtest_live_hard_stop_guard",
+                diagnostics_prefix="bt_live_hard_stop",
+            )
         if decision.updated_position is not None:
             position = decision.updated_position
         if decision.should_exit:

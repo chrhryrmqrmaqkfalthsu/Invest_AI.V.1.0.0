@@ -108,6 +108,57 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def apply_hard_stop_guard(
+    decision: ExitDecision,
+    *,
+    state: PositionState,
+    probe_price: float,
+    fill_price: Optional[float] = None,
+    trigger_source: str = "hard_stop_guard",
+    diagnostics_prefix: str = "live_hard_stop",
+) -> ExitDecision:
+    """Force stop_loss when ``probe_price`` reaches the entry-time stop_price.
+
+    Live passes current price as ``probe_price``. Daily backtests pass bar low and
+    a gap-fill price. This function intentionally preserves the legacy live
+    wrapper behavior: no-hit decisions only receive diagnostics, an existing
+    stop_loss is not overridden, and any other exit reason is overridden when
+    the hard stop is hit.
+    """
+    probe = _to_float(probe_price, 0.0)
+    stop = _to_float(getattr(state, "stop_price", 0.0), 0.0)
+    diagnostics = dict(decision.diagnostics or {})
+    hit = bool(probe > 0 and stop > 0 and probe <= stop)
+    diagnostics[f"{diagnostics_prefix}_guard"] = True
+    diagnostics[f"{diagnostics_prefix}_hit"] = hit
+
+    if not hit:
+        return replace(decision, diagnostics=diagnostics)
+
+    if decision.should_exit and decision.reason == "stop_loss":
+        diagnostics[f"{diagnostics_prefix}_override"] = False
+        return replace(decision, diagnostics=diagnostics)
+
+    fill = _to_float(fill_price, stop) if fill_price is not None else stop
+    diagnostics.update(
+        {
+            f"{diagnostics_prefix}_override": True,
+            f"{diagnostics_prefix}_previous_reason": decision.reason,
+            "stop_hit": True,
+            "trigger_source": trigger_source,
+        }
+    )
+    return ExitDecision(
+        should_exit=True,
+        reason="stop_loss",
+        trigger_price=stop,
+        fill_price_base=fill,
+        fill_price_stress=fill,
+        updated_position=decision.updated_position,
+        diagnostics=diagnostics,
+    )
+
+
 def _to_int(value: Any, default: int = 0) -> int:
     try:
         if value is None:

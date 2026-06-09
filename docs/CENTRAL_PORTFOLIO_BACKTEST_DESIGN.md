@@ -200,6 +200,23 @@ return_pct = realized_or_marked_pnl / strategy_allocated_capital
 
 노출이 다르면 수익률 비교가 무의미하다. 중앙 시스템이 더 많이 벌었더라도 더 많이 건 결과일 수 있기 때문이다.
 
+
+### 4.3 live_current_proxy_baseline (현재 라이브 재현)
+
+```text
+sizing: fractional shares, 30 USD fixed notional
+add_buy: OFF (disable_add_buy=True)
+entry: legacy T-close 유지 (look-ahead 제거는 realistic_research_baseline에서만 적용)
+exit: simulate_exit 결과를 평가한 뒤 hard-stop guard wrapper 적용
+guard hit 판정: snap.low <= entry-time stop_price (일봉 intraday touch 가정)
+gap-fill: open <= stop_price면 open 체결(gap-down), 아니면 stop_price 체결(intraday touch)
+slippage: 0 (stress는 realistic_research_baseline에서 별도)
+same-bar conflict: stop_loss 우선 (보유자 최악 가정, §5.2 일치)
+guard 로직: live와 동일한 engine.core.exit_policy.apply_hard_stop_guard() 공유
+```
+
+이 baseline은 현재 라이브의 핵심 차이를 연구용 daily backtest에 주입하기 위한 것이다. 공유 exit core 자체를 바꾸지 않고 wrapper로 hard-stop guard를 적용한다.
+
 ---
 
 ## 5. no-op 재현 게이트

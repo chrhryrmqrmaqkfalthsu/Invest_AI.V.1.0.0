@@ -41,6 +41,19 @@ def _normalize_shares(value: float) -> float:
     return 0.0 if abs(v) <= SHARE_EPS else v
 
 
+def _optional_bool(value) -> Optional[bool]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
 @dataclass
 class RunnerStats:
     market_ticks: int = 0
@@ -309,8 +322,65 @@ class Runner:
             self.stats.signals_hold += 1
             logger.debug(f"{ticker} HOLD: {sig.reason}")
 
+    def _add_buy_approval_enabled(self) -> bool:
+        """Manual/Telegram add-buy approvals are disabled unless explicitly enabled.
+
+        This is intentionally separate from add_buy.enabled. The latter guards the
+        low-level add-buy execution path, while this flag controls the old
+        live-only human approval workflow. Default False keeps live aligned with
+        backtest until automatic rulebook add-buy is wired symmetrically.
+        """
+        try:
+            policy = getattr(getattr(self, "safety", None), "policy", {}) or {}
+            add_buy = policy.get("add_buy", {}) or {}
+            candidates = (
+                policy.get("add_buy_approval_enabled"),
+                policy.get("manual_add_buy_approval_enabled"),
+                add_buy.get("approval_enabled"),
+                add_buy.get("manual_approval_enabled"),
+            )
+            for value in candidates:
+                parsed = _optional_bool(value)
+                if parsed is not None:
+                    return parsed
+        except Exception:
+            pass
+        return False
+
+    def _reject_disabled_add_buy_approvals(self) -> int:
+        mgr = getattr(self, "approval_manager", None)
+        if mgr is None:
+            return 0
+        requests = getattr(mgr, "_requests", {}) or {}
+        changed = 0
+        for rid, req in list(requests.items()):
+            status = str(getattr(req, "status", "") or "").lower()
+            if status not in {"pending", "approved", "reevaluating"}:
+                continue
+            req.status = "rejected"
+            if hasattr(req, "approved_krw"):
+                req.approved_krw = 0
+            if hasattr(req, "approved_at"):
+                req.approved_at = ""
+            ticker = str(getattr(req, "ticker", "") or "")
+            by_ticker = getattr(mgr, "_by_ticker", None)
+            if isinstance(by_ticker, dict) and ticker in by_ticker and by_ticker.get(ticker) == rid:
+                by_ticker.pop(ticker, None)
+            changed += 1
+        if changed:
+            try:
+                mgr._save()
+            except Exception as exc:
+                logger.warning("add-buy approval disabled 상태 저장 실패: %s", exc)
+        return changed
+
     def _process_pending_approvals(self) -> None:
         if not self.approval_manager:
+            return
+        if not self._add_buy_approval_enabled():
+            rejected = self._reject_disabled_add_buy_approvals()
+            if rejected:
+                logger.warning("[ADD-BUY-APPROVAL-DISABLED] 기존 추가매수 승인 요청 %d건 rejected 처리", rejected)
             return
         for req in list(self.approval_manager._requests.values()):
             if req.status == "approved":
@@ -319,6 +389,16 @@ class Runner:
                 self._reevaluate_request(req)
 
     def _execute_approved(self, req) -> None:
+        if not self._add_buy_approval_enabled():
+            try:
+                req.status = "rejected"
+                req.approved_krw = 0
+                req.approved_at = ""
+                self.approval_manager._save()
+            except Exception:
+                pass
+            logger.warning("[ADD-BUY-APPROVAL-DISABLED] %s 승인형 추가매수 실행 차단", getattr(req, "ticker", "?"))
+            return
         ticker = req.ticker
         amount = req.approved_krw
         if amount <= 0:
@@ -482,6 +562,8 @@ class Runner:
             logger.error(f"{ticker} _reevaluate_request 예외: {e}")
 
     def _maybe_reconfirm_existing(self, ticker: str, price: float) -> None:
+        if not self._add_buy_approval_enabled():
+            return
         if not self.position_manager.get(ticker) or not self.approval_manager.should_reconfirm(ticker):
             return
         try:
@@ -576,7 +658,7 @@ class Runner:
         return order
 
     def _maybe_request_approval(self, ticker, fill_price, rb, sig) -> None:
-        if sig is None:
+        if sig is None or not self._add_buy_approval_enabled():
             return
         try:
             try:

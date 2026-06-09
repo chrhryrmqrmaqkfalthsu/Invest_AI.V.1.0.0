@@ -6,7 +6,7 @@ run_live.py - 라이브 트레이딩 봇 엔트리포인트.
     ├─ once         → Runner.startup_check
     ├─ market_hours → Runner.tick_market
     ├─ interval     → Runner.tick_offmarket
-    └─ cron         → Runner.daily_summary
+    └─ cron         → 장마감 일일 보고
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 from engine.live.broker.factory import make_broker
+from engine.live.daily_report import send_daily_report_from_runner
 from engine.live.exit_policy_guard import validate_startup_exit_policy
 from engine.live.market_clock import select_market_clock, validate_broker_market_compatibility
 from engine.live.runner import Runner
@@ -98,9 +99,9 @@ def main():
     parser.add_argument("--offmarket-tick", type=int, default=3600)
     parser.add_argument("--sma-window", type=int, default=20)
     parser.add_argument("--stop-loss", type=float, default=0.03)
-    parser.add_argument("--summary-hour", type=int, default=16)
+    parser.add_argument("--summary-hour", type=int, default=6)
     parser.add_argument("--rulebook", choices=["learned", "demo"], default="learned")
-    parser.add_argument("--summary-minute", type=int, default=0)
+    parser.add_argument("--summary-minute", type=int, default=15)
     args = parser.parse_args()
 
     logger.info("=" * 60)
@@ -164,7 +165,19 @@ def main():
     scheduler.add_once_job(func=runner.startup_check, delay_sec=2, job_id="startup_check")
     scheduler.add_market_hours_job(func=runner.tick_market, interval_sec=args.market_tick, market=clock, job_id="tick_market")
     scheduler.add_interval_job(func=runner.tick_offmarket, interval_sec=args.offmarket_tick, job_id="tick_offmarket", name="tick_offmarket")
-    scheduler.add_cron_job(func=runner.daily_summary, hour=args.summary_hour, minute=args.summary_minute, market=clock, weekdays_only=True, job_id="daily_summary")
+
+    def daily_report_job():
+        return send_daily_report_from_runner(runner)
+
+    daily_report_job.__name__ = "daily_report"
+    scheduler.add_cron_job(
+        func=daily_report_job,
+        hour=args.summary_hour,
+        minute=args.summary_minute,
+        market=clock,
+        weekdays_only=False,
+        job_id="daily_summary",
+    )
 
     stop_flag = {"stop": False}
 

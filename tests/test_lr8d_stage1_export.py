@@ -74,10 +74,11 @@ def test_stage1_selection_is_expected_16_tickers():
     assert all(float(s.survivor["stress_worst_expectancy_pct"]) >= 0 for s in selections)
 
 
-def test_export_stage1_apply_writes_promoted_live_universe_in_temp_dir(tmp_path: Path):
+def test_export_stage1_apply_writes_promoted_live_universe_and_backups_in_temp_dir(tmp_path: Path):
     selections = build_stage1_selection(RUN_DIR)
     tickers = [s.ticker for s in selections]
     symbols_dir = tmp_path / "symbols"
+    backup_root = tmp_path / "backups"
     _write_minimal_existing_parameters(symbols_dir, tickers)
 
     manifest = export_stage1(
@@ -87,11 +88,21 @@ def test_export_stage1_apply_writes_promoted_live_universe_in_temp_dir(tmp_path:
         apply=True,
         confirm_promotion_id=DEFAULT_PROMOTION_ID,
         manifest_path=tmp_path / "manifest.json",
+        backup_root=backup_root,
     )
 
     assert manifest["count"] == 16
     assert manifest["tickers"] == tickers
+    assert manifest["backup_dir"]
     assert (tmp_path / "manifest.json").exists()
+
+    backup_dir = Path(manifest["backup_dir"])
+    assert backup_dir.is_dir()
+    for ticker in tickers:
+        backup_file = backup_dir / ticker / "parameters.json"
+        assert backup_file.exists()
+        backup = json.loads(backup_file.read_text(encoding="utf-8"))
+        assert backup["promotion"]["promotion_id"] == "old"
 
     universe = load_live_universe(
         LiveUniverseConfig(
@@ -112,9 +123,10 @@ def test_export_stage1_apply_writes_promoted_live_universe_in_temp_dir(tmp_path:
     assert crwd["asset_meta"]["market"] == "NYSE/NASDAQ"
 
 
-def test_export_stage1_refuses_apply_without_exact_confirmation(tmp_path: Path):
+def test_export_stage1_refuses_apply_without_exact_confirmation_and_without_backup(tmp_path: Path):
     selections = build_stage1_selection(RUN_DIR)
     symbols_dir = tmp_path / "symbols"
+    backup_root = tmp_path / "backups"
     _write_minimal_existing_parameters(symbols_dir, [s.ticker for s in selections])
 
     try:
@@ -125,6 +137,7 @@ def test_export_stage1_refuses_apply_without_exact_confirmation(tmp_path: Path):
             apply=True,
             confirm_promotion_id="wrong",
             manifest_path=tmp_path / "manifest.json",
+            backup_root=backup_root,
         )
     except RuntimeError as exc:
         assert "confirm-promotion-id" in str(exc)
@@ -132,3 +145,4 @@ def test_export_stage1_refuses_apply_without_exact_confirmation(tmp_path: Path):
         raise AssertionError("export_stage1 must refuse unconfirmed writes")
 
     assert not (tmp_path / "manifest.json").exists()
+    assert not backup_root.exists()

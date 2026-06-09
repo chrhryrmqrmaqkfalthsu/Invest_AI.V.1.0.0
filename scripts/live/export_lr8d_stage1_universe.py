@@ -8,12 +8,17 @@ Selection policy:
 - worst_drawdown_pct > -25
 - stress_worst_expectancy_pct >= 0
 
-The live loader does not consume a standalone universe JSON.  It scans
-``data/symbols/<ticker>/parameters.json`` and filters by promotion_id.  This
+The live loader does not consume a standalone universe JSON. It scans
+``data/symbols/<ticker>/parameters.json`` and filters by promotion_id. This
 script therefore builds validated parameters payloads for the selected symbols
 and, when explicitly confirmed with --apply, writes those parameters with a new
 promotion id so ``scripts/run_live.py --promotion-id lr8d_stage1_20260609``
 loads only the stage-1 universe.
+
+Safety properties:
+- default mode is dry-run and writes no files
+- --apply requires an exact --confirm-promotion-id match
+- every overwritten parameters.json is backed up before write
 """
 from __future__ import annotations
 
@@ -36,6 +41,7 @@ DEFAULT_RUN_DIR = Path(f"data/_system/research/{RUN_ID}")
 DEFAULT_SYMBOLS_DIR = Path("data/symbols")
 DEFAULT_PROMOTION_ID = "lr8d_stage1_20260609"
 DEFAULT_MANIFEST_PATH = Path("data/_system/live_universe_lr8d_stage1_manifest.json")
+DEFAULT_BACKUP_ROOT = Path("data/backups")
 DD_CUTOFF = -25.0
 
 
@@ -62,6 +68,10 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
                 raise ValueError(f"JSONL row must be object: {path}:{line_no}")
             rows.append(row)
     return rows
+
+
+def _safe_timestamp(value: str) -> str:
+    return value.replace(":", "").replace("-", "").replace("Z", "Z")
 
 
 def load_rulebooks_by_hash(run_dir: Path) -> dict[str, dict[str, Any]]:
@@ -129,6 +139,18 @@ def _read_existing_parameters(symbols_dir: Path, ticker: str) -> dict[str, Any]:
     return data
 
 
+def _backup_existing_parameters(symbols_dir: Path, ticker: str, backup_dir: Path) -> Path:
+    source = symbols_dir / ticker / "parameters.json"
+    if not source.exists():
+        raise FileNotFoundError(f"cannot backup missing parameters for {ticker}: {source}")
+    target = backup_dir / ticker / "parameters.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        raise FileExistsError(f"backup already exists, refusing overwrite: {target}")
+    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    return target
+
+
 def _selection_meta(survivor: dict[str, Any]) -> dict[str, Any]:
     keys = [
         "combo_id",
@@ -174,12 +196,11 @@ def build_parameters_payload(
     rb["ticker"] = selection.ticker
     rb.setdefault("asset_type", "us_stock")
     rb.setdefault("direction", "long")
-    # Validate before writing.  The live universe performs this same parse.
     Rulebook.from_dict(dict(rb))
 
     exported_at = exported_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     survivor = selection.survivor
-    payload = {
+    return {
         "version": "lr8d_stage1_v1",
         "saved_at": exported_at,
         "asset_meta": asset_meta,
@@ -210,7 +231,6 @@ def build_parameters_payload(
             "selection": _selection_meta(survivor),
         },
     }
-    return payload
 
 
 def build_manifest(
@@ -218,6 +238,7 @@ def build_manifest(
     *,
     promotion_id: str,
     exported_at: str,
+    backup_dir: str = "",
 ) -> dict[str, Any]:
     items = []
     for s in selections:
@@ -241,6 +262,7 @@ def build_manifest(
         "promotion_id": promotion_id,
         "run_id": RUN_ID,
         "exported_at": exported_at,
+        "backup_dir": backup_dir,
         "filter": {
             "combo_id": "strict_k3",
             "worst_drawdown_pct_gt": DD_CUTOFF,
@@ -250,7 +272,7 @@ def build_manifest(
         "count": len(items),
         "tickers": [row["ticker"] for row in items],
         "items": items,
-        "live_command_hint": f"venv/bin/python scripts/run_live.py --universe promoted --promotion-id {promotion_id}",
+        "live_command_hint": f"venv/bin/python scripts/run_live.py --mode paper --universe promoted --promotion-id {promotion_id}",
     }
 
 
@@ -262,14 +284,17 @@ def export_stage1(
     apply: bool = False,
     confirm_promotion_id: str = "",
     manifest_path: Path = DEFAULT_MANIFEST_PATH,
+    backup_root: Path = DEFAULT_BACKUP_ROOT,
 ) -> dict[str, Any]:
     run_dir = Path(run_dir)
     symbols_dir = Path(symbols_dir)
+    backup_root = Path(backup_root)
     selections = build_stage1_selection(run_dir)
     if len(selections) != 16:
         raise RuntimeError(f"expected 16 stage1 selections, got {len(selections)}")
 
     exported_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    backup_dir = backup_root / f"{promotion_id}_{_safe_timestamp(exported_at)}"
     payloads: dict[str, dict[str, Any]] = {}
     for selection in selections:
         payloads[selection.ticker] = build_parameters_payload(
@@ -279,13 +304,20 @@ def export_stage1(
             exported_at=exported_at,
         )
 
-    manifest = build_manifest(selections, promotion_id=promotion_id, exported_at=exported_at)
+    manifest = build_manifest(
+        selections,
+        promotion_id=promotion_id,
+        exported_at=exported_at,
+        backup_dir=str(backup_dir) if apply else "",
+    )
 
     if apply:
         if confirm_promotion_id != promotion_id:
             raise RuntimeError(
                 f"refusing to write parameters without exact --confirm-promotion-id {promotion_id!r}"
             )
+        for ticker in payloads:
+            _backup_existing_parameters(symbols_dir, ticker, backup_dir)
         for ticker, payload in payloads.items():
             target_dir = symbols_dir / ticker
             target_dir.mkdir(parents=True, exist_ok=True)
@@ -303,6 +335,7 @@ def main() -> int:
     parser.add_argument("--symbols-dir", type=Path, default=DEFAULT_SYMBOLS_DIR)
     parser.add_argument("--promotion-id", default=DEFAULT_PROMOTION_ID)
     parser.add_argument("--manifest-path", type=Path, default=DEFAULT_MANIFEST_PATH)
+    parser.add_argument("--backup-root", type=Path, default=DEFAULT_BACKUP_ROOT)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-promotion-id", default="")
     args = parser.parse_args()
@@ -314,6 +347,7 @@ def main() -> int:
         apply=args.apply,
         confirm_promotion_id=args.confirm_promotion_id,
         manifest_path=args.manifest_path,
+        backup_root=args.backup_root,
     )
     print(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
     if not args.apply:

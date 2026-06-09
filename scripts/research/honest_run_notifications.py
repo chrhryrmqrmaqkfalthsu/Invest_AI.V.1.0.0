@@ -16,16 +16,16 @@ except Exception:  # pragma: no cover - import safety for isolated tooling
 
 
 class HonestRunNotifier:
-    def __init__(self, *, run_id: str, stage: str, batch_index: str = "", total: int = 0, notify_every: int = 100, notify_pct: float = 5.0) -> None:
+    def __init__(self, *, run_id: str, stage: str, batch_index: str = "", total: int = 0, notify_every: int = 100, notify_pct: float = 10.0) -> None:
         self.run_id = str(run_id or "")
         self.stage = str(stage or "")
         self.batch_index = str(batch_index or "")
         self.total = max(0, int(total or 0))
         self.notify_every = max(1, int(notify_every or 100))
-        self.notify_pct = max(0.1, float(notify_pct or 5.0))
+        self.notify_pct = max(0.1, float(notify_pct or 10.0))
         self.started_at = time.time()
         self._last_sent_done = 0
-        self._last_sent_pct_bucket = -1
+        self._last_sent_pct_bucket = 0
         self._notifier = None
         if TelegramNotifier is not None:
             try:
@@ -67,14 +67,24 @@ class HonestRunNotifier:
         self._send("정직 RUN 시작", lines, level="INFO", event_key=f"honest_start:{self.stage}:{self.run_id}:{self.batch_index}")
 
     def progress(self, *, done: int, passed: int = 0, errors: int = 0, selected: int = 0, force: bool = False) -> None:
+        """Send sparse progress updates only.
+
+        A call to this method is cheap and may happen after every finished ticker,
+        but an actual Telegram message is emitted only when the configured count
+        interval is reached, or when a 10%-style bucket is crossed on a run large
+        enough to warrant progress messages. Small smoke runs therefore emit only
+        start/complete messages.
+        """
         done = max(0, int(done or 0))
         pct = (done / self.total * 100.0) if self.total else 0.0
         pct_bucket = int(pct // self.notify_pct) if self.notify_pct > 0 else 0
-        should_send = force or done == self.total or (done > 0 and done % self.notify_every == 0) or pct_bucket > self._last_sent_pct_bucket
+        count_threshold = done > 0 and done % self.notify_every == 0
+        pct_threshold = self.total >= self.notify_every and pct_bucket >= 1 and pct_bucket > self._last_sent_pct_bucket
+        should_send = count_threshold or pct_threshold
         if not should_send or done == self._last_sent_done:
             return
         self._last_sent_done = done
-        self._last_sent_pct_bucket = pct_bucket
+        self._last_sent_pct_bucket = max(self._last_sent_pct_bucket, pct_bucket)
         elapsed = time.time() - self.started_at
         rate = done / elapsed if elapsed > 0 else 0.0
         eta = (self.total - done) / rate if rate > 0 and self.total >= done else 0.0
@@ -99,7 +109,7 @@ class HonestRunNotifier:
             f"context: {context or '-'}",
             f"error: {str(error)[:900]}",
         ]
-        self._send("정직 RUN 에러", lines, level="CRITICAL", event_key=f"honest_error:{self.stage}:{self.run_id}:{self.batch_index}:{ticker}:{str(error)[:80]}")
+        self._send("정직 RUN 에러", lines, level="CRITICAL", event_key=f"honest_error:{self.stage}:{self.run_id}:{self.batch_index}:{ticker}:{context}:{str(error)[:80]}")
 
     def complete(self, *, total: int, passed: int = 0, selected: int = 0, errors: int = 0, elapsed_sec: float | None = None, honesty_ok: bool = True, extra: Mapping[str, Any] | None = None) -> None:
         elapsed = float(elapsed_sec if elapsed_sec is not None else time.time() - self.started_at)

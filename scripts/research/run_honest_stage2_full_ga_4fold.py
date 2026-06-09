@@ -77,42 +77,10 @@ CACHE_FORMAT = "pkl"
 STRESS_LABEL = "2025H2"
 
 FOLDS = (
-    {
-        "label": "2022",
-        "run_key_label": "2022",
-        "year": 2022,
-        "train_end": "2021-12-31",
-        "test_start": "2022-01-01",
-        "test_end": "2022-12-31",
-        "is_stress": False,
-    },
-    {
-        "label": "2023",
-        "run_key_label": "2023",
-        "year": 2023,
-        "train_end": "2022-12-31",
-        "test_start": "2023-01-01",
-        "test_end": "2023-12-31",
-        "is_stress": False,
-    },
-    {
-        "label": "2024",
-        "run_key_label": "2024",
-        "year": 2024,
-        "train_end": "2023-12-31",
-        "test_start": "2024-01-01",
-        "test_end": "2024-12-31",
-        "is_stress": False,
-    },
-    {
-        "label": STRESS_LABEL,
-        "run_key_label": "2025H2_STRESS",
-        "year": STRESS_LABEL,
-        "train_end": "2025-05-31",
-        "test_start": "2025-06-01",
-        "test_end": None,
-        "is_stress": True,
-    },
+    {"label": "2022", "run_key_label": "2022", "year": 2022, "train_end": "2021-12-31", "test_start": "2022-01-01", "test_end": "2022-12-31", "is_stress": False},
+    {"label": "2023", "run_key_label": "2023", "year": 2023, "train_end": "2022-12-31", "test_start": "2023-01-01", "test_end": "2023-12-31", "is_stress": False},
+    {"label": "2024", "run_key_label": "2024", "year": 2024, "train_end": "2023-12-31", "test_start": "2024-01-01", "test_end": "2024-12-31", "is_stress": False},
+    {"label": STRESS_LABEL, "run_key_label": "2025H2_STRESS", "year": STRESS_LABEL, "train_end": "2025-05-31", "test_start": "2025-06-01", "test_end": None, "is_stress": True},
 )
 
 BASE_STABILITY_WINDOWS = (
@@ -406,11 +374,7 @@ def rulebook_from_member(member: Mapping[str, Any]) -> Rulebook:
 
 def stability_windows_for_train(train_end: str) -> list[tuple[str, str, str]]:
     train_end_ts = pd.Timestamp(train_end)
-    out: list[tuple[str, str, str]] = []
-    for label, start, end in BASE_STABILITY_WINDOWS:
-        if pd.Timestamp(end) <= train_end_ts:
-            out.append((label, start, end))
-    return out
+    return [(label, start, end) for label, start, end in BASE_STABILITY_WINDOWS if pd.Timestamp(end) <= train_end_ts]
 
 
 def evaluate_member_stability(member: Mapping[str, Any], ctx: Mapping[str, Any], *, train_end: str) -> dict[str, Any]:
@@ -632,10 +596,7 @@ def process_ticker(ticker: str, args_dict: dict[str, Any], batch_dir_str: str) -
                 "member_count": training.get("member_count"),
                 "qualified_count": training.get("qualified_count"),
                 "member_score_distribution_diagnostic_only": training.get("member_score_distribution"),
-                "candidate_results": [
-                    {k: v for k, v in row.items() if k != "trades"}
-                    for row in candidate_results
-                ],
+                "candidate_results": [{k: v for k, v in row.items() if k != "trades"} for row in candidate_results],
                 "selected": selected,
                 "stability_ranked": stability_ranked,
                 "elapsed_sec": time.time() - fold_started,
@@ -811,8 +772,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-index", default=None)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--notify-every", type=int, default=100, help="telegram progress interval by completed ticker count")
-    parser.add_argument("--notify-pct", type=float, default=5.0, help="telegram progress interval by percent bucket")
+    parser.add_argument("--notify-pct", type=float, default=10.0, help="telegram progress interval by percent bucket")
+    parser.add_argument("--notify-error-threshold", type=int, default=50, help="send one aggregate error alert after this many ticker errors")
     return parser.parse_args()
+
+
+def maybe_send_error_threshold(notifier: HonestRunNotifier | None, *, error_count: int, threshold: int, sent: bool, context: str) -> bool:
+    if sent:
+        return True
+    if threshold <= 0:
+        return False
+    if error_count >= threshold:
+        if notifier:
+            notifier.error(
+                ticker="-",
+                error=f"aggregate_error_count={error_count} reached threshold={threshold}; see ticker_results.jsonl for ticker-level details",
+                context=context,
+            )
+        return True
+    return False
 
 
 def main() -> int:
@@ -845,6 +823,8 @@ def main() -> int:
                 "max_workers": args.max_workers,
                 "resume": bool(args.resume),
                 "ohlcv_cache": str(args.ohlcv_cache),
+                "progress_interval": f"{args.notify_every} tickers or {args.notify_pct:g}%",
+                "ticker_error_alert": f"aggregate only at {args.notify_error_threshold} errors",
             },
         )
         progress_path = batch_dir / "progress.json"
@@ -859,8 +839,15 @@ def main() -> int:
         completed_count = len(tickers) - len(pending)
         error_count = sum(1 for item in progress.values() if item.get("status") == "ERROR")
         selected_count = count_jsonl(batch_dir / "selected.jsonl")
+        error_threshold_sent = maybe_send_error_threshold(
+            notifier,
+            error_count=error_count,
+            threshold=args.notify_error_threshold,
+            sent=False,
+            context="stage2_error_threshold_resume",
+        )
         if notifier and completed_count:
-            notifier.progress(done=completed_count, selected=selected_count, errors=error_count, force=True)
+            notifier.progress(done=completed_count, selected=selected_count, errors=error_count)
 
         rows: list[dict[str, Any]] = []
         args_dict = {
@@ -894,8 +881,13 @@ def main() -> int:
                 completed_count += 1
                 if row.get("status") != "DONE":
                     error_count += 1
-                    if notifier:
-                        notifier.error(ticker=ticker, error=(row.get("error") or {}).get("message") or row.get("status"), context="stage2_worker")
+                    error_threshold_sent = maybe_send_error_threshold(
+                        notifier,
+                        error_count=error_count,
+                        threshold=args.notify_error_threshold,
+                        sent=error_threshold_sent,
+                        context="stage2_error_threshold",
+                    )
                 selected_count = count_jsonl(batch_dir / "selected.jsonl")
                 if notifier:
                     notifier.progress(done=completed_count, selected=selected_count, errors=error_count)

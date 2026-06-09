@@ -358,11 +358,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-viability", default="false")
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--limit", type=int, default=0, help="optional smoke limit from the input ticker file")
-    parser.add_argument("--notify-every", type=int, default=100, help="telegram progress interval by completed ticker count")
-    parser.add_argument("--notify-pct", type=float, default=5.0, help="telegram progress interval by percent bucket")
+    parser.add_argument("--notify-every", type=int, default=500, help="telegram progress interval by completed ticker count")
+    parser.add_argument("--notify-pct", type=float, default=10.0, help="telegram progress interval by percent bucket")
+    parser.add_argument("--notify-error-threshold", type=int, default=50, help="send one aggregate error alert after this many ticker errors")
     args = parser.parse_args()
     args.run_viability = str(args.run_viability).strip().lower() in {"1", "true", "yes", "y"}
     return args
+
+
+def maybe_send_error_threshold(notifier: HonestRunNotifier | None, *, error_count: int, threshold: int, sent: bool, context: str) -> bool:
+    if sent:
+        return True
+    if threshold <= 0:
+        return False
+    if error_count >= threshold:
+        if notifier:
+            notifier.error(
+                ticker="-",
+                error=f"aggregate_error_count={error_count} reached threshold={threshold}; see failures.jsonl for ticker-level details",
+                context=context,
+            )
+        return True
+    return False
 
 
 def main() -> int:
@@ -395,6 +412,8 @@ def main() -> int:
                 "max_workers": args.max_workers,
                 "run_viability": bool(args.run_viability),
                 "output_root": str(root),
+                "progress_interval": f"{args.notify_every} tickers or {args.notify_pct:g}%",
+                "ticker_error_alert": f"aggregate only at {args.notify_error_threshold} errors",
             },
         )
         progress_path = stage0 / "stage0_progress.json"
@@ -420,8 +439,15 @@ def main() -> int:
         completed_count = len(tickers) - len(pending)
         passed_count = sum(1 for row in existing_rows if row.get("screening_passed"))
         error_count = sum(1 for item in progress.values() if item.get("status") == "ERROR")
+        error_threshold_sent = maybe_send_error_threshold(
+            notifier,
+            error_count=error_count,
+            threshold=args.notify_error_threshold,
+            sent=False,
+            context="stage0_error_threshold_resume",
+        )
         if notifier and completed_count:
-            notifier.progress(done=completed_count, passed=passed_count, errors=error_count, force=True)
+            notifier.progress(done=completed_count, passed=passed_count, errors=error_count)
 
         with ProcessPoolExecutor(max_workers=max(1, int(args.max_workers))) as executor:
             futures = {
@@ -458,8 +484,13 @@ def main() -> int:
                     passed_count += 1
                 if row.get("status") == "ERROR":
                     error_count += 1
-                    if notifier:
-                        notifier.error(ticker=ticker, error=(row.get("error") or {}).get("message") or row.get("fail_reason"), context="stage0_worker")
+                    error_threshold_sent = maybe_send_error_threshold(
+                        notifier,
+                        error_count=error_count,
+                        threshold=args.notify_error_threshold,
+                        sent=error_threshold_sent,
+                        context="stage0_error_threshold",
+                    )
                 if notifier:
                     notifier.progress(done=completed_count, passed=passed_count, errors=error_count)
 

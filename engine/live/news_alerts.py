@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -19,11 +20,21 @@ from engine.live.market_clock import market_region_for_ticker
 
 log = logging.getLogger("live.news_alerts")
 
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(str(os.getenv(name, "")).strip() or default)
+    except Exception:
+        return default
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # Live lr8d_stage1 universe is a subset of the LR8D85 sell_omen table.
 # The legacy sell_omen_scores.csv does not cover current promoted holdings such as MPC/NBIX.
 SELL_OMEN_SCORE_TABLE = PROJECT_ROOT / "data" / "_system" / "ml_sell_omen" / "sell_omen_scores_lr8d85.csv"
 NEWS_ALERT_STATE_PATH = PROJECT_ROOT / "data" / "_system" / "news_alert_state.json"
+# sell_omen scores are daily rows. Keep normal weekend/holiday gaps usable, but block stale snapshots.
+SELL_OMEN_MAX_AGE_DAYS = _int_env("SELL_OMEN_MAX_AGE_DAYS", 5)
 KST = ZoneInfo("Asia/Seoul")
 NY = ZoneInfo("America/New_York")
 
@@ -74,6 +85,15 @@ def _score_asof_date(ticker: str, asof: Any = None) -> str:
     return local.date().isoformat()
 
 
+def _score_age_days(asof_date: str, score_date: str) -> Optional[int]:
+    try:
+        asof_day = datetime.strptime(str(asof_date), "%Y-%m-%d").date()
+        score_day = datetime.strptime(str(score_date), "%Y-%m-%d").date()
+        return (asof_day - score_day).days
+    except Exception:
+        return None
+
+
 def _load_score_rows(path: Path = SELL_OMEN_SCORE_TABLE) -> dict[str, list[dict[str, Any]]]:
     path = Path(path)
     if not path.exists():
@@ -115,7 +135,7 @@ def _load_score_rows(path: Path = SELL_OMEN_SCORE_TABLE) -> dict[str, list[dict[
 
 
 def lookup_live_sell_omen_score(ticker: str, *, asof: Any = None, path: Path = SELL_OMEN_SCORE_TABLE) -> Optional[dict[str, Any]]:
-    """Return latest sell_omen score row with Date <= asof session date."""
+    """Return latest non-stale sell_omen score row with Date <= asof session date."""
     t = str(ticker or "").upper().strip()
     if not t:
         return None
@@ -127,7 +147,24 @@ def lookup_live_sell_omen_score(ticker: str, *, asof: Any = None, path: Path = S
             latest = row
         else:
             break
-    return dict(latest) if latest else None
+    if not latest:
+        return None
+    score_date = str(latest.get("date") or "")
+    age_days = _score_age_days(asof_date, score_date)
+    if age_days is None:
+        log.warning("%s sell_omen score ignored: invalid score_date=%s asof_date=%s", t, score_date, asof_date)
+        return None
+    if age_days > SELL_OMEN_MAX_AGE_DAYS:
+        log.warning(
+            "%s sell_omen score ignored: stale score_date=%s asof_date=%s age_days=%s max_age_days=%s",
+            t,
+            score_date,
+            asof_date,
+            age_days,
+            SELL_OMEN_MAX_AGE_DAYS,
+        )
+        return None
+    return dict(latest)
 
 
 def _load_state(path: Path = NEWS_ALERT_STATE_PATH) -> dict[str, Any]:

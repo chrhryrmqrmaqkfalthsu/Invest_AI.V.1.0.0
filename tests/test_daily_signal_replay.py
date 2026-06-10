@@ -3,11 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pandas as pd
-
 from engine.portfolio.daily_signal_replay import (
     ENTRY_DIFF_ABS_TOL,
     ENTRY_DIFF_PCT_TOL,
+    ReplayConfig,
     _entry_match_ok,
     build_rulebook_map,
     dry_run_plan,
@@ -32,6 +31,12 @@ def test_build_rulebook_map_requires_stage2_artifact_no_fallback(tmp_path: Path)
     assert ("m1", "r1") in rb_map
     assert rb_map[("m1", "r1")].ticker == "AAA"
     assert build_rulebook_map(tmp_path / "missing.jsonl") == {}
+
+
+def test_replay_config_defaults_to_stage2_parity():
+    cfg = ReplayConfig()
+    assert cfg.mode == "stage2_parity"
+    assert cfg.use_llm_events is False
 
 
 def test_entry_match_tolerance_logic():
@@ -85,4 +90,6 @@ def test_dry_run_plan_detects_missing_rulebook(tmp_path: Path):
     assert summary["lots_sampled"] == 1
     assert summary["missing_rulebook_count"] == 1
     assert summary["fallback_used"] is False
+    assert summary["default_use_llm_events"] is False
+    assert summary["default_mode"] == "stage2_parity"
     assert "forbidden" in summary["fallback_policy"]

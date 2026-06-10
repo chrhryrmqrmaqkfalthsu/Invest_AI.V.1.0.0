@@ -35,6 +35,7 @@ def main() -> int:
     parser.add_argument("--max-daily-rows-per-lot", type=int, default=10)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--full-run", action="store_true")
+    parser.add_argument("--event-diagnostic", action="store_true", help="Use use_llm_events=True for diagnostics only; not stage2 parity.")
     parser.add_argument("--no-fail-on-entry-mismatch", action="store_true")
     args = parser.parse_args()
 
@@ -46,11 +47,14 @@ def main() -> int:
             limit=int(args.limit or 20),
         )
     else:
+        use_events = bool(args.event_diagnostic)
         cfg = ReplayConfig(
             max_lots=int(args.limit or 20),
             max_daily_rows_per_lot=int(args.max_daily_rows_per_lot or 0),
             full_run=bool(args.full_run),
             fail_on_entry_mismatch=not bool(args.no_fail_on_entry_mismatch),
+            use_llm_events=use_events,
+            mode="event_diagnostic" if use_events else "stage2_parity",
         )
         payload = run_daily_signal_replay(
             trades_jsonl=Path(args.trades_jsonl),

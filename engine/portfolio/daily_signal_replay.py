@@ -11,8 +11,10 @@ Safety invariants
   and exit_date are recorded separately.
 * Each replay call passes df.iloc[:T+1] to evaluate_signal(), matching backtest
   look-ahead discipline.
-* Entry replay must match logged entry strength within strict tolerance before a
-  daily time series is considered valid.
+* Default replay mode is stage2 parity: use_llm_events=False, matching
+  run_honest_stage2_full_ga_4fold.py.
+* Event-enabled replay is kept only as event_diagnostic mode and is excluded from
+  the entry sanity gate unless explicitly requested.
 """
 from __future__ import annotations
 
@@ -62,6 +64,9 @@ class ReplayConfig:
     max_daily_rows_per_lot: int = 0
     full_run: bool = False
     fail_on_entry_mismatch: bool = True
+    # stage2 parity default. event_diagnostic mode sets this to True explicitly.
+    use_llm_events: bool = False
+    mode: str = "stage2_parity"
 
 
 @dataclass(frozen=True)
@@ -104,10 +109,7 @@ def _read_jsonl(path: Path, limit: Optional[int] = None) -> list[dict[str, Any]]
 
 
 def build_rulebook_map(rulebooks_jsonl: Path = DEFAULT_RULEBOOKS_JSONL) -> dict[tuple[str, str], Rulebook]:
-    """Load stage2 rulebooks keyed by (member_hash, rulebook_hash).
-
-    No fallback is allowed. Missing artifact means replay is not verifiable.
-    """
+    """Load stage2 rulebooks keyed by (member_hash, rulebook_hash). No fallback."""
     rb_map: dict[tuple[str, str], Rulebook] = {}
     for row in _read_jsonl(Path(rulebooks_jsonl)):
         rb_dict = row.get("rulebook")
@@ -208,7 +210,6 @@ def _idx_for_date(df: pd.DataFrame, date_value: Any) -> Optional[int]:
     matches = index.get_indexer([d], method=None)
     if len(matches) and matches[0] >= 0:
         return int(matches[0])
-    # Prefer previous trading day, never future.
     pos = index.searchsorted(d, side="right") - 1
     if pos >= 0:
         return int(pos)
@@ -221,13 +222,14 @@ def _strength(score: float, threshold: float) -> Optional[float]:
     return float(score) / float(threshold)
 
 
-def component_reproducibility_report(*, has_ohlcv: bool, has_market_history: bool, has_ticker_sentiment: bool) -> list[dict[str, Any]]:
+def component_reproducibility_report(*, has_ohlcv: bool, has_market_history: bool, has_ticker_sentiment: bool, use_llm_events: bool) -> list[dict[str, Any]]:
+    event_treatment = "enabled only in event_diagnostic mode" if use_llm_events else "disabled for stage2 parity; matches run_honest_stage2_full_ga_4fold.py"
     statuses = [
         ReplayInputStatus("OHLCV/technical", has_ohlcv, "stage0/ohlcv_cache + calc_indicators", "required; blocker if missing", blocker=not has_ohlcv),
         ReplayInputStatus("market_history", has_market_history, "engine.market.context.get_market_history cache", f"lagged by FEATURE_LAG_DAYS={FEATURE_LAG_DAYS}", blocker=False),
         ReplayInputStatus("sector", has_market_history, "market_history sector_{sector_name}", "fallback to sector_score=50 if absent, same as backtest", blocker=False),
         ReplayInputStatus("vix", has_market_history, "market_history vix", "fallback to vix=18 if absent, same as backtest", blocker=False),
-        ReplayInputStatus("events", has_market_history, "market_history event flag columns", "zero flags if absent, same as backtest", blocker=False),
+        ReplayInputStatus("events", has_market_history, "market_history event flag columns", event_treatment, blocker=False),
         ReplayInputStatus("ticker_sentiment", has_ticker_sentiment, "data/_system/ticker_sentiment/{ticker}_daily.csv", f"lagged by FEATURE_LAG_DAYS={FEATURE_LAG_DAYS}, max_age={FEATURE_LAG_MAX_AGE_DAYS}", blocker=False),
         ReplayInputStatus("news_topics", has_ticker_sentiment, "precompute_topic_features(ticker_sentiment, rb.news_zscore_window)", f"lagged by FEATURE_LAG_DAYS={FEATURE_LAG_DAYS}, max_age={FEATURE_LAG_MAX_AGE_DAYS}", blocker=False),
     ]
@@ -242,6 +244,7 @@ def _replay_signal_for_idx(
     market_history_df: Optional[pd.DataFrame],
     ticker_sentiment: Optional[dict],
     topic_feature_map: Optional[dict],
+    use_llm_events: bool = False,
 ) -> tuple[Any, dict[str, Any]]:
     cur_market, cur_sector, cur_vix, cur_sentiment, cur_event_flags, cur_topic_features = _lookup_signal_context(
         df=df,
@@ -253,7 +256,7 @@ def _replay_signal_for_idx(
         sector_name=str(getattr(rb, "sector_name", "tech") or "tech"),
         ticker_sentiment=ticker_sentiment,
         topic_feature_map=topic_feature_map,
-        use_llm_events=True,
+        use_llm_events=bool(use_llm_events),
     )
     sig = evaluate_signal(
         rb,
@@ -272,6 +275,7 @@ def _replay_signal_for_idx(
         "news_sentiment": cur_sentiment,
         "event_flags": cur_event_flags,
         "topic_features": cur_topic_features,
+        "use_llm_events": bool(use_llm_events),
     }
     return sig, context
 
@@ -319,6 +323,7 @@ def replay_one_lot(
     market_history_df: Optional[pd.DataFrame],
     ticker_sentiment: Optional[dict],
     max_daily_rows: int = 0,
+    use_llm_events: bool = False,
 ) -> dict[str, Any]:
     topic_window = _news_zscore_window(rb)
     topic_feature_map = _precompute_topic_feature_map(ticker_sentiment, topic_window)
@@ -332,6 +337,7 @@ def replay_one_lot(
         market_history_df=market_history_df,
         ticker_sentiment=ticker_sentiment,
         topic_feature_map=topic_feature_map,
+        use_llm_events=use_llm_events,
     )
     logged_strength = _strength(_to_float(row.get("entry_signal_score")), _to_float(row.get("entry_signal_threshold")))
     replay_strength = _strength(float(entry_sig.score), float(entry_sig.threshold))
@@ -353,6 +359,8 @@ def replay_one_lot(
         "entry_signal_date": str(row.get("entry_signal_date") or ""),
         "entry_fill_date": str(row.get("entry_fill_date") or ""),
         "exit_date": str(row.get("exit_date") or ""),
+        "replay_mode": "event_diagnostic" if use_llm_events else "stage2_parity",
+        "use_llm_events": bool(use_llm_events),
         "current_score": float(entry_sig.score),
         "current_threshold": float(entry_sig.threshold),
         "current_strength": replay_strength,
@@ -386,8 +394,7 @@ def replay_one_lot(
     if end_idx is None:
         end_idx = len(df) - 1
     end_idx = min(end_idx, len(df) - 1)
-    limit_count = 0
-    for i in range(start_idx, end_idx + 1):
+    for count, i in enumerate(range(start_idx, end_idx + 1), start=1):
         sig, ctx = _replay_signal_for_idx(
             rb,
             df,
@@ -395,20 +402,17 @@ def replay_one_lot(
             market_history_df=market_history_df,
             ticker_sentiment=ticker_sentiment,
             topic_feature_map=topic_feature_map,
+            use_llm_events=use_llm_events,
         )
         cur_strength = _strength(float(sig.score), float(sig.threshold))
-        valid = cur_strength is not None
         decay = None
         if replay_strength is not None and cur_strength is not None:
             decay = (replay_strength - cur_strength) / max(abs(replay_strength), 1e-12) * 100.0
         price_path_proxy = None
-        try:
-            entry_price = _to_float(row.get("entry_price"), 0.0)
-            cur_close = _to_float(df.iloc[i].get("Close"), 0.0)
-            if entry_price > 0 and cur_close > 0:
-                price_path_proxy = (entry_price - cur_close) / entry_price * 100.0
-        except Exception:
-            price_path_proxy = None
+        entry_price = _to_float(row.get("entry_price"), 0.0)
+        cur_close = _to_float(df.iloc[i].get("Close"), 0.0)
+        if entry_price > 0 and cur_close > 0:
+            price_path_proxy = (entry_price - cur_close) / entry_price * 100.0
         daily_records.append({
             "ticker": row.get("ticker"),
             "lot_id": row.get("lot_id"),
@@ -418,6 +422,8 @@ def replay_one_lot(
             "entry_signal_date": str(row.get("entry_signal_date") or ""),
             "entry_fill_date": str(row.get("entry_fill_date") or ""),
             "exit_date": str(row.get("exit_date") or ""),
+            "replay_mode": "event_diagnostic" if use_llm_events else "stage2_parity",
+            "use_llm_events": bool(use_llm_events),
             "current_score": float(sig.score),
             "current_threshold": float(sig.threshold),
             "current_strength": cur_strength,
@@ -426,7 +432,7 @@ def replay_one_lot(
             "entry_strength_diff_abs": diff_abs,
             "entry_strength_diff_pct": diff_pct,
             "strength_decay_pct": decay,
-            "signal_valid": valid,
+            "signal_valid": cur_strength is not None,
             "price_path_proxy_baseline": price_path_proxy,
             "raw_score": float(sig.raw_score),
             "market_adjustment": float(sig.market_adjustment),
@@ -434,8 +440,7 @@ def replay_one_lot(
             "context": ctx,
             "reasons": list(sig.reasons),
         })
-        limit_count += 1
-        if max_daily_rows and limit_count >= max_daily_rows:
+        if max_daily_rows and count >= max_daily_rows:
             break
     return {"entry": entry_record, "daily": daily_records}
 
@@ -467,17 +472,13 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 def entry_diff_stats(entries: list[dict[str, Any]]) -> dict[str, Any]:
     vals_abs = [float(x["entry_strength_diff_abs"]) for x in entries if x.get("entry_strength_diff_abs") is not None]
     vals_pct = [float(x["entry_strength_diff_pct"]) for x in entries if x.get("entry_strength_diff_pct") is not None]
+
     def stats(vals: list[float]) -> dict[str, Any]:
         if not vals:
             return {"count": 0}
         s = sorted(vals)
-        return {
-            "count": len(vals),
-            "min": s[0],
-            "p50": s[len(s)//2],
-            "p95": s[int(0.95 * (len(s)-1))],
-            "max": s[-1],
-        }
+        return {"count": len(vals), "min": s[0], "p50": s[len(s)//2], "p95": s[int(0.95 * (len(s)-1))], "max": s[-1]}
+
     fail = [x for x in entries if not _entry_match_ok(x)]
     return {
         "abs": stats(vals_abs),
@@ -535,6 +536,9 @@ def dry_run_plan(
     return {
         "gate": "daily_signal_replay_dry_plan",
         "stage2_guard": "full_replay_not_executed_while_stage2_running",
+        "default_mode": "stage2_parity",
+        "default_use_llm_events": False,
+        "event_diagnostic_available": True,
         "trades_jsonl": str(trades_jsonl),
         "rulebooks_jsonl": str(rulebooks_jsonl),
         "ohlcv_cache": str(ohlcv_cache),
@@ -575,7 +579,6 @@ def run_daily_signal_replay(
     entries: list[dict[str, Any]] = []
     daily_rows: list[dict[str, Any]] = []
     component_reports: dict[str, list[dict[str, Any]]] = {}
-    mismatch_samples: list[dict[str, Any]] = []
     for row in lots:
         ticker = row["ticker"]
         rb = rb_map[_trade_key(row)]
@@ -587,6 +590,7 @@ def run_daily_signal_replay(
             has_ohlcv=True,
             has_market_history=market_history_df is not None and not market_history_df.empty,
             has_ticker_sentiment=bool(ticker_sentiment),
+            use_llm_events=config.use_llm_events,
         )
         replayed = replay_one_lot(
             row,
@@ -595,22 +599,25 @@ def run_daily_signal_replay(
             market_history_df=market_history_df,
             ticker_sentiment=ticker_sentiment,
             max_daily_rows=config.max_daily_rows_per_lot,
+            use_llm_events=config.use_llm_events,
         )
         entry = replayed["entry"]
         entries.append(entry)
-        if not _entry_match_ok(entry):
-            mismatch_samples.append(entry)
-        if mismatch_samples and config.fail_on_entry_mismatch:
+        if not _entry_match_ok(entry) and config.fail_on_entry_mismatch:
             break
         daily_rows.extend(replayed["daily"])
 
     stats = entry_diff_stats(entries)
+    blocked = stats["fail_count"] > 0 and config.fail_on_entry_mismatch
     summary = {
         "gate": "daily_signal_replay",
         "trades_jsonl": str(trades_jsonl),
         "rulebooks_jsonl": str(rulebooks_jsonl),
         "out_dir": str(out_dir),
         "full_run": bool(config.full_run),
+        "mode": config.mode,
+        "use_llm_events": bool(config.use_llm_events),
+        "sanity_gate_compared_mode": "stage2_parity" if not config.use_llm_events else "event_diagnostic_not_for_stage2_sanity",
         "fallback_used": False,
         "fallback_policy": "forbidden; stage2 topn_rulebooks only",
         "lots_loaded": len(lots),
@@ -620,9 +627,11 @@ def run_daily_signal_replay(
         "feature_lag_max_age_days": FEATURE_LAG_MAX_AGE_DAYS,
         "entry_diff_stats": stats,
         "entry_replay_passed": stats["fail_count"] == 0,
+        "entry_replay_pass_rate_pct": (stats["pass_count"] / len(entries) * 100.0) if entries else 0.0,
         "component_reproducibility_by_ticker_sample": dict(list(component_reports.items())[:10]),
         "proxy_disagreement": proxy_disagreement_rate(daily_rows),
-        "blocked_reason": "entry_strength_mismatch" if stats["fail_count"] else "",
+        "blocked_reason": "entry_strength_mismatch" if blocked else "",
+        "full_daily_replay_ready_after_stage2": bool(stats["fail_count"] == 0 and len(entries) > 0 and not config.use_llm_events),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_jsonl(out_dir / "entry_replay.jsonl", entries)

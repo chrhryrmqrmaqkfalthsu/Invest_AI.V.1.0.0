@@ -4,7 +4,7 @@ run_live.py - 라이브 트레이딩 봇 엔트리포인트.
 구성:
   Scheduler (시계)
     ├─ once         → Runner.startup_check
-    ├─ market_hours → Runner.tick_market
+    ├─ market_hours → Runner.tick_market → holding-news refresh
     ├─ interval     → Runner.tick_offmarket
     ├─ cron         → 장마감 일일 보고
     ├─ cron         → 주간 보고
@@ -103,6 +103,82 @@ def start_telegram_control(
     return bot
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw in (None, ""):
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(str(os.getenv(name, "")).strip() or default)
+    except Exception:
+        return default
+
+
+def make_holding_news_tick_market_job(runner: Runner):
+    """Wrap market tick with hourly holding-news refresh.
+
+    The wrapper does not change sell/exit authority. It runs the existing market
+    tick first, then refreshes the cache read by lookup_live_sell_omen_score() so
+    API latency cannot delay the current tick's existing exit checks.
+    """
+    state = {"last_refresh_at": None}
+
+    def _refresh_if_due() -> None:
+        if not _env_bool("HOLDING_NEWS_QUEUE_ENABLED", True):
+            return
+        now = datetime.now(ZoneInfo("Asia/Seoul"))
+        interval_min = max(1, _env_int("HOLDING_NEWS_REFRESH_MIN", 60))
+        last = state.get("last_refresh_at")
+        due = last is None or (now - last).total_seconds() >= interval_min * 60
+        if not due:
+            return
+        try:
+            from engine.live.holding_news_queue import (
+                DEFAULT_INDIVIDUAL_CALL_BUDGET,
+                recent_no_ticker_covered_tickers,
+                refresh_holding_news_for_positions,
+            )
+
+            budget = min(max(0, _env_int("HOLDING_NEWS_INDIVIDUAL_BUDGET", DEFAULT_INDIVIDUAL_CALL_BUDGET)), DEFAULT_INDIVIDUAL_CALL_BUDGET)
+            market_covered = recent_no_ticker_covered_tickers(
+                max_age_minutes=max(1, _env_int("HOLDING_NEWS_MARKET_COVERED_MAX_MIN", 90)),
+                now=now,
+            )
+            result = refresh_holding_news_for_positions(
+                runner.position_manager.all(),
+                broker=runner.broker,
+                notifier=runner.notifier,
+                asof=now,
+                budget=budget,
+                dry_run=_env_bool("HOLDING_NEWS_DRY_RUN", False),
+                exclude_tickers=market_covered,
+            )
+            state["last_refresh_at"] = now
+            logger.info(
+                "[HOLDING-NEWS] refresh result held=%s selected=%s budget=%s market_covered=%s dry_run=%s errors=%s",
+                result.get("held_count"),
+                result.get("selected_count"),
+                result.get("budget"),
+                result.get("market_covered_count"),
+                result.get("dry_run"),
+                len(result.get("errors") or {}),
+            )
+        except Exception as exc:
+            logger.warning("[HOLDING-NEWS] refresh failed; tick_market already completed: %s", exc)
+            state["last_refresh_at"] = now
+
+    def tick_market_with_holding_news():
+        result = runner.tick_market()
+        _refresh_if_due()
+        return result
+
+    tick_market_with_holding_news.__name__ = "tick_market_with_holding_news"
+    return tick_market_with_holding_news
+
+
 def main():
     parser = argparse.ArgumentParser(description="Kingmaker live trading bot")
     parser.add_argument("--mode", choices=["paper", "real", "vts", "live", "alpaca", "alpaca_paper"], default=None)
@@ -195,7 +271,7 @@ def main():
 
     scheduler = Scheduler(default_timezone="Asia/Seoul")
     scheduler.add_once_job(func=runner.startup_check, delay_sec=2, job_id="startup_check")
-    scheduler.add_market_hours_job(func=runner.tick_market, interval_sec=args.market_tick, market=clock, job_id="tick_market")
+    scheduler.add_market_hours_job(func=make_holding_news_tick_market_job(runner), interval_sec=args.market_tick, market=clock, job_id="tick_market")
     scheduler.add_interval_job(func=runner.tick_offmarket, interval_sec=args.offmarket_tick, job_id="tick_offmarket", name="tick_offmarket")
 
     def daily_report_job():

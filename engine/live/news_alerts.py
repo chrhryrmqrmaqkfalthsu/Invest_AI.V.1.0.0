@@ -94,6 +94,28 @@ def _score_age_days(asof_date: str, score_date: str) -> Optional[int]:
         return None
 
 
+def _fresh_score_row_or_none(ticker: str, row: Optional[dict[str, Any]], asof_date: str, *, source: str) -> Optional[dict[str, Any]]:
+    if not row:
+        return None
+    score_date = str(row.get("date") or row.get("score_date") or "")[:10]
+    age_days = _score_age_days(asof_date, score_date)
+    if age_days is None:
+        log.warning("%s sell_omen %s score ignored: invalid score_date=%s asof_date=%s", ticker, source, score_date, asof_date)
+        return None
+    if age_days > SELL_OMEN_MAX_AGE_DAYS:
+        log.warning(
+            "%s sell_omen %s score ignored: stale score_date=%s asof_date=%s age_days=%s max_age_days=%s",
+            ticker,
+            source,
+            score_date,
+            asof_date,
+            age_days,
+            SELL_OMEN_MAX_AGE_DAYS,
+        )
+        return None
+    return dict(row)
+
+
 def _load_score_rows(path: Path = SELL_OMEN_SCORE_TABLE) -> dict[str, list[dict[str, Any]]]:
     path = Path(path)
     if not path.exists():
@@ -135,11 +157,29 @@ def _load_score_rows(path: Path = SELL_OMEN_SCORE_TABLE) -> dict[str, list[dict[
 
 
 def lookup_live_sell_omen_score(ticker: str, *, asof: Any = None, path: Path = SELL_OMEN_SCORE_TABLE) -> Optional[dict[str, Any]]:
-    """Return latest non-stale sell_omen score row with Date <= asof session date."""
+    """Return latest non-stale sell_omen score row with Date <= asof session date.
+
+    Fresh holding-news cache rows have priority. If the cache is absent or stale,
+    the LR8D85 CSV table is used as a fallback and passes through the same 5-day
+    stale guard.
+    """
     t = str(ticker or "").upper().strip()
     if not t:
         return None
     asof_date = _score_asof_date(t, asof)
+    path = Path(path)
+
+    try:
+        if path.resolve() == SELL_OMEN_SCORE_TABLE.resolve():
+            from engine.live import holding_news_queue as hnq
+
+            cached = hnq.lookup_holding_news_cache_score(t, path=hnq.HOLDING_NEWS_CACHE_PATH)
+            fresh_cached = _fresh_score_row_or_none(t, cached, asof_date, source="cache")
+            if fresh_cached:
+                return fresh_cached
+    except Exception as exc:
+        log.warning("%s sell_omen cache lookup failed, CSV fallback: %s", t, exc)
+
     rows = _load_score_rows(path).get(t, [])
     latest = None
     for row in rows:
@@ -147,24 +187,7 @@ def lookup_live_sell_omen_score(ticker: str, *, asof: Any = None, path: Path = S
             latest = row
         else:
             break
-    if not latest:
-        return None
-    score_date = str(latest.get("date") or "")
-    age_days = _score_age_days(asof_date, score_date)
-    if age_days is None:
-        log.warning("%s sell_omen score ignored: invalid score_date=%s asof_date=%s", t, score_date, asof_date)
-        return None
-    if age_days > SELL_OMEN_MAX_AGE_DAYS:
-        log.warning(
-            "%s sell_omen score ignored: stale score_date=%s asof_date=%s age_days=%s max_age_days=%s",
-            t,
-            score_date,
-            asof_date,
-            age_days,
-            SELL_OMEN_MAX_AGE_DAYS,
-        )
-        return None
-    return dict(latest)
+    return _fresh_score_row_or_none(t, latest, asof_date, source="csv")
 
 
 def _load_state(path: Path = NEWS_ALERT_STATE_PATH) -> dict[str, Any]:

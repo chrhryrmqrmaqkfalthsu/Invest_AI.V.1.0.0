@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -108,6 +109,45 @@ def _read_jsonl(path: Path, limit: Optional[int] = None) -> list[dict[str, Any]]
     return rows
 
 
+def canonical_lot_group_key(row: dict[str, Any]) -> tuple[str, str, str, str, str]:
+    """Immutable lot identity group before sequence assignment.
+
+    exit_date is intentionally excluded because it is an outcome, not an entry
+    identity. The sequence is derived from stage2_trade_line_no within this group.
+    """
+    return (
+        str(row.get("ticker") or "").upper().strip(),
+        str(row.get("member_hash") or "").strip(),
+        str(row.get("rulebook_hash") or "").strip(),
+        str(row.get("entry_signal_date") or "")[:10],
+        str(row.get("entry_fill_date") or row.get("entry_date") or "")[:10],
+    )
+
+
+def canonical_lot_id_from_parts(group_key: tuple[str, str, str, str, str], entry_sequence: int) -> str:
+    ticker, member_hash, rulebook_hash, entry_signal_date, entry_fill_date = group_key
+    return f"{ticker}:{member_hash[:12]}:{rulebook_hash[:12]}:{entry_signal_date}:{entry_fill_date}:{int(entry_sequence)}"
+
+
+def assign_canonical_lot_ids(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Assign stable canonical_lot_id using stage2_trade_line_no rank per group."""
+    grouped: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[canonical_lot_group_key(row)].append(row)
+    out: list[dict[str, Any]] = []
+    for group_key, group_rows in grouped.items():
+        ordered = sorted(group_rows, key=lambda r: int(r.get("stage2_trade_line_no", 0)))
+        for seq, row in enumerate(ordered):
+            r = dict(row)
+            r["canonical_lot_group_key"] = "|".join(group_key)
+            r["entry_sequence"] = seq
+            r["canonical_lot_id"] = canonical_lot_id_from_parts(group_key, seq)
+            # Keep legacy lot_id aligned for downstream joins.
+            r["lot_id"] = r["canonical_lot_id"]
+            out.append(r)
+    return sorted(out, key=lambda r: int(r.get("stage2_trade_line_no", 0)))
+
+
 def build_rulebook_map(rulebooks_jsonl: Path = DEFAULT_RULEBOOKS_JSONL) -> dict[tuple[str, str], Rulebook]:
     """Load stage2 rulebooks keyed by (member_hash, rulebook_hash). No fallback."""
     rb_map: dict[tuple[str, str], Rulebook] = {}
@@ -125,15 +165,6 @@ def _trade_key(row: dict[str, Any]) -> tuple[str, str]:
     return str(row.get("member_hash") or "").strip(), str(row.get("rulebook_hash") or "").strip()
 
 
-def _lot_id(row: dict[str, Any], index: int) -> str:
-    existing = str(row.get("lot_id") or "").strip()
-    if existing:
-        return existing
-    ticker = str(row.get("ticker") or "").upper().strip()
-    mh = str(row.get("member_hash") or "")[:12]
-    return f"{ticker}:{mh}:{row.get('entry_signal_date')}:{row.get('entry_fill_date')}:{index}"
-
-
 def _valid_trade(row: dict[str, Any]) -> bool:
     if not REQUIRED_TRADE_FIELDS.issubset(row):
         return False
@@ -148,14 +179,26 @@ def _valid_trade(row: dict[str, Any]) -> bool:
 
 def load_stage2_lots(trades_jsonl: Path = DEFAULT_TRADES_JSONL, *, limit: Optional[int] = None) -> list[dict[str, Any]]:
     rows = []
-    for i, row in enumerate(_read_jsonl(Path(trades_jsonl), limit=limit)):
-        if not _valid_trade(row):
-            continue
-        r = dict(row)
-        r["ticker"] = str(r.get("ticker") or "").upper().strip()
-        r["lot_id"] = _lot_id(r, i)
-        rows.append(r)
-    return rows
+    count = 0
+    if not Path(trades_jsonl).exists():
+        return rows
+    with Path(trades_jsonl).open("r", encoding="utf-8") as fh:
+        for line_no, line in enumerate(fh, start=1):
+            if not line.strip():
+                continue
+            raw = json.loads(line)
+            count += 1
+            if not _valid_trade(raw):
+                if limit and count >= limit:
+                    break
+                continue
+            r = dict(raw)
+            r["ticker"] = str(r.get("ticker") or "").upper().strip()
+            r["stage2_trade_line_no"] = line_no
+            rows.append(r)
+            if limit and count >= limit:
+                break
+    return assign_canonical_lot_ids(rows)
 
 
 def _normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
@@ -352,7 +395,11 @@ def replay_one_lot(
     logged_context = _logged_entry_context(row)
     entry_record = {
         "ticker": row.get("ticker"),
-        "lot_id": row.get("lot_id"),
+        "lot_id": row.get("lot_id") or row.get("canonical_lot_id"),
+        "canonical_lot_id": row.get("canonical_lot_id") or row.get("lot_id"),
+        "canonical_lot_group_key": row.get("canonical_lot_group_key"),
+        "entry_sequence": row.get("entry_sequence"),
+        "stage2_trade_line_no": row.get("stage2_trade_line_no"),
         "rulebook_hash": row.get("rulebook_hash"),
         "member_hash": row.get("member_hash"),
         "decision_date": str(df.index[entry_idx].date()),
@@ -415,7 +462,11 @@ def replay_one_lot(
             price_path_proxy = (entry_price - cur_close) / entry_price * 100.0
         daily_records.append({
             "ticker": row.get("ticker"),
-            "lot_id": row.get("lot_id"),
+            "lot_id": row.get("lot_id") or row.get("canonical_lot_id"),
+            "canonical_lot_id": row.get("canonical_lot_id") or row.get("lot_id"),
+            "canonical_lot_group_key": row.get("canonical_lot_group_key"),
+            "entry_sequence": row.get("entry_sequence"),
+            "stage2_trade_line_no": row.get("stage2_trade_line_no"),
             "rulebook_hash": row.get("rulebook_hash"),
             "member_hash": row.get("member_hash"),
             "decision_date": str(df.index[i].date()),
@@ -533,6 +584,7 @@ def dry_run_plan(
     tickers = sorted({row["ticker"] for row in lots})
     ohlcv_available = {ticker: (Path(ohlcv_cache) / f"{ticker}.pkl").exists() for ticker in tickers}
     sentiment_available = {ticker: bool(load_ticker_sentiment(ticker)) for ticker in tickers[: min(20, len(tickers))]}
+    duplicate_lot_ids = len(lots) - len({row.get("canonical_lot_id") for row in lots})
     return {
         "gate": "daily_signal_replay_dry_plan",
         "stage2_guard": "full_replay_not_executed_while_stage2_running",
@@ -545,6 +597,7 @@ def dry_run_plan(
         "lots_sampled": len(lots),
         "rulebooks_loaded": len(rb_map),
         "missing_rulebook_count": len(missing_rb),
+        "duplicate_canonical_lot_id": duplicate_lot_ids,
         "fallback_used": False,
         "fallback_policy": "forbidden; missing stage2 rulebook_hash is blocker",
         "ticker_count": len(tickers),
@@ -553,7 +606,7 @@ def dry_run_plan(
         "feature_lag_days": FEATURE_LAG_DAYS,
         "feature_lag_max_age_days": FEATURE_LAG_MAX_AGE_DAYS,
         "date_axis": "decision_date; entry_signal_date/entry_fill_date/exit_date recorded separately",
-        "join_key": "ticker / lot_id / rulebook_hash / decision_date",
+        "join_key": "canonical_lot_id / decision_date",
         "entry_replay_tolerance": {"abs": ENTRY_DIFF_ABS_TOL, "pct": ENTRY_DIFF_PCT_TOL},
         "will_not_execute_full_replay_in_dry_run": True,
     }
@@ -574,6 +627,9 @@ def run_daily_signal_replay(
     missing = [row for row in lots if _trade_key(row) not in rb_map]
     if missing:
         raise RuntimeError(f"Missing stage2 rulebooks for {len(missing)} lots; fallback forbidden")
+    dup_count = len(lots) - len({row.get("canonical_lot_id") for row in lots})
+    if dup_count:
+        raise RuntimeError(f"duplicate canonical_lot_id rows: {dup_count}")
 
     market_history_df = get_market_history(years=7)
     entries: list[dict[str, Any]] = []
@@ -622,6 +678,7 @@ def run_daily_signal_replay(
         "fallback_policy": "forbidden; stage2 topn_rulebooks only",
         "lots_loaded": len(lots),
         "lots_replayed": len(entries),
+        "duplicate_canonical_lot_id": dup_count,
         "daily_rows": len(daily_rows),
         "feature_lag_days": FEATURE_LAG_DAYS,
         "feature_lag_max_age_days": FEATURE_LAG_MAX_AGE_DAYS,

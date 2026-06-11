@@ -72,7 +72,7 @@ FITNESS_MODE = "swing"
 POSITION_LIMIT_KRW = 120_000.0
 COMMISSION_RATE = 0.0005
 WARMUP = 200
-MAX_MEMBERS = 40
+MAX_MEMBERS = 100
 CACHE_FORMAT = "pkl"
 STRESS_LABEL = "2025H2"
 
@@ -296,6 +296,7 @@ def run_backtest_cc(rb: Rulebook, ctx: Mapping[str, Any], *, start_date: str, en
         entry_execution_mode=ENTRY_EXECUTION_MODE,
         exit_execution_mode=EXIT_EXECUTION_MODE,
         fold_exit_policy=FOLD_EXIT_POLICY,
+        live_hard_stop_guard=True,
     )
 
 
@@ -764,7 +765,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tickers", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--max-workers", type=int, default=8)
-    parser.add_argument("--population", type=int, default=40)
+    parser.add_argument("--population", type=int, default=100)
     parser.add_argument("--generations", type=int, default=50)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--ohlcv-cache", type=Path, default=DEFAULT_OHLCV_CACHE)

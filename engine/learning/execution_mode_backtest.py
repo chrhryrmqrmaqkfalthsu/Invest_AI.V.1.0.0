@@ -218,6 +218,7 @@ def run_backtest_execution_mode(
     entry_execution_mode: str = "close",
     exit_execution_mode: str = "base",
     fold_exit_policy: str = "unbounded",
+    live_hard_stop_guard: bool = False,
 ) -> BacktestResult:
     """Run a fold-aware learning backtest with explicit execution semantics."""
     trades: list[dict[str, Any]] = []
@@ -297,6 +298,7 @@ def run_backtest_execution_mode(
             cur_market_score=cur_market,
             cur_vix_level=cur_vix,
             cur_sector_score=cur_sector,
+            live_hard_stop_guard=live_hard_stop_guard,
             entry_price_override=entry_price,
             entry_atr_override=plan.get("entry_atr"),
             exit_execution_mode=exit_execution_mode,

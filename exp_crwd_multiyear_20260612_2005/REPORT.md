@@ -1,0 +1,43 @@
+# CRWD multiyear
+
+{
+  "best_train_fitness": 19.14797435938174,
+  "execution": {
+    "entry": "t_plus_1_open",
+    "exit": "conservative_core",
+    "fitness_mode": "swing",
+    "fold_exit_policy": "fold_end_mark_to_market",
+    "live_hard_stop_guard": true
+  },
+  "ga_seconds": 315.86535143852234,
+  "generations": 40,
+  "generations_run": 40,
+  "mode": "multiyear",
+  "population": 100,
+  "result": {
+    "all4": 0,
+    "candidate_count": 100,
+    "general3": 0,
+    "general_pass_dist": {
+      "0": 30,
+      "1": 53,
+      "2": 17
+    },
+    "pass_2022": 8,
+    "pass_2023": 47,
+    "pass_2024": 32,
+    "stress_pass": 39
+  },
+  "seed": 21263308,
+  "strict": {
+    "general_exp": 1.0,
+    "min_member": 10.0,
+    "min_trades": 5,
+    "stress_exp": 0.0
+  },
+  "ticker": "CRWD",
+  "train_period": [
+    "2020-05-11",
+    "2021-12-31"
+  ]
+}

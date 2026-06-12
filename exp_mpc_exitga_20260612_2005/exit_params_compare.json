@@ -1,0 +1,82 @@
+{
+  "baseline_live": {
+    "hash": "e1ced6002e72fd60bf5f096e69b4bf36c82dc94fccab5f77b1eb1a1a3fae24b8",
+    "params": {
+      "breakeven_enabled": false,
+      "breakeven_floor_profit_pct": 1.0,
+      "breakeven_trigger_profit_pct": 4.0,
+      "exit_strategy": "fixed",
+      "max_holding_days": 30,
+      "sell_omen_enabled": true,
+      "sell_omen_threshold": 0.7,
+      "stop_loss_atr": 2.9609299471666555,
+      "stop_loss_atr_bear": 4.075999047024478,
+      "take_profit_atr": 4.050758068120564,
+      "take_profit_atr_bull": 4.417975675085267,
+      "trailing_activation_profit_pct": 1.224083447325694,
+      "trailing_atr": 2.125327079876188,
+      "trailing_atr_volatile": 4.0
+    },
+    "rank": "baseline"
+  },
+  "ga_top1": {
+    "hash": "869f36d1a5deae9c511d09a9a6a95c4f9e294a9149562862ffb5112b925544db",
+    "params": {
+      "breakeven_enabled": false,
+      "breakeven_floor_profit_pct": 1.5815505566970163,
+      "breakeven_trigger_profit_pct": 5.2157310742564125,
+      "exit_strategy": "hybrid",
+      "max_holding_days": 30,
+      "sell_omen_enabled": true,
+      "sell_omen_threshold": 0.7,
+      "stop_loss_atr": 2.1387534497034686,
+      "stop_loss_atr_bear": 2.7284575240484608,
+      "take_profit_atr": 5.0,
+      "take_profit_atr_bull": 4.758930232087542,
+      "trailing_activation_profit_pct": 7.037265406711978,
+      "trailing_atr": 1.295492702190896,
+      "trailing_atr_volatile": 2.3945603193172733
+    },
+    "rank": 1
+  },
+  "ga_top2": {
+    "hash": "e0b282473db100913a0743ae279ab6de99836df884e8172a97f88baad869a789",
+    "params": {
+      "breakeven_enabled": false,
+      "breakeven_floor_profit_pct": 1.5815505566970163,
+      "breakeven_trigger_profit_pct": 5.2157310742564125,
+      "exit_strategy": "hybrid",
+      "max_holding_days": 30,
+      "sell_omen_enabled": false,
+      "sell_omen_threshold": 0.7,
+      "stop_loss_atr": 2.1387534497034686,
+      "stop_loss_atr_bear": 2.6759706516821073,
+      "take_profit_atr": 5.0,
+      "take_profit_atr_bull": 4.758930232087542,
+      "trailing_activation_profit_pct": 6.84790414737561,
+      "trailing_atr": 1.3640919229435138,
+      "trailing_atr_volatile": 2.115303057752171
+    },
+    "rank": 2
+  },
+  "ga_top3": {
+    "hash": "4e370c85c606b73b1d39c783b227bf7dd3b2f8db6aceff1fb9ed3ffd51f8cfa1",
+    "params": {
+      "breakeven_enabled": false,
+      "breakeven_floor_profit_pct": 1.0,
+      "breakeven_trigger_profit_pct": 6.3384776183686355,
+      "exit_strategy": "hybrid",
+      "max_holding_days": 30,
+      "sell_omen_enabled": false,
+      "sell_omen_threshold": 0.6556325770877827,
+      "stop_loss_atr": 2.1962684608367122,
+      "stop_loss_atr_bear": 2.6588838003855195,
+      "take_profit_atr": 5.0,
+      "take_profit_atr_bull": 4.758930232087542,
+      "trailing_activation_profit_pct": 6.94163689492049,
+      "trailing_atr": 1.3640919229435138,
+      "trailing_atr_volatile": 2.575320277792583
+    },
+    "rank": 3
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "best_train_fitness": 24.365596817096712,
+  "execution": {
+    "entry": "t_plus_1_open",
+    "exit": "conservative_core",
+    "fitness_mode": "swing",
+    "fold_exit_policy": "fold_end_mark_to_market",
+    "live_hard_stop_guard": true
+  },
+  "ga_seconds": 1502.6921072006226,
+  "generations": 40,
+  "generations_run": 40,
+  "mode": "reverse",
+  "population": 100,
+  "result": {
+    "all4": 27,
+    "candidate_count": 100,
+    "general3": 31,
+    "general_pass_dist": {
+      "0": 11,
+      "1": 32,
+      "2": 26,
+      "3": 31
+    },
+    "pass_2022": 76,
+    "pass_2023": 44,
+    "pass_2024": 57,
+    "stress_pass": 91
+  },
+  "seed": 21265711,
+  "strict": {
+    "general_exp": 1.0,
+    "min_member": 10.0,
+    "min_trades": 5,
+    "stress_exp": 0.0
+  },
+  "ticker": "MPC",
+  "train_period": [
+    "2020-05-12",
+    "2025-05-31"
+  ]
+}

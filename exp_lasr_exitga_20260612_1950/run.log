@@ -1,0 +1,60 @@
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.adapters.factory[0m:[36mget_adapter[0m:[36m63[0m | [1madapter created: LASR → USStockAdapter[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.adapters.factory[0m:[36mget_adapter[0m:[36m63[0m | [1madapter created: LASR → USStockAdapter[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.adapters.factory[0m:[36mget_adapter[0m:[36m63[0m | [1madapter created: LASR → USStockAdapter[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.adapters.factory[0m:[36mget_adapter[0m:[36m63[0m | [1madapter created: LASR → USStockAdapter[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.adapters.factory[0m:[36mget_adapter[0m:[36m63[0m | [1madapter created: LASR → USStockAdapter[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.adapters.factory[0m:[36mget_adapter[0m:[36m63[0m | [1madapter created: LASR → USStockAdapter[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 19:49:49[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+[32m2026-06-12 19:49:50[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+[32m2026-06-12 19:49:50[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+{"gen": 0, "best": 11.952388, "avg_top10": 8.5106, "cache": 100, "avg_exp": 6.774, "min_exp": 5.3201, "worst_dd": 15.5513, "trades": 28}
+{"gen": 1, "best": 14.463513, "avg_top10": 10.978247, "cache": 180, "avg_exp": 6.9149, "min_exp": 5.9756, "worst_dd": 13.7118, "trades": 22}
+{"gen": 2, "best": 14.463513, "avg_top10": 12.774185, "cache": 259, "avg_exp": 6.9149, "min_exp": 5.9756, "worst_dd": 13.7118, "trades": 22}
+{"gen": 3, "best": 15.938326, "avg_top10": 13.885367, "cache": 339, "avg_exp": 7.4087, "min_exp": 5.9756, "worst_dd": 10.2412, "trades": 21}
+{"gen": 4, "best": 15.938326, "avg_top10": 14.163532, "cache": 419, "avg_exp": 7.4087, "min_exp": 5.9756, "worst_dd": 10.2412, "trades": 21}
+{"gen": 5, "best": 15.938326, "avg_top10": 14.20398, "cache": 499, "avg_exp": 7.4087, "min_exp": 5.9756, "worst_dd": 10.2412, "trades": 21}
+{"gen": 6, "best": 15.938326, "avg_top10": 14.433588, "cache": 579, "avg_exp": 7.4087, "min_exp": 5.9756, "worst_dd": 10.2412, "trades": 21}
+{"gen": 7, "best": 15.938326, "avg_top10": 14.782581, "cache": 659, "avg_exp": 7.4087, "min_exp": 5.9756, "worst_dd": 10.2412, "trades": 21}
+{"gen": 8, "best": 16.014946, "avg_top10": 15.373903, "cache": 739, "avg_exp": 7.3828, "min_exp": 5.9756, "worst_dd": 9.9162, "trades": 21}
+{"gen": 9, "best": 17.229152, "avg_top10": 16.093561, "cache": 819, "avg_exp": 7.484, "min_exp": 5.9756, "worst_dd": 6.1987, "trades": 20}
+{"gen": 10, "best": 17.229152, "avg_top10": 16.273561, "cache": 899, "avg_exp": 7.484, "min_exp": 5.9756, "worst_dd": 6.1987, "trades": 20}
+{"gen": 11, "best": 17.229152, "avg_top10": 16.404152, "cache": 979, "avg_exp": 7.484, "min_exp": 5.9756, "worst_dd": 6.1987, "trades": 20}
+{"gen": 12, "best": 17.229152, "avg_top10": 16.692678, "cache": 1059, "avg_exp": 7.484, "min_exp": 5.9756, "worst_dd": 6.1987, "trades": 20}
+{"gen": 13, "best": 17.229152, "avg_top10": 17.047677, "cache": 1139, "avg_exp": 7.484, "min_exp": 5.9756, "worst_dd": 6.1987, "trades": 20}
+{"gen": 14, "best": 17.229152, "avg_top10": 17.204541, "cache": 1219, "avg_exp": 7.484, "min_exp": 5.9756, "worst_dd": 6.1987, "trades": 20}
+{"gen": 15, "best": 18.079983, "avg_top10": 17.314235, "cache": 1299, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 16, "best": 18.079983, "avg_top10": 17.401626, "cache": 1379, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 17, "best": 18.079983, "avg_top10": 17.486709, "cache": 1459, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 18, "best": 18.079983, "avg_top10": 17.737265, "cache": 1539, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 19, "best": 18.079983, "avg_top10": 17.859468, "cache": 1619, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 20, "best": 18.079983, "avg_top10": 18.075289, "cache": 1699, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 21, "best": 18.079983, "avg_top10": 18.079983, "cache": 1779, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 22, "best": 18.079983, "avg_top10": 18.079983, "cache": 1859, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 23, "best": 18.079983, "avg_top10": 18.079983, "cache": 1939, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 24, "best": 18.079983, "avg_top10": 18.079983, "cache": 2019, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 25, "best": 18.079983, "avg_top10": 18.079983, "cache": 2099, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 26, "best": 18.079983, "avg_top10": 18.079983, "cache": 2179, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 27, "best": 18.079983, "avg_top10": 18.079983, "cache": 2259, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 28, "best": 18.079983, "avg_top10": 18.079983, "cache": 2339, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 29, "best": 18.079983, "avg_top10": 18.079983, "cache": 2419, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 30, "best": 18.079983, "avg_top10": 18.079983, "cache": 2499, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 31, "best": 18.079983, "avg_top10": 18.079983, "cache": 2579, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 32, "best": 18.079983, "avg_top10": 18.079983, "cache": 2659, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 33, "best": 18.079983, "avg_top10": 18.079983, "cache": 2739, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 34, "best": 18.079983, "avg_top10": 18.079983, "cache": 2819, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 35, "best": 18.079983, "avg_top10": 18.079983, "cache": 2899, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 36, "best": 18.079983, "avg_top10": 18.079983, "cache": 2979, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 37, "best": 18.079983, "avg_top10": 18.079983, "cache": 3059, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 38, "best": 18.079983, "avg_top10": 18.079983, "cache": 3139, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 39, "best": 18.079983, "avg_top10": 18.079983, "cache": 3219, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"gen": 40, "best": 18.079983, "avg_top10": 18.079983, "cache": 3299, "avg_exp": 7.6605, "min_exp": 6.3021, "worst_dd": 6.1987, "trades": 20}
+{"best": {"avg_exp": 7.660457460375181, "fitness": 18.079982976736122, "hash": "027ab610c028af0dfb731a9abd06e03eb2774f7d35bfef0e1923ecf9ba2fbe83", "individual": {"breakeven_enabled": false, "breakeven_floor_profit_pct": 2.811554722376771, "breakeven_trigger_profit_pct": 4.0, "exit_strategy": "fixed", "max_holding_days": 16, "sell_omen_enabled": true, "sell_omen_threshold": 0.3440311513149143, "stop_loss_atr": 2.788884434299998, "stop_loss_atr_bear": 3.93466566507738, "take_profit_atr": 5.0, "take_profit_atr_bull": 3.569752871145108, "trailing_activation_profit_pct": 3.4357588645817136, "trailing_atr": 2.654413785365203, "trailing_atr_volatile": 2.0084572435549974}, "min_exp": 6.302065162194418, "trades": 20, "worst_dd_abs": 6.198669256325772}, "elapsed_sec": 343.921, "evaluated_unique": 3299, "out": "exp_lasr_exitga_20260612_1950"}

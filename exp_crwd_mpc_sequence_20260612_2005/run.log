@@ -1,0 +1,291 @@
+[32m2026-06-12 20:05:48[0m | [1mINFO    [0m | [36mengine.adapters.factory[0m:[36mget_adapter[0m:[36m63[0m | [1madapter created: CRWD → USStockAdapter[0m
+[32m2026-06-12 20:05:48[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 20:05:48[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+{"event": "start_ga", "ticker": "CRWD", "mode": "multiyear", "seed": 21263308, "train": ["2020-05-11", "2021-12-31"]}
+[32m2026-06-12 20:05:59[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  1: best=97.822, avg=-74.226[0m
+[32m2026-06-12 20:06:07[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  2: best=97.822, avg=-36.132[0m
+[32m2026-06-12 20:06:14[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  3: best=103.884, avg=-14.966[0m
+[32m2026-06-12 20:06:22[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  4: best=103.884, avg=-5.012[0m
+[32m2026-06-12 20:06:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  5: best=103.884, avg=-1.230[0m
+[32m2026-06-12 20:06:37[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  6: best=103.884, avg=-3.717[0m
+[32m2026-06-12 20:06:45[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  7: best=109.435, avg=-0.985[0m
+[32m2026-06-12 20:06:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  8: best=109.435, avg=7.308[0m
+[32m2026-06-12 20:07:00[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  9: best=109.435, avg=8.556[0m
+[32m2026-06-12 20:07:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 10: best=109.435, avg=21.310[0m
+[32m2026-06-12 20:07:16[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 11: best=109.435, avg=27.275[0m
+[32m2026-06-12 20:07:24[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 12: best=109.435, avg=23.776[0m
+[32m2026-06-12 20:07:31[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 13: best=109.435, avg=27.397[0m
+[32m2026-06-12 20:07:39[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 14: best=109.435, avg=34.625[0m
+[32m2026-06-12 20:07:47[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 15: best=110.579, avg=48.194[0m
+[32m2026-06-12 20:07:54[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 16: best=110.579, avg=56.561[0m
+[32m2026-06-12 20:08:02[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 17: best=110.579, avg=46.345[0m
+[32m2026-06-12 20:08:09[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 18: best=110.579, avg=50.470[0m
+[32m2026-06-12 20:08:17[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 19: best=110.579, avg=54.706[0m
+[32m2026-06-12 20:08:25[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 20: best=110.579, avg=57.429[0m
+[32m2026-06-12 20:08:32[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 21: best=110.579, avg=70.606[0m
+[32m2026-06-12 20:08:40[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 22: best=110.692, avg=62.098[0m
+[32m2026-06-12 20:08:48[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 23: best=110.692, avg=58.422[0m
+[32m2026-06-12 20:08:55[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 24: best=110.692, avg=71.077[0m
+[32m2026-06-12 20:09:03[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 25: best=110.692, avg=66.548[0m
+[32m2026-06-12 20:09:10[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 26: best=110.692, avg=73.590[0m
+[32m2026-06-12 20:09:18[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 27: best=110.692, avg=65.739[0m
+[32m2026-06-12 20:09:25[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 28: best=110.692, avg=78.134[0m
+[32m2026-06-12 20:09:33[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 29: best=111.125, avg=76.396[0m
+[32m2026-06-12 20:09:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 30: best=111.125, avg=85.487[0m
+[32m2026-06-12 20:09:48[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 31: best=111.125, avg=80.733[0m
+[32m2026-06-12 20:09:56[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 32: best=111.125, avg=83.196[0m
+[32m2026-06-12 20:10:03[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 33: best=111.125, avg=80.841[0m
+[32m2026-06-12 20:10:11[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 34: best=111.125, avg=82.065[0m
+[32m2026-06-12 20:10:18[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 35: best=111.125, avg=70.632[0m
+[32m2026-06-12 20:10:26[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 36: best=111.125, avg=81.706[0m
+[32m2026-06-12 20:10:34[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 37: best=111.125, avg=80.956[0m
+[32m2026-06-12 20:10:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 38: best=111.125, avg=80.766[0m
+[32m2026-06-12 20:10:49[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 39: best=111.125, avg=82.857[0m
+[32m2026-06-12 20:10:56[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 40: best=111.189, avg=76.335[0m
+{"event": "eval_period", "ticker": "CRWD", "label": "2022", "n": 100}
+{"event": "eval_period", "ticker": "CRWD", "label": "2023", "n": 100}
+{"event": "eval_period", "ticker": "CRWD", "label": "2024", "n": 100}
+{"event": "eval_period", "ticker": "CRWD", "label": "2025H2", "n": 100}
+{"event": "done_ga", "ticker": "CRWD", "mode": "multiyear", "candidate_count": 100, "pass_2022": 8, "pass_2023": 47, "pass_2024": 32, "stress_pass": 39, "general3": 0, "all4": 0, "general_pass_dist": {"0": 30, "1": 53, "2": 17}}
+[32m2026-06-12 20:11:51[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 20:11:51[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+{"event": "start_ga", "ticker": "CRWD", "mode": "reverse", "seed": 21263311, "train": ["2020-05-11", "2025-05-31"]}
+[32m2026-06-12 20:12:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  1: best=139.014, avg=-19.583[0m
+[32m2026-06-12 20:13:14[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  2: best=146.143, avg=18.110[0m
+[32m2026-06-12 20:13:51[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  3: best=150.192, avg=35.603[0m
+[32m2026-06-12 20:14:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  4: best=150.192, avg=57.813[0m
+[32m2026-06-12 20:15:04[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  5: best=150.192, avg=61.023[0m
+[32m2026-06-12 20:15:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  6: best=150.192, avg=69.482[0m
+[32m2026-06-12 20:16:19[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  7: best=150.192, avg=73.690[0m
+[32m2026-06-12 20:16:56[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  8: best=155.887, avg=83.357[0m
+[32m2026-06-12 20:17:33[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  9: best=155.887, avg=90.018[0m
+[32m2026-06-12 20:18:11[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 10: best=159.266, avg=90.459[0m
+[32m2026-06-12 20:18:48[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 11: best=159.266, avg=98.129[0m
+[32m2026-06-12 20:19:25[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 12: best=159.266, avg=95.518[0m
+[32m2026-06-12 20:20:03[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 13: best=159.266, avg=98.940[0m
+[32m2026-06-12 20:20:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 14: best=159.266, avg=96.720[0m
+[32m2026-06-12 20:21:18[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 15: best=159.266, avg=93.894[0m
+[32m2026-06-12 20:21:56[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 16: best=159.266, avg=96.385[0m
+[32m2026-06-12 20:22:33[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 17: best=159.266, avg=101.351[0m
+[32m2026-06-12 20:23:11[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 18: best=159.266, avg=103.608[0m
+[32m2026-06-12 20:23:49[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 19: best=159.390, avg=107.891[0m
+[32m2026-06-12 20:24:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 20: best=159.390, avg=109.670[0m
+[32m2026-06-12 20:25:05[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 21: best=159.390, avg=114.102[0m
+[32m2026-06-12 20:25:43[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 22: best=159.390, avg=110.556[0m
+[32m2026-06-12 20:26:21[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 23: best=159.390, avg=116.156[0m
+[32m2026-06-12 20:27:00[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 24: best=159.390, avg=116.151[0m
+[32m2026-06-12 20:27:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 25: best=159.390, avg=115.078[0m
+[32m2026-06-12 20:28:16[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 26: best=159.390, avg=110.228[0m
+[32m2026-06-12 20:28:54[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 27: best=159.390, avg=120.627[0m
+[32m2026-06-12 20:29:32[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 28: best=159.390, avg=120.198[0m
+[32m2026-06-12 20:30:10[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 29: best=159.390, avg=124.573[0m
+[32m2026-06-12 20:30:48[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 30: best=159.390, avg=118.256[0m
+[32m2026-06-12 20:31:26[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 31: best=159.390, avg=120.083[0m
+[32m2026-06-12 20:32:04[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 32: best=159.390, avg=119.436[0m
+[32m2026-06-12 20:32:42[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 33: best=159.390, avg=120.848[0m
+[32m2026-06-12 20:33:20[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 34: best=159.390, avg=129.005[0m
+[32m2026-06-12 20:33:57[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 35: best=159.390, avg=124.139[0m
+[32m2026-06-12 20:34:35[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 36: best=159.390, avg=121.565[0m
+[32m2026-06-12 20:35:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 37: best=159.390, avg=123.758[0m
+[32m2026-06-12 20:35:50[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 38: best=159.390, avg=129.002[0m
+[32m2026-06-12 20:36:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 39: best=159.390, avg=123.309[0m
+[32m2026-06-12 20:37:05[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 40: best=159.390, avg=123.009[0m
+{"event": "eval_period", "ticker": "CRWD", "label": "2022", "n": 100}
+{"event": "eval_period", "ticker": "CRWD", "label": "2023", "n": 100}
+{"event": "eval_period", "ticker": "CRWD", "label": "2024", "n": 100}
+{"event": "eval_period", "ticker": "CRWD", "label": "2025H2", "n": 100}
+{"event": "done_ga", "ticker": "CRWD", "mode": "reverse", "candidate_count": 100, "pass_2022": 78, "pass_2023": 29, "pass_2024": 35, "stress_pass": 44, "general3": 13, "all4": 7, "general_pass_dist": {"0": 10, "1": 51, "2": 26, "3": 13}}
+[32m2026-06-12 20:38:30[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 20:38:30[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 20:38:30[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 20:38:30[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+[32m2026-06-12 20:38:30[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+[32m2026-06-12 20:38:30[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 0, "best": 3.038237, "avg_exp": 4.341, "min_exp": 2.1609, "worst_dd": 16.2544, "trades": 20, "cache": 100}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 1, "best": 7.699202, "avg_exp": 5.9682, "min_exp": 4.2754, "worst_dd": 20.4155, "trades": 19, "cache": 180}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 2, "best": 7.699202, "avg_exp": 5.9682, "min_exp": 4.2754, "worst_dd": 20.4155, "trades": 19, "cache": 260}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 3, "best": 7.699202, "avg_exp": 5.9682, "min_exp": 4.2754, "worst_dd": 20.4155, "trades": 19, "cache": 340}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 4, "best": 9.347974, "avg_exp": 5.8047, "min_exp": 4.5007, "worst_dd": 16.1625, "trades": 19, "cache": 420}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 5, "best": 9.347974, "avg_exp": 5.8047, "min_exp": 4.5007, "worst_dd": 16.1625, "trades": 19, "cache": 500}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 6, "best": 9.347974, "avg_exp": 5.8047, "min_exp": 4.5007, "worst_dd": 16.1625, "trades": 19, "cache": 580}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 7, "best": 9.347974, "avg_exp": 5.8047, "min_exp": 4.5007, "worst_dd": 16.1625, "trades": 19, "cache": 660}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 8, "best": 9.347974, "avg_exp": 5.8047, "min_exp": 4.5007, "worst_dd": 16.1625, "trades": 19, "cache": 740}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 9, "best": 9.347974, "avg_exp": 5.8047, "min_exp": 4.5007, "worst_dd": 16.1625, "trades": 19, "cache": 820}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 10, "best": 9.347974, "avg_exp": 5.8047, "min_exp": 4.5007, "worst_dd": 16.1625, "trades": 19, "cache": 900}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 11, "best": 9.477077, "avg_exp": 5.8906, "min_exp": 4.75, "worst_dd": 17.7199, "trades": 19, "cache": 980}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 12, "best": 9.477077, "avg_exp": 5.8906, "min_exp": 4.75, "worst_dd": 17.7199, "trades": 19, "cache": 1060}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 13, "best": 9.477077, "avg_exp": 5.8906, "min_exp": 4.75, "worst_dd": 17.7199, "trades": 19, "cache": 1140}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 14, "best": 9.635254, "avg_exp": 5.8643, "min_exp": 4.6107, "worst_dd": 16.1625, "trades": 19, "cache": 1220}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 15, "best": 10.008936, "avg_exp": 5.9341, "min_exp": 4.7582, "worst_dd": 16.1625, "trades": 19, "cache": 1300}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 16, "best": 10.164774, "avg_exp": 6.0009, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 1380}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 17, "best": 10.164774, "avg_exp": 6.0009, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 1460}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 18, "best": 10.164774, "avg_exp": 6.0009, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 1540}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 19, "best": 10.164774, "avg_exp": 6.0009, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 1620}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 20, "best": 10.164774, "avg_exp": 6.0009, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 1700}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 21, "best": 10.175103, "avg_exp": 6.0102, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 1780}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 22, "best": 10.182375, "avg_exp": 6.0169, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 1860}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 23, "best": 10.182375, "avg_exp": 6.0169, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 1940}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 24, "best": 10.182375, "avg_exp": 6.0169, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 2020}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 25, "best": 10.182375, "avg_exp": 6.0169, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 2100}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 26, "best": 10.182375, "avg_exp": 6.0169, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 2180}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 27, "best": 10.182375, "avg_exp": 6.0169, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 2260}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 28, "best": 10.182375, "avg_exp": 6.0169, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 2340}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 29, "best": 10.182375, "avg_exp": 6.0169, "min_exp": 4.799, "worst_dd": 16.1625, "trades": 19, "cache": 2420}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 30, "best": 10.203857, "avg_exp": 6.0212, "min_exp": 4.8073, "worst_dd": 16.1625, "trades": 19, "cache": 2500}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 31, "best": 10.203857, "avg_exp": 6.0212, "min_exp": 4.8073, "worst_dd": 16.1625, "trades": 19, "cache": 2580}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 32, "best": 10.203857, "avg_exp": 6.0212, "min_exp": 4.8073, "worst_dd": 16.1625, "trades": 19, "cache": 2660}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 33, "best": 10.203857, "avg_exp": 6.0212, "min_exp": 4.8073, "worst_dd": 16.1625, "trades": 19, "cache": 2740}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 34, "best": 10.203857, "avg_exp": 6.0212, "min_exp": 4.8073, "worst_dd": 16.1625, "trades": 19, "cache": 2820}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 35, "best": 10.203857, "avg_exp": 6.0212, "min_exp": 4.8073, "worst_dd": 16.1625, "trades": 19, "cache": 2900}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 36, "best": 10.203857, "avg_exp": 6.0212, "min_exp": 4.8073, "worst_dd": 16.1625, "trades": 19, "cache": 2980}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 37, "best": 10.203857, "avg_exp": 6.0212, "min_exp": 4.8073, "worst_dd": 16.1625, "trades": 19, "cache": 3060}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 38, "best": 10.203857, "avg_exp": 6.0212, "min_exp": 4.8073, "worst_dd": 16.1625, "trades": 19, "cache": 3140}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 39, "best": 10.254593, "avg_exp": 6.0316, "min_exp": 4.8268, "worst_dd": 16.1625, "trades": 19, "cache": 3220}
+{"event": "exitga_gen", "ticker": "CRWD", "gen": 40, "best": 10.254593, "avg_exp": 6.0316, "min_exp": 4.8268, "worst_dd": 16.1625, "trades": 19, "cache": 3300}
+{"event": "done_exitga", "ticker": "CRWD", "composite_fitness": 10.254593081912143, "avg_exp": 6.031592966243176, "min_exp": 4.826821429069768, "worst_dd_abs": 16.162467311262276, "total_trades": 19, "rulebook_hash": "de38cbfa0e0beb13866c0928bf53de6998297d4f0750666afe11733b82c569e6"}
+[32m2026-06-12 20:47:16[0m | [1mINFO    [0m | [36mengine.adapters.factory[0m:[36mget_adapter[0m:[36m63[0m | [1madapter created: MPC → USStockAdapter[0m
+[32m2026-06-12 20:47:16[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 20:47:16[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+{"event": "start_ga", "ticker": "MPC", "mode": "multiyear", "seed": 21265708, "train": ["2020-05-12", "2021-12-31"]}
+[32m2026-06-12 20:47:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  1: best=75.455, avg=-47.445[0m
+[32m2026-06-12 20:47:35[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  2: best=84.429, avg=-18.963[0m
+[32m2026-06-12 20:47:42[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  3: best=92.750, avg=-5.192[0m
+[32m2026-06-12 20:47:50[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  4: best=94.535, avg=-1.728[0m
+[32m2026-06-12 20:47:57[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  5: best=94.535, avg=8.656[0m
+[32m2026-06-12 20:48:05[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  6: best=108.496, avg=2.337[0m
+[32m2026-06-12 20:48:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  7: best=108.496, avg=5.710[0m
+[32m2026-06-12 20:48:20[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  8: best=108.496, avg=14.317[0m
+[32m2026-06-12 20:48:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  9: best=108.509, avg=23.239[0m
+[32m2026-06-12 20:48:35[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 10: best=108.509, avg=30.457[0m
+[32m2026-06-12 20:48:43[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 11: best=108.509, avg=27.516[0m
+[32m2026-06-12 20:48:50[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 12: best=108.720, avg=41.404[0m
+[32m2026-06-12 20:48:58[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 13: best=108.720, avg=47.903[0m
+[32m2026-06-12 20:49:06[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 14: best=110.888, avg=59.853[0m
+[32m2026-06-12 20:49:14[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 15: best=110.888, avg=53.724[0m
+[32m2026-06-12 20:49:21[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 16: best=110.888, avg=59.495[0m
+[32m2026-06-12 20:49:29[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 17: best=110.933, avg=55.100[0m
+[32m2026-06-12 20:49:37[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 18: best=110.933, avg=55.415[0m
+[32m2026-06-12 20:49:44[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 19: best=110.933, avg=60.814[0m
+[32m2026-06-12 20:49:52[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 20: best=110.933, avg=57.735[0m
+[32m2026-06-12 20:50:00[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 21: best=110.933, avg=51.022[0m
+[32m2026-06-12 20:50:07[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 22: best=110.933, avg=61.638[0m
+[32m2026-06-12 20:50:15[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 23: best=110.933, avg=63.807[0m
+[32m2026-06-12 20:50:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 24: best=110.933, avg=58.607[0m
+[32m2026-06-12 20:50:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 25: best=110.933, avg=64.343[0m
+[32m2026-06-12 20:50:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 26: best=111.300, avg=58.674[0m
+[32m2026-06-12 20:50:46[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 27: best=111.300, avg=58.509[0m
+[32m2026-06-12 20:50:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 28: best=111.300, avg=58.299[0m
+[32m2026-06-12 20:51:01[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 29: best=111.364, avg=61.857[0m
+[32m2026-06-12 20:51:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 30: best=111.364, avg=58.583[0m
+[32m2026-06-12 20:51:16[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 31: best=111.364, avg=53.420[0m
+[32m2026-06-12 20:51:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 32: best=111.364, avg=64.434[0m
+[32m2026-06-12 20:51:31[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 33: best=111.364, avg=66.571[0m
+[32m2026-06-12 20:51:39[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 34: best=111.364, avg=64.413[0m
+[32m2026-06-12 20:51:46[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 35: best=111.364, avg=57.187[0m
+[32m2026-06-12 20:51:54[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 36: best=111.364, avg=66.302[0m
+[32m2026-06-12 20:52:01[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 37: best=111.364, avg=68.834[0m
+[32m2026-06-12 20:52:09[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 38: best=111.364, avg=67.339[0m
+[32m2026-06-12 20:52:16[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 39: best=111.364, avg=66.837[0m
+[32m2026-06-12 20:52:24[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 40: best=111.364, avg=68.902[0m
+{"event": "eval_period", "ticker": "MPC", "label": "2022", "n": 100}
+{"event": "eval_period", "ticker": "MPC", "label": "2023", "n": 100}
+{"event": "eval_period", "ticker": "MPC", "label": "2024", "n": 100}
+{"event": "eval_period", "ticker": "MPC", "label": "2025H2", "n": 100}
+{"event": "done_ga", "ticker": "MPC", "mode": "multiyear", "candidate_count": 100, "pass_2022": 90, "pass_2023": 68, "pass_2024": 37, "stress_pass": 92, "general3": 23, "all4": 20, "general_pass_dist": {"0": 1, "1": 26, "2": 50, "3": 23}}
+[32m2026-06-12 20:53:16[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 20:53:16[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+{"event": "start_ga", "ticker": "MPC", "mode": "reverse", "seed": 21265711, "train": ["2020-05-12", "2025-05-31"]}
+[32m2026-06-12 20:54:03[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  1: best=148.567, avg=-5.554[0m
+[32m2026-06-12 20:54:39[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  2: best=150.249, avg=34.398[0m
+[32m2026-06-12 20:55:15[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  3: best=150.249, avg=61.624[0m
+[32m2026-06-12 20:55:52[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  4: best=152.647, avg=72.404[0m
+[32m2026-06-12 20:56:28[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  5: best=152.647, avg=67.052[0m
+[32m2026-06-12 20:57:05[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  6: best=152.647, avg=85.424[0m
+[32m2026-06-12 20:57:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  7: best=152.647, avg=98.396[0m
+[32m2026-06-12 20:58:18[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  8: best=152.647, avg=96.390[0m
+[32m2026-06-12 20:58:55[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen  9: best=152.647, avg=101.264[0m
+[32m2026-06-12 20:59:31[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 10: best=152.647, avg=101.098[0m
+[32m2026-06-12 21:00:07[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 11: best=152.647, avg=101.565[0m
+[32m2026-06-12 21:00:44[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 12: best=152.647, avg=100.252[0m
+[32m2026-06-12 21:01:20[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 13: best=152.647, avg=99.518[0m
+[32m2026-06-12 21:01:56[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 14: best=154.615, avg=103.183[0m
+[32m2026-06-12 21:02:32[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 15: best=154.615, avg=107.947[0m
+[32m2026-06-12 21:03:09[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 16: best=154.615, avg=105.825[0m
+[32m2026-06-12 21:03:45[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 17: best=154.615, avg=101.999[0m
+[32m2026-06-12 21:04:21[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 18: best=154.615, avg=103.511[0m
+[32m2026-06-12 21:04:58[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 19: best=154.615, avg=108.399[0m
+[32m2026-06-12 21:05:34[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 20: best=154.615, avg=117.437[0m
+[32m2026-06-12 21:06:10[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 21: best=154.615, avg=115.020[0m
+[32m2026-06-12 21:06:47[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 22: best=154.615, avg=112.941[0m
+[32m2026-06-12 21:07:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 23: best=154.615, avg=119.439[0m
+[32m2026-06-12 21:07:59[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 24: best=154.615, avg=127.027[0m
+[32m2026-06-12 21:08:35[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 25: best=154.615, avg=126.601[0m
+[32m2026-06-12 21:09:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 26: best=154.615, avg=131.225[0m
+[32m2026-06-12 21:09:48[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 27: best=154.615, avg=131.379[0m
+[32m2026-06-12 21:10:25[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 28: best=154.615, avg=133.440[0m
+[32m2026-06-12 21:11:01[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 29: best=154.615, avg=129.254[0m
+[32m2026-06-12 21:11:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 30: best=154.615, avg=130.517[0m
+[32m2026-06-12 21:12:14[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 31: best=154.615, avg=132.463[0m
+[32m2026-06-12 21:12:50[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 32: best=154.615, avg=135.293[0m
+[32m2026-06-12 21:13:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 33: best=154.668, avg=129.650[0m
+[32m2026-06-12 21:14:04[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 34: best=154.668, avg=127.819[0m
+[32m2026-06-12 21:14:40[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 35: best=154.668, avg=123.481[0m
+[32m2026-06-12 21:15:17[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 36: best=158.568, avg=128.040[0m
+[32m2026-06-12 21:15:54[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 37: best=158.568, avg=125.252[0m
+[32m2026-06-12 21:16:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 38: best=158.568, avg=132.436[0m
+[32m2026-06-12 21:17:06[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 39: best=158.568, avg=128.593[0m
+[32m2026-06-12 21:17:43[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m258[0m | [1mGen 40: best=158.568, avg=136.638[0m
+{"event": "eval_period", "ticker": "MPC", "label": "2022", "n": 100}
+{"event": "eval_period", "ticker": "MPC", "label": "2023", "n": 100}
+{"event": "eval_period", "ticker": "MPC", "label": "2024", "n": 100}
+{"event": "eval_period", "ticker": "MPC", "label": "2025H2", "n": 100}
+{"event": "done_ga", "ticker": "MPC", "mode": "reverse", "candidate_count": 100, "pass_2022": 76, "pass_2023": 44, "pass_2024": 57, "stress_pass": 91, "general3": 31, "all4": 27, "general_pass_dist": {"0": 11, "1": 32, "2": 26, "3": 31}}
+[32m2026-06-12 21:19:05[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 21:19:05[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 21:19:05[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36mbuild_market_history[0m:[36m683[0m | [1mmarket_history cache: 1760 rows[0m
+[32m2026-06-12 21:19:05[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+[32m2026-06-12 21:19:06[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+[32m2026-06-12 21:19:06[0m | [1mINFO    [0m | [36mengine.market.context[0m:[36m_merge_v2_events[0m:[36m774[0m | [1mv2 이벤트 컬럼 18개 머지 완료[0m
+{"event": "exitga_gen", "ticker": "MPC", "gen": 0, "best": 3.959957, "avg_exp": 4.8001, "min_exp": 2.3962, "worst_dd": 13.5076, "trades": 25, "cache": 100}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 1, "best": 6.204805, "avg_exp": 6.0686, "min_exp": 2.9654, "worst_dd": 15.0425, "trades": 21, "cache": 179}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 2, "best": 6.567534, "avg_exp": 5.6248, "min_exp": 2.516, "worst_dd": 9.0495, "trades": 23, "cache": 259}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 3, "best": 7.405229, "avg_exp": 6.1841, "min_exp": 2.637, "worst_dd": 9.0207, "trades": 22, "cache": 339}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 4, "best": 7.711275, "avg_exp": 6.1, "min_exp": 2.6493, "worst_dd": 8.2816, "trades": 21, "cache": 419}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 5, "best": 8.143714, "avg_exp": 6.1363, "min_exp": 3.3205, "worst_dd": 11.2412, "trades": 21, "cache": 499}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 6, "best": 8.143714, "avg_exp": 6.1363, "min_exp": 3.3205, "worst_dd": 11.2412, "trades": 21, "cache": 579}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 7, "best": 8.143714, "avg_exp": 6.1363, "min_exp": 3.3205, "worst_dd": 11.2412, "trades": 21, "cache": 659}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 8, "best": 8.345061, "avg_exp": 6.6893, "min_exp": 3.1901, "worst_dd": 11.508, "trades": 21, "cache": 739}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 9, "best": 9.46212, "avg_exp": 6.7398, "min_exp": 3.3211, "worst_dd": 8.7461, "trades": 21, "cache": 819}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 10, "best": 9.46212, "avg_exp": 6.7398, "min_exp": 3.3211, "worst_dd": 8.7461, "trades": 21, "cache": 899}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 11, "best": 9.46212, "avg_exp": 6.7398, "min_exp": 3.3211, "worst_dd": 8.7461, "trades": 21, "cache": 979}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 12, "best": 9.496321, "avg_exp": 5.8646, "min_exp": 3.7371, "worst_dd": 9.0495, "trades": 22, "cache": 1059}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 13, "best": 10.636046, "avg_exp": 5.9268, "min_exp": 4.1567, "worst_dd": 8.5206, "trades": 23, "cache": 1139}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 14, "best": 10.636046, "avg_exp": 5.9268, "min_exp": 4.1567, "worst_dd": 8.5206, "trades": 23, "cache": 1219}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 15, "best": 10.636046, "avg_exp": 5.9268, "min_exp": 4.1567, "worst_dd": 8.5206, "trades": 23, "cache": 1299}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 16, "best": 10.636046, "avg_exp": 5.9268, "min_exp": 4.1567, "worst_dd": 8.5206, "trades": 23, "cache": 1378}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 17, "best": 10.636046, "avg_exp": 5.9268, "min_exp": 4.1567, "worst_dd": 8.5206, "trades": 23, "cache": 1458}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 18, "best": 10.636046, "avg_exp": 5.9268, "min_exp": 4.1567, "worst_dd": 8.5206, "trades": 23, "cache": 1538}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 19, "best": 10.636046, "avg_exp": 5.9268, "min_exp": 4.1567, "worst_dd": 8.5206, "trades": 23, "cache": 1618}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 20, "best": 10.636046, "avg_exp": 5.9268, "min_exp": 4.1567, "worst_dd": 8.5206, "trades": 23, "cache": 1698}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 21, "best": 10.636046, "avg_exp": 5.9268, "min_exp": 4.1567, "worst_dd": 8.5206, "trades": 23, "cache": 1778}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 22, "best": 10.636046, "avg_exp": 5.9268, "min_exp": 4.1567, "worst_dd": 8.5206, "trades": 23, "cache": 1858}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 23, "best": 10.672889, "avg_exp": 5.9275, "min_exp": 4.1867, "worst_dd": 8.5206, "trades": 23, "cache": 1938}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 24, "best": 11.175154, "avg_exp": 6.135, "min_exp": 4.33, "worst_dd": 8.5206, "trades": 22, "cache": 2018}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 25, "best": 11.175154, "avg_exp": 6.135, "min_exp": 4.33, "worst_dd": 8.5206, "trades": 22, "cache": 2098}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 26, "best": 11.175154, "avg_exp": 6.135, "min_exp": 4.33, "worst_dd": 8.5206, "trades": 22, "cache": 2178}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 27, "best": 11.239879, "avg_exp": 6.099, "min_exp": 4.3766, "worst_dd": 8.5206, "trades": 23, "cache": 2258}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 28, "best": 11.239879, "avg_exp": 6.099, "min_exp": 4.3766, "worst_dd": 8.5206, "trades": 23, "cache": 2338}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 29, "best": 11.239879, "avg_exp": 6.099, "min_exp": 4.3766, "worst_dd": 8.5206, "trades": 23, "cache": 2418}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 30, "best": 11.239879, "avg_exp": 6.099, "min_exp": 4.3766, "worst_dd": 8.5206, "trades": 23, "cache": 2497}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 31, "best": 11.239879, "avg_exp": 6.099, "min_exp": 4.3766, "worst_dd": 8.5206, "trades": 23, "cache": 2577}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 32, "best": 11.239879, "avg_exp": 6.099, "min_exp": 4.3766, "worst_dd": 8.5206, "trades": 23, "cache": 2657}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 33, "best": 11.239879, "avg_exp": 6.099, "min_exp": 4.3766, "worst_dd": 8.5206, "trades": 23, "cache": 2737}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 34, "best": 11.239879, "avg_exp": 6.099, "min_exp": 4.3766, "worst_dd": 8.5206, "trades": 23, "cache": 2817}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 35, "best": 11.253303, "avg_exp": 6.3462, "min_exp": 4.3766, "worst_dd": 9.5877, "trades": 22, "cache": 2897}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 36, "best": 11.253303, "avg_exp": 6.3462, "min_exp": 4.3766, "worst_dd": 9.5877, "trades": 22, "cache": 2977}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 37, "best": 11.389243, "avg_exp": 6.4062, "min_exp": 4.4165, "worst_dd": 9.5877, "trades": 22, "cache": 3057}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 38, "best": 11.389243, "avg_exp": 6.4062, "min_exp": 4.4165, "worst_dd": 9.5877, "trades": 22, "cache": 3137}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 39, "best": 11.389243, "avg_exp": 6.4062, "min_exp": 4.4165, "worst_dd": 9.5877, "trades": 22, "cache": 3217}
+{"event": "exitga_gen", "ticker": "MPC", "gen": 40, "best": 11.389243, "avg_exp": 6.4062, "min_exp": 4.4165, "worst_dd": 9.5877, "trades": 22, "cache": 3297}
+{"event": "done_exitga", "ticker": "MPC", "composite_fitness": 11.389242845913326, "avg_exp": 6.406236723243827, "min_exp": 4.416450021028437, "worst_dd_abs": 9.587686834205517, "total_trades": 22, "rulebook_hash": "869f36d1a5deae9c511d09a9a6a95c4f9e294a9149562862ffb5112b925544db"}
+{"event": "ALL_DONE", "elapsed_seconds": 4924.551276445389}

@@ -1,0 +1,77 @@
+{
+  "best_train_fitness": 98.55938255172858,
+  "candidate_count": 100,
+  "created_at": "2026-06-12T18:51:27.346953+00:00",
+  "eval_periods": [
+    {
+      "is_stress": false,
+      "label": "2022",
+      "test_end": "2022-12-31",
+      "test_start": "2022-01-01",
+      "train_end": "2021-12-31",
+      "train_start": "2020-05-12",
+      "year": 2022
+    },
+    {
+      "is_stress": false,
+      "label": "2023",
+      "test_end": "2023-12-31",
+      "test_start": "2023-01-01",
+      "train_end": "2021-12-31",
+      "train_start": "2020-05-12",
+      "year": 2023
+    },
+    {
+      "is_stress": false,
+      "label": "2024",
+      "test_end": "2024-12-31",
+      "test_start": "2024-01-01",
+      "train_end": "2021-12-31",
+      "train_start": "2020-05-12",
+      "year": 2024
+    },
+    {
+      "is_stress": true,
+      "label": "2025H2",
+      "test_end": "2026-06-09",
+      "test_start": "2025-06-01",
+      "train_end": "2021-12-31",
+      "train_start": "2020-05-12",
+      "year": "2025H2"
+    }
+  ],
+  "execution_settings": {
+    "commission_rate": 0.0005,
+    "entry_execution_mode": "t_plus_1_open",
+    "exit_execution_mode": "conservative_core",
+    "fitness_mode": "swing",
+    "fold_exit_policy": "fold_end_mark_to_market",
+    "live_hard_stop_guard": true,
+    "position_limit_krw": 120000.0,
+    "warmup": 200
+  },
+  "ga_seconds": 298.8762176036835,
+  "generations": 40,
+  "generations_run": 40,
+  "population": 100,
+  "seed": 21264908,
+  "strict_k3_individual_criteria": {
+    "general_years": [
+      "2022",
+      "2023",
+      "2024"
+    ],
+    "min_general_expectancy_pct": 1.0,
+    "min_member_score": 10.0,
+    "min_stress_expectancy_pct": 0.0,
+    "min_trades": 5,
+    "stress_label": "2025H2",
+    "survivor_k": 3
+  },
+  "ticker": "LASR",
+  "top_n": 100,
+  "train_period": [
+    "2020-05-12",
+    "2021-12-31"
+  ]
+}

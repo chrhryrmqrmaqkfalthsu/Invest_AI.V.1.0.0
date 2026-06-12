@@ -11,10 +11,11 @@
 - 필드: 모든 기존 필드 보존, kospi_trend_pct=0.0 고정
 - 신규 필드: event_adjustment, active_events, news_sentiment_avg
 """
+import copy
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pathlib import Path
 from typing import Optional, Any
 
@@ -34,6 +35,20 @@ CACHE_TTL_MIN = config.get("cycle.market_context_cache_min", 60)
 
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+EVENT_IMPACT_MIN = -30.0
+EVENT_IMPACT_MAX = 20.0
+
+# 이벤트 보존 TTL(거래일 기준). 최적값이 아니라 보수적 기본값이다.
+# 근거: 과거 관측에서 강한 사건(실제 낙폭 >=10점)이 t+15까지 안정 회복하지 못했다.
+# impact_score 연동은 실제 낙폭과 상관이 약해 폐기하고 유형별 고정값을 사용한다.
+EVENT_TTL_DAYS = {
+    "금리정책_인상": 10,
+    "금리정책_인하": 10,
+    "인플레이션": 10,
+    "연준발언": 3,
+}
+DEFAULT_EVENT_TTL_DAYS = 5
 
 
 # =====================================================================
@@ -115,6 +130,214 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return v
     except Exception:
         return default
+
+
+# =====================================================================
+# 이벤트 보존/감쇠 헬퍼
+# =====================================================================
+def _parse_decay_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    text = str(value or "").strip()
+    if text.endswith("Z"):
+        text = text[:-1]
+    return datetime.fromisoformat(text)
+
+
+def _load_decay_market_dates(path: Optional[Path] = None) -> list:
+    """market_history.csv 날짜를 실제 거래일 캘린더로 사용한다.
+
+    market_history.csv 범위 밖의 미래 날짜는 별도 휴장 캘린더가 없으므로 평일 근사로 fallback한다.
+    이 경우 주말은 제외하지만 미국 공휴일 오차로 TTL이 1~2일 어긋날 수 있다.
+    """
+    p = path or (config.system_dir() / "market_history.csv")
+    if not p.exists():
+        return []
+    dates = []
+    try:
+        df = pd.read_csv(p, usecols=["date"])
+        for raw in df["date"].dropna().tolist():
+            dates.append(date.fromisoformat(str(raw)[:10]))
+    except Exception as e:
+        log.warning(f"decay market date load failed: {e}")
+        return []
+    return sorted(set(dates))
+
+
+def _weekday_trading_days_elapsed(start_dt: datetime, end_dt: datetime) -> int:
+    if end_dt.date() <= start_dt.date():
+        return 0
+    cur = start_dt.date() + timedelta(days=1)
+    end = end_dt.date()
+    n = 0
+    while cur <= end:
+        if cur.weekday() < 5:
+            n += 1
+        cur += timedelta(days=1)
+    return n
+
+
+def _trading_days_elapsed(start_ts: Any, end_ts: Any, market_history_path: Optional[Path] = None) -> tuple[int, str]:
+    start_dt = _parse_decay_datetime(start_ts)
+    end_dt = _parse_decay_datetime(end_ts)
+    if end_dt <= start_dt:
+        return 0, "none"
+
+    market_dates = _load_decay_market_dates(market_history_path)
+    if market_dates and market_dates[0] <= start_dt.date() <= market_dates[-1] and end_dt.date() <= market_dates[-1]:
+        n = sum(1 for d in market_dates if start_dt.date() < d <= end_dt.date())
+        return n, "market_history"
+
+    # 현재 내부에는 정식 휴장 캘린더가 없다. market_history.csv 범위 밖은 평일 근사.
+    return _weekday_trading_days_elapsed(start_dt, end_dt), "weekday_fallback"
+
+
+def _event_ttl_days(event_type: str) -> int:
+    return int(EVENT_TTL_DAYS.get(event_type, DEFAULT_EVENT_TTL_DAYS))
+
+
+def _event_original_impact(event: dict) -> float:
+    if not isinstance(event, dict):
+        return 0.0
+    meta = event.get("decay_meta") or {}
+    if isinstance(meta, dict) and "original_total_impact_score" in meta:
+        return _safe_float(meta.get("original_total_impact_score"), 0.0)
+    return _safe_float(event.get("total_impact_score", 0.0), 0.0)
+
+
+def _apply_event_decay_meta(
+    event_type: str,
+    event: dict,
+    detected_at: str,
+    elapsed_days: int,
+    weight: float,
+    original_impact: Optional[float] = None,
+) -> dict:
+    out = copy.deepcopy(event) if isinstance(event, dict) else {}
+    ttl = _event_ttl_days(event_type)
+    base_impact = _event_original_impact(out) if original_impact is None else float(original_impact)
+    out["total_impact_score"] = round(base_impact * weight, 2)
+    out["decay_meta"] = {
+        "ttl_days": ttl,
+        "detected_at": detected_at,
+        "elapsed_trading_days": elapsed_days,
+        "decay_weight": round(weight, 4),
+        "original_total_impact_score": round(base_impact, 2),
+        "note": "fixed TTL + linear decay; conservative default, not optimized",
+    }
+    return out
+
+
+def _decay_previous_event(
+    event_type: str,
+    event: dict,
+    previous_timestamp: Optional[str],
+    now_ts: str,
+    market_history_path: Optional[Path] = None,
+) -> tuple[Optional[dict], str]:
+    ttl = _event_ttl_days(event_type)
+    meta = event.get("decay_meta") if isinstance(event, dict) else {}
+    if not isinstance(meta, dict):
+        meta = {}
+    detected_at = meta.get("detected_at") or meta.get("last_detected_at") or previous_timestamp or now_ts
+    original_impact = _event_original_impact(event)
+    elapsed, method = _trading_days_elapsed(detected_at, now_ts, market_history_path)
+    if elapsed >= ttl:
+        return None, method
+    weight = max(0.0, (ttl - elapsed) / ttl)
+    return _apply_event_decay_meta(event_type, event, detected_at, elapsed, weight, original_impact), method
+
+
+def _merge_active_events_with_decay(
+    previous_active_events: Optional[dict],
+    previous_timestamp: Optional[str],
+    new_active_events: Optional[dict],
+    now_timestamp: str,
+    market_history_path: Optional[Path] = None,
+) -> tuple[float, dict, dict]:
+    """이전 active_events를 TTL/선형 decay로 이월한 뒤 신규 이벤트와 병합한다.
+
+    병합 규칙:
+    - 이전 이벤트는 TTL 내면 감쇠 보존, TTL 초과면 제거한다.
+    - 같은 유형이 신규 감지되면 타이머를 now_timestamp로 리셋한다.
+    - 같은 유형의 impact는 절댓값이 더 강한 쪽을 유지한다.
+    - active_events key 구조와 기존 필드는 유지하고 decay_meta만 추가한다.
+    """
+    now_text = _parse_decay_datetime(now_timestamp).isoformat()
+    prev = previous_active_events if isinstance(previous_active_events, dict) else {}
+    new = new_active_events if isinstance(new_active_events, dict) else {}
+
+    merged = {}
+    methods = {}
+    removed = {}
+
+    for event_type, event in prev.items():
+        if not isinstance(event, dict):
+            continue
+        carried, method = _decay_previous_event(
+            event_type, event, previous_timestamp, now_text, market_history_path
+        )
+        methods[event_type] = method
+        if carried is None:
+            removed[event_type] = "ttl_expired"
+            continue
+        merged[event_type] = carried
+
+    for event_type, event in new.items():
+        if not isinstance(event, dict):
+            continue
+        new_impact = _safe_float(event.get("total_impact_score", 0.0), 0.0)
+        chosen = copy.deepcopy(event)
+        chosen_impact = new_impact
+
+        if event_type in merged:
+            prev_impact = _event_original_impact(merged[event_type])
+            if abs(prev_impact) > abs(new_impact):
+                chosen = copy.deepcopy(merged[event_type])
+                chosen_impact = prev_impact
+                chosen["articles"] = list(chosen.get("articles", [])) + list(event.get("articles", []))
+                chosen["match_count"] = max(
+                    int(chosen.get("match_count", 0) or 0),
+                    int(event.get("match_count", 0) or 0),
+                )
+            else:
+                chosen["articles"] = list(event.get("articles", [])) + list(merged[event_type].get("articles", []))
+
+        merged[event_type] = _apply_event_decay_meta(
+            event_type=event_type,
+            event=chosen,
+            detected_at=now_text,
+            elapsed_days=0,
+            weight=1.0,
+            original_impact=chosen_impact,
+        )
+        methods[event_type] = "new_event_reset"
+
+    total = sum(_safe_float(ev.get("total_impact_score", 0.0), 0.0) for ev in merged.values())
+    total = float(np.clip(total, EVENT_IMPACT_MIN, EVENT_IMPACT_MAX))
+    debug = {
+        "methods": methods,
+        "removed": removed,
+        "event_count": len(merged),
+        "impact_min": EVENT_IMPACT_MIN,
+        "impact_max": EVENT_IMPACT_MAX,
+    }
+    return round(total, 2), merged, debug
+
+
+def _split_active_event_names(active_events: dict) -> tuple[list, list]:
+    risks, benefits = [], []
+    if not isinstance(active_events, dict):
+        return risks, benefits
+    for ev_name, ev_data in active_events.items():
+        score = _safe_float(ev_data.get("total_impact_score", 0.0), 0.0) if isinstance(ev_data, dict) else 0.0
+        if score < 0:
+            risks.append(ev_name)
+        elif score > 0:
+            benefits.append(ev_name)
+    return risks, benefits
 
 
 # =====================================================================
@@ -356,7 +579,25 @@ def build_market_context(force_refresh: bool = False) -> MarketContext:
     price_risks, price_benefits = _macro_events_price_based(vix_level, sp500_60d)
 
     articles = _fetch_realtime_news(max_articles=100)
-    event_adj, active_events, news_risks, news_benefits = _analyze_news_via_colab(articles)
+    raw_event_adj, fresh_active_events, news_risks, news_benefits = _analyze_news_via_colab(articles)
+
+    build_ts = datetime.now().isoformat()
+    previous_active_events = cached_ctx.active_events if cached_ctx else {}
+    previous_timestamp = cached_ctx.timestamp if cached_ctx else None
+    event_adj, active_events, decay_debug = _merge_active_events_with_decay(
+        previous_active_events=previous_active_events,
+        previous_timestamp=previous_timestamp,
+        new_active_events=fresh_active_events,
+        now_timestamp=build_ts,
+        market_history_path=config.system_dir() / "market_history.csv",
+    )
+    news_risks, news_benefits = _split_active_event_names(active_events)
+    if raw_event_adj != event_adj or decay_debug.get("removed") or decay_debug.get("event_count"):
+        log.info(
+            "event decay merge: fresh_adj=%+.2f merged_adj=%+.2f events=%d methods=%s removed=%s",
+            raw_event_adj, event_adj, len(active_events),
+            decay_debug.get("methods"), decay_debug.get("removed"),
+        )
 
     final_score = float(np.clip(price_score + event_adj, 0, 100))
     if final_score >= 70:
@@ -370,7 +611,7 @@ def build_market_context(force_refresh: bool = False) -> MarketContext:
     all_benefits = list(set(price_benefits + news_benefits))
 
     ctx = MarketContext(
-        timestamp=datetime.now().isoformat(),
+        timestamp=build_ts,
         score=final_score,
         regime=regime,
         kospi_trend_pct=0.0,

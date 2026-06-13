@@ -48,3 +48,19 @@ backup/
 
 # runtime logs
 logs/
+*.log
+.log
+
+# 실험 산출물 및 대용량 결과
+exp_*/
+exp_*/trades.jsonl
+exp_*/rulebooks_all.jsonl
+exp_*/validation_results.jsonl
+
+# Stage 3 잔여 손실 분석용 거래 로그 예외
+!exp_cw_stage3_20260613_0001/
+exp_cw_stage3_20260613_0001/*
+!exp_cw_stage3_20260613_0001/exit_trades.jsonl
+!exp_crwd_stage3_20260613_0001/
+exp_crwd_stage3_20260613_0001/*
+!exp_crwd_stage3_20260613_0001/exit_trades.jsonl

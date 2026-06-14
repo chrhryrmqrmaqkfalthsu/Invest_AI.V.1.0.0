@@ -43,6 +43,12 @@ class ExitFitnessWeights:
     expectancy, reward the weaker of stress/bull expectancies through a downside
     term, penalize failure to clear a bull floor, penalize stress drawdown, and
     penalize median holding days above a soft cap.
+
+    w_timeout_loss and w_deep_stop are trade-level exit-quality penalties. Their
+    defaults are 0.0, so disabling them preserves the previous fitness exactly.
+    w_timeout_loss discourages loss-making time_out exits. w_deep_stop
+    discourages stop_loss exits whose realized loss exceeds
+    deep_stop_threshold_pct.
     """
 
     w_downside: float = 2.0
@@ -51,6 +57,9 @@ class ExitFitnessWeights:
     w_stress_mdd: float = 0.2
     w_holding: float = 0.1
     holding_soft_cap: float = 7.0
+    w_timeout_loss: float = 0.0
+    w_deep_stop: float = 0.0
+    deep_stop_threshold_pct: float = 10.0
 
 
 DEFAULT_EXIT_FITNESS_WEIGHTS = ExitFitnessWeights()
@@ -139,11 +148,47 @@ def _metric_value(metrics: Mapping[str, Any] | None, key: str, default: float = 
     return float(default) if value is None else float(value)
 
 
+def _exit_trade_penalty_terms(
+    trades: Sequence[Mapping[str, Any]] | None,
+    *,
+    deep_stop_threshold_pct: float,
+) -> tuple[float, float]:
+    """Return (timeout_loss_penalty, deep_stop_penalty) from trade rows.
+
+    The terms are raw percentage-point sums. The caller controls their impact by
+    w_timeout_loss and w_deep_stop. Profitable time_out exits are not penalized.
+    stop_loss exits are penalized only for the loss portion beyond
+    deep_stop_threshold_pct. Stress/bull weighting is intentionally kept at the
+    caller layer so a future experiment can weight stress trades more heavily
+    without changing this helper.
+    """
+
+    timeout_loss = 0.0
+    deep_stop = 0.0
+    threshold = max(0.0, float(deep_stop_threshold_pct))
+    for trade in trades or []:
+        if not isinstance(trade, Mapping):
+            continue
+        pnl = _safe_float(trade.get("pnl_pct"))
+        if pnl is None or pnl >= 0.0:
+            continue
+        reason = str(trade.get("exit_reason") or "")
+        loss_abs = abs(pnl)
+        if reason == "time_out":
+            timeout_loss += loss_abs
+        if reason == "stop_loss" and loss_abs > threshold:
+            deep_stop += loss_abs - threshold
+    return float(timeout_loss), float(deep_stop)
+
+
 def composite_exit_fitness(
     stress_metrics: Mapping[str, Any] | None,
     bull_metrics: Mapping[str, Any] | None,
     holding_summary: Mapping[str, Any] | None,
     weights: ExitFitnessWeights = DEFAULT_EXIT_FITNESS_WEIGHTS,
+    *,
+    stress_trades: Sequence[Mapping[str, Any]] | None = None,
+    bull_trades: Sequence[Mapping[str, Any]] | None = None,
 ) -> float:
     """Compute provisional Stage 3 exit-GA composite fitness.
 
@@ -154,9 +199,13 @@ def composite_exit_fitness(
         - w_bull_floor_penalty * max(0, bull_floor - bull_exp)
         - w_stress_mdd * abs(min(0, stress_mdd))
         - w_holding * max(0, median_holding - holding_soft_cap)
+        - w_timeout_loss * loss-making time_out penalty
+        - w_deep_stop * deep stop-loss penalty
 
-    This is a first-pass scaffold only. Coefficients are exposed in
-    ExitFitnessWeights and must be tuned after the first real Stage 3 experiment.
+    Trade-level penalties are exact when stress_trades/bull_trades are supplied.
+    With the new weights left at 0.0, the previous fitness is preserved exactly.
+    Stress and bull penalty terms are currently summed with equal weight; the
+    separate inputs leave room for later stress-heavy weighting if needed.
     """
 
     stress_exp = _metric_value(stress_metrics, "expectancy_pct", 0.0)
@@ -173,12 +222,25 @@ def composite_exit_fitness(
     stress_mdd_abs = abs(min(0.0, stress_mdd))
     holding_excess = max(0.0, median_holding - float(weights.holding_soft_cap))
 
+    stress_timeout_penalty, stress_deep_stop_penalty = _exit_trade_penalty_terms(
+        stress_trades,
+        deep_stop_threshold_pct=float(weights.deep_stop_threshold_pct),
+    )
+    bull_timeout_penalty, bull_deep_stop_penalty = _exit_trade_penalty_terms(
+        bull_trades,
+        deep_stop_threshold_pct=float(weights.deep_stop_threshold_pct),
+    )
+    timeout_loss_penalty = stress_timeout_penalty + bull_timeout_penalty
+    deep_stop_penalty = stress_deep_stop_penalty + bull_deep_stop_penalty
+
     fitness = (
         bull_exp
         + float(weights.w_downside) * downside_term
         - float(weights.w_bull_floor_penalty) * bull_floor_penalty
         - float(weights.w_stress_mdd) * stress_mdd_abs
         - float(weights.w_holding) * holding_excess
+        - float(weights.w_timeout_loss) * timeout_loss_penalty
+        - float(weights.w_deep_stop) * deep_stop_penalty
     )
     return float(fitness)
 

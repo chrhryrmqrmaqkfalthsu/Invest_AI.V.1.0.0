@@ -47,6 +47,16 @@ SAMPLE_EXIT_GENE = {
 }
 
 
+def _base_fitness(weights=None, **kwargs):
+    return composite_exit_fitness(
+        {"expectancy_pct": 1.0, "max_drawdown_pct": -5.0},
+        {"expectancy_pct": 2.0, "max_drawdown_pct": -5.0},
+        {"median": 5.0},
+        weights or ExitFitnessWeights(),
+        **kwargs,
+    )
+
+
 def test_exit_fields_are_the_audited_fourteen_fields():
     assert len(EXIT_FIELDS) == 14
     assert EXIT_FIELDS == EXPECTED_EXIT_FIELDS
@@ -161,3 +171,86 @@ def test_composite_exit_fitness_penalizes_holding_above_soft_cap():
     )
 
     assert long_holding < short_holding
+
+
+def test_trade_penalty_weights_zero_preserve_previous_fitness_exactly():
+    weights = ExitFitnessWeights(w_timeout_loss=0.0, w_deep_stop=0.0)
+    no_trades = _base_fitness(weights)
+    with_bad_trades = _base_fitness(
+        weights,
+        stress_trades=[
+            {"exit_reason": "time_out", "pnl_pct": -7.0},
+            {"exit_reason": "stop_loss", "pnl_pct": -18.0},
+        ],
+        bull_trades=[
+            {"exit_reason": "time_out", "pnl_pct": -5.0},
+            {"exit_reason": "stop_loss", "pnl_pct": -14.0},
+        ],
+    )
+
+    assert with_bad_trades == pytest.approx(no_trades)
+
+
+def test_timeout_loss_penalty_decreases_fitness_monotonically_with_more_timeout_losses():
+    weights = ExitFitnessWeights(w_timeout_loss=0.5)
+    no_timeout_loss = _base_fitness(
+        weights,
+        stress_trades=[{"exit_reason": "time_out", "pnl_pct": 3.0}],
+    )
+    one_timeout_loss = _base_fitness(
+        weights,
+        stress_trades=[{"exit_reason": "time_out", "pnl_pct": -3.0}],
+    )
+    two_timeout_losses = _base_fitness(
+        weights,
+        stress_trades=[
+            {"exit_reason": "time_out", "pnl_pct": -3.0},
+            {"exit_reason": "time_out", "pnl_pct": -4.0},
+        ],
+    )
+
+    assert one_timeout_loss < no_timeout_loss
+    assert two_timeout_losses < one_timeout_loss
+
+
+def test_deep_stop_penalty_decreases_fitness_only_above_threshold():
+    weights = ExitFitnessWeights(w_deep_stop=1.0, deep_stop_threshold_pct=10.0)
+    shallow_stop = _base_fitness(
+        weights,
+        stress_trades=[{"exit_reason": "stop_loss", "pnl_pct": -9.9}],
+    )
+    threshold_stop = _base_fitness(
+        weights,
+        stress_trades=[{"exit_reason": "stop_loss", "pnl_pct": -10.0}],
+    )
+    deep_stop = _base_fitness(
+        weights,
+        stress_trades=[{"exit_reason": "stop_loss", "pnl_pct": -12.5}],
+    )
+    deeper_stops = _base_fitness(
+        weights,
+        stress_trades=[
+            {"exit_reason": "stop_loss", "pnl_pct": -12.5},
+            {"exit_reason": "stop_loss", "pnl_pct": -15.0},
+        ],
+    )
+
+    assert shallow_stop == pytest.approx(threshold_stop)
+    assert deep_stop < threshold_stop
+    assert deeper_stops < deep_stop
+
+
+def test_profitable_timeout_and_shallow_non_stop_losses_are_not_trade_penalized():
+    weights = ExitFitnessWeights(w_timeout_loss=1.0, w_deep_stop=1.0, deep_stop_threshold_pct=10.0)
+    base = _base_fitness(weights)
+    harmless = _base_fitness(
+        weights,
+        stress_trades=[
+            {"exit_reason": "time_out", "pnl_pct": 2.0},
+            {"exit_reason": "trailing", "pnl_pct": -20.0},
+            {"exit_reason": "stop_loss", "pnl_pct": -8.0},
+        ],
+        bull_trades=[{"exit_reason": "take_profit", "pnl_pct": 7.0}],
+    )
+
+    assert harmless == pytest.approx(base)

@@ -647,11 +647,20 @@ def _evaluate_exit_gene(
     rb = Rulebook.from_dict(rb_dict)
     stress_result = run_backtest_period(rb, ctx, start=STRESS_PERIOD["start"], end=STRESS_PERIOD["end"])
     bull_result = run_backtest_period(rb, ctx, start=BULL_PERIOD["start"], end=BULL_PERIOD["end"])
-    trades = list(getattr(stress_result, "trades", []) or []) + list(getattr(bull_result, "trades", []) or [])
-    holding = holding_days_summary([t for t in trades if isinstance(t, dict)])
+    stress_trades = [t for t in list(getattr(stress_result, "trades", []) or []) if isinstance(t, dict)]
+    bull_trades = [t for t in list(getattr(bull_result, "trades", []) or []) if isinstance(t, dict)]
+    trades = stress_trades + bull_trades
+    holding = holding_days_summary(trades)
     stress_metrics = result_metrics(stress_result)
     bull_metrics = result_metrics(bull_result)
-    fitness = composite_exit_fitness(stress_metrics, bull_metrics, holding, weights)
+    fitness = composite_exit_fitness(
+        stress_metrics,
+        bull_metrics,
+        holding,
+        weights,
+        stress_trades=stress_trades,
+        bull_trades=bull_trades,
+    )
     return {
         "key": _exit_gene_key(gene),
         "exit_gene": _normalize_exit_gene(gene),
@@ -729,7 +738,13 @@ def _run_exit_ga_for_entry(
     return out
 
 
-def run_exit_ga(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any]:
+def run_exit_ga(
+    ticker: str,
+    out_dir: Path,
+    *,
+    seed_base: int,
+    weights: ExitFitnessWeights = DEFAULT_EXIT_FITNESS_WEIGHTS,
+) -> dict[str, Any]:
     """Stage 3 단계3: 청산재학습."""
     entry_path = out_dir / "entry_rulebooks.jsonl"
     if not entry_path.exists():
@@ -740,7 +755,7 @@ def run_exit_ga(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any]
     final_rows: list[dict[str, Any]] = []
     for idx, entry_row in enumerate(entries, 1):
         seed = seed_base + 1000 + idx
-        final_rows.extend(_run_exit_ga_for_entry(entry_row=entry_row, ctx=ctx, seed=seed))
+        final_rows.extend(_run_exit_ga_for_entry(entry_row=entry_row, ctx=ctx, seed=seed, weights=weights))
     final_rows.sort(key=lambda row: safe_float(row.get("composite_fitness"), float("-inf")), reverse=True)
     append_jsonl(out_dir / "final_rulebooks.jsonl", final_rows)
     summary = {
@@ -748,7 +763,7 @@ def run_exit_ga(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any]
         "stage": "exit",
         "entry_count": len(entries),
         "final_rulebook_count": len(final_rows),
-        "weights": dataclasses.asdict(DEFAULT_EXIT_FITNESS_WEIGHTS),
+        "weights": dataclasses.asdict(weights),
         "best_composite_fitness": safe_float(final_rows[0].get("composite_fitness")) if final_rows else None,
         "best_hash": final_rows[0].get("rulebook_hash") if final_rows else None,
         "elapsed_seconds": time.time() - started,
@@ -1075,13 +1090,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--stage", default="all", choices=["qualify", "entry", "exit", "validate", "all"], help="Stage to run. all runs qualify→entry→exit→validate.")
     parser.add_argument("--out-dir", default=None, help="Existing or new output directory. Defaults to exp_<ticker>_stage3_<YYYYMMDD>_<NNNN> for qualify/all; latest dir for resume stages.")
     parser.add_argument("--seed-base", type=int, default=None, help="Optional deterministic seed base")
+    parser.add_argument("--exit-w-timeout-loss", type=float, default=None, help="Optional Stage 3 exit-GA penalty weight for loss-making time_out exits. Default keeps configured baseline.")
+    parser.add_argument("--exit-w-deep-stop", type=float, default=None, help="Optional Stage 3 exit-GA penalty weight for deep stop_loss exits. Default keeps configured baseline.")
+    parser.add_argument("--exit-deep-stop-threshold-pct", type=float, default=None, help="Optional threshold for deep stop_loss penalty in percentage points. Default keeps configured baseline.")
     return parser.parse_args(argv)
+
+
+def exit_fitness_weights_from_args(args: argparse.Namespace) -> ExitFitnessWeights:
+    """Build exit-fitness weights from CLI overrides without changing defaults."""
+    updates: dict[str, float] = {}
+    if args.exit_w_timeout_loss is not None:
+        updates["w_timeout_loss"] = float(args.exit_w_timeout_loss)
+    if args.exit_w_deep_stop is not None:
+        updates["w_deep_stop"] = float(args.exit_w_deep_stop)
+    if args.exit_deep_stop_threshold_pct is not None:
+        updates["deep_stop_threshold_pct"] = float(args.exit_deep_stop_threshold_pct)
+    if not updates:
+        return DEFAULT_EXIT_FITNESS_WEIGHTS
+    return dataclasses.replace(DEFAULT_EXIT_FITNESS_WEIGHTS, **updates)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     ticker = str(args.ticker).upper().strip()
     seed_base = int(args.seed_base) if args.seed_base is not None else default_seed_base(ticker)
+    exit_weights = exit_fitness_weights_from_args(args)
     out_dir = resolve_out_dir(ticker, str(args.stage), args.out_dir)
     ensure_experiment_header(out_dir, ticker=ticker, seed_base=seed_base, stage=str(args.stage))
     print(json.dumps({"event": "stage3_start", "ticker": ticker, "stage": args.stage, "out_dir": str(out_dir), "seed_base": seed_base}, ensure_ascii=False), flush=True)
@@ -1092,7 +1125,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.stage == "entry":
         summaries.append(run_entry_ga(ticker, out_dir, seed_base=seed_base))
     elif args.stage == "exit":
-        summaries.append(run_exit_ga(ticker, out_dir, seed_base=seed_base))
+        summaries.append(run_exit_ga(ticker, out_dir, seed_base=seed_base, weights=exit_weights))
     elif args.stage == "validate":
         summaries.append(run_validate(ticker, out_dir, seed_base=seed_base))
     elif args.stage == "all":
@@ -1100,7 +1133,7 @@ def main(argv: list[str] | None = None) -> int:
         summaries.append(qualify)
         if qualify.get("qualified"):
             summaries.append(run_entry_ga(ticker, out_dir, seed_base=seed_base))
-            summaries.append(run_exit_ga(ticker, out_dir, seed_base=seed_base))
+            summaries.append(run_exit_ga(ticker, out_dir, seed_base=seed_base, weights=exit_weights))
             summaries.append(run_validate(ticker, out_dir, seed_base=seed_base))
         else:
             print(json.dumps({"event": "stage3_stop_after_qualify", "ticker": ticker, "qualified": False}, ensure_ascii=False), flush=True)

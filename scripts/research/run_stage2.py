@@ -24,7 +24,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from statistics import mean
-from typing import Any
+from typing import Any, Mapping
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -72,6 +72,85 @@ HEAVY_TRADE_KEYS = {
     "holding_path_full",
     "backtest_params_full",
 }
+
+# Keep this schema identical to scripts/research/run_stage3_aggressive.py.
+RL_REPLAY_SCHEMA_VERSION = 1
+
+RL_REPLAY_TRADE_FIELDS: tuple[str, ...] = (
+    "rl_replay_schema_version",
+    "ticker",
+    "source_stage",
+    "source_run_dir",
+    "rulebook_hash",
+    "final_rulebook_hash",
+    "entry_rulebook_hash",
+    "exit_rank",
+    "period_label",
+    "period_role",
+    "trade_index_in_period",
+    "entry_signal_date",
+    "entry_fill_date",
+    "entry_date",
+    "exit_date",
+    "entry_execution_mode",
+    "exit_execution_mode",
+    "fold_exit_policy",
+    "entry_price",
+    "exit_price",
+    "entry_shares",
+    "total_shares",
+    "avg_cost",
+    "add_buys",
+    "pnl_pct",
+    "pnl_krw",
+    "commission",
+    "trigger_price",
+    "fill_price_base",
+    "fill_price_stress",
+    "stress_pnl_pct",
+    "stress_pnl_krw",
+    "exit_reason",
+    "holding_days",
+    "max_profit_during_hold",
+    "max_loss_during_hold",
+    "entry_reason",
+    "entry_reasons",
+    "entry_signal_score",
+    "entry_signal_raw_score",
+    "entry_signal_threshold",
+    "entry_market_adjustment",
+    "entry_signal_components",
+    "entry_news_sentiment",
+    "entry_topic_features",
+    "entry_market_score",
+    "entry_sector_score",
+    "entry_vix_level",
+    "entry_event_flags",
+    "entry_atr",
+    "stop_price_at_entry",
+    "target_price_at_entry",
+    "trailing_stop_at_entry",
+    "trailing_distance_at_entry",
+    "trailing_activation_profit_pct",
+    "breakeven_enabled",
+    "breakeven_trigger_profit_pct",
+    "breakeven_floor_profit_pct",
+    "sell_omen_enabled",
+    "sell_omen_score",
+    "sell_omen_threshold",
+    "exit_strategy",
+)
+
+RL_REPLAY_CRITICAL_FIELDS: tuple[str, ...] = (
+    "ticker",
+    "rulebook_hash",
+    "entry_date",
+    "exit_date",
+    "pnl_pct",
+    "pnl_krw",
+    "entry_signal_score",
+    "period_role",
+)
 
 PERIOD_METRICS_FIELDS = [
     "ticker",
@@ -264,6 +343,63 @@ def compact_trade(trade: dict[str, Any]) -> dict[str, Any]:
     out = {key: value for key, value in trade.items() if key not in HEAVY_TRADE_KEYS}
     out["heavy_trade_keys_omitted"] = sorted([key for key in HEAVY_TRADE_KEYS if key in trade])
     return out
+
+
+def period_role_for_stage2(period_label: str, period_kind: Any, logger: logging.Logger | None = None) -> str:
+    kind = str(period_kind or "").strip().lower()
+    if kind in {"train", "oos", "stress"}:
+        return kind
+    role = "unknown"
+    if logger is not None:
+        logger.warning("stage2 rl_replay unknown period_role period_label=%s period_kind=%s", period_label, period_kind)
+    return role
+
+
+def _lookup_rl_replay_trade_value(
+    *,
+    trade: Mapping[str, Any],
+    rulebook_dict: Mapping[str, Any],
+    context: Mapping[str, Any],
+    field: str,
+) -> tuple[Any, bool]:
+    if field in context:
+        return context.get(field), True
+    if field in trade:
+        return trade.get(field), True
+    nested_rulebook = trade.get("rulebook_full")
+    if isinstance(nested_rulebook, Mapping) and field in nested_rulebook:
+        return nested_rulebook.get(field), True
+    if field in rulebook_dict:
+        return rulebook_dict.get(field), True
+    return None, False
+
+
+def _rl_replay_trade(
+    *,
+    trade: Mapping[str, Any],
+    rulebook_dict: Mapping[str, Any],
+    context: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[str], list[str]]:
+    out: dict[str, Any] = {}
+    missing: list[str] = []
+    for field in RL_REPLAY_TRADE_FIELDS:
+        value, found = _lookup_rl_replay_trade_value(
+            trade=trade,
+            rulebook_dict=rulebook_dict,
+            context=context,
+            field=field,
+        )
+        if found:
+            out[field] = value
+        else:
+            out[field] = None
+            missing.append(field)
+    critical_null = [field for field in RL_REPLAY_CRITICAL_FIELDS if out.get(field) is None]
+    return out, missing, critical_null
+
+
+def _counter_dict(counter: Counter[str]) -> dict[str, int]:
+    return {key: int(counter[key]) for key in sorted(counter)}
 
 
 def _configure_logging(out_dir: Path) -> logging.Logger:
@@ -460,6 +596,7 @@ def evaluate_periods(
     representative_by_hash: dict[str, Rulebook],
     origin_rows_by_hash: dict[str, list[dict[str, Any]]],
     logger: logging.Logger,
+    out_dir: Path | None = None,
 ) -> dict[str, Any]:
     df = ctx["df"]
     kwargs = base_kwargs(ctx)
@@ -469,6 +606,9 @@ def evaluate_periods(
     early_cut_rows: list[dict[str, Any]] = []
     survivor_rows: list[dict[str, Any]] = []
     trade_rows: list[dict[str, Any]] = []
+    rl_replay_trade_rows: list[dict[str, Any]] = []
+    rl_replay_missing_counter: Counter[str] = Counter()
+    rl_replay_critical_null_counter: Counter[str] = Counter()
     eval_count = 0
     max_eval_count = len(unique_hashes) * len(periods)
     first_fail_by_hash: dict[str, dict[str, Any]] = {}
@@ -564,12 +704,34 @@ def evaluate_periods(
                 }
             )
 
+            period_role = period_role_for_stage2(str(period["label"]), period.get("kind"), logger)
+            rulebook_dict = representative_by_hash[rulebook_hash].to_dict() if hasattr(representative_by_hash[rulebook_hash], "to_dict") else {}
             for trade_idx, trade in enumerate(list(getattr(results_by_hash[rulebook_hash], "trades", []) or []), 1):
                 if isinstance(trade, dict):
+                    raw_trade = trade
                     trade_row = compact_trade(trade)
                 else:
                     converted = json_safe(trade)
+                    raw_trade = converted if isinstance(converted, dict) else {}
                     trade_row = compact_trade(converted) if isinstance(converted, dict) else {"trade_repr": str(trade)}
+                trade_context = {
+                    "rl_replay_schema_version": RL_REPLAY_SCHEMA_VERSION,
+                    "ticker": ticker,
+                    "source_stage": "stage2",
+                    "source_run_dir": str(out_dir) if out_dir is not None else None,
+                    "rulebook_hash": rulebook_hash,
+                    "period_label": period["label"],
+                    "period_role": period_role,
+                    "trade_index_in_period": trade_idx,
+                }
+                replay_row, replay_missing, replay_critical_null = _rl_replay_trade(
+                    trade=raw_trade,
+                    rulebook_dict=rulebook_dict,
+                    context=trade_context,
+                )
+                rl_replay_trade_rows.append(replay_row)
+                rl_replay_missing_counter.update(replay_missing)
+                rl_replay_critical_null_counter.update(replay_critical_null)
                 trade_row.update(
                     {
                         "ticker": ticker,
@@ -671,6 +833,9 @@ def evaluate_periods(
         "early_cut_rows": early_cut_rows,
         "survivor_rows": survivor_rows,
         "trade_rows": trade_rows,
+        "rl_replay_trade_rows": rl_replay_trade_rows,
+        "rl_replay_missing_counts": _counter_dict(rl_replay_missing_counter),
+        "rl_replay_critical_null_counts": _counter_dict(rl_replay_critical_null_counter),
         "eval_count": eval_count,
         "max_eval_count": max_eval_count,
     }
@@ -762,6 +927,7 @@ def run_stage2(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool) ->
         periods=periods,
         representative_by_hash=representative_by_hash,
         origin_rows_by_hash=origin_rows_by_hash,
+        out_dir=out_dir,
         logger=logger,
     )
 
@@ -769,6 +935,16 @@ def run_stage2(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool) ->
     write_csv(out_dir / "early_cut_log.csv", eval_result["early_cut_rows"], EARLY_CUT_FIELDS)
     write_jsonl(out_dir / "survivors.jsonl", eval_result["survivor_rows"])
     write_jsonl(out_dir / "trades.jsonl", eval_result["trade_rows"])
+    write_jsonl(out_dir / "rl_replay_trades.jsonl", eval_result["rl_replay_trade_rows"])
+    logger.info(
+        "stage2 rl_replay_trades written path=%s rows=%s missing_field_counts=%s critical_null_counts=%s",
+        out_dir / "rl_replay_trades.jsonl",
+        len(eval_result["rl_replay_trade_rows"]),
+        eval_result["rl_replay_missing_counts"],
+        eval_result["rl_replay_critical_null_counts"],
+    )
+    if eval_result["rl_replay_critical_null_counts"]:
+        logger.warning("stage2 rl_replay critical null counts: %s", eval_result["rl_replay_critical_null_counts"])
 
     fail_counts = Counter(str(row.get("failed_period_label") or "SURVIVED") for row in eval_result["early_cut_rows"])
     generations = [safe_int(row["generations_run"]) for row in train_results]

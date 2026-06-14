@@ -37,7 +37,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from engine.core.metadata import compute_rulebook_hash
-from engine.learning.backtest import run_backtest
+from engine.learning.execution_mode_backtest import run_backtest_execution_mode
 from engine.learning.genetic import GAConfig, collect_top_rulebooks, run_ga
 from engine.pipeline.context import prepare_ticker_context
 from engine.pipeline.exit_gene import (
@@ -79,6 +79,10 @@ PURE_OOS_VALIDATION_PERIODS: tuple[dict[str, str | None], ...] = (
 )
 EXIT_CHECK_PERIOD = {"label": "stress_pre_2022h1", "start": None, "end": "2022-06-30", "role": "exit_check"}
 VALIDATION_PERIOD = RECENT_1Y_PERIOD  # 이전 호출부 호환용 별칭. Stage 4 profile은 PURE_OOS_VALIDATION_PERIODS를 사용한다.
+ENTRY_EXECUTION_MODE = "t_plus_1_open"
+EXIT_EXECUTION_MODE = "conservative_core"
+FOLD_EXIT_POLICY = "fold_end_mark_to_market"
+LIVE_HARD_STOP_GUARD = True
 
 # 첫 Stage 3 실험용 임시 크기. 실제 계수와 population은 첫 결과 이후 튜닝한다.
 QUALIFY_POPULATION = 100
@@ -297,8 +301,18 @@ def jaccard_similarity(a: set[str], b: set[str]) -> float:
 
 
 def run_backtest_period(rulebook: Rulebook, ctx: dict[str, Any], *, start: str | None, end: str | None) -> Any:
-    """하나의 기간에 대해 기존 run_backtest를 호출한다."""
-    return run_backtest(rulebook, ctx["df"], start_date=start, end_date=end, **base_backtest_kwargs(ctx))
+    """하나의 기간에 대해 honest Stage2와 같은 t+1 open + conservative_core backtest를 호출한다."""
+    return run_backtest_execution_mode(
+        rulebook,
+        ctx["df"],
+        start_date=start,
+        end_date=end,
+        **base_backtest_kwargs(ctx),
+        entry_execution_mode=ENTRY_EXECUTION_MODE,
+        exit_execution_mode=EXIT_EXECUTION_MODE,
+        fold_exit_policy=FOLD_EXIT_POLICY,
+        live_hard_stop_guard=LIVE_HARD_STOP_GUARD,
+    )
 
 
 def make_ga_config(*, population: int, generations: int, seed: int) -> GAConfig:

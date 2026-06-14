@@ -51,6 +51,9 @@ logs/
 *.log
 .log
 
+# API smoke-test artifacts
+test_write.txt
+
 # 실험 산출물 및 대용량 결과
 exp_*/
 exp_*/trades.jsonl

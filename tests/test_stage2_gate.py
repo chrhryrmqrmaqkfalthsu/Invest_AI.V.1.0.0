@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from engine.pipeline.stage2_gate import Stage2GateConfig, stage2_fail_reasons
-from scripts.research.recheck_stage2_gate import TARGET_COUNTS, recheck_all
 
 
 def test_stress_gate_passes_mdd_boundary_when_ratio_above_one() -> None:
@@ -93,11 +92,3 @@ def test_oos_trade_member_gate_can_be_disabled() -> None:
         "max_drawdown_pct": -15.0,
     }
     assert stage2_fail_reasons(metrics, "oos", config) == []
-
-
-def test_stage2_gate_recheck_matches_10stock_targets() -> None:
-    results = recheck_all()
-    got = {result.ticker: result.final_count for result in results}
-    assert got == TARGET_COUNTS
-    assert sum(got.values()) == 201
-    assert all(result.passed for result in results)

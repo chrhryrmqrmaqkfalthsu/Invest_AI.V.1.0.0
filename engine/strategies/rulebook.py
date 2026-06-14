@@ -192,9 +192,11 @@ PARAM_RANGES = {
     "base_position_ratio":    (0.3, 1.0),
     "signal_multiplier":      (0.5, 2.0),
 
-    "add_buy_trigger_profit_pct": (0.5, 3.5),
-    "add_buy_max_count":          (0, 3),
-    "add_buy_size_ratio":         (0.3, 1.0),
+    # disabled: 중앙 통제기가 담당. GA/백테스트 탐색에서 제외하되 Rulebook 필드는 보존한다.
+    # "add_buy_trigger_profit_pct": (0.5, 3.5),
+    # "add_buy_max_count":          (0, 3),
+    # "add_buy_size_ratio":         (0.3, 1.0),
+    # "add_buy_min_signal_score"는 과거 연구용 필드로, active PARAM_RANGES에 포함하지 않는다.
 
     "market_score_weight":    (-1.0, 1.0),
     "sector_strength_weight": (-1.0, 1.0),
@@ -224,7 +226,8 @@ PARAM_RANGES = {
 CATEGORICAL_PARAMS = {
     "exit_strategy":                 ["fixed", "trailing", "hybrid"],
     "position_sizing_strategy":      ["fixed", "signal_scaled", "kelly_lite"],
-    "add_buy_enabled":               [False, True],
+    # disabled: 중앙 통제기가 담당. GA/백테스트 탐색에서 제외하되 Rulebook 필드는 보존한다.
+    # "add_buy_enabled":               [False, True],
     "breakeven_enabled":             [False, True],
     "sell_omen_enabled":             [False, True],
     "crash_buy_enabled":             [False, True],

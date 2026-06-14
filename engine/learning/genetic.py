@@ -99,7 +99,7 @@ def _rand_in(low, high, integer: bool = False):
     return random.uniform(low, high)
 
 
-_INT_PARAMS = {"max_holding_days", "add_buy_max_count"}
+_INT_PARAMS = {"max_holding_days"}
 _MASK_CATEGORICAL_PARAMS = {
     "use_news_global",
     "use_event_block",
@@ -119,6 +119,15 @@ def _clamp_float(value: object, low: float, high: float) -> float:
     except Exception:
         v = low
     return float(max(low, min(high, v)))
+
+
+def _disable_add_buy_genes(rb: Rulebook) -> None:
+    """추가매수 유전자는 엔진/GA에서 비활성화하고 중앙 통제기 전용으로 보존한다."""
+    rb.add_buy_enabled = False
+    rb.add_buy_trigger_profit_pct = 2.0
+    rb.add_buy_max_count = 1
+    rb.add_buy_size_ratio = 0.5
+    rb.add_buy_min_signal_score = 1.5
 
 
 def _normalize_dependent_params(rb: Rulebook) -> None:
@@ -142,6 +151,7 @@ def _normalize_dependent_params(rb: Rulebook) -> None:
 def _finalize_rulebook_genes(rb: Rulebook) -> Rulebook:
     _mark_mask_schema_if_needed(rb)
     _normalize_dependent_params(rb)
+    _disable_add_buy_genes(rb)
     return rb
 
 

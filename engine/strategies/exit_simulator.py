@@ -17,6 +17,9 @@ from engine.core.metadata import compute_rulebook_hash
 from engine.strategies.rulebook import Rulebook
 
 
+ADD_BUY_RUNTIME_ENABLED = False  # 비활성화: 중앙 통제기가 추가매수 담당
+
+
 @dataclass
 class Trade:
     entry_date: str
@@ -346,7 +349,8 @@ def simulate_exit(
 
         current_pnl_pct = (close - position.avg_cost) / position.avg_cost * 100 if position.avg_cost > 0 else 0.0
         if (
-            not disable_add_buy
+            ADD_BUY_RUNTIME_ENABLED
+            and not disable_add_buy
             and rb.add_buy_enabled
             and position.add_buy_count < rb.add_buy_max_count
             and current_pnl_pct >= rb.add_buy_trigger_profit_pct

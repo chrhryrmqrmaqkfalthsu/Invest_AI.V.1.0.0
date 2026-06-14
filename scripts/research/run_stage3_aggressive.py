@@ -841,6 +841,84 @@ EXIT_TRADE_OUTPUT_FIELDS: tuple[str, ...] = (
 )
 
 
+RL_REPLAY_SCHEMA_VERSION = 1
+
+RL_REPLAY_TRADE_FIELDS: tuple[str, ...] = (
+    "rl_replay_schema_version",
+    "ticker",
+    "source_stage",
+    "source_run_dir",
+    "rulebook_hash",
+    "final_rulebook_hash",
+    "entry_rulebook_hash",
+    "exit_rank",
+    "period_label",
+    "period_role",
+    "trade_index_in_period",
+    "entry_signal_date",
+    "entry_fill_date",
+    "entry_date",
+    "exit_date",
+    "entry_execution_mode",
+    "exit_execution_mode",
+    "fold_exit_policy",
+    "entry_price",
+    "exit_price",
+    "entry_shares",
+    "total_shares",
+    "avg_cost",
+    "add_buys",
+    "pnl_pct",
+    "pnl_krw",
+    "commission",
+    "trigger_price",
+    "fill_price_base",
+    "fill_price_stress",
+    "stress_pnl_pct",
+    "stress_pnl_krw",
+    "exit_reason",
+    "holding_days",
+    "max_profit_during_hold",
+    "max_loss_during_hold",
+    "entry_reason",
+    "entry_reasons",
+    "entry_signal_score",
+    "entry_signal_raw_score",
+    "entry_signal_threshold",
+    "entry_market_adjustment",
+    "entry_signal_components",
+    "entry_news_sentiment",
+    "entry_topic_features",
+    "entry_market_score",
+    "entry_sector_score",
+    "entry_vix_level",
+    "entry_event_flags",
+    "entry_atr",
+    "stop_price_at_entry",
+    "target_price_at_entry",
+    "trailing_stop_at_entry",
+    "trailing_distance_at_entry",
+    "trailing_activation_profit_pct",
+    "breakeven_enabled",
+    "breakeven_trigger_profit_pct",
+    "breakeven_floor_profit_pct",
+    "sell_omen_enabled",
+    "sell_omen_score",
+    "sell_omen_threshold",
+    "exit_strategy",
+)
+
+RL_REPLAY_CRITICAL_FIELDS: tuple[str, ...] = (
+    "ticker",
+    "rulebook_hash",
+    "entry_date",
+    "exit_date",
+    "pnl_pct",
+    "pnl_krw",
+    "entry_signal_score",
+    "period_role",
+)
+
 _EXIT_TRADE_CONTEXT_FIELDS = {"final_rulebook_hash", "entry_rulebook_hash", "exit_rank", "period_label"}
 
 
@@ -912,6 +990,94 @@ def _exit_trade_rows_for_period(
     return rows, missing_counter
 
 
+def _lookup_rl_replay_trade_value(
+    *,
+    trade: Mapping[str, Any],
+    rulebook_dict: Mapping[str, Any],
+    context: Mapping[str, Any],
+    field: str,
+) -> tuple[Any, bool]:
+    """RL replay row 필드를 runner context, trade dict, rulebook에서 조회한다."""
+    if field in context:
+        return context.get(field), True
+    if field in trade:
+        return trade.get(field), True
+    nested_rulebook = trade.get("rulebook_full")
+    if isinstance(nested_rulebook, Mapping) and field in nested_rulebook:
+        return nested_rulebook.get(field), True
+    if field in rulebook_dict:
+        return rulebook_dict.get(field), True
+    return None, False
+
+
+def _rl_replay_trade(
+    *,
+    trade: Mapping[str, Any],
+    rulebook_dict: Mapping[str, Any],
+    context: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[str], list[str]]:
+    """Stage 3 validate 거래를 RL replay용 풍부한 JSONL row로 변환한다."""
+    out: dict[str, Any] = {}
+    missing: list[str] = []
+    for field in RL_REPLAY_TRADE_FIELDS:
+        value, found = _lookup_rl_replay_trade_value(
+            trade=trade,
+            rulebook_dict=rulebook_dict,
+            context=context,
+            field=field,
+        )
+        if found:
+            out[field] = value
+        else:
+            out[field] = None
+            missing.append(field)
+    critical_null = [field for field in RL_REPLAY_CRITICAL_FIELDS if out.get(field) is None]
+    return out, missing, critical_null
+
+
+def _rl_replay_rows_for_period(
+    *,
+    trades: list[dict[str, Any]] | None,
+    rulebook_dict: Mapping[str, Any],
+    ticker: str,
+    out_dir: Path,
+    final_rulebook_hash: str,
+    entry_rulebook_hash: Any,
+    exit_rank: Any,
+    period_label: str,
+    period_role: str,
+) -> tuple[list[dict[str, Any]], Counter[str], Counter[str]]:
+    """한 validate 기간의 trade 배열을 rl_replay_trades.jsonl row 목록으로 변환한다."""
+    rows: list[dict[str, Any]] = []
+    missing_counter: Counter[str] = Counter()
+    critical_null_counter: Counter[str] = Counter()
+    for trade_index, trade in enumerate(trades or [], 1):
+        if not isinstance(trade, Mapping):
+            continue
+        context = {
+            "rl_replay_schema_version": RL_REPLAY_SCHEMA_VERSION,
+            "ticker": ticker,
+            "source_stage": "stage3",
+            "source_run_dir": str(out_dir),
+            "rulebook_hash": final_rulebook_hash,
+            "final_rulebook_hash": final_rulebook_hash,
+            "entry_rulebook_hash": entry_rulebook_hash,
+            "exit_rank": exit_rank,
+            "period_label": period_label,
+            "period_role": period_role,
+            "trade_index_in_period": trade_index,
+        }
+        row, missing, critical_null = _rl_replay_trade(
+            trade=trade,
+            rulebook_dict=rulebook_dict,
+            context=context,
+        )
+        rows.append(row)
+        missing_counter.update(missing)
+        critical_null_counter.update(critical_null)
+    return rows, missing_counter, critical_null_counter
+
+
 def run_validate(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any]:
     """Stage 3 단계4: 최소 적격선 + 프로파일 카탈로그.
 
@@ -942,6 +1108,9 @@ def run_validate(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any
     ineligible_reason_counter: Counter[str] = Counter()
     exit_trade_rows: list[dict[str, Any]] = []
     exit_trade_missing_counter: Counter[str] = Counter()
+    rl_replay_trade_rows: list[dict[str, Any]] = []
+    rl_replay_missing_counter: Counter[str] = Counter()
+    rl_replay_critical_null_counter: Counter[str] = Counter()
 
     for rank, row in enumerate(final_rows, 1):
         rb = Rulebook.from_dict(dict(row["rulebook"]))
@@ -967,6 +1136,20 @@ def run_validate(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any
             )
             exit_trade_rows.extend(trade_rows)
             exit_trade_missing_counter.update(missing)
+            replay_rows, replay_missing, replay_critical_null = _rl_replay_rows_for_period(
+                trades=trades,
+                rulebook_dict=rulebook_dict,
+                ticker=ticker,
+                out_dir=out_dir,
+                final_rulebook_hash=rulebook_hash,
+                entry_rulebook_hash=row.get("entry_rulebook_hash"),
+                exit_rank=row.get("exit_rank"),
+                period_label=label,
+                period_role="oos",
+            )
+            rl_replay_trade_rows.extend(replay_rows)
+            rl_replay_missing_counter.update(replay_missing)
+            rl_replay_critical_null_counter.update(replay_critical_null)
             all_oos_trades.extend(trades)
             period_results[label] = {**one, "gate_included": True, "role": "pure_oos"}
 
@@ -983,6 +1166,20 @@ def run_validate(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any
         )
         exit_trade_rows.extend(stress_trade_rows)
         exit_trade_missing_counter.update(stress_missing)
+        stress_replay_rows, stress_replay_missing, stress_replay_critical_null = _rl_replay_rows_for_period(
+            trades=stress_trades,
+            rulebook_dict=rulebook_dict,
+            ticker=ticker,
+            out_dir=out_dir,
+            final_rulebook_hash=rulebook_hash,
+            entry_rulebook_hash=row.get("entry_rulebook_hash"),
+            exit_rank=row.get("exit_rank"),
+            period_label=stress_label,
+            period_role="stress",
+        )
+        rl_replay_trade_rows.extend(stress_replay_rows)
+        rl_replay_missing_counter.update(stress_replay_missing)
+        rl_replay_critical_null_counter.update(stress_replay_critical_null)
         period_results[stress_label] = {
             **stress_check,
             "gate_included": False,
@@ -1052,6 +1249,21 @@ def run_validate(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any
                 "path": str(out_dir / "exit_trades.jsonl"),
                 "trade_count": len(exit_trade_rows),
                 "missing_field_counts": _counter_dict(exit_trade_missing_counter),
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
+    append_jsonl(out_dir / "rl_replay_trades.jsonl", rl_replay_trade_rows)
+    print(
+        json.dumps(
+            {
+                "event": "stage3_validate_rl_replay_trades_written",
+                "ticker": ticker,
+                "path": str(out_dir / "rl_replay_trades.jsonl"),
+                "trade_count": len(rl_replay_trade_rows),
+                "missing_field_counts": _counter_dict(rl_replay_missing_counter),
+                "critical_null_counts": _counter_dict(rl_replay_critical_null_counter),
             },
             ensure_ascii=False,
         ),

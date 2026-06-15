@@ -34,11 +34,14 @@ class Stage3ProfileConfig:
     """Stage 3 단계4 최소 적격선과 프로파일 경계값.
 
     임시 1차 기준이다. 단계4는 모든 순수 OOS 구간의 expectancy_pct가
-    eligibility_min_expectancy_pct 이상인지로만 적격 여부를 판단한다.
+    eligibility_min_expectancy_pct 이상인지로 적격 여부를 판단하고,
+    진짜 forward OOS인 recent_1y에만 최소 거래 수를 요구한다.
     MDD와 보유일은 탈락 사유가 아니라 프로파일 라벨로만 사용한다.
     """
 
     eligibility_min_expectancy_pct: float = 1.0
+    eligibility_min_trades: int = 5
+    eligibility_min_trades_periods: tuple[str, ...] = ("recent_1y",)
     holding_ultra_short_max_days: float = 7.0
     holding_mid_max_days: float = 14.0
     low_mdd_floor_pct: float = -10.0
@@ -233,15 +236,19 @@ def stage3_basic_eligibility(
 ) -> list[dict[str, Any]]:
     """Return minimum eligibility failures for Stage 3 profile cataloging.
 
-    Only the minimum eligibility line is checked:
+    Minimum eligibility line:
     train_1, train_2, and recent_1y must each have expectancy_pct >=
-    eligibility_min_expectancy_pct. Missing periods also fail. MDD and holding
-    days are intentionally ignored here and used only by stage3_profile.
+    eligibility_min_expectancy_pct. Missing periods also fail. Only periods in
+    eligibility_min_trades_periods require trade_count >= eligibility_min_trades,
+    so mixed/down-market checks can still treat no-trade behavior as normal.
+    MDD and holding days are intentionally ignored here and used only by
+    stage3_profile.
 
     Boundary rule: exact equality passes.
     """
 
     reasons: list[dict[str, Any]] = []
+    min_trade_periods = tuple(str(p) for p in (config.eligibility_min_trades_periods or ()))
     for period in STAGE3_FINAL_OOS_PERIODS:
         metrics = _period_metrics(per_period_metrics, period)
         if metrics is None:
@@ -264,6 +271,17 @@ def stage3_basic_eligibility(
                 threshold=config.eligibility_min_expectancy_pct,
                 period=period,
             )
+        if period in min_trade_periods:
+            trade_count = _safe_int(metrics.get("trade_count", 0))
+            if trade_count is None or trade_count < config.eligibility_min_trades:
+                _append_reason(
+                    reasons,
+                    metric="trade_count",
+                    value=trade_count,
+                    threshold=config.eligibility_min_trades,
+                    period=period,
+                    reason="below_min_trades_for_period",
+                )
     return reasons
 
 
@@ -325,6 +343,8 @@ def stage3_profile(
         "period_metrics": period_snapshots,
         "config": {
             "eligibility_min_expectancy_pct": config.eligibility_min_expectancy_pct,
+            "eligibility_min_trades": config.eligibility_min_trades,
+            "eligibility_min_trades_periods": config.eligibility_min_trades_periods,
             "holding_ultra_short_max_days": config.holding_ultra_short_max_days,
             "holding_mid_max_days": config.holding_mid_max_days,
             "low_mdd_floor_pct": config.low_mdd_floor_pct,

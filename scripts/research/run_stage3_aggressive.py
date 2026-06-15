@@ -385,10 +385,18 @@ def _pass_one_year(metrics: Mapping[str, Any], config: Stage3QualifyConfig = DEF
 
 
 # ---------- 단계 1: 자격심사 ----------
-def run_qualify(ticker: str, out_dir: Path, *, seed_base: int, use_fitness_cache: bool = False, code_commit: str | None = None) -> dict[str, Any]:
+def run_qualify(
+    ticker: str,
+    out_dir: Path,
+    *,
+    seed_base: int,
+    use_fitness_cache: bool = False,
+    code_commit: str | None = None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Stage 3 단계1: 자격심사."""
     started = time.time()
-    ctx = prepare_ticker_context(ticker)
+    ctx = context if context is not None else prepare_ticker_context(ticker)
     code_commit = code_commit or resolve_code_commit(PROJECT_ROOT)
     candidates_by_hash: dict[str, Rulebook] = {}
     ga_summaries: list[dict[str, Any]] = []
@@ -552,7 +560,15 @@ def _select_diverse_entry_rows(
     return selected, rejected
 
 
-def run_entry_ga(ticker: str, out_dir: Path, *, seed_base: int, use_fitness_cache: bool = False, code_commit: str | None = None) -> dict[str, Any]:
+def run_entry_ga(
+    ticker: str,
+    out_dir: Path,
+    *,
+    seed_base: int,
+    use_fitness_cache: bool = False,
+    code_commit: str | None = None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Stage 3 단계2: 진입학습."""
     qualify_path = out_dir / "qualify_result.json"
     if not qualify_path.exists():
@@ -562,7 +578,7 @@ def run_entry_ga(ticker: str, out_dir: Path, *, seed_base: int, use_fitness_cach
         raise RuntimeError(f"ticker {ticker} did not pass Stage 3 qualification")
 
     started = time.time()
-    ctx = prepare_ticker_context(ticker)
+    ctx = context if context is not None else prepare_ticker_context(ticker)
     code_commit = code_commit or resolve_code_commit(PROJECT_ROOT)
     train_3 = next(split for split in TRAIN_SPLITS if split["label"] == "train_3")
     seed = seed_base + 100
@@ -831,6 +847,7 @@ def run_exit_ga(
     *,
     seed_base: int,
     weights: ExitFitnessWeights = DEFAULT_EXIT_FITNESS_WEIGHTS,
+    context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Stage 3 단계3: 청산재학습."""
     entry_path = out_dir / "entry_rulebooks.jsonl"
@@ -838,7 +855,7 @@ def run_exit_ga(
         raise FileNotFoundError(f"missing prerequisite: {entry_path}")
     entries = [json.loads(line) for line in entry_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     started = time.time()
-    ctx = prepare_ticker_context(ticker)
+    ctx = context if context is not None else prepare_ticker_context(ticker)
     final_rows: list[dict[str, Any]] = []
     for idx, entry_row in enumerate(entries, 1):
         seed = seed_base + 1000 + idx
@@ -1151,7 +1168,7 @@ def _rl_replay_rows_for_period(
     return rows, missing_counter, critical_null_counter
 
 
-def run_validate(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any]:
+def run_validate(ticker: str, out_dir: Path, *, seed_base: int, context: dict[str, Any] | None = None) -> dict[str, Any]:
     """Stage 3 단계4: 최소 적격선 + 프로파일 카탈로그.
 
     final_rulebooks.jsonl의 최종 개체를 순수 OOS 3구간(train_1, train_2, recent_1y)에서
@@ -1169,7 +1186,7 @@ def run_validate(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any
         raise FileNotFoundError(f"missing prerequisite: {final_path}")
     final_rows = [json.loads(line) for line in final_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     started = time.time()
-    ctx = prepare_ticker_context(ticker)
+    ctx = context if context is not None else prepare_ticker_context(ticker)
     data_end = str(ctx.get("data_end") or ctx.get("data_max") or "") or None
     validation_rows: list[dict[str, Any]] = []
     catalog_rows: list[dict[str, Any]] = []
@@ -1432,12 +1449,13 @@ def main(argv: list[str] | None = None) -> int:
     elif args.stage == "validate":
         summaries.append(run_validate(ticker, out_dir, seed_base=seed_base))
     elif args.stage == "all":
-        qualify = run_qualify(ticker, out_dir, seed_base=seed_base, use_fitness_cache=use_fitness_cache, code_commit=code_commit)
+        ctx = prepare_ticker_context(ticker)
+        qualify = run_qualify(ticker, out_dir, seed_base=seed_base, use_fitness_cache=use_fitness_cache, code_commit=code_commit, context=ctx)
         summaries.append(qualify)
         if qualify.get("qualified"):
-            summaries.append(run_entry_ga(ticker, out_dir, seed_base=seed_base, use_fitness_cache=use_fitness_cache, code_commit=code_commit))
-            summaries.append(run_exit_ga(ticker, out_dir, seed_base=seed_base, weights=exit_weights))
-            summaries.append(run_validate(ticker, out_dir, seed_base=seed_base))
+            summaries.append(run_entry_ga(ticker, out_dir, seed_base=seed_base, use_fitness_cache=use_fitness_cache, code_commit=code_commit, context=ctx))
+            summaries.append(run_exit_ga(ticker, out_dir, seed_base=seed_base, weights=exit_weights, context=ctx))
+            summaries.append(run_validate(ticker, out_dir, seed_base=seed_base, context=ctx))
         else:
             print(json.dumps({"event": "stage3_stop_after_qualify", "ticker": ticker, "qualified": False}, ensure_ascii=False), flush=True)
     else:

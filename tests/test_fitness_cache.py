@@ -4,6 +4,7 @@ from engine.learning.fitness_cache import (
     build_cache_key,
     make_cache_key_context,
     make_cached_evaluate_fn,
+    resolve_fitness_cache_enabled,
 )
 
 
@@ -96,3 +97,26 @@ def test_aggregate_fitness_cache_summaries_counts_hit_rate():
     assert summary["misses"] == 7
     assert summary["unique_keys"] == 7
     assert summary["hit_rate"] == 0.3
+
+
+def test_fitness_cache_default_disabled_when_env_unset(monkeypatch):
+    monkeypatch.delenv("KINGMAKER_FITNESS_CACHE", raising=False)
+
+    assert resolve_fitness_cache_enabled() is False
+
+
+def test_fitness_cache_enabled_only_by_explicit_env_one(monkeypatch):
+    monkeypatch.setenv("KINGMAKER_FITNESS_CACHE", "1")
+    assert resolve_fitness_cache_enabled() is True
+
+    monkeypatch.setenv("KINGMAKER_FITNESS_CACHE", "0")
+    assert resolve_fitness_cache_enabled() is False
+
+    monkeypatch.setenv("KINGMAKER_FITNESS_CACHE", "true")
+    assert resolve_fitness_cache_enabled() is False
+
+
+def test_fitness_cache_enabled_by_explicit_cli_opt_in(monkeypatch):
+    monkeypatch.delenv("KINGMAKER_FITNESS_CACHE", raising=False)
+
+    assert resolve_fitness_cache_enabled(cli_enabled=True) is True

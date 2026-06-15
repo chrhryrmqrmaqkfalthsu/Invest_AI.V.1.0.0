@@ -42,7 +42,7 @@ from engine.learning.genetic import GAConfig, collect_top_rulebooks, run_ga
 from engine.learning.fitness_cache import (
     FitnessCache,
     aggregate_fitness_cache_summaries,
-    fitness_cache_disabled_by_env,
+    resolve_fitness_cache_enabled,
     make_cache_key_context,
     make_cached_evaluate_fn,
     resolve_code_commit,
@@ -385,7 +385,7 @@ def _pass_one_year(metrics: Mapping[str, Any], config: Stage3QualifyConfig = DEF
 
 
 # ---------- 단계 1: 자격심사 ----------
-def run_qualify(ticker: str, out_dir: Path, *, seed_base: int, use_fitness_cache: bool = True, code_commit: str | None = None) -> dict[str, Any]:
+def run_qualify(ticker: str, out_dir: Path, *, seed_base: int, use_fitness_cache: bool = False, code_commit: str | None = None) -> dict[str, Any]:
     """Stage 3 단계1: 자격심사."""
     started = time.time()
     ctx = prepare_ticker_context(ticker)
@@ -552,7 +552,7 @@ def _select_diverse_entry_rows(
     return selected, rejected
 
 
-def run_entry_ga(ticker: str, out_dir: Path, *, seed_base: int, use_fitness_cache: bool = True, code_commit: str | None = None) -> dict[str, Any]:
+def run_entry_ga(ticker: str, out_dir: Path, *, seed_base: int, use_fitness_cache: bool = False, code_commit: str | None = None) -> dict[str, Any]:
     """Stage 3 단계2: 진입학습."""
     qualify_path = out_dir / "qualify_result.json"
     if not qualify_path.exists():
@@ -1392,7 +1392,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--exit-w-timeout-loss", type=float, default=None, help="Optional Stage 3 exit-GA penalty weight for loss-making time_out exits. Default keeps configured baseline.")
     parser.add_argument("--exit-w-deep-stop", type=float, default=None, help="Optional Stage 3 exit-GA penalty weight for deep stop_loss exits. Default keeps configured baseline.")
     parser.add_argument("--exit-deep-stop-threshold-pct", type=float, default=None, help="Optional threshold for deep stop_loss penalty in percentage points. Default keeps configured baseline.")
-    parser.add_argument("--no-fitness-cache", action="store_true", help="Disable Stage 3 qualify/entry GA evaluate_fn in-memory fitness cache for smoke comparison")
+    parser.add_argument("--fitness-cache", action="store_true", help="Explicitly enable Stage 3 qualify/entry GA evaluate_fn in-memory fitness cache. Default: disabled")
+    parser.add_argument("--no-fitness-cache", action="store_true", help="Deprecated compatibility flag; fitness cache is already disabled by default")
     return parser.parse_args(argv)
 
 
@@ -1415,7 +1416,7 @@ def main(argv: list[str] | None = None) -> int:
     ticker = str(args.ticker).upper().strip()
     seed_base = int(args.seed_base) if args.seed_base is not None else default_seed_base(ticker)
     exit_weights = exit_fitness_weights_from_args(args)
-    use_fitness_cache = not (bool(args.no_fitness_cache) or fitness_cache_disabled_by_env())
+    use_fitness_cache = resolve_fitness_cache_enabled(cli_enabled=bool(args.fitness_cache))
     code_commit = resolve_code_commit(PROJECT_ROOT)
     out_dir = resolve_out_dir(ticker, str(args.stage), args.out_dir)
     ensure_experiment_header(out_dir, ticker=ticker, seed_base=seed_base, stage=str(args.stage))

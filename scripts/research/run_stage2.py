@@ -39,7 +39,7 @@ from engine.learning.genetic import GAConfig, run_ga
 from engine.learning.fitness_cache import (
     FitnessCache,
     aggregate_fitness_cache_summaries,
-    fitness_cache_disabled_by_env,
+    resolve_fitness_cache_enabled,
     make_cache_key_context,
     make_cached_evaluate_fn,
     resolve_code_commit,
@@ -434,7 +434,7 @@ def _train_one_split_worker(payload: dict[str, Any]) -> dict[str, Any]:
         split_idx=payload["split_idx"],
         split=payload["split"],
         seed_base=payload["seed_base"],
-        use_fitness_cache=bool(payload.get("use_fitness_cache", True)),
+        use_fitness_cache=bool(payload.get("use_fitness_cache", False)),
         code_commit=payload.get("code_commit"),
     )
 
@@ -445,7 +445,7 @@ def train_one_split(
     split_idx: int,
     split: dict[str, str],
     seed_base: int,
-    use_fitness_cache: bool = True,
+    use_fitness_cache: bool = False,
     code_commit: str | None = None,
 ) -> dict[str, Any]:
     pid = os.getpid()
@@ -562,7 +562,7 @@ def run_training(
     seed_base: int,
     parallel: bool,
     logger: logging.Logger,
-    use_fitness_cache: bool = True,
+    use_fitness_cache: bool = False,
     code_commit: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     train_results: list[dict[str, Any]] = []
@@ -957,7 +957,7 @@ def build_config(
             "code_commit": code_commit,
             "add_buy_runtime_enabled": ADD_BUY_RUNTIME_ENABLED,
             "cache_schema_version": 1,
-            "toggle": "default on; disable with --no-fitness-cache or KINGMAKER_FITNESS_CACHE=0",
+            "toggle": "default off; enable with --fitness-cache or KINGMAKER_FITNESS_CACHE=1; --no-fitness-cache is accepted as a no-op compatibility flag",
         },
         "train_splits": TRAIN_SPLITS,
         "evaluation_periods": periods,
@@ -978,7 +978,7 @@ def build_config(
     }
 
 
-def run_stage2(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool, use_fitness_cache: bool = True) -> dict[str, Any]:
+def run_stage2(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool, use_fitness_cache: bool = False) -> dict[str, Any]:
     started = time.time()
     code_commit = resolve_code_commit(PROJECT_ROOT)
     out_dir.mkdir(parents=True, exist_ok=False)
@@ -1095,7 +1095,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out-dir", default=None, help="Output directory. Default: exp_<ticker>_stage2_<YYYYMMDD>_NNNN")
     parser.add_argument("--seed-base", type=int, default=None, help="Deterministic GA seed base. Default: ticker-specific deterministic offset")
     parser.add_argument("--parallel", action="store_true", help="Run the three train splits in parallel processes. Default: sequential")
-    parser.add_argument("--no-fitness-cache", action="store_true", help="Disable GA evaluate_fn in-memory fitness cache for smoke comparison")
+    parser.add_argument("--fitness-cache", action="store_true", help="Explicitly enable GA evaluate_fn in-memory fitness cache. Default: disabled")
+    parser.add_argument("--no-fitness-cache", action="store_true", help="Deprecated compatibility flag; fitness cache is already disabled by default")
     return parser.parse_args(argv)
 
 
@@ -1106,7 +1107,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--ticker must not be empty")
     out_dir = Path(args.out_dir).resolve() if args.out_dir else auto_out_dir(ticker)
     seed_base = int(args.seed_base) if args.seed_base is not None else default_seed_base(ticker)
-    use_fitness_cache = not (bool(args.no_fitness_cache) or fitness_cache_disabled_by_env())
+    use_fitness_cache = resolve_fitness_cache_enabled(cli_enabled=bool(args.fitness_cache))
     run_stage2(ticker=ticker, out_dir=out_dir, seed_base=seed_base, parallel=bool(args.parallel), use_fitness_cache=use_fitness_cache)
     return 0
 

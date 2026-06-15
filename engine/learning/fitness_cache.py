@@ -58,15 +58,28 @@ class FitnessCache:
         }
 
 
-def fitness_cache_disabled_by_env() -> bool:
-    """Return True when the process env explicitly disables the fitness cache."""
+def fitness_cache_enabled_by_env(env: Mapping[str, str] | None = None) -> bool:
+    """Return True only when KINGMAKER_FITNESS_CACHE explicitly enables the cache.
 
-    raw = os.environ.get("KINGMAKER_FITNESS_CACHE")
-    if raw is None:
-        raw = os.environ.get("FITNESS_CACHE")
-    if raw is None:
-        return False
-    return str(raw).strip().lower() in {"0", "false", "off", "no", "disabled"}
+    The in-memory GA fitness cache is default-off because production smoke runs
+    showed no natural duplicate rulebook hashes.  The environment toggle is
+    intentionally narrow: only KINGMAKER_FITNESS_CACHE=1 enables it; unset, 0,
+    false-like values, and all other values keep it disabled.
+    """
+
+    source = os.environ if env is None else env
+    raw = source.get("KINGMAKER_FITNESS_CACHE")
+    return raw is not None and str(raw).strip() == "1"
+
+
+def resolve_fitness_cache_enabled(*, cli_enabled: bool = False, env: Mapping[str, str] | None = None) -> bool:
+    """Resolve the single enable switch used by Stage2/Stage3 runners.
+
+    Default is disabled.  It becomes enabled only via explicit CLI opt-in
+    (``--fitness-cache``) or KINGMAKER_FITNESS_CACHE=1.
+    """
+
+    return bool(cli_enabled) or fitness_cache_enabled_by_env(env)
 
 
 def resolve_code_commit(project_root: str | Path | None = None) -> str:

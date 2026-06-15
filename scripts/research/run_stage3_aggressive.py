@@ -39,6 +39,15 @@ if str(PROJECT_ROOT) not in sys.path:
 from engine.core.metadata import compute_rulebook_hash
 from engine.learning.execution_mode_backtest import run_backtest_execution_mode
 from engine.learning.genetic import GAConfig, collect_top_rulebooks, run_ga
+from engine.learning.fitness_cache import (
+    FitnessCache,
+    aggregate_fitness_cache_summaries,
+    fitness_cache_disabled_by_env,
+    make_cache_key_context,
+    make_cached_evaluate_fn,
+    resolve_code_commit,
+    summarize_fitness_cache,
+)
 from engine.pipeline.context import prepare_ticker_context
 from engine.pipeline.exit_gene import (
     DEFAULT_EXIT_FITNESS_WEIGHTS,
@@ -83,6 +92,7 @@ ENTRY_EXECUTION_MODE = "t_plus_1_open"
 EXIT_EXECUTION_MODE = "conservative_core"
 FOLD_EXIT_POLICY = "fold_end_mark_to_market"
 LIVE_HARD_STOP_GUARD = True
+ADD_BUY_RUNTIME_ENABLED = False
 
 # 첫 Stage 3 실험용 임시 크기. 실제 계수와 population은 첫 결과 이후 튜닝한다.
 QUALIFY_POPULATION = 100
@@ -330,6 +340,42 @@ def make_ga_config(*, population: int, generations: int, seed: int) -> GAConfig:
     )
 
 
+def _maybe_cached_evaluate_fn(
+    raw_evaluate_fn: Any,
+    *,
+    enabled: bool,
+    ticker: str,
+    period_label: str,
+    start_date: Any,
+    end_date: Any,
+    fitness_mode: str,
+    code_commit: str,
+) -> tuple[Any, FitnessCache | None]:
+    """Stage 3 GA evaluate_fn에만 process-local fitness cache를 선택적으로 감싼다."""
+    if not enabled:
+        return raw_evaluate_fn, None
+    cache = FitnessCache()
+    return (
+        make_cached_evaluate_fn(
+            raw_evaluate_fn,
+            cache=cache,
+            key_ctx=make_cache_key_context(
+                ticker=ticker,
+                period_label=period_label,
+                start_date=start_date,
+                end_date=end_date,
+                entry_execution_mode=ENTRY_EXECUTION_MODE,
+                exit_execution_mode=EXIT_EXECUTION_MODE,
+                fold_exit_policy=FOLD_EXIT_POLICY,
+                fitness_mode=fitness_mode,
+                code_commit=code_commit,
+                add_buy_runtime_enabled=ADD_BUY_RUNTIME_ENABLED,
+            ),
+        ),
+        cache,
+    )
+
+
 def _pass_one_year(metrics: Mapping[str, Any], config: Stage3QualifyConfig = DEFAULT_STAGE3_QUALIFY) -> bool:
     return (
         safe_int(metrics.get("trade_count")) >= config.min_trades
@@ -339,10 +385,11 @@ def _pass_one_year(metrics: Mapping[str, Any], config: Stage3QualifyConfig = DEF
 
 
 # ---------- 단계 1: 자격심사 ----------
-def run_qualify(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any]:
+def run_qualify(ticker: str, out_dir: Path, *, seed_base: int, use_fitness_cache: bool = True, code_commit: str | None = None) -> dict[str, Any]:
     """Stage 3 단계1: 자격심사."""
     started = time.time()
     ctx = prepare_ticker_context(ticker)
+    code_commit = code_commit or resolve_code_commit(PROJECT_ROOT)
     candidates_by_hash: dict[str, Rulebook] = {}
     ga_summaries: list[dict[str, Any]] = []
 
@@ -353,6 +400,17 @@ def run_qualify(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any]
         def evaluate_fn(rulebook: Rulebook, s: dict[str, str] = split) -> float:
             result = run_backtest_period(rulebook, ctx, start=s["start"], end=s["end"])
             return safe_float(getattr(result, "fitness", 0.0), -1_000_000.0)
+
+        evaluate_fn, fitness_cache = _maybe_cached_evaluate_fn(
+            evaluate_fn,
+            enabled=use_fitness_cache,
+            ticker=ticker,
+            period_label=split["label"],
+            start_date=split["start"],
+            end_date=split["end"],
+            fitness_mode="swing",
+            code_commit=code_commit,
+        )
 
         ga = run_ga(
             base_rulebook=ctx["base_rulebook"],
@@ -373,6 +431,7 @@ def run_qualify(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any]
                 "top_count": len(top_rulebooks),
                 "best_fitness": safe_float(getattr(getattr(ga, "best", None), "fitness", 0.0)),
                 "best_hash": compute_rulebook_hash(ga.best) if getattr(ga, "best", None) is not None else None,
+                "fitness_cache": summarize_fitness_cache(fitness_cache),
             }
         )
         print(json.dumps({"event": "stage3_qualify_ga_done", "ticker": ticker, "split": split["label"], "top_count": len(top_rulebooks)}, ensure_ascii=False), flush=True)
@@ -442,6 +501,7 @@ def run_qualify(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any]
         "data_start": ctx.get("data_start"),
         "data_end": ctx.get("data_end"),
         "ga_summaries": ga_summaries,
+        "fitness_cache": aggregate_fitness_cache_summaries([row.get("fitness_cache", {}) for row in ga_summaries]),
         "unique_candidate_count": len(candidate_hashes),
         "year_pass_counts": year_pass_counts,
         "member_score_stats": member_score_stats,
@@ -492,7 +552,7 @@ def _select_diverse_entry_rows(
     return selected, rejected
 
 
-def run_entry_ga(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any]:
+def run_entry_ga(ticker: str, out_dir: Path, *, seed_base: int, use_fitness_cache: bool = True, code_commit: str | None = None) -> dict[str, Any]:
     """Stage 3 단계2: 진입학습."""
     qualify_path = out_dir / "qualify_result.json"
     if not qualify_path.exists():
@@ -503,12 +563,24 @@ def run_entry_ga(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any
 
     started = time.time()
     ctx = prepare_ticker_context(ticker)
+    code_commit = code_commit or resolve_code_commit(PROJECT_ROOT)
     train_3 = next(split for split in TRAIN_SPLITS if split["label"] == "train_3")
     seed = seed_base + 100
 
     def evaluate_fn(rulebook: Rulebook) -> float:
         result = run_backtest_period(rulebook, ctx, start=train_3["start"], end=train_3["end"])
         return safe_float(getattr(result, "fitness", 0.0), -1_000_000.0)
+
+    evaluate_fn, fitness_cache = _maybe_cached_evaluate_fn(
+        evaluate_fn,
+        enabled=use_fitness_cache,
+        ticker=ticker,
+        period_label=train_3["label"],
+        start_date=train_3["start"],
+        end_date=train_3["end"],
+        fitness_mode="swing",
+        code_commit=code_commit,
+    )
 
     ga = run_ga(
         base_rulebook=ctx["base_rulebook"],
@@ -559,6 +631,7 @@ def run_entry_ga(ticker: str, out_dir: Path, *, seed_base: int) -> dict[str, Any
         "absolute_pass_count": sum(1 for row in evaluated_rows if safe_float(row.get("expectancy_pct")) >= DEFAULT_STAGE3_ENTRY_SELECTION.entry_min_expectancy_pct),
         "selected_count": len(output_rows),
         "overlap_rejected_count": len(rejected),
+        "fitness_cache": summarize_fitness_cache(fitness_cache),
         "best_fitness": output_rows[0]["train_fitness"] if output_rows else None,
         "best_hash": output_rows[0]["rulebook_hash"] if output_rows else None,
         "elapsed_seconds": time.time() - started,
@@ -1319,6 +1392,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--exit-w-timeout-loss", type=float, default=None, help="Optional Stage 3 exit-GA penalty weight for loss-making time_out exits. Default keeps configured baseline.")
     parser.add_argument("--exit-w-deep-stop", type=float, default=None, help="Optional Stage 3 exit-GA penalty weight for deep stop_loss exits. Default keeps configured baseline.")
     parser.add_argument("--exit-deep-stop-threshold-pct", type=float, default=None, help="Optional threshold for deep stop_loss penalty in percentage points. Default keeps configured baseline.")
+    parser.add_argument("--no-fitness-cache", action="store_true", help="Disable Stage 3 qualify/entry GA evaluate_fn in-memory fitness cache for smoke comparison")
     return parser.parse_args(argv)
 
 
@@ -1341,24 +1415,26 @@ def main(argv: list[str] | None = None) -> int:
     ticker = str(args.ticker).upper().strip()
     seed_base = int(args.seed_base) if args.seed_base is not None else default_seed_base(ticker)
     exit_weights = exit_fitness_weights_from_args(args)
+    use_fitness_cache = not (bool(args.no_fitness_cache) or fitness_cache_disabled_by_env())
+    code_commit = resolve_code_commit(PROJECT_ROOT)
     out_dir = resolve_out_dir(ticker, str(args.stage), args.out_dir)
     ensure_experiment_header(out_dir, ticker=ticker, seed_base=seed_base, stage=str(args.stage))
     print(json.dumps({"event": "stage3_start", "ticker": ticker, "stage": args.stage, "out_dir": str(out_dir), "seed_base": seed_base}, ensure_ascii=False), flush=True)
 
     summaries: list[dict[str, Any]] = []
     if args.stage == "qualify":
-        summaries.append(run_qualify(ticker, out_dir, seed_base=seed_base))
+        summaries.append(run_qualify(ticker, out_dir, seed_base=seed_base, use_fitness_cache=use_fitness_cache, code_commit=code_commit))
     elif args.stage == "entry":
-        summaries.append(run_entry_ga(ticker, out_dir, seed_base=seed_base))
+        summaries.append(run_entry_ga(ticker, out_dir, seed_base=seed_base, use_fitness_cache=use_fitness_cache, code_commit=code_commit))
     elif args.stage == "exit":
         summaries.append(run_exit_ga(ticker, out_dir, seed_base=seed_base, weights=exit_weights))
     elif args.stage == "validate":
         summaries.append(run_validate(ticker, out_dir, seed_base=seed_base))
     elif args.stage == "all":
-        qualify = run_qualify(ticker, out_dir, seed_base=seed_base)
+        qualify = run_qualify(ticker, out_dir, seed_base=seed_base, use_fitness_cache=use_fitness_cache, code_commit=code_commit)
         summaries.append(qualify)
         if qualify.get("qualified"):
-            summaries.append(run_entry_ga(ticker, out_dir, seed_base=seed_base))
+            summaries.append(run_entry_ga(ticker, out_dir, seed_base=seed_base, use_fitness_cache=use_fitness_cache, code_commit=code_commit))
             summaries.append(run_exit_ga(ticker, out_dir, seed_base=seed_base, weights=exit_weights))
             summaries.append(run_validate(ticker, out_dir, seed_base=seed_base))
         else:

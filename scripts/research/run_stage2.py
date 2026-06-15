@@ -36,6 +36,15 @@ import pandas as pd
 from engine.core.metadata import compute_rulebook_hash
 from engine.learning.execution_mode_backtest import run_backtest_execution_mode
 from engine.learning.genetic import GAConfig, run_ga
+from engine.learning.fitness_cache import (
+    FitnessCache,
+    aggregate_fitness_cache_summaries,
+    fitness_cache_disabled_by_env,
+    make_cache_key_context,
+    make_cached_evaluate_fn,
+    resolve_code_commit,
+    summarize_fitness_cache,
+)
 from engine.pipeline.context import prepare_ticker_context
 from engine.pipeline.stage2_gate import DEFAULT_STAGE2_GATE, stage2_fail_reasons
 from engine.pipeline.topn_survivor import _score_period_candidates
@@ -49,6 +58,7 @@ ENTRY_EXECUTION_MODE = "t_plus_1_open"
 EXIT_EXECUTION_MODE = "conservative_core"
 FOLD_EXIT_POLICY = "fold_end_mark_to_market"
 LIVE_HARD_STOP_GUARD = True
+ADD_BUY_RUNTIME_ENABLED = False
 
 TRAIN_SPLITS: list[dict[str, str]] = [
     {"label": "train_1", "train_start": "2022-07-01", "train_end": "2023-06-30"},
@@ -424,10 +434,20 @@ def _train_one_split_worker(payload: dict[str, Any]) -> dict[str, Any]:
         split_idx=payload["split_idx"],
         split=payload["split"],
         seed_base=payload["seed_base"],
+        use_fitness_cache=bool(payload.get("use_fitness_cache", True)),
+        code_commit=payload.get("code_commit"),
     )
 
 
-def train_one_split(*, ticker: str, split_idx: int, split: dict[str, str], seed_base: int) -> dict[str, Any]:
+def train_one_split(
+    *,
+    ticker: str,
+    split_idx: int,
+    split: dict[str, str],
+    seed_base: int,
+    use_fitness_cache: bool = True,
+    code_commit: str | None = None,
+) -> dict[str, Any]:
     pid = os.getpid()
     started = time.time()
     ctx = prepare_ticker_context(ticker)
@@ -448,6 +468,25 @@ def train_one_split(*, ticker: str, split_idx: int, split: dict[str, str], seed_
             live_hard_stop_guard=LIVE_HARD_STOP_GUARD,
         )
         return result.fitness
+
+    fitness_cache = FitnessCache() if use_fitness_cache else None
+    if fitness_cache is not None:
+        evaluate_fn = make_cached_evaluate_fn(
+            evaluate_fn,
+            cache=fitness_cache,
+            key_ctx=make_cache_key_context(
+                ticker=ticker,
+                period_label=split["label"],
+                start_date=split["train_start"],
+                end_date=split["train_end"],
+                entry_execution_mode=ENTRY_EXECUTION_MODE,
+                exit_execution_mode=EXIT_EXECUTION_MODE,
+                fold_exit_policy=FOLD_EXIT_POLICY,
+                fitness_mode=str(kwargs.get("fitness_mode", "swing")),
+                code_commit=code_commit or resolve_code_commit(PROJECT_ROOT),
+                add_buy_runtime_enabled=ADD_BUY_RUNTIME_ENABLED,
+            ),
+        )
 
     def on_generation(generation: int, best: Any, avg: float) -> None:
         history.append(
@@ -513,10 +552,19 @@ def train_one_split(*, ticker: str, split_idx: int, split: dict[str, str], seed_
         "early_stop": early_stop,
         "elapsed": elapsed,
         "pid": pid,
+        "fitness_cache": summarize_fitness_cache(fitness_cache),
     }
 
 
-def run_training(*, ticker: str, seed_base: int, parallel: bool, logger: logging.Logger) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+def run_training(
+    *,
+    ticker: str,
+    seed_base: int,
+    parallel: bool,
+    logger: logging.Logger,
+    use_fitness_cache: bool = True,
+    code_commit: str | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     train_results: list[dict[str, Any]] = []
     if parallel:
         max_workers = min(len(TRAIN_SPLITS), max(1, (os.cpu_count() or 2) - 1))
@@ -525,7 +573,14 @@ def run_training(*, ticker: str, seed_base: int, parallel: bool, logger: logging
             futures = {
                 executor.submit(
                     _train_one_split_worker,
-                    {"ticker": ticker, "split_idx": idx, "split": split, "seed_base": seed_base},
+                    {
+                        "ticker": ticker,
+                        "split_idx": idx,
+                        "split": split,
+                        "seed_base": seed_base,
+                        "use_fitness_cache": use_fitness_cache,
+                        "code_commit": code_commit,
+                    },
                 ): split
                 for idx, split in enumerate(TRAIN_SPLITS, 1)
             }
@@ -545,7 +600,14 @@ def run_training(*, ticker: str, seed_base: int, parallel: bool, logger: logging
         logger.info("training mode=sequential train_splits=%s", len(TRAIN_SPLITS))
         for idx, split in enumerate(TRAIN_SPLITS, 1):
             logger.info("train start label=%s", split["label"])
-            result = train_one_split(ticker=ticker, split_idx=idx, split=split, seed_base=seed_base)
+            result = train_one_split(
+                ticker=ticker,
+                split_idx=idx,
+                split=split,
+                seed_base=seed_base,
+                use_fitness_cache=use_fitness_cache,
+                code_commit=code_commit,
+            )
             logger.info(
                 "train done label=%s pid=%s generations=%s early_stop=%s rows=%s elapsed=%.1fs",
                 result["split"]["label"],
@@ -841,7 +903,18 @@ def evaluate_periods(
     }
 
 
-def build_config(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool, ctx: dict[str, Any], periods: list[dict[str, Any]], started: float) -> dict[str, Any]:
+def build_config(
+    *,
+    ticker: str,
+    out_dir: Path,
+    seed_base: int,
+    parallel: bool,
+    ctx: dict[str, Any],
+    periods: list[dict[str, Any]],
+    started: float,
+    use_fitness_cache: bool,
+    code_commit: str,
+) -> dict[str, Any]:
     return {
         "ticker": ticker,
         "purpose": f"{ticker} ticker-agnostic Stage 2 definition validation; research-only; not live trading",
@@ -878,6 +951,14 @@ def build_config(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool, 
             "train_splits_parallel": len(TRAIN_SPLITS) if parallel else 1,
             "note": "Parallel mode runs independent train splits in separate processes; GA engine has no internal worker parameter.",
         },
+        "fitness_cache": {
+            "enabled": bool(use_fitness_cache),
+            "type": "in_memory_process_local",
+            "code_commit": code_commit,
+            "add_buy_runtime_enabled": ADD_BUY_RUNTIME_ENABLED,
+            "cache_schema_version": 1,
+            "toggle": "default on; disable with --no-fitness-cache or KINGMAKER_FITNESS_CACHE=0",
+        },
         "train_splits": TRAIN_SPLITS,
         "evaluation_periods": periods,
         "early_cut_order": [period["label"] for period in periods],
@@ -897,8 +978,9 @@ def build_config(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool, 
     }
 
 
-def run_stage2(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool) -> dict[str, Any]:
+def run_stage2(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool, use_fitness_cache: bool = True) -> dict[str, Any]:
     started = time.time()
+    code_commit = resolve_code_commit(PROJECT_ROOT)
     out_dir.mkdir(parents=True, exist_ok=False)
     logger = _configure_logging(out_dir)
     logger.info("stage2 start ticker=%s out_dir=%s seed_base=%s parallel=%s", ticker, out_dir, seed_base, parallel)
@@ -913,10 +995,27 @@ def run_stage2(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool) ->
         row["end"] = row["end"] or data_end
         periods.append(row)
 
-    config = build_config(ticker=ticker, out_dir=out_dir, seed_base=seed_base, parallel=parallel, ctx=ctx, periods=periods, started=started)
+    config = build_config(
+        ticker=ticker,
+        out_dir=out_dir,
+        seed_base=seed_base,
+        parallel=parallel,
+        ctx=ctx,
+        periods=periods,
+        started=started,
+        use_fitness_cache=use_fitness_cache,
+        code_commit=code_commit,
+    )
     write_text_json(out_dir / "config.json", config)
 
-    train_results, rulebook_rows, ga_history_rows = run_training(ticker=ticker, seed_base=seed_base, parallel=parallel, logger=logger)
+    train_results, rulebook_rows, ga_history_rows = run_training(
+        ticker=ticker,
+        seed_base=seed_base,
+        parallel=parallel,
+        logger=logger,
+        use_fitness_cache=use_fitness_cache,
+        code_commit=code_commit,
+    )
     write_jsonl(out_dir / "rulebooks_all.jsonl", rulebook_rows)
     write_csv(out_dir / "ga_history.csv", ga_history_rows, GA_HISTORY_FIELDS)
 
@@ -949,6 +1048,8 @@ def run_stage2(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool) ->
     fail_counts = Counter(str(row.get("failed_period_label") or "SURVIVED") for row in eval_result["early_cut_rows"])
     generations = [safe_int(row["generations_run"]) for row in train_results]
     actual_eval_ratio = float(eval_result["eval_count"] / eval_result["max_eval_count"]) if eval_result["max_eval_count"] else 0.0
+    fitness_cache_by_train = {row["split"]["label"]: row.get("fitness_cache", {}) for row in train_results}
+    fitness_cache_summary = aggregate_fitness_cache_summaries(list(fitness_cache_by_train.values()))
     summary = {
         "ticker": ticker,
         "generated_rulebook_rows": len(rulebook_rows),
@@ -965,6 +1066,8 @@ def run_stage2(*, ticker: str, out_dir: Path, seed_base: int, parallel: bool) ->
         "ga_early_stop_triggered_count": sum(1 for row in train_results if row["early_stop"]),
         "ga_average_generations_run": float(mean(generations)) if generations else None,
         "parallel": config["parallel"],
+        "fitness_cache": fitness_cache_summary,
+        "fitness_cache_by_train": fitness_cache_by_train,
         "elapsed_sec": time.time() - started,
         "outputs": {
             "rulebooks_all": str(out_dir / "rulebooks_all.jsonl"),
@@ -992,6 +1095,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out-dir", default=None, help="Output directory. Default: exp_<ticker>_stage2_<YYYYMMDD>_NNNN")
     parser.add_argument("--seed-base", type=int, default=None, help="Deterministic GA seed base. Default: ticker-specific deterministic offset")
     parser.add_argument("--parallel", action="store_true", help="Run the three train splits in parallel processes. Default: sequential")
+    parser.add_argument("--no-fitness-cache", action="store_true", help="Disable GA evaluate_fn in-memory fitness cache for smoke comparison")
     return parser.parse_args(argv)
 
 
@@ -1002,7 +1106,8 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--ticker must not be empty")
     out_dir = Path(args.out_dir).resolve() if args.out_dir else auto_out_dir(ticker)
     seed_base = int(args.seed_base) if args.seed_base is not None else default_seed_base(ticker)
-    run_stage2(ticker=ticker, out_dir=out_dir, seed_base=seed_base, parallel=bool(args.parallel))
+    use_fitness_cache = not (bool(args.no_fitness_cache) or fitness_cache_disabled_by_env())
+    run_stage2(ticker=ticker, out_dir=out_dir, seed_base=seed_base, parallel=bool(args.parallel), use_fitness_cache=use_fitness_cache)
     return 0
 
 

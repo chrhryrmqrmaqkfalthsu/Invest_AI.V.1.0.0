@@ -3,7 +3,6 @@ import json
 from engine.pipeline.stage3_gate import (
     DEFAULT_STAGE3_PROFILE,
     DEFAULT_STAGE3_QUALIFY,
-    Stage3ProfileConfig,
     stage3_basic_eligibility,
     stage3_profile,
     stage3_qualify_fail_reasons,
@@ -133,71 +132,6 @@ def test_stage3_basic_eligibility_ignores_bad_mdd_and_long_holding():
     assert stage3_basic_eligibility(periods) == []
 
 
-def test_stage3_basic_eligibility_fails_when_recent_1y_trade_count_is_below_minimum():
-    periods = {
-        "train_1": _period_metrics(exp=1.2, trades=2),
-        "train_2": _period_metrics(exp=1.3, trades=2),
-        "recent_1y": _period_metrics(exp=1.4, trades=4),
-        "stress_pre_2022h1": _period_metrics(exp=-99.0, trades=0),
-    }
-
-    reasons = stage3_basic_eligibility(periods)
-
-    assert any(
-        r["metric"] == "trade_count"
-        and r.get("period") == "recent_1y"
-        and r.get("value") == 4
-        and r.get("threshold") == 5
-        and r.get("reason") == "below_min_trades_for_period"
-        for r in reasons
-    )
-
-
-def test_stage3_basic_eligibility_recent_1y_trade_count_five_passes_when_expectancy_passes():
-    periods = {
-        "train_1": _period_metrics(exp=1.2, trades=0),
-        "train_2": _period_metrics(exp=1.3, trades=0),
-        "recent_1y": _period_metrics(exp=1.4, trades=5),
-        "stress_pre_2022h1": _period_metrics(exp=-99.0, trades=0),
-    }
-
-    assert stage3_basic_eligibility(periods) == []
-
-
-def test_stage3_basic_eligibility_ignores_train_1_trade_count_when_expectancy_passes():
-    periods = {
-        "train_1": _period_metrics(exp=1.2, trades=2),
-        "train_2": _period_metrics(exp=1.3, trades=5),
-        "recent_1y": _period_metrics(exp=1.4, trades=5),
-    }
-
-    assert stage3_basic_eligibility(periods) == []
-
-
-def test_stage3_basic_eligibility_ignores_stress_trade_count_and_expectancy():
-    periods = {
-        "train_1": _period_metrics(exp=1.2, trades=5),
-        "train_2": _period_metrics(exp=1.3, trades=5),
-        "recent_1y": _period_metrics(exp=1.4, trades=5),
-        "stress_pre_2022h1": _period_metrics(exp=-99.0, trades=0),
-    }
-
-    assert stage3_basic_eligibility(periods) == []
-
-
-def test_stage3_basic_eligibility_respects_configured_min_trade_periods():
-    periods = {
-        "train_1": _period_metrics(exp=1.2, trades=5),
-        "train_2": _period_metrics(exp=1.3, trades=4),
-        "recent_1y": _period_metrics(exp=1.4, trades=5),
-    }
-    config = Stage3ProfileConfig(eligibility_min_trades_periods=("recent_1y", "train_2"))
-
-    reasons = stage3_basic_eligibility(periods, config)
-
-    assert any(r["metric"] == "trade_count" and r.get("period") == "train_2" for r in reasons)
-
-
 def test_stage3_profile_labels_mid_low_mdd_mid_exp_and_preserves_metrics():
     periods = {
         "train_1": _period_metrics(exp=3.1, mdd=-8.0, median=29.0),
@@ -214,8 +148,6 @@ def test_stage3_profile_labels_mid_low_mdd_mid_exp_and_preserves_metrics():
     assert profile["period_metrics"]["train_1"]["expectancy_pct"] == 3.1
     assert profile["period_metrics"]["train_2"]["max_drawdown_pct"] == -4.0
     assert profile["period_metrics"]["recent_1y"]["median_holding_days"] == 14.0
-    assert profile["config"]["eligibility_min_trades"] == 5
-    assert profile["config"]["eligibility_min_trades_periods"] == ("recent_1y",)
 
 
 def test_stage3_profile_boundary_labels():

@@ -156,6 +156,17 @@ def append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             f.write(json.dumps(json_safe(row), ensure_ascii=False, sort_keys=True) + "\n")
 
 
+def preserve_legacy_validated_survivors(out_dir: Path) -> None:
+    """Preserve stale legacy survivors instead of deleting object data."""
+    legacy_survivors = out_dir / "validated_survivors.jsonl"
+    deprecated_survivors = out_dir / "validated_survivors.jsonl.deprecated"
+    if not legacy_survivors.exists():
+        return
+    if deprecated_survivors.exists():
+        return
+    legacy_survivors.rename(deprecated_survivors)
+
+
 def safe_float(value: Any, default: float = 0.0) -> float:
     try:
         if value is None:
@@ -1178,7 +1189,7 @@ def run_validate(ticker: str, out_dir: Path, *, seed_base: int, context: dict[st
 
     투자 성격 선택은 사후에 카탈로그의 holding_class/risk_class/return_class/composite_tag로
     필터링한다. validated_survivors.jsonl은 기존 hard gate 의미와 충돌하므로 더 이상 생성하지
-    않으며, 기존 파일이 있으면 stale 혼동 방지를 위해 제거한다.
+    않는다. 기존 파일이 있으면 삭제하지 않고 .deprecated 파일로 보존한다.
     """
     del seed_base  # validate 단계는 난수 없이 재현된다.
     final_path = out_dir / "final_rulebooks.jsonl"
@@ -1362,9 +1373,7 @@ def run_validate(ticker: str, out_dir: Path, *, seed_base: int, context: dict[st
     append_jsonl(out_dir / "validation_results.jsonl", validation_rows)
     append_jsonl(out_dir / "stage3_profile_catalog.jsonl", catalog_rows)
     append_jsonl(out_dir / "stage3_ineligible.jsonl", ineligible_rows)
-    legacy_survivors = out_dir / "validated_survivors.jsonl"
-    if legacy_survivors.exists():
-        legacy_survivors.unlink()
+    preserve_legacy_validated_survivors(out_dir)
 
     summary = {
         "ticker": ticker,
@@ -1390,7 +1399,7 @@ def run_validate(ticker: str, out_dir: Path, *, seed_base: int, context: dict[st
             "profile_catalog": "stage3_profile_catalog.jsonl",
             "all_validation_rows": "validation_results.jsonl",
             "ineligible_rows": "stage3_ineligible.jsonl",
-            "legacy_validated_survivors": "not_created; removed if stale because Stage 4 is now a profile catalog, not a hard pass/fail survivor gate",
+            "legacy_validated_survivors": "not_created; existing stale file is preserved as validated_survivors.jsonl.deprecated",
         },
         "elapsed_seconds": time.time() - started,
         "note": "Stage 4 checks only minimum pure-OOS expectancy eligibility. MDD and holding days are profile labels for later investment-style selection.",

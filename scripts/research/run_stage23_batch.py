@@ -3,28 +3,42 @@
 
 This wrapper intentionally does not import or modify GA/backtest learning logic.
 It only parses ticker lists, invokes existing single-ticker scripts via
-subprocess, writes logs, validates expected outputs, and records wrapper-owned
-completion markers.
+subprocess, writes logs, validates expected outputs, records wrapper-owned
+completion markers, and writes operational indexes/notifications around those
+subprocesses.
 """
 
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
+import math
 import re
+import shutil
 import subprocess
 import sys
 import time
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
+try:
+    from engine.live.telegram.notifier import TelegramNotifier
+except Exception:  # pragma: no cover - notification must never block research
+    TelegramNotifier = None  # type: ignore[assignment]
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STAGE2_SCRIPT = PROJECT_ROOT / "scripts" / "research" / "run_stage2.py"
 STAGE3_SCRIPT = PROJECT_ROOT / "scripts" / "research" / "run_stage3_aggressive.py"
+CENTRAL_INDEX_NAME = "central_index.jsonl"
+GB = 1024 ** 3
+DISK_WARN_FREE_BYTES = 50 * GB
+DISK_CRITICAL_FREE_BYTES = 20 * GB
+DISK_FATAL_FREE_BYTES = 10 * GB
 
 Status = Literal[
     "PENDING",
@@ -36,6 +50,7 @@ Status = Literal[
     "STAGE3_DONE",
     "STAGE3_FAILED",
     "SKIPPED_EXISTING",
+    "FATAL_DISK_STOP",
 ]
 Stage3Mode = Literal["none", "qualify-only", "all", "resume-qualified"]
 
@@ -51,6 +66,20 @@ class StageRunResult:
     elapsed_seconds: float = 0.0
     command: list[str] | None = None
     log_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class DiskState:
+    level: str
+    path: str
+    total_bytes: int
+    used_bytes: int
+    free_bytes: int
+    used_pct: float
+
+    @property
+    def free_gb(self) -> float:
+        return float(self.free_bytes / GB)
 
 
 def utc_now_iso() -> str:
@@ -98,6 +127,22 @@ def read_json(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(value, dict):
+            rows.append(value)
+    return rows
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -106,6 +151,28 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 def write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
+def append_jsonl_rows(path: Path, rows: Iterable[dict[str, Any]]) -> int:
+    """Append rows without truncating existing object indexes."""
+
+    materialized = list(rows)
+    if not materialized:
+        return 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fp:
+        try:
+            fcntl.flock(fp.fileno(), fcntl.LOCK_EX)
+        except Exception:
+            pass
+        for row in materialized:
+            fp.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+        fp.flush()
+        try:
+            fcntl.flock(fp.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            pass
+    return len(materialized)
 
 
 def stage2_done_marker(out_dir: Path) -> Path:
@@ -192,12 +259,16 @@ def stage3_marker_satisfies(payload: dict[str, Any], mode: Stage3Mode) -> bool:
 
 
 def choose_run_dir(ticker_root: Path, stage_prefix: str, *, retry_failed: bool, reusable_existing: bool = False) -> tuple[Path, str | None]:
-    """Choose an output dir without deleting prior failed artifacts."""
+    """Choose an output dir without deleting or overwriting prior failed artifacts."""
 
     canonical = ticker_root / stage_prefix
-    if not canonical.exists() or reusable_existing:
-        return canonical, None
     marker = canonical / f"_{stage_prefix}_done.json"
+    if not canonical.exists():
+        return canonical, None
+    if reusable_existing and marker.exists():
+        return canonical, None
+    if reusable_existing and not marker.exists():
+        return canonical, f"existing incomplete {stage_prefix} directory cannot be reused safely without a done marker"
     if marker.exists():
         return canonical, None
     if not retry_failed:
@@ -280,6 +351,295 @@ def make_stage3_marker(
         return StageRunResult(status, out_dir, marker, returncode, qualified, "", elapsed, command, log_path)
     final_reason = reason if returncode == 0 else f"Stage3 subprocess returned {returncode}"
     return StageRunResult("STAGE3_FAILED", out_dir, None, returncode, qualified, final_reason, elapsed, command, log_path)
+
+
+def rel_path(path: Path, root: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(root.resolve()))
+    except Exception:
+        return str(path)
+
+
+def metric_subset(metrics: dict[str, Any] | None) -> dict[str, Any]:
+    metrics = dict(metrics or {})
+    keys = ["expectancy_pct", "max_drawdown_pct", "profit_factor", "trade_count", "win_rate", "fitness", "avg_return_pct", "median_holding_days"]
+    return {key: metrics.get(key) for key in keys if key in metrics}
+
+
+def stage2_period_metric_map(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for period in row.get("periods") or []:
+        if not isinstance(period, dict):
+            continue
+        label = str(period.get("period_label") or period.get("label") or "")
+        if label:
+            out[label] = metric_subset(period)
+    return out
+
+
+def central_common(args: argparse.Namespace, out_root: Path, result: StageRunResult, ticker: str, event_type: str, source_file: Path, source_row_index: int) -> dict[str, Any]:
+    return {
+        "event_type": event_type,
+        "run_id": args.run_id,
+        "out_root": str(out_root),
+        "ticker": ticker,
+        "attempt_dir": rel_path(result.out_dir, out_root),
+        "source_file": rel_path(source_file, out_root),
+        "source_row_index": source_row_index,
+        "created_at": utc_now_iso(),
+    }
+
+
+def build_stage2_central_index_rows(args: argparse.Namespace, out_root: Path, result: StageRunResult, ticker: str) -> list[dict[str, Any]]:
+    if result.status not in {"STAGE2_DONE", "SKIPPED_EXISTING"}:
+        return []
+    source = result.out_dir / "survivors.jsonl"
+    rows: list[dict[str, Any]] = []
+    for idx, row in enumerate(read_jsonl(source), 1):
+        rows.append(
+            {
+                **central_common(args, out_root, result, ticker, "stage2_survivor", source, idx),
+                "stage": "stage2",
+                "rulebook_hash": row.get("rulebook_hash"),
+                "origin_train_labels": row.get("origin_train_labels"),
+                "origin_count": row.get("origin_count"),
+                "metrics": stage2_period_metric_map(row),
+                "eligible": True,
+                "artifact_paths": {
+                    "survivors": rel_path(result.out_dir / "survivors.jsonl", out_root),
+                    "rulebooks_all": rel_path(result.out_dir / "rulebooks_all.jsonl", out_root),
+                    "period_metrics_all": rel_path(result.out_dir / "period_metrics_all.csv", out_root),
+                    "trades": rel_path(result.out_dir / "trades.jsonl", out_root),
+                    "rl_replay_trades": rel_path(result.out_dir / "rl_replay_trades.jsonl", out_root),
+                    "summary": rel_path(result.out_dir / "summary.json", out_root),
+                },
+            }
+        )
+    return rows
+
+
+def stage3_object_row(
+    args: argparse.Namespace,
+    out_root: Path,
+    result: StageRunResult,
+    ticker: str,
+    event_type: str,
+    source: Path,
+    idx: int,
+    row: dict[str, Any],
+) -> dict[str, Any]:
+    profile = {
+        key: row.get(key)
+        for key in ["holding_class", "risk_class", "return_class", "composite_tag"]
+        if row.get(key) is not None
+    }
+    metrics = row.get("per_period_metrics") or {}
+    if not metrics:
+        metrics = {"stress": metric_subset(row.get("stress_metrics")), "bull": metric_subset(row.get("bull_metrics"))}
+    return {
+        **central_common(args, out_root, result, ticker, event_type, source, idx),
+        "stage": "stage3",
+        "rulebook_hash": row.get("rulebook_hash"),
+        "entry_rulebook_hash": row.get("entry_rulebook_hash"),
+        "entry_rank": row.get("entry_rank"),
+        "exit_rank": row.get("exit_rank"),
+        "stage3_rank": row.get("rank"),
+        "eligible": row.get("eligible_stage3_basic"),
+        "source_composite_fitness": row.get("source_composite_fitness", row.get("composite_fitness")),
+        "profile": profile,
+        "metrics": metrics,
+        "artifact_paths": {
+            "final_rulebooks": rel_path(result.out_dir / "final_rulebooks.jsonl", out_root),
+            "validation_results": rel_path(result.out_dir / "validation_results.jsonl", out_root),
+            "profile_catalog": rel_path(result.out_dir / "stage3_profile_catalog.jsonl", out_root),
+            "ineligible": rel_path(result.out_dir / "stage3_ineligible.jsonl", out_root),
+            "exit_trades": rel_path(result.out_dir / "exit_trades.jsonl", out_root),
+            "rl_replay_trades": rel_path(result.out_dir / "rl_replay_trades.jsonl", out_root),
+            "summary": rel_path(result.out_dir / "validate_result.json", out_root),
+        },
+    }
+
+
+def build_stage3_central_index_rows(args: argparse.Namespace, out_root: Path, result: StageRunResult, ticker: str) -> list[dict[str, Any]]:
+    if result.status not in {"STAGE3_DONE", "SKIPPED_EXISTING"}:
+        return []
+    specs = [
+        ("stage3_final_rulebook", result.out_dir / "final_rulebooks.jsonl"),
+        ("stage3_validation_result", result.out_dir / "validation_results.jsonl"),
+        ("stage3_profile_catalog", result.out_dir / "stage3_profile_catalog.jsonl"),
+        ("stage3_ineligible", result.out_dir / "stage3_ineligible.jsonl"),
+    ]
+    out: list[dict[str, Any]] = []
+    for event_type, source in specs:
+        for idx, row in enumerate(read_jsonl(source), 1):
+            out.append(stage3_object_row(args, out_root, result, ticker, event_type, source, idx, row))
+    return out
+
+
+def append_central_index(out_root: Path, rows: Iterable[dict[str, Any]]) -> int:
+    return append_jsonl_rows(out_root / CENTRAL_INDEX_NAME, rows)
+
+
+def classify_disk_level(free_bytes: int, used_pct: float) -> str:
+    if free_bytes < DISK_FATAL_FREE_BYTES:
+        return "FATAL"
+    if free_bytes < DISK_CRITICAL_FREE_BYTES or used_pct >= 90.0:
+        return "CRITICAL"
+    if free_bytes < DISK_WARN_FREE_BYTES or used_pct >= 70.0:
+        return "WARN"
+    return "OK"
+
+
+def disk_state(path: Path) -> DiskState:
+    usage = shutil.disk_usage(path)
+    used_pct = float(usage.used / usage.total * 100.0) if usage.total else 0.0
+    level = classify_disk_level(int(usage.free), used_pct)
+    return DiskState(level=level, path=str(path), total_bytes=int(usage.total), used_bytes=int(usage.used), free_bytes=int(usage.free), used_pct=used_pct)
+
+
+class BatchProgressNotifier:
+    """Best-effort Telegram progress reporter. It never raises into the batch."""
+
+    def __init__(self, *, run_id: str, out_root: Path, total_tickers: int, total_events: int) -> None:
+        self.run_id = str(run_id)
+        self.out_root = out_root
+        self.total_tickers = int(total_tickers)
+        self.total_events = int(total_events)
+        self.started_at = time.time()
+        self._last_edit_at = 0.0
+        self._last_text = ""
+        self._message_id = 0
+        self._notifier = None
+        if TelegramNotifier is not None:
+            try:
+                self._notifier = TelegramNotifier(default_rate_limit_seconds=0)
+            except Exception:
+                self._notifier = None
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self._notifier and getattr(self._notifier, "enabled", False))
+
+    def _safe_send(self, text: str) -> None:
+        if not self.enabled:
+            return
+        try:
+            self._notifier.send(text[:3900])
+        except Exception:
+            return
+
+    def _safe_progress(self, text: str, *, force: bool = False) -> None:
+        if not self.enabled:
+            return
+        now = time.time()
+        if not force and self._last_edit_at and now - self._last_edit_at < 30:
+            return
+        if not force and text == self._last_text:
+            return
+        try:
+            if not self._message_id:
+                self._message_id = int(self._notifier.send_progress(text[:3900]) or 0)
+            elif not self._notifier.edit_message(self._message_id, text[:3900]):
+                return
+            self._last_text = text
+            self._last_edit_at = now
+        except Exception:
+            return
+
+    def start(self, args: argparse.Namespace, disk: DiskState) -> None:
+        self._safe_send(
+            "🚀 Stage123 배치 시작\n"
+            f"run_id: {self.run_id}\n"
+            f"tickers: {self.total_tickers}\n"
+            f"stage2: {bool(args.stage2)}\n"
+            f"stage3_mode: {args.stage3_mode}\n"
+            f"workers: s2={args.max_workers_stage2}, s3={args.max_workers_stage3}\n"
+            f"out_root: {self.out_root}\n"
+            f"disk_free_gb: {disk.free_gb:.1f} ({disk.level})"
+        )
+        self.progress(stage2_done=0, stage3_done=0, failures=0, disk=disk, force=True)
+
+    def format_progress(self, *, stage2_done: int, stage3_done: int, failures: int, disk: DiskState, final: bool = False) -> str:
+        done_events = int(stage2_done) + int(stage3_done)
+        elapsed = max(0.0, time.time() - self.started_at)
+        rate = done_events / elapsed if elapsed > 0 else 0.0
+        eta = (self.total_events - done_events) / rate if rate > 0 and self.total_events >= done_events else 0.0
+        pct = (done_events / self.total_events * 100.0) if self.total_events else 0.0
+        label = "완료" if final else "진행"
+        return (
+            f"Stage123 {self.run_id} ▸ {done_events}/{self.total_events} ({pct:.1f}%) | "
+            f"S2 {stage2_done} | S3 {stage3_done} | 실패 {failures} | "
+            f"disk {disk.free_gb:.1f}GB {disk.level} | ETA {eta/3600:.1f}h | {label}"
+        )
+
+    def progress(self, *, stage2_done: int, stage3_done: int, failures: int, disk: DiskState, force: bool = False) -> None:
+        self._safe_progress(self.format_progress(stage2_done=stage2_done, stage3_done=stage3_done, failures=failures, disk=disk), force=force)
+
+    def complete(self, *, stage2_done: int, stage3_done: int, failures: int, disk: DiskState) -> None:
+        self._safe_progress(self.format_progress(stage2_done=stage2_done, stage3_done=stage3_done, failures=failures, disk=disk, final=True), force=True)
+        self._safe_send(
+            "✅ Stage123 배치 완료\n"
+            f"run_id: {self.run_id}\n"
+            f"stage2_done: {stage2_done}\n"
+            f"stage3_done: {stage3_done}\n"
+            f"failures: {failures}\n"
+            f"disk_free_gb: {disk.free_gb:.1f} ({disk.level})\n"
+            f"out_root: {self.out_root}"
+        )
+
+    def alert(self, title: str, message: str) -> None:
+        self._safe_send(f"{title}\n{message}")
+
+
+class BatchRuntime:
+    def __init__(self, *, args: argparse.Namespace, out_root: Path, total_tickers: int) -> None:
+        total_events = 0
+        if args.stage2:
+            total_events += total_tickers
+        if args.stage3_mode != "none":
+            total_events += total_tickers
+        self.args = args
+        self.out_root = out_root
+        self.notifier = BatchProgressNotifier(run_id=args.run_id, out_root=out_root, total_tickers=total_tickers, total_events=total_events)
+        self.disk_levels_sent: set[str] = set()
+        self.fatal_disk_stop = False
+        self.last_disk = disk_state(out_root)
+
+    def check_disk(self) -> DiskState:
+        self.last_disk = disk_state(self.out_root)
+        if self.last_disk.level in {"WARN", "CRITICAL", "FATAL"} and self.last_disk.level not in self.disk_levels_sent:
+            self.disk_levels_sent.add(self.last_disk.level)
+            self.notifier.alert(
+                f"⚠️ Stage123 disk {self.last_disk.level}",
+                f"run_id: {self.args.run_id}\nout_root: {self.out_root}\nfree_gb: {self.last_disk.free_gb:.1f}\nused_pct: {self.last_disk.used_pct:.1f}%",
+            )
+        if self.last_disk.level == "FATAL":
+            self.fatal_disk_stop = True
+        return self.last_disk
+
+
+def batch_counts(rows_by_ticker: dict[str, dict[str, Any]]) -> tuple[int, int, int]:
+    stage2_done = 0
+    stage3_done = 0
+    failures = 0
+    for row in rows_by_ticker.values():
+        s2 = row.get("stage2_status")
+        s3 = row.get("stage3_status")
+        if s2:
+            stage2_done += 1
+        if s3:
+            stage3_done += 1
+        if str(row.get("status") or "").endswith("FAILED") or row.get("status") == "FATAL_DISK_STOP":
+            failures += 1
+        elif s2 == "STAGE2_FAILED" or s3 == "STAGE3_FAILED":
+            failures += 1
+    return stage2_done, stage3_done, failures
+
+
+def notify_runtime_progress(runtime: BatchRuntime, rows_by_ticker: dict[str, dict[str, Any]], *, force: bool = False) -> None:
+    stage2_done, stage3_done, failures = batch_counts(rows_by_ticker)
+    disk = runtime.check_disk()
+    runtime.notifier.progress(stage2_done=stage2_done, stage3_done=stage3_done, failures=failures, disk=disk, force=force)
 
 
 def run_stage2_for_ticker(
@@ -402,6 +762,8 @@ def write_summary(out_root: Path, rows: list[dict[str, Any]], args: argparse.Nam
         "skip_existing": bool(args.skip_existing),
         "retry_failed": bool(args.retry_failed),
         "dry_run": bool(args.dry_run),
+        "central_index": str(Path(args.out_root_resolved) / CENTRAL_INDEX_NAME) if getattr(args, "out_root_resolved", None) else CENTRAL_INDEX_NAME,
+        "disk_thresholds_gb": {"warn_free_lt": 50, "critical_free_lt": 20, "fatal_free_lt": 10},
         "updated_at": utc_now_iso(),
     }
     write_json(out_root / "batch_summary.json", summary)
@@ -413,23 +775,58 @@ def write_index_and_summary(out_root: Path, rows_by_ticker: dict[str, dict[str, 
     write_summary(out_root, rows, args)
 
 
-def run_stage2_batch(tickers: list[str], out_root: Path, args: argparse.Namespace, rows_by_ticker: dict[str, dict[str, Any]]) -> None:
+def disk_stop_result(ticker: str, out_root: Path, stage: str, reason: str) -> StageRunResult:
+    out_dir = (out_root / "tickers" / safe_ticker_dir_name(ticker) / stage).resolve()
+    return StageRunResult("FATAL_DISK_STOP", out_dir, None, None, None, reason, 0.0, None, None)
+
+
+def run_stage2_batch(tickers: list[str], out_root: Path, args: argparse.Namespace, rows_by_ticker: dict[str, dict[str, Any]], runtime: BatchRuntime) -> None:
     if not args.stage2:
         return
-    with ThreadPoolExecutor(max_workers=max(1, args.max_workers_stage2)) as executor:
-        futures = {}
-        for ticker in tickers:
-            started = utc_now_iso()
-            futures[executor.submit(run_stage2_for_ticker, ticker, out_root, skip_existing=args.skip_existing, retry_failed=args.retry_failed, dry_run=args.dry_run)] = (ticker, started)
-        for future in as_completed(futures):
-            ticker, started = futures[future]
-            try:
-                result = future.result()
-            except Exception as exc:
-                result = StageRunResult("STAGE2_FAILED", (out_root / "tickers" / safe_ticker_dir_name(ticker) / "stage2").resolve(), None, None, None, f"wrapper exception: {exc}")
-            rows_by_ticker[ticker] = row_from_results(ticker, stage2_result=result, stage3_result=None, started_at=started, finished_at=utc_now_iso())
-            print(f"{ticker} {result.status} {result.reason}".rstrip(), flush=True)
-            write_index_and_summary(out_root, rows_by_ticker, args)
+    workers = max(1, args.max_workers_stage2)
+    next_idx = 0
+    disk_stopped = False
+    futures: dict[Any, tuple[str, str]] = {}
+
+    def submit_one(executor: ThreadPoolExecutor) -> bool:
+        nonlocal next_idx, disk_stopped
+        if next_idx >= len(tickers):
+            return False
+        disk = runtime.check_disk()
+        if disk.level == "FATAL":
+            disk_stopped = True
+            return False
+        ticker = tickers[next_idx]
+        next_idx += 1
+        started = utc_now_iso()
+        futures[executor.submit(run_stage2_for_ticker, ticker, out_root, skip_existing=args.skip_existing, retry_failed=args.retry_failed, dry_run=args.dry_run)] = (ticker, started)
+        return True
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        while len(futures) < workers and submit_one(executor):
+            pass
+        while futures:
+            done, _ = wait(set(futures), return_when=FIRST_COMPLETED)
+            for future in done:
+                ticker, started = futures.pop(future)
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    result = StageRunResult("STAGE2_FAILED", (out_root / "tickers" / safe_ticker_dir_name(ticker) / "stage2").resolve(), None, None, None, f"wrapper exception: {exc}")
+                rows_by_ticker[ticker] = row_from_results(ticker, stage2_result=result, stage3_result=None, started_at=started, finished_at=utc_now_iso())
+                append_central_index(out_root, build_stage2_central_index_rows(args, out_root, result, ticker))
+                print(f"{ticker} {result.status} {result.reason}".rstrip(), flush=True)
+                write_index_and_summary(out_root, rows_by_ticker, args)
+                notify_runtime_progress(runtime, rows_by_ticker)
+            while len(futures) < workers and submit_one(executor):
+                pass
+
+    if disk_stopped:
+        for ticker in tickers[next_idx:]:
+            result = disk_stop_result(ticker, out_root, "stage2", "disk free below fatal threshold; new Stage2 submissions stopped")
+            rows_by_ticker.setdefault(ticker, row_from_results(ticker, stage2_result=result, stage3_result=None, started_at=utc_now_iso(), finished_at=utc_now_iso()))
+        write_index_and_summary(out_root, rows_by_ticker, args)
+        notify_runtime_progress(runtime, rows_by_ticker, force=True)
 
 
 def tickers_for_stage3(tickers: list[str], rows_by_ticker: dict[str, dict[str, Any]], args: argparse.Namespace) -> list[str]:
@@ -447,19 +844,65 @@ def tickers_for_stage3(tickers: list[str], rows_by_ticker: dict[str, dict[str, A
     return selected
 
 
-def run_stage3_batch(tickers: list[str], out_root: Path, args: argparse.Namespace, rows_by_ticker: dict[str, dict[str, Any]]) -> None:
+def run_stage3_batch(tickers: list[str], out_root: Path, args: argparse.Namespace, rows_by_ticker: dict[str, dict[str, Any]], runtime: BatchRuntime) -> None:
     selected = tickers_for_stage3(tickers, rows_by_ticker, args)
     if not selected:
         return
-    with ThreadPoolExecutor(max_workers=max(1, args.max_workers_stage3)) as executor:
-        futures = {}
-        for ticker in selected:
-            started = rows_by_ticker.get(ticker, {}).get("started_at") or utc_now_iso()
-            futures[executor.submit(run_stage3_for_ticker, ticker, out_root, mode=args.stage3_mode, skip_existing=args.skip_existing, retry_failed=args.retry_failed, dry_run=args.dry_run)] = (ticker, started)
-        for future in as_completed(futures):
-            ticker, started = futures[future]
-            stage2_result = None
+    workers = max(1, args.max_workers_stage3)
+    next_idx = 0
+    disk_stopped = False
+    futures: dict[Any, tuple[str, str]] = {}
+
+    def submit_one(executor: ThreadPoolExecutor) -> bool:
+        nonlocal next_idx, disk_stopped
+        if next_idx >= len(selected):
+            return False
+        disk = runtime.check_disk()
+        if disk.level == "FATAL":
+            disk_stopped = True
+            return False
+        ticker = selected[next_idx]
+        next_idx += 1
+        started = rows_by_ticker.get(ticker, {}).get("started_at") or utc_now_iso()
+        futures[executor.submit(run_stage3_for_ticker, ticker, out_root, mode=args.stage3_mode, skip_existing=args.skip_existing, retry_failed=args.retry_failed, dry_run=args.dry_run)] = (ticker, started)
+        return True
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        while len(futures) < workers and submit_one(executor):
+            pass
+        while futures:
+            done, _ = wait(set(futures), return_when=FIRST_COMPLETED)
+            for future in done:
+                ticker, started = futures.pop(future)
+                stage2_result = None
+                prior = rows_by_ticker.get(ticker)
+                if prior and prior.get("stage2_status"):
+                    stage2_result = StageRunResult(
+                        prior["stage2_status"],
+                        Path(prior["stage2_out_dir"]) if prior.get("stage2_out_dir") else (out_root / "tickers" / safe_ticker_dir_name(ticker) / "stage2").resolve(),
+                        Path(prior["stage2_marker"]) if prior.get("stage2_marker") else None,
+                        prior.get("stage2_returncode"),
+                        None,
+                        "",
+                        float(prior.get("stage2_elapsed_seconds") or 0.0),
+                        prior.get("stage2_command"),
+                    )
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    result = StageRunResult("STAGE3_FAILED", (out_root / "tickers" / safe_ticker_dir_name(ticker) / "stage3").resolve(), None, None, None, f"wrapper exception: {exc}")
+                rows_by_ticker[ticker] = row_from_results(ticker, stage2_result=stage2_result, stage3_result=result, started_at=started, finished_at=utc_now_iso())
+                append_central_index(out_root, build_stage3_central_index_rows(args, out_root, result, ticker))
+                print(f"{ticker} {result.status} {result.reason}".rstrip(), flush=True)
+                write_index_and_summary(out_root, rows_by_ticker, args)
+                notify_runtime_progress(runtime, rows_by_ticker)
+            while len(futures) < workers and submit_one(executor):
+                pass
+
+    if disk_stopped:
+        for ticker in selected[next_idx:]:
             prior = rows_by_ticker.get(ticker)
+            stage2_result = None
             if prior and prior.get("stage2_status"):
                 stage2_result = StageRunResult(
                     prior["stage2_status"],
@@ -471,13 +914,10 @@ def run_stage3_batch(tickers: list[str], out_root: Path, args: argparse.Namespac
                     float(prior.get("stage2_elapsed_seconds") or 0.0),
                     prior.get("stage2_command"),
                 )
-            try:
-                result = future.result()
-            except Exception as exc:
-                result = StageRunResult("STAGE3_FAILED", (out_root / "tickers" / safe_ticker_dir_name(ticker) / "stage3").resolve(), None, None, None, f"wrapper exception: {exc}")
-            rows_by_ticker[ticker] = row_from_results(ticker, stage2_result=stage2_result, stage3_result=result, started_at=started, finished_at=utc_now_iso())
-            print(f"{ticker} {result.status} {result.reason}".rstrip(), flush=True)
-            write_index_and_summary(out_root, rows_by_ticker, args)
+            result = disk_stop_result(ticker, out_root, "stage3", "disk free below fatal threshold; new Stage3 submissions stopped")
+            rows_by_ticker[ticker] = row_from_results(ticker, stage2_result=stage2_result, stage3_result=result, started_at=prior.get("started_at") if prior else utc_now_iso(), finished_at=utc_now_iso())
+        write_index_and_summary(out_root, rows_by_ticker, args)
+        notify_runtime_progress(runtime, rows_by_ticker, force=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -510,6 +950,7 @@ def main(argv: list[str] | None = None) -> int:
     if not out_root.is_absolute():
         out_root = PROJECT_ROOT / out_root
     out_root = out_root.resolve()
+    args.out_root_resolved = str(out_root)
 
     tickers = parse_ticker_file(tickers_path)
     if args.limit is not None:
@@ -517,18 +958,22 @@ def main(argv: list[str] | None = None) -> int:
     out_root.mkdir(parents=True, exist_ok=True)
     (out_root / "logs").mkdir(parents=True, exist_ok=True)
     rows_by_ticker: dict[str, dict[str, Any]] = {}
+    runtime = BatchRuntime(args=args, out_root=out_root, total_tickers=len(tickers))
+    runtime.notifier.start(args, runtime.last_disk)
 
     if args.dry_run:
         print(f"DRY-RUN run_id={args.run_id} out_root={out_root} tickers={len(tickers)}", flush=True)
-    run_stage2_batch(tickers, out_root, args, rows_by_ticker)
+    run_stage2_batch(tickers, out_root, args, rows_by_ticker, runtime)
     if not args.stage2:
         for ticker in tickers:
             rows_by_ticker.setdefault(
                 ticker,
                 row_from_results(ticker, stage2_result=None, stage3_result=None, started_at=utc_now_iso(), finished_at=utc_now_iso()),
             )
-    run_stage3_batch(tickers, out_root, args, rows_by_ticker)
+    run_stage3_batch(tickers, out_root, args, rows_by_ticker, runtime)
     write_index_and_summary(out_root, rows_by_ticker, args)
+    stage2_done, stage3_done, failures = batch_counts(rows_by_ticker)
+    runtime.notifier.complete(stage2_done=stage2_done, stage3_done=stage3_done, failures=failures, disk=runtime.check_disk())
     return 0
 
 

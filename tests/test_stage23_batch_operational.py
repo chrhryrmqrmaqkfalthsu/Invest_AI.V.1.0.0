@@ -36,6 +36,46 @@ def test_central_index_append_is_append_only(tmp_path):
     assert rows == [first, second]
 
 
+def test_notification_events_record_start_send_and_progress(monkeypatch, tmp_path):
+    class FakeTelegramNotifier:
+        def __init__(self, *args, **kwargs):
+            self.enabled = True
+
+        def send(self, text, parse_mode=""):
+            return True
+
+        def send_progress(self, text):
+            return 77
+
+        def edit_message(self, message_id, text, parse_mode=""):
+            return True
+
+    monkeypatch.setattr(batch, "TelegramNotifier", FakeTelegramNotifier)
+    notifier = batch.BatchProgressNotifier(run_id="notify_test", out_root=tmp_path, total_tickers=2, total_events=4)
+    args = type(
+        "Args",
+        (),
+        {
+            "stage2": True,
+            "stage3_mode": "all",
+            "max_workers_stage2": 1,
+            "max_workers_stage3": 1,
+        },
+    )()
+    disk = batch.DiskState(level="OK", path=str(tmp_path), total_bytes=100 * batch.GB, used_bytes=1 * batch.GB, free_bytes=99 * batch.GB, used_pct=1.0)
+
+    notifier.start(args, disk)
+
+    rows = [json.loads(line) for line in (tmp_path / batch.NOTIFICATION_EVENTS_NAME).read_text(encoding="utf-8").splitlines()]
+    event_types = [row["event_type"] for row in rows]
+    assert "notifier_init_begin" in event_types
+    assert "notifier_init_done" in event_types
+    assert "start_called" in event_types
+    assert any(row["event_type"] == "send" and row["result"] is True for row in rows)
+    assert any(row["event_type"] == "send_progress" and row["result"] is True and row["message_id"] == 77 for row in rows)
+    assert all("token" not in row and "chat_id" not in row for row in rows)
+
+
 def test_stage2_central_index_rows_include_survivor_metrics_and_paths(tmp_path):
     out_root = tmp_path / "batch"
     out_dir = out_root / "tickers" / "CW" / "stage2"

@@ -35,6 +35,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STAGE2_SCRIPT = PROJECT_ROOT / "scripts" / "research" / "run_stage2.py"
 STAGE3_SCRIPT = PROJECT_ROOT / "scripts" / "research" / "run_stage3_aggressive.py"
 CENTRAL_INDEX_NAME = "central_index.jsonl"
+NOTIFICATION_EVENTS_NAME = "notification_events.jsonl"
 GB = 1024 ** 3
 DISK_WARN_FREE_BYTES = 50 * GB
 DISK_CRITICAL_FREE_BYTES = 20 * GB
@@ -173,6 +174,25 @@ def append_jsonl_rows(path: Path, rows: Iterable[dict[str, Any]]) -> int:
         except Exception:
             pass
     return len(materialized)
+
+
+def append_notification_event(out_root: Path, event: dict[str, Any]) -> int:
+    """Append notification diagnostics without exposing token/chat_id values."""
+
+    safe_event = {
+        "created_at": utc_now_iso(),
+        **{k: v for k, v in event.items() if k not in {"token", "chat_id", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"}},
+    }
+    written = append_jsonl_rows(out_root / NOTIFICATION_EVENTS_NAME, [safe_event])
+    log_view = {
+        "event_type": safe_event.get("event_type"),
+        "enabled": safe_event.get("enabled"),
+        "result": safe_event.get("result"),
+        "message_id": safe_event.get("message_id"),
+        "error_class": safe_event.get("error_class"),
+    }
+    print("NOTIFICATION_EVENT " + json.dumps(log_view, ensure_ascii=False, sort_keys=True), flush=True)
+    return written
 
 
 def stage2_done_marker(out_dir: Path) -> Path:
@@ -498,7 +518,7 @@ def disk_state(path: Path) -> DiskState:
 
 
 class BatchProgressNotifier:
-    """Best-effort Telegram progress reporter. It never raises into the batch."""
+    """Best-effort Telegram progress reporter with append-only diagnostics."""
 
     def __init__(self, *, run_id: str, out_root: Path, total_tickers: int, total_events: int) -> None:
         self.run_id = str(run_id)
@@ -510,43 +530,96 @@ class BatchProgressNotifier:
         self._last_text = ""
         self._message_id = 0
         self._notifier = None
+        self._record("notifier_init_begin", telegram_import_available=TelegramNotifier is not None)
         if TelegramNotifier is not None:
             try:
                 self._notifier = TelegramNotifier(default_rate_limit_seconds=0)
-            except Exception:
+            except Exception as exc:
+                self._record(
+                    "notifier_init_exception",
+                    telegram_import_available=True,
+                    error_class=exc.__class__.__name__,
+                    error_message=str(exc)[:500],
+                )
                 self._notifier = None
+        self._record(
+            "notifier_init_done",
+            telegram_import_available=TelegramNotifier is not None,
+            notifier_created=self._notifier is not None,
+            enabled=self.enabled,
+        )
 
     @property
     def enabled(self) -> bool:
         return bool(self._notifier and getattr(self._notifier, "enabled", False))
 
-    def _safe_send(self, text: str) -> None:
-        if not self.enabled:
-            return
+    def _record(self, event_type: str, **payload: Any) -> None:
         try:
-            self._notifier.send(text[:3900])
+            append_notification_event(
+                self.out_root,
+                {
+                    "event_type": event_type,
+                    "run_id": self.run_id,
+                    "enabled": self.enabled,
+                    **payload,
+                },
+            )
         except Exception:
             return
 
-    def _safe_progress(self, text: str, *, force: bool = False) -> None:
+    def _safe_send(self, text: str) -> bool:
         if not self.enabled:
-            return
+            self._record("send_skipped", result=False, reason="notifier_disabled")
+            return False
+        try:
+            result = bool(self._notifier.send(text[:3900]))
+            self._record("send", result=result)
+            return result
+        except Exception as exc:
+            self._record("send_exception", result=False, error_class=exc.__class__.__name__, error_message=str(exc)[:500])
+            return False
+
+    def _safe_progress(self, text: str, *, force: bool = False) -> bool:
+        if not self.enabled:
+            self._record("progress_skipped", result=False, reason="notifier_disabled")
+            return False
         now = time.time()
         if not force and self._last_edit_at and now - self._last_edit_at < 30:
-            return
+            return False
         if not force and text == self._last_text:
-            return
+            return False
         try:
             if not self._message_id:
-                self._message_id = int(self._notifier.send_progress(text[:3900]) or 0)
-            elif not self._notifier.edit_message(self._message_id, text[:3900]):
-                return
+                message_id = int(self._notifier.send_progress(text[:3900]) or 0)
+                self._message_id = message_id
+                result = message_id > 0
+                self._record("send_progress", result=result, message_id=message_id)
+                if not result:
+                    return False
+            else:
+                result = bool(self._notifier.edit_message(self._message_id, text[:3900]))
+                self._record("edit_message", result=result, message_id=self._message_id)
+                if not result:
+                    return False
             self._last_text = text
             self._last_edit_at = now
-        except Exception:
-            return
+            return True
+        except Exception as exc:
+            self._record("progress_exception", result=False, error_class=exc.__class__.__name__, error_message=str(exc)[:500])
+            return False
 
     def start(self, args: argparse.Namespace, disk: DiskState) -> None:
+        self._record(
+            "start_called",
+            stage2=bool(args.stage2),
+            stage3_mode=args.stage3_mode,
+            max_workers_stage2=args.max_workers_stage2,
+            max_workers_stage3=args.max_workers_stage3,
+            total_tickers=self.total_tickers,
+            total_events=self.total_events,
+            disk_free_gb=round(disk.free_gb, 3),
+            disk_level=disk.level,
+        )
         self._safe_send(
             "🚀 Stage123 배치 시작\n"
             f"run_id: {self.run_id}\n"
@@ -763,6 +836,7 @@ def write_summary(out_root: Path, rows: list[dict[str, Any]], args: argparse.Nam
         "retry_failed": bool(args.retry_failed),
         "dry_run": bool(args.dry_run),
         "central_index": str(Path(args.out_root_resolved) / CENTRAL_INDEX_NAME) if getattr(args, "out_root_resolved", None) else CENTRAL_INDEX_NAME,
+        "notification_events": str(Path(args.out_root_resolved) / NOTIFICATION_EVENTS_NAME) if getattr(args, "out_root_resolved", None) else NOTIFICATION_EVENTS_NAME,
         "disk_thresholds_gb": {"warn_free_lt": 50, "critical_free_lt": 20, "fatal_free_lt": 10},
         "updated_at": utc_now_iso(),
     }

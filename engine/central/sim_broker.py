@@ -39,7 +39,8 @@ class SimBroker:
 
     Price data must be supplied up front. The orchestrator calls ``set_date(D)``
     before placing orders; market orders then fill immediately according to the
-    configured ``FillPolicy``.
+    configured ``FillPolicy``. Insufficient-cash BUYs return a rejected Order
+    instead of raising so the ledger can record the failed execution safely.
     """
 
     def __init__(
@@ -170,11 +171,29 @@ class SimBroker:
         if side == OrderSide.SELL:
             held = normalize_shares(self._holdings.get(ticker_u, {}).get("shares", 0.0))
             if shares_n - held > 1e-6:
-                raise ValueError(f"sell exceeds simulated holding: {ticker_u} sell={shares_n} held={held}")
+                return self._rejected_order(
+                    ticker_u,
+                    side,
+                    shares_n,
+                    order_type,
+                    price or fill_price,
+                    client_order_id,
+                    fill_date,
+                    f"sell exceeds simulated holding: sell={shares_n} held={held}",
+                )
         notional = shares_n * fill_price
         commission = notional * float(self.fill_policy.commission_rate or 0.0)
         if side == OrderSide.BUY and notional + commission - self.cash > 1e-6:
-            raise ValueError(f"insufficient simulated cash: need={notional + commission:.2f} cash={self.cash:.2f}")
+            return self._rejected_order(
+                ticker_u,
+                side,
+                shares_n,
+                order_type,
+                price or fill_price,
+                client_order_id,
+                fill_date,
+                f"insufficient simulated cash: need={notional + commission:.2f} cash={self.cash:.2f}",
+            )
 
         self._apply_fill_to_holdings(ticker_u, side, shares_n, fill_price, commission)
         order_id = f"SIM-{next(self._ids):08d}"
@@ -195,10 +214,44 @@ class SimBroker:
             raw_status="filled",
             client_order_id=str(client_order_id or ""),
         )
-        self._orders[order_id] = order
-        if order.client_order_id:
-            self._client_to_order[order.client_order_id] = order_id
+        self._record_order(order)
         return order
+
+    def _rejected_order(
+        self,
+        ticker: str,
+        side: OrderSide,
+        shares: float,
+        order_type: OrderType,
+        price: float,
+        client_order_id: str,
+        submitted_at: str,
+        message: str,
+    ) -> Order:
+        order = Order(
+            order_id=f"SIM-{next(self._ids):08d}",
+            ticker=ticker,
+            side=side,
+            order_type=order_type,
+            shares=shares,
+            price=float(price or 0.0),
+            status=OrderStatus.REJECTED,
+            filled_shares=0.0,
+            filled_avg_price=0.0,
+            commission=0.0,
+            submitted_at=submitted_at,
+            filled_at="",
+            message=message,
+            raw_status="rejected",
+            client_order_id=str(client_order_id or ""),
+        )
+        self._record_order(order)
+        return order
+
+    def _record_order(self, order: Order) -> None:
+        self._orders[order.order_id] = order
+        if order.client_order_id:
+            self._client_to_order[order.client_order_id] = order.order_id
 
     def _apply_fill_to_holdings(self, ticker: str, side: OrderSide, shares: float, price: float, commission: float) -> None:
         row = self._holdings.get(ticker, {"shares": 0.0, "avg_cost": 0.0})

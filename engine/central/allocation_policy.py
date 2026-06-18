@@ -17,6 +17,7 @@ class AllocationParams:
     total_capital: float = 100_000.0
     position_sizing: str = "score_weighted"  # score_weighted | equal
     min_notional: float = 0.0
+    cash_buffer_ratio: float = 0.98
 
 
 @dataclass(frozen=True)

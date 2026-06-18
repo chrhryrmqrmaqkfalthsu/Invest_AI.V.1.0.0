@@ -8,9 +8,9 @@ from engine.central.allocation_policy import AllocationParams, BuyCandidate, dec
 from engine.central.backtester import common_validation_window, run_central_backtest
 from engine.central.entity_loader import ConfidenceParams, load_entities_from_catalog
 from engine.central.ledger import EntityPositionLedger
-from engine.central.signal_collector import SignalCollector
+from engine.central.signal_collector import CacheOnlyDataProvider, SignalCollector
 from engine.central.sim_broker import FillPolicy, SimBroker
-from engine.live.broker.base import OrderSide
+from engine.core.indicators import calc_indicators
 
 
 class MemoryProvider:
@@ -62,11 +62,11 @@ def _rulebook(ticker="AAA", max_holding_days=3):
     }
 
 
-def _catalog_row(ticker="AAA", rulebook_hash="abcdef1234567890"):
+def _catalog_row(ticker="AAA", rulebook_hash="abcdef1234567890", max_holding_days=3):
     return {
         "ticker": ticker,
         "rulebook_hash": rulebook_hash,
-        "rulebook": _rulebook(ticker),
+        "rulebook": _rulebook(ticker, max_holding_days=max_holding_days),
         "period_results": {
             "train_1": {
                 "role": "pure_oos",
@@ -113,6 +113,23 @@ def test_sim_broker_next_open_fill_and_holdings():
     assert broker.get_holdings()[0].shares == 6
 
 
+def test_sim_broker_rejects_insufficient_cash_without_mutating_holdings():
+    df = pd.DataFrame(
+        [
+            {"Open": 10.0, "High": 11.0, "Low": 9.0, "Close": 10.0},
+            {"Open": 200.0, "High": 205.0, "Low": 195.0, "Close": 200.0},
+        ],
+        index=pd.to_datetime(["2025-01-02", "2025-01-03"]),
+    )
+    broker = SimBroker({"AAA": df}, initial_cash=1_000.0)
+    broker.set_date("2025-01-02")
+    order = broker.place_buy("AAA", 10)
+    assert order.status.value == "rejected"
+    assert order.filled_shares == 0
+    assert broker.cash == pytest.approx(1_000.0)
+    assert broker.get_holdings() == []
+
+
 def test_entity_loader_catalog_confidence(tmp_path):
     catalog = tmp_path / "stage3_profile_catalog.jsonl"
     catalog.write_text(json.dumps(_catalog_row()) + "\n", encoding="utf-8")
@@ -138,6 +155,20 @@ def test_signal_collector_is_deterministic_and_uses_current_slice_only(tmp_path)
     assert first.should_buy is True
 
 
+def test_cache_only_provider_recomputes_indicators_from_raw_ohlcv(tmp_path):
+    cache_dir = tmp_path / "stage0" / "ohlcv_cache"
+    cache_dir.mkdir(parents=True)
+    df = _price_df(days=40)
+    polluted = calc_indicators(df)
+    polluted["MA5"] = 999999.0
+    polluted.to_pickle(cache_dir / "AAA.pkl")
+    provider = CacheOnlyDataProvider(cache_roots=[tmp_path], recompute_indicators=True)
+    loaded = provider.load_price_df("AAA")
+    expected = calc_indicators(df)
+    assert loaded["MA5"].iloc[-1] == pytest.approx(expected["MA5"].iloc[-1])
+    assert loaded["MA5"].iloc[-1] != 999999.0
+
+
 def test_allocation_policy_limits_and_caps(tmp_path):
     ledger = EntityPositionLedger(base_dir=tmp_path / "ledger")
     candidates = [
@@ -161,27 +192,45 @@ def test_backtester_end_to_end_reconciles_and_is_deterministic(tmp_path):
     entities = load_entities_from_catalog(catalog)
     provider = MemoryProvider({"AAA": df, "BBB": df.copy()})
     params = AllocationParams(max_positions=2, min_confidence=0.0, total_capital=10_000.0, per_ticker_exposure_cap=0.5, position_sizing="equal")
-    result1 = run_central_backtest(
-        entities,
-        start=df.index[70].strftime("%Y-%m-%d"),
-        end=df.index[80].strftime("%Y-%m-%d"),
-        alloc_params=params,
-        data_provider=provider,
-        ledger_dir=tmp_path / "ledger1",
-    )
-    result2 = run_central_backtest(
-        entities,
-        start=df.index[70].strftime("%Y-%m-%d"),
-        end=df.index[80].strftime("%Y-%m-%d"),
-        alloc_params=params,
-        data_provider=provider,
-        ledger_dir=tmp_path / "ledger2",
-    )
+    result1 = run_central_backtest(entities, start=df.index[70].strftime("%Y-%m-%d"), end=df.index[80].strftime("%Y-%m-%d"), alloc_params=params, data_provider=provider, ledger_dir=tmp_path / "ledger1")
+    result2 = run_central_backtest(entities, start=df.index[70].strftime("%Y-%m-%d"), end=df.index[80].strftime("%Y-%m-%d"), alloc_params=params, data_provider=provider, ledger_dir=tmp_path / "ledger2")
     assert result1.reconcile_failures == []
     assert len(result1.equity_curve) > 0
     assert result1.to_dict()["equity_curve"] == result2.to_dict()["equity_curve"]
     assert result1.final_equity == pytest.approx(result2.final_equity)
     assert sum(result1.per_entity_pnl.values()) == pytest.approx(result1.final_equity - params.total_capital)
+
+
+def test_backtester_gap_change_does_not_change_signal_day_shares_or_entry_risk(tmp_path):
+    base = _gap_regression_df(next_open=101.0, next_high=102.0, next_low=100.0, next_close=101.0)
+    spiky = _gap_regression_df(next_open=101.0, next_high=300.0, next_low=1.0, next_close=101.0)
+    result_a, pos_a = _run_single_day_gap_case(tmp_path / "a", base, total_capital=20_000.0)
+    result_b, pos_b = _run_single_day_gap_case(tmp_path / "b", spiky, total_capital=20_000.0)
+    assert result_a.rejected_order_count == 0
+    assert result_b.rejected_order_count == 0
+    assert result_a.trades[0].shares == pytest.approx(result_b.trades[0].shares)
+    assert pos_a.atr_at_entry == pytest.approx(pos_b.atr_at_entry)
+    assert pos_a.stop_price == pytest.approx(pos_b.stop_price)
+    assert pos_a.target_price == pytest.approx(pos_b.target_price)
+    assert pos_a.trailing_distance == pytest.approx(pos_b.trailing_distance)
+
+
+def test_backtester_rejects_buy_when_next_open_gap_exceeds_cash(tmp_path):
+    df = _gap_regression_df(next_open=200.0, next_high=205.0, next_low=195.0, next_close=200.0)
+    result, ledger = _run_single_day_gap_case(tmp_path, df, total_capital=10_000.0, return_ledger=True)
+    assert result.trades == []
+    assert result.rejected_order_count == 1
+    assert "insufficient simulated cash" in result.rejected_orders[0].reason
+    assert ledger.open_positions() == []
+    assert result.reconcile_failures == []
+
+
+def test_backtester_cash_buffer_caps_d_close_sized_shares(tmp_path):
+    df = _gap_regression_df(next_open=100.0, next_high=101.0, next_low=99.0, next_close=100.0)
+    result, pos = _run_single_day_gap_case(tmp_path, df, total_capital=10_000.0, cash_buffer_ratio=0.98)
+    assert result.rejected_order_count == 0
+    assert result.trades[0].shares == pytest.approx(98.0)
+    assert pos.open_shares == pytest.approx(98.0)
 
 
 def test_common_validation_window_recent_1y(tmp_path):
@@ -195,3 +244,30 @@ def _write_catalog_tmp(root: Path, row: dict) -> Path:
     path = root / "central_test_stage3_profile_catalog.jsonl"
     path.write_text(json.dumps(row) + "\n", encoding="utf-8")
     return path
+
+
+def _gap_regression_df(next_open: float, next_high: float, next_low: float, next_close: float) -> pd.DataFrame:
+    df = _price_df(days=90, base=100.0)
+    signal_idx = df.index[70]
+    next_idx = df.index[71]
+    df.loc[signal_idx, ["Open", "High", "Low", "Close"]] = [100.0, 101.0, 99.0, 100.0]
+    df.loc[next_idx, ["Open", "High", "Low", "Close"]] = [next_open, next_high, next_low, next_close]
+    return calc_indicators(df)
+
+
+def _run_single_day_gap_case(root: Path, df: pd.DataFrame, *, total_capital: float, cash_buffer_ratio: float = 0.98, return_ledger: bool = False):
+    catalog = root / "stage3_profile_catalog.jsonl"
+    root.mkdir(parents=True, exist_ok=True)
+    catalog.write_text(json.dumps(_catalog_row("AAA", "gap1112223334444", max_holding_days=99)) + "\n", encoding="utf-8")
+    entities = load_entities_from_catalog(catalog)
+    provider = MemoryProvider({"AAA": df})
+    signal_day = df.index[70].strftime("%Y-%m-%d")
+    ledger_dir = root / "ledger"
+    params = AllocationParams(max_positions=1, min_confidence=0.0, total_capital=total_capital, per_ticker_exposure_cap=1.0, position_sizing="equal", cash_buffer_ratio=cash_buffer_ratio)
+    result = run_central_backtest(entities, start=signal_day, end=signal_day, alloc_params=params, data_provider=provider, ledger_dir=ledger_dir)
+    ledger = EntityPositionLedger(base_dir=ledger_dir)
+    if return_ledger:
+        return result, ledger
+    positions = ledger.open_positions()
+    assert len(positions) == 1
+    return result, positions[0]

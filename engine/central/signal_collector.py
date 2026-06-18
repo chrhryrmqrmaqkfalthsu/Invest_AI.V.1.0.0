@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Mapping, Optional
+from typing import Iterable, Optional
 
 import pandas as pd
 
@@ -32,16 +32,19 @@ class SignalSnapshot:
 
 
 class CacheOnlyDataProvider:
-    """Read-only provider that refuses to download market data.
+    """Read-only provider that refuses to download market data."""
 
-    It loads existing local OHLCV cache files and optional market/sentiment CSVs
-    under ``data/_system``. Missing files return neutral contexts instead of
-    attempting any network access.
-    """
-
-    def __init__(self, *, cache_roots: Optional[Iterable[str | Path]] = None, system_dir: str | Path = "data/_system") -> None:
+    def __init__(
+        self,
+        *,
+        cache_roots: Optional[Iterable[str | Path]] = None,
+        system_dir: str | Path = "data/_system",
+        recompute_indicators: bool = True,
+    ) -> None:
         self.cache_roots = [Path(p) for p in (cache_roots or ["data/_system/research"])]
         self.system_dir = Path(system_dir)
+        self.recompute_indicators = bool(recompute_indicators)
+        self.indicator_fallback_warnings: list[str] = []
         self._price_cache: dict[str, pd.DataFrame] = {}
         self._market_history: Optional[pd.DataFrame] = None
         self._sentiment_cache: dict[str, dict] = {}
@@ -53,11 +56,17 @@ class CacheOnlyDataProvider:
         path = self._find_price_cache(ticker_u)
         if path is None:
             raise FileNotFoundError(f"cache-only OHLCV not found for {ticker_u}")
-        df = _read_df(path)
-        df = _normalize_price_df(df)
-        missing = [c for c in ("MA5", "MA20", "MACD", "RSI", "ATR") if c not in df.columns]
-        if missing:
-            df = calc_indicators(df)
+        df = _normalize_price_df(_read_df(path))
+        if self.recompute_indicators and _has_raw_ohlcv(df):
+            df = calc_indicators(df[["Open", "High", "Low", "Close", "Volume"]].copy())
+        else:
+            if self.recompute_indicators and not _has_raw_ohlcv(df):
+                self.indicator_fallback_warnings.append(f"{ticker_u}: raw OHLCV columns missing; using cached indicators")
+            missing = [c for c in ("MA5", "MA20", "MACD", "RSI", "ATR") if c not in df.columns]
+            if missing and _has_raw_ohlcv(df):
+                df = calc_indicators(df[["Open", "High", "Low", "Close", "Volume"]].copy())
+            elif missing:
+                raise ValueError(f"{ticker_u}: missing indicator columns and raw OHLCV unavailable: {missing}")
         self._price_cache[ticker_u] = df
         return df
 
@@ -219,6 +228,10 @@ def _normalize_price_df(df: pd.DataFrame) -> pd.DataFrame:
         out.index = pd.to_datetime(out.index, errors="coerce")
     out = out[~out.index.isna()].sort_index()
     return out
+
+
+def _has_raw_ohlcv(df: pd.DataFrame) -> bool:
+    return {"Open", "High", "Low", "Close", "Volume"}.issubset(set(df.columns))
 
 
 def _index_for_date(df: pd.DataFrame, date) -> Optional[int]:

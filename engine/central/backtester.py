@@ -231,10 +231,11 @@ def _process_exits(day, ledger, broker: SimBroker, provider: CacheOnlyDataProvid
         execution = ledger.dispatch_execution(intent.intent_id, broker, client_order_id)
         order = broker.get_order(execution.order_id)
         if order is None:
-            return
+            _record_reject(result, snap.date, pos.entity_id, pos.ticker, "sell", pos.open_shares, order)
+            continue
         if order.status != OrderStatus.FILLED:
             _record_reject(result, snap.date, pos.entity_id, pos.ticker, "sell", pos.open_shares, order)
-            return
+            continue
         ledger.apply_fill(execution.execution_id, order)
         result.trades.append(
             TradeRecord(

@@ -106,6 +106,7 @@ def run_policy_search(
     cfg = settings or SearchSettings()
     combos = _parameter_combinations(search_space, method=method, n_random=n_random, seed=cfg.random_seed)
     provider_factory = data_provider_factory or (lambda: CacheOnlyDataProvider())
+    run_ledger_root = _ledger_run_root(cfg)
 
     rows: list[CandidateResult] = []
     for idx, params in enumerate(combos, start=1):
@@ -124,7 +125,7 @@ def run_policy_search(
         period_scores: list[PeriodScore] = []
         for period in periods:
             provider = provider_factory()
-            ledger_dir = _ledger_dir(cfg, idx, period.label)
+            ledger_dir = _ledger_dir(cfg, run_ledger_root, idx, period.label)
             bt = run_central_backtest(
                 adjusted_entities,
                 period.start,
@@ -276,11 +277,18 @@ def _candidate_result(rank: int, params: dict, alloc: AllocationParams, periods:
     )
 
 
-def _ledger_dir(settings: SearchSettings, combo_idx: int, label: str) -> str:
+def _ledger_run_root(settings: SearchSettings) -> Optional[Path]:
+    if not settings.ledger_root:
+        return None
+    root = Path(settings.ledger_root)
+    root.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix="run_", dir=root))
+
+
+def _ledger_dir(settings: SearchSettings, run_root: Optional[Path], combo_idx: int, label: str) -> str:
     safe_label = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in str(label or "period"))[:40]
-    if settings.ledger_root:
-        root = Path(settings.ledger_root)
-        return str(root / f"combo_{combo_idx:05d}_{safe_label}")
+    if run_root is not None:
+        return str(run_root / f"combo_{combo_idx:05d}_{safe_label}")
     return tempfile.mkdtemp(prefix=f"central_policy_search_{combo_idx:05d}_{safe_label}_")
 
 

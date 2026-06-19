@@ -1,12 +1,15 @@
 """Stage3 row to live ``parameters.json`` payload adapter.
 
-v1 intentionally does not write files. It builds and validates dictionaries so a
-later CLI/export step can decide where and when to persist them.
+The adapter builds validated dictionaries and can write them to a non-live output
+area with atomic replacement. Writing to ``data/symbols`` is blocked unless the
+caller explicitly opts in.
 """
 from __future__ import annotations
 
 import copy
 import json
+import os
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -137,6 +140,72 @@ def build_parameters_from_stage3_row(
     return payload
 
 
+def write_parameters(
+    params: Mapping[str, Any],
+    out_path: str | Path,
+    *,
+    dry_run: bool = True,
+    backup: bool = True,
+    allow_live_symbols: bool = False,
+) -> dict[str, Any]:
+    """Validate and optionally write a parameters payload atomically.
+
+    ``dry_run`` is the default and never creates directories or files. Actual
+    writes use a same-directory temporary file followed by ``os.replace``. If
+    the target already exists and backup is enabled, a timestamped ``.bak`` copy
+    is created before replacement.
+    """
+    payload = copy.deepcopy(dict(params or {}))
+    ticker = _payload_ticker(payload)
+    _dry_validate_live_payload(ticker, payload)
+    path = Path(out_path)
+    live_symbols_path = _is_under_live_symbols(path)
+    backup_forced = False
+    if live_symbols_path:
+        if not allow_live_symbols:
+            raise ParametersAdapterError(f"refusing to write live symbols path without allow_live_symbols=True: {path}")
+        if not backup:
+            backup_forced = True
+            backup = True
+    text = _json_dumps(payload)
+    report = {
+        "dry_run": bool(dry_run),
+        "written": False,
+        "skipped": bool(dry_run),
+        "out_path": str(path),
+        "backup": bool(backup),
+        "backup_forced": bool(backup_forced),
+        "backup_path": None,
+        "live_symbols_path": bool(live_symbols_path),
+        "ticker": ticker,
+        "promotion_id": str((payload.get("promotion") or {}).get("promotion_id") or ""),
+        "rulebook_hash": str((payload.get("promotion") or {}).get("rulebook_hash") or ""),
+        "bytes": len(text.encode("utf-8")),
+    }
+    if dry_run:
+        return report
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and backup:
+        backup_path = _backup_path(path)
+        shutil.copy2(path, backup_path)
+        report["backup_path"] = str(backup_path)
+    tmp_path = _tmp_path(path)
+    try:
+        tmp_path.write_text(text, encoding="utf-8")
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        finally:
+            pass
+        raise
+    report["written"] = True
+    report["skipped"] = False
+    return report
+
+
 def _load_jsonl(path: str | Path) -> list[dict[str, Any]]:
     p = Path(path)
     if not p.exists():
@@ -252,6 +321,47 @@ def _dry_validate_live_payload(ticker: str, payload: Mapping[str, Any]) -> None:
         _validate_parameters(ticker, Path(f"<stage3-adapter>/{ticker}/parameters.json"), payload)
     except LiveUniverseError as exc:
         raise ParametersAdapterError(f"live universe validation failed for {ticker}: {exc}") from exc
+
+
+def _payload_ticker(payload: Mapping[str, Any]) -> str:
+    asset_meta = payload.get("asset_meta") if isinstance(payload, Mapping) else None
+    rulebook = payload.get("rulebook") if isinstance(payload, Mapping) else None
+    ticker = ""
+    if isinstance(asset_meta, Mapping):
+        ticker = _normalize_ticker(asset_meta.get("ticker"))
+    if not ticker and isinstance(rulebook, Mapping):
+        ticker = _normalize_ticker(rulebook.get("ticker"))
+    if not ticker:
+        raise ParametersAdapterError("parameters payload ticker missing")
+    return ticker
+
+
+def _json_dumps(payload: Mapping[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+
+
+def _backup_path(path: Path) -> Path:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    candidate = path.with_name(f"{path.name}.bak.{stamp}")
+    counter = 1
+    while candidate.exists():
+        candidate = path.with_name(f"{path.name}.bak.{stamp}.{counter}")
+        counter += 1
+    return candidate
+
+
+def _tmp_path(path: Path) -> Path:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    return path.with_name(f".{path.name}.tmp.{stamp}.{os.getpid()}")
+
+
+def _is_under_live_symbols(path: Path) -> bool:
+    try:
+        resolved = path.resolve(strict=False)
+        live_root = Path("data/symbols").resolve(strict=False)
+        return resolved == live_root or resolved.is_relative_to(live_root)
+    except Exception:
+        return False
 
 
 def _require_non_empty(value: Any, name: str) -> str:

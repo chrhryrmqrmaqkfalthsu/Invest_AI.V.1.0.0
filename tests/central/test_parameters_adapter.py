@@ -1,5 +1,8 @@
 import copy
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,6 +15,7 @@ from engine.central.parameters_adapter import (
     load_asset_meta_for_ticker,
     load_final_rulebooks,
     load_stage3_catalog,
+    write_parameters,
 )
 from engine.core.metadata import compute_rulebook_hash
 
@@ -204,3 +208,130 @@ def test_dry_run_payload_can_be_json_serialized():
     payload = _build()
     text = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     assert '"promotion_id": "stage3_test_promotion"' in text
+
+
+def test_write_parameters_dry_run_does_not_create_file(tmp_path):
+    out_path = tmp_path / "CW" / "parameters.json"
+    report = write_parameters(_build(), out_path)
+    assert report["dry_run"] is True
+    assert report["written"] is False
+    assert report["skipped"] is True
+    assert report["out_path"] == str(out_path)
+    assert not out_path.exists()
+
+
+def test_write_parameters_actual_write_creates_valid_json(tmp_path):
+    out_path = tmp_path / "CW" / "parameters.json"
+    report = write_parameters(_build(), out_path, dry_run=False)
+    assert report["written"] is True
+    assert out_path.exists()
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert sorted(payload.keys()) == ["asset_meta", "promotion", "rulebook", "saved_at", "version"]
+    assert payload["asset_meta"]["ticker"] == "CW"
+    assert payload["promotion"]["promotion_id"] == PROMOTION_ID
+
+
+def test_write_parameters_backup_existing_file(tmp_path):
+    out_path = tmp_path / "CW" / "parameters.json"
+    out_path.parent.mkdir(parents=True)
+    out_path.write_text('{"old": true}\n', encoding="utf-8")
+    report = write_parameters(_build(), out_path, dry_run=False, backup=True)
+    assert report["written"] is True
+    backup_path = Path(report["backup_path"])
+    assert backup_path.exists()
+    assert json.loads(backup_path.read_text(encoding="utf-8")) == {"old": True}
+    assert json.loads(out_path.read_text(encoding="utf-8"))["asset_meta"]["ticker"] == "CW"
+
+
+def test_write_parameters_atomic_failure_keeps_existing_file_and_cleans_tmp(tmp_path, monkeypatch):
+    out_path = tmp_path / "CW" / "parameters.json"
+    out_path.parent.mkdir(parents=True)
+    out_path.write_text('{"old": true}\n', encoding="utf-8")
+
+    def boom(src, dst):
+        raise RuntimeError("replace failed")
+
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(RuntimeError, match="replace failed"):
+        write_parameters(_build(), out_path, dry_run=False, backup=False)
+    assert json.loads(out_path.read_text(encoding="utf-8")) == {"old": True}
+    assert list(out_path.parent.glob(".parameters.json.tmp.*")) == []
+
+
+def test_write_parameters_refuses_live_symbols_path_without_explicit_allow():
+    with pytest.raises(ParametersAdapterError, match="refusing to write live symbols path"):
+        write_parameters(_build(), Path("data/symbols/CW/parameters.json"), dry_run=True)
+
+
+def test_write_parameters_live_symbols_path_forces_backup_when_allowed():
+    report = write_parameters(
+        _build(),
+        Path("data/symbols/CW/parameters.json"),
+        dry_run=True,
+        backup=False,
+        allow_live_symbols=True,
+    )
+    assert report["live_symbols_path"] is True
+    assert report["backup"] is True
+    assert report["backup_forced"] is True
+    assert report["written"] is False
+
+
+def test_write_parameters_revalidates_and_rejects_invalid_payload(tmp_path):
+    payload = _build()
+    payload["rulebook"]["ticker"] = "WRONG"
+    with pytest.raises(ParametersAdapterError, match="live universe validation failed"):
+        write_parameters(payload, tmp_path / "CW" / "parameters.json", dry_run=False)
+    assert not (tmp_path / "CW" / "parameters.json").exists()
+
+
+def test_cli_dry_run_outputs_report_and_does_not_write(tmp_path):
+    out_dir = tmp_path / "out"
+    proc = _run_cli(out_dir)
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is True
+    assert payload["mode"] == "dry_run"
+    assert payload["write_report"]["written"] is False
+    assert payload["payload_summary"]["rulebook_key_count"] == 88
+    assert not (out_dir / "CW" / "parameters.json").exists()
+
+
+def test_cli_write_to_tmp_out_dir_creates_file(tmp_path):
+    out_dir = tmp_path / "out"
+    proc = _run_cli(out_dir, "--write")
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["mode"] == "write"
+    out_path = out_dir / "CW" / "parameters.json"
+    assert out_path.exists()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["promotion"]["promotion_id"] == PROMOTION_ID
+
+
+def _run_cli(out_dir: Path, *extra_args: str):
+    args = [
+        sys.executable,
+        "-m",
+        "engine.central.parameters_cli",
+        "--catalog",
+        str(CATALOG_PATH),
+        "--final",
+        str(FINAL_PATH),
+        "--ticker",
+        "CW",
+        "--rank",
+        "1",
+        "--promotion-id",
+        PROMOTION_ID,
+        "--version",
+        VERSION,
+        "--source-run-dir",
+        "exp_cw_stage3_20260613_0001",
+        "--source-run-id",
+        "exp_cw_stage3_20260613_0001",
+        "--out-dir",
+        str(out_dir),
+    ]
+    args.extend(extra_args)
+    return subprocess.run(args, text=True, capture_output=True, check=False)

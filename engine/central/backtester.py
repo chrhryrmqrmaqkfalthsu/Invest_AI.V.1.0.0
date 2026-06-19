@@ -199,12 +199,20 @@ def _process_exits(day, ledger, broker: SimBroker, provider: CacheOnlyDataProvid
             close=_float(row.get("Close", 0.0)),
             next_open=next_open,
         )
+        sell_omen_score = _optional_float(row.get("sell_omen_score"))
         decision = evaluate_exit(
             state,
             snap,
             rb,
             MarketContext(holding_trading_days=_holding_days(df, pos.entry_date, idx), current_trade_date=snap.date),
-            ExitExecutionConfig(mode="base", use_next_open=True, fallback_to_trigger_price=True),
+            ExitExecutionConfig(
+                mode="base",
+                use_next_open=True,
+                fallback_to_trigger_price=True,
+                sell_omen_enabled=bool(getattr(rb, "sell_omen_enabled", False)),
+                sell_omen_score=sell_omen_score,
+                sell_omen_threshold=_optional_float(getattr(rb, "sell_omen_threshold", None)),
+            ),
         )
         if decision.updated_position is not None:
             _copy_state_to_record(pos, decision.updated_position)
@@ -454,6 +462,15 @@ def _record_reject(result: BacktestResult, date: str, entity_id: str, ticker: st
 def _client_order_id(side: str, entity_id: str, ticker: str, date: str) -> str:
     seed = f"cbt-{side}-{ticker}-{entity_id}-{date}"
     return seed[:48]
+
+
+def _optional_float(value) -> Optional[float]:
+    try:
+        if value is None or pd.isna(value):
+            return None
+        return float(value)
+    except Exception:
+        return None
 
 
 def _float(value) -> float:

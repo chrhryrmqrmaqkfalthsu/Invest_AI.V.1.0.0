@@ -169,6 +169,31 @@ def test_cache_only_provider_recomputes_indicators_from_raw_ohlcv(tmp_path):
     assert loaded["MA5"].iloc[-1] != 999999.0
 
 
+def test_cache_only_provider_attaches_sell_omen_scores_and_guards(tmp_path):
+    cache_dir = tmp_path / "stage0" / "ohlcv_cache"
+    cache_dir.mkdir(parents=True)
+    df = _price_df(days=20)
+    df.to_pickle(cache_dir / "AAA.pkl")
+    good_date = pd.Timestamp(df.index[10]).strftime("%Y-%m-%d")
+    bad_date = pd.Timestamp(df.index[11]).strftime("%Y-%m-%d")
+    score_path = tmp_path / "sell_omen_scores.csv"
+    pd.DataFrame(
+        [
+            {"ticker": "AAA", "Date": good_date, "sell_omen_score": 0.77, "model_train_end": "2024-12-31", "score_year": 2025},
+            {"ticker": "AAA", "Date": bad_date, "sell_omen_score": 0.99, "model_train_end": bad_date, "score_year": 2025},
+        ]
+    ).to_csv(score_path, index=False)
+    provider = CacheOnlyDataProvider(cache_roots=[tmp_path], sell_omen_score_path=score_path)
+    loaded = provider.load_price_df("AAA")
+    assert loaded.loc[pd.Timestamp(good_date), "sell_omen_score"] == pytest.approx(0.77)
+    assert pd.isna(loaded.loc[pd.Timestamp(bad_date), "sell_omen_score"])
+    assert loaded.loc[pd.Timestamp(good_date), "sell_omen_model_train_end"] == "2024-12-31"
+    assert loaded.loc[pd.Timestamp(good_date), "sell_omen_score_year"] == 2025
+    assert provider.sell_omen_guard_violations == 1
+    assert provider.sell_omen_loaded_rows == 2
+    assert provider.sell_omen_missing_tickers == set()
+
+
 def test_allocation_policy_limits_and_caps(tmp_path):
     ledger = EntityPositionLedger(base_dir=tmp_path / "ledger")
     candidates = [
@@ -233,6 +258,55 @@ def test_backtester_cash_buffer_caps_d_close_sized_shares(tmp_path):
     assert pos.open_shares == pytest.approx(98.0)
 
 
+def test_sell_omen_disabled_ignores_high_score(tmp_path):
+    df = _sell_omen_df({1: 0.95})
+    result = _run_sell_omen_case(tmp_path, df, sell_omen_enabled=False)
+    assert _sell_trades(result) == []
+    assert result.reconcile_failures == []
+
+
+def test_sell_omen_enabled_exits_when_score_crosses_threshold(tmp_path):
+    df = _sell_omen_df({1: 0.95})
+    result = _run_sell_omen_case(tmp_path, df, sell_omen_enabled=True, threshold=0.5)
+    sells = _sell_trades(result)
+    assert len(sells) == 1
+    assert sells[0].reason == "sell_omen"
+    assert result.reconcile_failures == []
+
+
+def test_sell_omen_missing_score_does_not_exit(tmp_path):
+    df = _sell_omen_df({})
+    result = _run_sell_omen_case(tmp_path, df, sell_omen_enabled=True, threshold=0.5)
+    assert _sell_trades(result) == []
+    assert result.reconcile_failures == []
+
+
+def test_sell_omen_guarded_score_row_is_ignored(tmp_path):
+    df = _sell_omen_df({})
+    root = tmp_path / "guarded"
+    cache_dir = root / "stage0" / "ohlcv_cache"
+    cache_dir.mkdir(parents=True)
+    raw = df[["Open", "High", "Low", "Close", "Volume"]]
+    raw.to_pickle(cache_dir / "AAA.pkl")
+    exit_date = pd.Timestamp(df.index[71]).strftime("%Y-%m-%d")
+    score_path = root / "sell_omen_scores.csv"
+    pd.DataFrame(
+        [{"ticker": "AAA", "Date": exit_date, "sell_omen_score": 0.95, "model_train_end": exit_date, "score_year": 2025}]
+    ).to_csv(score_path, index=False)
+    provider = CacheOnlyDataProvider(cache_roots=[root], sell_omen_score_path=score_path)
+    result = _run_sell_omen_case(tmp_path, None, sell_omen_enabled=True, threshold=0.5, provider=provider)
+    assert _sell_trades(result) == []
+    assert provider.sell_omen_guard_violations == 1
+    assert result.reconcile_failures == []
+
+
+def test_sell_omen_d_plus_one_score_does_not_affect_d_day_exit(tmp_path):
+    df = _sell_omen_df({1: 0.1, 2: 0.99})
+    result = _run_sell_omen_case(tmp_path, df, sell_omen_enabled=True, threshold=0.5)
+    assert _sell_trades(result) == []
+    assert result.reconcile_failures == []
+
+
 def test_common_validation_window_recent_1y(tmp_path):
     catalog = tmp_path / "stage3_profile_catalog.jsonl"
     catalog.write_text(json.dumps(_catalog_row()) + "\n", encoding="utf-8")
@@ -271,3 +345,63 @@ def _run_single_day_gap_case(root: Path, df: pd.DataFrame, *, total_capital: flo
     positions = ledger.open_positions()
     assert len(positions) == 1
     return result, positions[0]
+
+
+def _sell_omen_rulebook(ticker="AAA", *, enabled=True, threshold=0.5):
+    rb = _rulebook(ticker, max_holding_days=99999)
+    rb.update(
+        {
+            "stop_loss_atr": 1000.0,
+            "take_profit_atr": 1000.0,
+            "trailing_atr": 1000.0,
+            "sell_omen_enabled": bool(enabled),
+            "sell_omen_threshold": float(threshold),
+        }
+    )
+    return rb
+
+
+def _sell_omen_catalog_row(ticker="AAA", rulebook_hash="omen111222333", *, enabled=True, threshold=0.5):
+    row = _catalog_row(ticker, rulebook_hash, max_holding_days=99999)
+    row["rulebook"] = _sell_omen_rulebook(ticker, enabled=enabled, threshold=threshold)
+    return row
+
+
+def _sell_omen_df(score_by_offset: dict[int, float]) -> pd.DataFrame:
+    raw = _price_df(days=90, base=100.0)
+    out = calc_indicators(raw)
+    out["sell_omen_score"] = pd.NA
+    out["sell_omen_model_train_end"] = pd.NA
+    out["sell_omen_score_year"] = pd.NA
+    signal_idx = 70
+    for offset, score in score_by_offset.items():
+        idx = signal_idx + int(offset)
+        out.loc[out.index[idx], "sell_omen_score"] = float(score)
+        out.loc[out.index[idx], "sell_omen_model_train_end"] = "2024-12-31"
+        out.loc[out.index[idx], "sell_omen_score_year"] = 2025
+    return out
+
+
+def _run_sell_omen_case(tmp_path: Path, df: pd.DataFrame | None, *, sell_omen_enabled: bool, threshold: float = 0.5, provider=None):
+    root = tmp_path / f"sell_omen_{len(list(tmp_path.iterdir())) if tmp_path.exists() else 0}"
+    root.mkdir(parents=True, exist_ok=True)
+    catalog = root / "stage3_profile_catalog.jsonl"
+    catalog.write_text(json.dumps(_sell_omen_catalog_row(enabled=sell_omen_enabled, threshold=threshold)) + "\n", encoding="utf-8")
+    entities = load_entities_from_catalog(catalog)
+    provider = provider or MemoryProvider({"AAA": df})
+    price_df = df if df is not None else provider.load_price_df("AAA")
+    start = price_df.index[70].strftime("%Y-%m-%d")
+    end = price_df.index[71].strftime("%Y-%m-%d")
+    params = AllocationParams(max_positions=1, min_confidence=0.0, total_capital=10_000.0, per_ticker_exposure_cap=1.0, position_sizing="equal")
+    return run_central_backtest(
+        entities,
+        start=start,
+        end=end,
+        alloc_params=params,
+        data_provider=provider,
+        ledger_dir=root / "ledger",
+    )
+
+
+def _sell_trades(result):
+    return [t for t in result.trades if t.side == "sell"]

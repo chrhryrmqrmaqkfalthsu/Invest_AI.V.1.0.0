@@ -13,6 +13,9 @@ from engine.learning.backtest import _lookup_signal_context, _precompute_topic_f
 from engine.strategies.evaluator import evaluate_signal
 from engine.strategies.rulebook import Rulebook
 
+DEFAULT_SELL_OMEN_SCORE_PATH = Path("data/_system/ml_sell_omen/sell_omen_scores_lr8d85.csv")
+SELL_OMEN_COLUMNS = ("sell_omen_score", "sell_omen_model_train_end", "sell_omen_score_year")
+
 
 @dataclass(frozen=True)
 class SignalSnapshot:
@@ -40,14 +43,22 @@ class CacheOnlyDataProvider:
         cache_roots: Optional[Iterable[str | Path]] = None,
         system_dir: str | Path = "data/_system",
         recompute_indicators: bool = True,
+        sell_omen_score_path: Optional[str | Path] = DEFAULT_SELL_OMEN_SCORE_PATH,
     ) -> None:
         self.cache_roots = [Path(p) for p in (cache_roots or ["data/_system/research"])]
         self.system_dir = Path(system_dir)
         self.recompute_indicators = bool(recompute_indicators)
+        self.sell_omen_score_path = Path(sell_omen_score_path) if sell_omen_score_path else None
         self.indicator_fallback_warnings: list[str] = []
+        self.sell_omen_warnings: list[str] = []
+        self.sell_omen_guard_violations: int = 0
+        self.sell_omen_missing_tickers: set[str] = set()
+        self.sell_omen_loaded_rows: int = 0
         self._price_cache: dict[str, pd.DataFrame] = {}
         self._market_history: Optional[pd.DataFrame] = None
         self._sentiment_cache: dict[str, dict] = {}
+        self._sell_omen_score_table: Optional[pd.DataFrame] = None
+        self._sell_omen_score_table_loaded: bool = False
 
     def load_price_df(self, ticker: str) -> pd.DataFrame:
         ticker_u = str(ticker or "").upper()
@@ -67,6 +78,7 @@ class CacheOnlyDataProvider:
                 df = calc_indicators(df[["Open", "High", "Low", "Close", "Volume"]].copy())
             elif missing:
                 raise ValueError(f"{ticker_u}: missing indicator columns and raw OHLCV unavailable: {missing}")
+        df = self._attach_sell_omen_scores(ticker_u, df)
         self._price_cache[ticker_u] = df
         return df
 
@@ -124,6 +136,70 @@ class CacheOnlyDataProvider:
         if not found:
             return None
         return sorted(found, key=lambda p: (p.stat().st_mtime, str(p)), reverse=True)[0]
+
+    def _load_sell_omen_score_table(self) -> Optional[pd.DataFrame]:
+        if self._sell_omen_score_table_loaded:
+            return self._sell_omen_score_table
+        self._sell_omen_score_table_loaded = True
+        path = self.sell_omen_score_path
+        if path is None:
+            self.sell_omen_warnings.append("sell_omen_score_path disabled")
+            self._sell_omen_score_table = None
+            return None
+        if not path.exists():
+            self.sell_omen_warnings.append(f"sell omen score table missing: {path}")
+            self._sell_omen_score_table = None
+            return None
+        try:
+            table = pd.read_csv(path)
+        except Exception as exc:
+            self.sell_omen_warnings.append(f"sell omen score table read failed: {path}: {exc}")
+            self._sell_omen_score_table = None
+            return None
+        required = {"ticker", "Date", "sell_omen_score", "model_train_end"}
+        missing = sorted(required - set(table.columns))
+        if missing:
+            self.sell_omen_warnings.append(f"sell omen score table missing columns: {missing}")
+            self._sell_omen_score_table = None
+            return None
+        out = table.copy()
+        out["ticker"] = out["ticker"].astype(str).str.upper()
+        out["Date"] = pd.to_datetime(out["Date"], errors="coerce").dt.normalize()
+        out["model_train_end"] = pd.to_datetime(out["model_train_end"], errors="coerce").dt.normalize()
+        out["sell_omen_score"] = pd.to_numeric(out["sell_omen_score"], errors="coerce")
+        if "score_year" not in out.columns:
+            out["score_year"] = pd.NA
+        out = out.dropna(subset=["ticker", "Date"])
+        self.sell_omen_loaded_rows = int(len(out))
+        self._sell_omen_score_table = out
+        return self._sell_omen_score_table
+
+    def _attach_sell_omen_scores(self, ticker: str, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+        _ensure_sell_omen_columns(out)
+        table = self._load_sell_omen_score_table()
+        if table is None or table.empty:
+            self.sell_omen_missing_tickers.add(str(ticker or "").upper())
+            return out
+        ticker_u = str(ticker or "").upper()
+        sub = table[table["ticker"] == ticker_u].copy()
+        if sub.empty:
+            self.sell_omen_missing_tickers.add(ticker_u)
+            return out
+        sub = sub.drop_duplicates(subset=["Date"], keep="last").set_index("Date").sort_index()
+        dates = pd.Series(pd.to_datetime(out.index, errors="coerce").normalize(), index=out.index)
+        score = dates.map(sub["sell_omen_score"])
+        model_train_end = pd.to_datetime(dates.map(sub["model_train_end"]), errors="coerce")
+        score_year = dates.map(sub["score_year"])
+        violations = model_train_end.notna() & dates.notna() & (model_train_end >= dates)
+        violation_count = int(violations.sum())
+        if violation_count:
+            self.sell_omen_guard_violations += violation_count
+        out["sell_omen_score"] = pd.to_numeric(score, errors="coerce")
+        out.loc[violations, "sell_omen_score"] = pd.NA
+        out["sell_omen_model_train_end"] = model_train_end.dt.strftime("%Y-%m-%d")
+        out["sell_omen_score_year"] = score_year
+        return out
 
 
 class SignalCollector:
@@ -232,6 +308,12 @@ def _normalize_price_df(df: pd.DataFrame) -> pd.DataFrame:
 
 def _has_raw_ohlcv(df: pd.DataFrame) -> bool:
     return {"Open", "High", "Low", "Close", "Volume"}.issubset(set(df.columns))
+
+
+def _ensure_sell_omen_columns(df: pd.DataFrame) -> None:
+    for col in SELL_OMEN_COLUMNS:
+        if col not in df.columns:
+            df[col] = pd.NA
 
 
 def _index_for_date(df: pd.DataFrame, date) -> Optional[int]:

@@ -36,6 +36,7 @@ class SearchSettings:
     low_trade_shortfall_penalty: float = 5.0
     random_seed: int = 0
     ledger_root: str = ""
+    persist_ledger: bool = False
 
 
 @dataclass(frozen=True)
@@ -133,6 +134,8 @@ def run_policy_search(
                 alloc,
                 data_provider=provider,
                 ledger_dir=ledger_dir,
+                persist_ledger=bool(cfg.persist_ledger),
+                flush_ledger_on_finish=False,
             )
             period_scores.append(_period_score(period, bt))
         rows.append(_candidate_result(0, params, alloc, period_scores, cfg))
@@ -288,7 +291,9 @@ def _ledger_run_root(settings: SearchSettings) -> Optional[Path]:
 def _ledger_dir(settings: SearchSettings, run_root: Optional[Path], combo_idx: int, label: str) -> str:
     safe_label = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in str(label or "period"))[:40]
     if run_root is not None:
-        return str(run_root / f"combo_{combo_idx:05d}_{safe_label}")
+        path = run_root / f"combo_{combo_idx:05d}_{safe_label}"
+        path.mkdir(parents=True, exist_ok=True)
+        return str(path)
     return tempfile.mkdtemp(prefix=f"central_policy_search_{combo_idx:05d}_{safe_label}_")
 
 

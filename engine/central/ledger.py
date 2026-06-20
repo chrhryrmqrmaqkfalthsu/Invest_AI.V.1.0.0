@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
@@ -57,7 +56,13 @@ def _order_side_value(side) -> str:
 
 
 class EntityPositionLedger:
-    """Entity-level ledger with fill-delta accounting and broker reconciliation."""
+    """Entity-level ledger with fill-delta accounting and broker reconciliation.
+
+    ``persist=False`` keeps the exact same in-memory accounting and reconcile
+    behavior but skips per-operation JSON writes. This is intended for heavy
+    backtests/policy-search runs. ``flush()`` can write the final in-memory state
+    once for diagnostics.
+    """
 
     def __init__(
         self,
@@ -65,17 +70,21 @@ class EntityPositionLedger:
         positions_path: Optional[Path] = None,
         executions_path: Optional[Path] = None,
         intents_path: Optional[Path] = None,
+        *,
+        persist: bool = True,
     ) -> None:
         root = Path(base_dir) if base_dir is not None else DEFAULT_LEDGER_DIR
         self.positions_path = Path(positions_path or (root / POSITIONS_FILE))
         self.executions_path = Path(executions_path or (root / EXECUTIONS_FILE))
         self.intents_path = Path(intents_path or (root / INTENTS_FILE))
+        self.persist = bool(persist)
         self._positions: Dict[str, PositionRecord] = {}
         self._executions: Dict[str, ExecutionRecord] = {}
         self._intents: Dict[str, IntentRecord] = {}
         self._reconcile_blocked_tickers: set[str] = set()
         self._load_error = ""
-        self._load_all()
+        if self.persist:
+            self._load_all()
 
     @property
     def load_error(self) -> str:
@@ -320,6 +329,21 @@ class EntityPositionLedger:
             "ledger_shares_by_ticker": ledger_by_ticker,
         }
 
+    def flush(self) -> None:
+        """Write the current in-memory state once, regardless of persist mode."""
+        self._write_positions()
+        self._write_executions()
+        self._write_intents()
+
+    def to_record_dicts(self) -> dict:
+        """Return a serializable snapshot of ledger records for tests/diagnostics."""
+        return {
+            "positions": {k: v.to_dict() for k, v in self._positions.items()},
+            "executions": {k: v.to_dict() for k, v in self._executions.items()},
+            "intents": {k: v.to_dict() for k, v in self._intents.items()},
+            "reconcile_blocked_tickers": sorted(self._reconcile_blocked_tickers),
+        }
+
     def _apply_buy_fill(self, execution: ExecutionRecord, fill_delta: float, price: float, order: Order) -> None:
         now = _now_iso()
         position = self._positions.get(execution.position_id) if execution.position_id else None
@@ -456,16 +480,31 @@ class EntityPositionLedger:
         return records, [normalize_ticker(t) for t in blocked]
 
     def _save_positions(self) -> None:
+        if not self.persist:
+            return
+        self._write_positions()
+
+    def _save_executions(self) -> None:
+        if not self.persist:
+            return
+        self._write_executions()
+
+    def _save_intents(self) -> None:
+        if not self.persist:
+            return
+        self._write_intents()
+
+    def _write_positions(self) -> None:
         self._atomic_write(
             self.positions_path,
             {k: v.to_dict() for k, v in self._positions.items()},
             extra={"reconcile_blocked_tickers": sorted(self._reconcile_blocked_tickers)},
         )
 
-    def _save_executions(self) -> None:
+    def _write_executions(self) -> None:
         self._atomic_write(self.executions_path, {k: v.to_dict() for k, v in self._executions.items()})
 
-    def _save_intents(self) -> None:
+    def _write_intents(self) -> None:
         self._atomic_write(self.intents_path, {k: v.to_dict() for k, v in self._intents.items()})
 
     def _atomic_write(self, path: Path, records: dict, extra: Optional[dict] = None) -> None:

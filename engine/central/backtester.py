@@ -130,6 +130,8 @@ def run_central_backtest(
     fill_policy: Optional[FillPolicy] = None,
     exit_via: str = "rulebook",
     use_llm_events: bool = False,
+    persist_ledger: bool = False,
+    flush_ledger_on_finish: Optional[bool] = None,
 ) -> BacktestResult:
     entity_list = list(entities)
     if not entity_list:
@@ -138,9 +140,10 @@ def run_central_backtest(
     collector = SignalCollector(provider, use_llm_events=use_llm_events)
     price_data = {ticker: provider.load_price_df(ticker) for ticker in sorted({e.ticker for e in entity_list})}
     broker = SimBroker(price_data, initial_cash=alloc_params.total_capital, fill_policy=fill_policy or FillPolicy())
+    ledger_dir_was_provided = ledger_dir is not None
     if ledger_dir is None:
         ledger_dir = tempfile.mkdtemp(prefix="central_bt_ledger_")
-    ledger = EntityPositionLedger(base_dir=Path(ledger_dir))
+    ledger = EntityPositionLedger(base_dir=Path(ledger_dir), persist=bool(persist_ledger))
     entity_by_id = {e.entity_id: e for e in entity_list}
     rb_by_entity = {e.entity_id: Rulebook.from_dict(e.rulebook) for e in entity_list}
 
@@ -173,6 +176,9 @@ def run_central_backtest(
             result.reconcile_failures.append({"date": pd.Timestamp(day).strftime("%Y-%m-%d"), **rec})
         result.equity_curve.append(_equity_point(day, broker, ledger))
     _finalize_result(result, alloc_params.total_capital, ledger, broker)
+    should_flush = (ledger_dir_was_provided and not bool(persist_ledger)) if flush_ledger_on_finish is None else bool(flush_ledger_on_finish)
+    if should_flush:
+        ledger.flush()
     return result
 
 

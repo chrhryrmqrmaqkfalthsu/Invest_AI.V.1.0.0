@@ -6,9 +6,11 @@ results with a robustness-oriented score.
 """
 from __future__ import annotations
 
+import calendar
 import statistics
 import tempfile
 from dataclasses import asdict, dataclass, field, replace
+from datetime import date
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Sequence
 
@@ -50,6 +52,18 @@ class PeriodScore:
     rejected: int
     final_equity: float
     reconcile_failures: int
+
+
+@dataclass(frozen=True)
+class SegmentReturn:
+    label: str
+    return_pct: float
+    start_equity: float
+    end_equity: float
+    is_partial: bool
+    start_date: str
+    end_date: str
+    trading_days: int
 
 
 @dataclass(frozen=True)
@@ -221,6 +235,122 @@ def robust_score_from_returns(
     return float(raw * multiplier - shortfall_penalty)
 
 
+def split_equity_curve_to_segment_returns(
+    equity_curve,
+    *,
+    granularity: str,
+    initial_equity: float,
+) -> list[SegmentReturn]:
+    """Split a continuous equity curve into compounded monthly/quarterly returns.
+
+    Segment returns are percent points, matching ``BacktestResult.total_return``
+    and ``robust_score_from_returns`` input units. Each segment starts from the
+    previous segment's ending equity; the first segment starts from
+    ``initial_equity``.
+    """
+    points = list(equity_curve or [])
+    if len(points) < 2:
+        raise ValueError("equity_curve must contain at least two points")
+    start_equity = float(initial_equity or 0.0)
+    if start_equity <= 0.0:
+        raise ValueError("initial_equity must be positive")
+    mode = str(granularity or "").lower()
+    if mode not in {"monthly", "quarterly"}:
+        raise ValueError(f"unsupported granularity: {granularity}")
+
+    rows = []
+    for point in points:
+        dt = _parse_date(getattr(point, "date", ""))
+        equity = float(getattr(point, "equity", 0.0) or 0.0)
+        if equity <= 0.0:
+            raise ValueError("equity points must have positive equity")
+        label = _segment_label(dt, mode)
+        rows.append((dt, label, equity))
+    rows.sort(key=lambda row: row[0])
+
+    grouped: list[tuple[str, list[tuple[date, str, float]]]] = []
+    for row in rows:
+        if not grouped or grouped[-1][0] != row[1]:
+            grouped.append((row[1], [row]))
+        else:
+            grouped[-1][1].append(row)
+
+    segments: list[SegmentReturn] = []
+    previous_end_equity = start_equity
+    for idx, (label, segment_rows) in enumerate(grouped):
+        segment_start_date = segment_rows[0][0]
+        segment_end_date = segment_rows[-1][0]
+        segment_end_equity = float(segment_rows[-1][2])
+        return_pct = (segment_end_equity / previous_end_equity - 1.0) * 100.0
+        calendar_start, calendar_end = _segment_calendar_bounds(label, mode)
+        is_partial = False
+        if idx == 0 and segment_start_date > calendar_start:
+            is_partial = True
+        if idx == len(grouped) - 1 and segment_end_date < calendar_end:
+            is_partial = True
+        segments.append(
+            SegmentReturn(
+                label=label,
+                return_pct=float(return_pct),
+                start_equity=float(previous_end_equity),
+                end_equity=float(segment_end_equity),
+                is_partial=bool(is_partial),
+                start_date=segment_start_date.isoformat(),
+                end_date=segment_end_date.isoformat(),
+                trading_days=len(segment_rows),
+            )
+        )
+        previous_end_equity = segment_end_equity
+    return segments
+
+
+def recompute_multiseg_robust(
+    backtest_result: BacktestResult,
+    *,
+    initial_equity: float,
+    granularities: Sequence[str] = ("monthly", "quarterly"),
+) -> dict:
+    """Recompute robust scores from a single OOS backtest's equity curve."""
+    trades = len(backtest_result.trades)
+    total_return = float(backtest_result.total_return or 0.0)
+    max_drawdown_pct = float(backtest_result.max_drawdown_pct or 0.0)
+    output: dict[str, dict] = {}
+    for granularity in granularities:
+        segments = split_equity_curve_to_segment_returns(
+            backtest_result.equity_curve,
+            granularity=granularity,
+            initial_equity=initial_equity,
+        )
+        returns = [seg.return_pct for seg in segments]
+        mean_return = sum(returns) / len(returns)
+        worst_return = min(returns)
+        best_return = max(returns)
+        return_stdev = statistics.pstdev(returns) if len(returns) > 1 else 0.0
+        robust = robust_score_from_returns(
+            returns,
+            max_drawdown_pct=max_drawdown_pct,
+            trades=trades,
+        )
+        output[str(granularity).lower()] = {
+            "robust_score": float(robust),
+            "mean_return": float(mean_return),
+            "worst_segment_return": float(worst_return),
+            "best_segment_return": float(best_return),
+            "return_stdev": float(return_stdev),
+            "segment_count": len(segments),
+            "negative_segment_count": sum(1 for value in returns if value < 0.0),
+            "positive_segment_count": sum(1 for value in returns if value > 0.0),
+            "total_return": total_return,
+            "segment_return_sum": float(sum(returns)),
+            "segment_compound_return_pct": float(_compound_return_pct(returns)),
+            "best_segment_to_total_ratio": _safe_ratio(best_return, total_return),
+            "max_drawdown_pct": max_drawdown_pct,
+            "trades": trades,
+            "segments": [asdict(seg) for seg in segments],
+        }
+    return output
+
+
 def _parameter_combinations(space: SearchSpace, *, method: str, n_random: Optional[int], seed: int) -> list[dict]:
     mode = str(method or "grid").lower()
     if mode == "grid":
@@ -301,6 +431,51 @@ def _candidate_to_dict(row: CandidateResult) -> dict:
     payload = asdict(row)
     payload["period_scores"] = [asdict(p) for p in row.period_scores]
     return payload
+
+
+def _parse_date(value) -> date:
+    try:
+        if hasattr(value, "date"):
+            return value.date()
+        return date.fromisoformat(str(value)[:10])
+    except Exception as exc:
+        raise ValueError(f"invalid equity point date: {value!r}") from exc
+
+
+def _segment_label(dt: date, granularity: str) -> str:
+    if granularity == "monthly":
+        return f"{dt.year:04d}-{dt.month:02d}"
+    quarter = (dt.month - 1) // 3 + 1
+    return f"{dt.year:04d}-Q{quarter}"
+
+
+def _segment_calendar_bounds(label: str, granularity: str) -> tuple[date, date]:
+    if granularity == "monthly":
+        year_s, month_s = label.split("-")
+        year = int(year_s)
+        month = int(month_s)
+        last_day = calendar.monthrange(year, month)[1]
+        return date(year, month, 1), date(year, month, last_day)
+    year_s, quarter_s = label.split("-Q")
+    year = int(year_s)
+    quarter = int(quarter_s)
+    start_month = (quarter - 1) * 3 + 1
+    end_month = start_month + 2
+    last_day = calendar.monthrange(year, end_month)[1]
+    return date(year, start_month, 1), date(year, end_month, last_day)
+
+
+def _compound_return_pct(return_pcts: Sequence[float]) -> float:
+    value = 1.0
+    for ret in return_pcts:
+        value *= 1.0 + float(ret or 0.0) / 100.0
+    return (value - 1.0) * 100.0
+
+
+def _safe_ratio(numerator: float, denominator: float) -> Optional[float]:
+    if abs(float(denominator or 0.0)) <= 1e-12:
+        return None
+    return float(numerator) / float(denominator)
 
 
 def _float(value) -> float:

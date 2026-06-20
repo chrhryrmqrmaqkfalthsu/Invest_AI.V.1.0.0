@@ -12,7 +12,7 @@ from typing import Iterable, Optional
 
 import pandas as pd
 
-from engine.central.allocation_policy import AllocationParams, BuyCandidate, decide_buys
+from engine.central.allocation_policy import AllocationParams, BuyCandidate, MIN_ORDER_SHARES, decide_buys
 from engine.central.entity_loader import EntityRecord
 from engine.central.ledger import EntityPositionLedger
 from engine.central.models import normalize_shares
@@ -256,7 +256,7 @@ def _process_exits(day, ledger, broker: SimBroker, provider: CacheOnlyDataProvid
 def _execute_buy(day, decision, ledger, broker: SimBroker, provider: CacheOnlyDataProvider, entity: EntityRecord, rb: Rulebook, alloc_params: AllocationParams, result: BacktestResult) -> None:
     d_close = _close_price_on_day(provider, decision.ticker, day)
     shares = _cash_capped_shares(broker.cash, decision.shares, d_close, alloc_params.cash_buffer_ratio)
-    if shares <= 0.0:
+    if shares <= MIN_ORDER_SHARES:
         result.rejected_orders.append(
             RejectedOrderRecord(
                 date=pd.Timestamp(day).strftime("%Y-%m-%d"),
@@ -311,7 +311,8 @@ def _cash_capped_shares(cash: float, requested_shares: float, d_close_price: flo
         return 0.0
     ratio = max(0.0, min(float(cash_buffer_ratio or 0.0), 1.0))
     max_affordable = (float(cash or 0.0) * ratio) / price
-    return normalize_shares(min(requested, max_affordable))
+    capped = normalize_shares(min(requested, max_affordable))
+    return capped if capped > MIN_ORDER_SHARES else 0.0
 
 
 def _initialize_record_from_entry(pos, entity: EntityRecord, rb: Rulebook, provider: CacheOnlyDataProvider, order, signal_day) -> None:

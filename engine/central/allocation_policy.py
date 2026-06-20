@@ -6,6 +6,8 @@ from typing import Iterable, Optional
 
 from engine.central.models import normalize_shares, normalize_ticker
 
+MIN_ORDER_SHARES = 1e-6
+
 
 @dataclass(frozen=True)
 class AllocationParams:
@@ -97,7 +99,7 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
         if notional <= max(float(params.min_notional or 0.0), 0.0):
             continue
         shares = normalize_shares(notional / price)
-        if shares <= 0.0:
+        if shares <= MIN_ORDER_SHARES:
             continue
         decisions.append(
             BuyDecision(
@@ -122,7 +124,7 @@ def _weights(scores: list[float], mode: str) -> list[float]:
     if str(mode or "").lower() == "equal":
         return [1.0 / len(scores)] * len(scores)
     total = sum(max(float(s), 0.0) for s in scores)
-    if total <= 0.0:
+    if total <= 0:
         return [1.0 / len(scores)] * len(scores)
     return [max(float(s), 0.0) / total for s in scores]
 

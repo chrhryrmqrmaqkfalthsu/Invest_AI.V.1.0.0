@@ -50,18 +50,23 @@ class BuyDecision:
 def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: AllocationParams) -> list[BuyDecision]:
     """Select and size BUY candidates.
 
-    The ledger is queried only through ``open_positions()``. Existing positions
-    for the same entity are skipped unless the candidate rulebook explicitly has
-    add_buy_enabled and the max add-buy count has not been reached.
+    ``max_positions`` is interpreted as a concurrent distinct-ticker cap for
+    entry positions. Existing positions for the same entity are skipped unless
+    the candidate rulebook explicitly allows add-buy.
     """
     open_positions = list(current_ledger.open_positions()) if current_ledger is not None else []
-    open_by_entity = {p.entity_id: p for p in open_positions if normalize_shares(getattr(p, "open_shares", 0.0)) > 0.0}
-    ticker_exposure = _ticker_exposure(open_positions)
-    selected_rows = []
+    active_open_positions = [p for p in open_positions if normalize_shares(getattr(p, "open_shares", 0.0)) > 0.0]
+    open_by_entity = {p.entity_id: p for p in active_open_positions}
+    open_tickers = {normalize_ticker(getattr(p, "ticker", "")) for p in active_open_positions if normalize_ticker(getattr(p, "ticker", ""))}
+    ticker_exposure = _ticker_exposure(active_open_positions)
+    max_tickers = max(int(params.max_positions or 0), 0)
+    remaining_new_ticker_slots = max(max_tickers - len(open_tickers), 0)
+
+    candidate_rows = []
     for cand in buy_candidates:
         ticker = normalize_ticker(cand.ticker)
         price = float(cand.price or 0.0)
-        if price <= 0.0:
+        if not ticker or price <= 0.0:
             continue
         confidence = float(cand.confidence or 0.0)
         if confidence < params.min_confidence:
@@ -77,13 +82,30 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
                 continue
             purpose = "add_buy"
             target_position_id = str(getattr(existing, "position_id", "") or "")
+        elif ticker in open_tickers:
+            # A different rulebook for an already-held ticker must not consume a
+            # new slot or create duplicate ticker exposure.
+            continue
         score = float(params.confidence_weight) * confidence + float(params.signal_strength_weight) * float(cand.strength or 0.0)
         if score <= 0.0:
             continue
-        selected_rows.append((score, cand, purpose, target_position_id, ticker, price))
+        candidate_rows.append((score, cand, purpose, target_position_id, ticker, price))
 
-    selected_rows.sort(key=lambda row: (row[0], row[1].confidence, row[1].strength, row[1].entity_id), reverse=True)
-    selected_rows = selected_rows[: max(int(params.max_positions or 0), 0)]
+    candidate_rows.sort(key=lambda row: (row[0], row[1].confidence, row[1].strength, row[1].entity_id), reverse=True)
+    selected_rows = []
+    selected_new_tickers: set[str] = set()
+    for row in candidate_rows:
+        purpose = row[2]
+        ticker = row[4]
+        if purpose == "add_buy":
+            selected_rows.append(row)
+            continue
+        if ticker in selected_new_tickers:
+            continue
+        if len(selected_new_tickers) >= remaining_new_ticker_slots:
+            continue
+        selected_rows.append(row)
+        selected_new_tickers.add(ticker)
     if not selected_rows:
         return []
 

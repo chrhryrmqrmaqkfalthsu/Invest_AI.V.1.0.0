@@ -5,6 +5,7 @@ broker fills, EntityPositionLedger accounting, and daily reconcile checks.
 """
 from __future__ import annotations
 
+import json
 import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -15,7 +16,7 @@ import pandas as pd
 from engine.central.allocation_policy import AllocationParams, BuyCandidate, MIN_ORDER_SHARES, decide_buys
 from engine.central.entity_loader import EntityRecord
 from engine.central.ledger import EntityPositionLedger
-from engine.central.models import normalize_shares
+from engine.central.models import normalize_shares, normalize_ticker
 from engine.central.signal_collector import CacheOnlyDataProvider, SignalCollector
 from engine.central.sim_broker import FillPolicy, SimBroker
 from engine.core.exit_policy import (
@@ -132,6 +133,8 @@ def run_central_backtest(
     use_llm_events: bool = False,
     persist_ledger: bool = False,
     flush_ledger_on_finish: Optional[bool] = None,
+    candidate_log_path: Optional[str | Path] = None,
+    candidate_log_append: bool = False,
 ) -> BacktestResult:
     entity_list = list(entities)
     if not entity_list:
@@ -146,6 +149,7 @@ def run_central_backtest(
     ledger = EntityPositionLedger(base_dir=Path(ledger_dir), persist=bool(persist_ledger))
     entity_by_id = {e.entity_id: e for e in entity_list}
     rb_by_entity = {e.entity_id: Rulebook.from_dict(e.rulebook) for e in entity_list}
+    candidate_log_rows: list[dict] = []
 
     result = BacktestResult()
     days = _trading_days(price_data.values(), start, end)
@@ -169,6 +173,8 @@ def run_central_backtest(
             for s in signals
         ]
         decisions = decide_buys(candidates, ledger, alloc_params)
+        if candidate_log_path is not None:
+            _append_candidate_log_rows(candidate_log_rows, day, candidates, decisions, ledger, provider, alloc_params)
         for decision in decisions:
             _execute_buy(day, decision, ledger, broker, provider, entity_by_id[decision.entity_id], rb_by_entity[decision.entity_id], alloc_params, result)
         rec = ledger.reconcile(broker)
@@ -176,6 +182,8 @@ def run_central_backtest(
             result.reconcile_failures.append({"date": pd.Timestamp(day).strftime("%Y-%m-%d"), **rec})
         result.equity_curve.append(_equity_point(day, broker, ledger))
     _finalize_result(result, alloc_params.total_capital, ledger, broker)
+    if candidate_log_path is not None:
+        _flush_candidate_log(candidate_log_path, candidate_log_rows, append=bool(candidate_log_append))
     should_flush = (ledger_dir_was_provided and not bool(persist_ledger)) if flush_ledger_on_finish is None else bool(flush_ledger_on_finish)
     if should_flush:
         ledger.flush()
@@ -319,6 +327,97 @@ def _cash_capped_shares(cash: float, requested_shares: float, d_close_price: flo
     max_affordable = (float(cash or 0.0) * ratio) / price
     capped = normalize_shares(min(requested, max_affordable))
     return capped if capped > MIN_ORDER_SHARES else 0.0
+
+
+def _append_candidate_log_rows(rows: list[dict], day, candidates: list[BuyCandidate], decisions, ledger: EntityPositionLedger, provider: CacheOnlyDataProvider, alloc_params: AllocationParams) -> None:
+    date_str = pd.Timestamp(day).strftime("%Y-%m-%d")
+    open_snapshot = _open_positions_snapshot(day, ledger, provider)
+    selected_entity_ids = {str(getattr(decision, "entity_id", "") or "") for decision in decisions or []}
+    for cand in candidates:
+        selected = str(cand.entity_id or "") in selected_entity_ids
+        allocation_score = _allocation_score_for_candidate(cand, alloc_params)
+        rows.append(
+            {
+                "date": date_str,
+                "entity_id": str(cand.entity_id or ""),
+                "ticker": normalize_ticker(cand.ticker),
+                "confidence": float(cand.confidence or 0.0),
+                "signal_strength": float(cand.strength or 0.0),
+                "allocation_score": float(allocation_score),
+                "signal_score": float(cand.signal_score or 0.0),
+                "selected": bool(selected),
+                "rejection_reason": _candidate_rejection_reason(cand, selected, ledger, alloc_params, allocation_score),
+                "open_positions_snapshot": open_snapshot,
+                "price_at_decision": float(cand.price or 0.0),
+            }
+        )
+
+
+def _allocation_score_for_candidate(cand: BuyCandidate, alloc_params: AllocationParams) -> float:
+    return float(alloc_params.confidence_weight) * float(cand.confidence or 0.0) + float(alloc_params.signal_strength_weight) * float(cand.strength or 0.0)
+
+
+def _candidate_rejection_reason(cand: BuyCandidate, selected: bool, ledger: EntityPositionLedger, alloc_params: AllocationParams, allocation_score: float) -> str:
+    if selected:
+        return ""
+    ticker = normalize_ticker(cand.ticker)
+    price = float(cand.price or 0.0)
+    if not ticker or price <= 0.0:
+        return "invalid_ticker_or_price"
+    confidence = float(cand.confidence or 0.0)
+    if confidence < float(alloc_params.min_confidence or 0.0):
+        return "below_min_confidence"
+    active_open_positions = [p for p in list(ledger.open_positions()) if normalize_shares(getattr(p, "open_shares", 0.0)) > 0.0]
+    open_by_entity = {str(getattr(p, "entity_id", "") or ""): p for p in active_open_positions}
+    open_tickers = {normalize_ticker(getattr(p, "ticker", "")) for p in active_open_positions if normalize_ticker(getattr(p, "ticker", ""))}
+    existing = open_by_entity.get(str(cand.entity_id or ""))
+    if existing is not None:
+        rb = dict(cand.rulebook or {})
+        if not bool(rb.get("add_buy_enabled", False)):
+            return "already_open_entity_add_buy_disabled"
+        if int(getattr(existing, "add_buy_count", 0) or 0) >= int(rb.get("add_buy_max_count", 0) or 0):
+            return "add_buy_max_count"
+    elif ticker in open_tickers:
+        return "already_held_ticker"
+    if allocation_score <= 0.0:
+        return "non_positive_allocation_score"
+    max_positions = max(int(alloc_params.max_positions or 0), 0)
+    if len(open_tickers) >= max_positions:
+        return "max_positions_full_or_ranked_out"
+    return "ranked_out_or_duplicate_ticker"
+
+
+def _open_positions_snapshot(day, ledger: EntityPositionLedger, provider: CacheOnlyDataProvider) -> list[dict]:
+    snapshot: list[dict] = []
+    for pos in list(ledger.open_positions()):
+        shares = normalize_shares(getattr(pos, "open_shares", 0.0))
+        if shares <= 0.0:
+            continue
+        ticker = normalize_ticker(getattr(pos, "ticker", ""))
+        current_price = _close_price_on_day(provider, ticker, day)
+        entry_price = float(getattr(pos, "avg_entry_price", 0.0) or 0.0)
+        unrealized_pnl_pct = ((current_price - entry_price) / entry_price * 100.0) if current_price > 0.0 and entry_price > 0.0 else 0.0
+        snapshot.append(
+            {
+                "position_id": str(getattr(pos, "position_id", "") or ""),
+                "entity_id": str(getattr(pos, "entity_id", "") or ""),
+                "ticker": ticker,
+                "open_shares": float(shares),
+                "avg_entry_price": float(entry_price),
+                "current_price": float(current_price or 0.0),
+                "unrealized_pnl_pct": float(unrealized_pnl_pct),
+            }
+        )
+    return snapshot
+
+
+def _flush_candidate_log(path: str | Path, rows: list[dict], *, append: bool = False) -> None:
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    mode = "a" if append else "w"
+    with open(out, mode, encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
 
 
 def _initialize_record_from_entry(pos, entity: EntityRecord, rb: Rulebook, provider: CacheOnlyDataProvider, order, signal_day) -> None:

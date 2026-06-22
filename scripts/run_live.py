@@ -89,7 +89,7 @@ def start_telegram_control(
         return None
 
     assert_no_legacy_run_bot(legacy_run_bot_pid_path)
-    bot = bot_factory(broker=broker, safety=safety, notifier=notifier, polling_owner="run_live")
+    bot = bot_factory(broker=broker, safety=safety, notifier=notifier, polling_owner="run_live", runner=runner)
     try:
         runner.attach_bot(bot)
         bot.start_polling(blocking=False)

@@ -240,14 +240,41 @@ class TelegramBot(BaseTelegramBot):
         *args,
         polling_owner: Optional[str] = None,
         polling_lock_path: Path | str = DEFAULT_POLLING_LOCK_PATH,
+        runner: Any | None = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        self.runner = runner
+        self.commands["/reload_universe"] = self._cmd_reload_universe
         inferred_owner = Path(sys.argv[0]).stem if sys.argv else "telegram_bot"
         self._polling_lock = TelegramPollingLock(
             token=self.token,
             owner=polling_owner or inferred_owner,
             path=polling_lock_path,
+        )
+
+    def _cmd_reload_universe(self, msg: dict) -> str:
+        """Hot-reload the runner's live universe without restarting the process."""
+        runner = getattr(self, "runner", None)
+        if runner is None or not hasattr(runner, "reload_symbols"):
+            return "❌ runner.reload_symbols 미연결"
+        before_symbols = list(getattr(runner, "symbols", []) or [])
+        try:
+            result = runner.reload_symbols()
+        except Exception as exc:
+            log.exception("/reload_universe failed")
+            return f"❌ universe reload 실패: {type(exc).__name__}: {exc}"
+        after_symbols = list(getattr(runner, "symbols", []) or [])
+        added = list(result.get("added") or []) if isinstance(result, dict) else []
+        eligible = result.get("eligible") if isinstance(result, dict) else "?"
+        excluded = result.get("excluded_reason_counts") if isinstance(result, dict) else {}
+        return (
+            "🔄 universe reload 완료\n"
+            f"이전 symbols: {len(before_symbols)}개\n"
+            f"추가: {len(added)}개 {added}\n"
+            f"현재 symbols: {len(after_symbols)}개\n"
+            f"eligible: {eligible}\n"
+            f"excluded: {excluded}"
         )
 
     def start_polling(self, blocking: bool = True) -> None:

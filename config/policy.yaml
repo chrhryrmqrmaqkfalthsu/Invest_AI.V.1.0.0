@@ -21,10 +21,10 @@ small_amount_safety:
   max_notional_per_order: 30
   max_usd_per_order: 30
   max_krw_per_order: 30                # legacy field name; USD notional in US-only mode
-  max_bought_notional_per_day: 600
+  max_bought_notional_per_day: 0
   max_total_exposure_notional: 600
   max_total_notional: 600
-  max_daily_bought_notional: 600
+  max_daily_bought_notional: 0
   max_total_invested_krw: 600          # legacy field name; USD notional in US-only mode
   max_orders_per_day: 20
   require_first_order_approval: false

@@ -13,7 +13,7 @@ from typing import Iterable, Optional
 
 import pandas as pd
 
-from engine.central.allocation_policy import AllocationParams, BuyCandidate, MIN_ORDER_SHARES, decide_buys
+from engine.central.allocation_policy import AllocationParams, BuyCandidate, BuyDecision, MIN_ORDER_SHARES, decide_buys
 from engine.central.entity_loader import EntityRecord
 from engine.central.ledger import EntityPositionLedger
 from engine.central.models import normalize_shares, normalize_ticker
@@ -135,6 +135,9 @@ def run_central_backtest(
     flush_ledger_on_finish: Optional[bool] = None,
     candidate_log_path: Optional[str | Path] = None,
     candidate_log_append: bool = False,
+    swap_enabled: bool = False,
+    swap_score_gap_threshold: float = 0.0,
+    swap_score_metric: str = "confidence",
 ) -> BacktestResult:
     entity_list = list(entities)
     if not entity_list:
@@ -175,7 +178,24 @@ def run_central_backtest(
         decisions = decide_buys(candidates, ledger, alloc_params)
         if candidate_log_path is not None:
             _append_candidate_log_rows(candidate_log_rows, day, candidates, decisions, ledger, provider, alloc_params)
+        swapped_position_ids = _execute_score_swaps(
+            day,
+            candidates,
+            decisions,
+            ledger,
+            broker,
+            provider,
+            entity_by_id,
+            rb_by_entity,
+            alloc_params,
+            result,
+            swap_enabled=bool(swap_enabled),
+            swap_score_gap_threshold=float(swap_score_gap_threshold or 0.0),
+            swap_score_metric=str(swap_score_metric or "confidence"),
+        )
         for decision in decisions:
+            if decision.target_position_id and decision.target_position_id in swapped_position_ids:
+                continue
             _execute_buy(day, decision, ledger, broker, provider, entity_by_id[decision.entity_id], rb_by_entity[decision.entity_id], alloc_params, result)
         rec = ledger.reconcile(broker)
         if not rec.get("ok"):
@@ -267,7 +287,7 @@ def _process_exits(day, ledger, broker: SimBroker, provider: CacheOnlyDataProvid
         )
 
 
-def _execute_buy(day, decision, ledger, broker: SimBroker, provider: CacheOnlyDataProvider, entity: EntityRecord, rb: Rulebook, alloc_params: AllocationParams, result: BacktestResult) -> None:
+def _execute_buy(day, decision, ledger, broker: SimBroker, provider: CacheOnlyDataProvider, entity: EntityRecord, rb: Rulebook, alloc_params: AllocationParams, result: BacktestResult, *, reason: str = "central_policy_buy") -> None:
     d_close = _close_price_on_day(provider, decision.ticker, day)
     shares = _cash_capped_shares(broker.cash, decision.shares, d_close, alloc_params.cash_buffer_ratio)
     if shares <= MIN_ORDER_SHARES:
@@ -288,7 +308,7 @@ def _execute_buy(day, decision, ledger, broker: SimBroker, provider: CacheOnlyDa
         OrderSide.BUY.value,
         decision.purpose,
         shares,
-        "central_policy_buy",
+        str(reason or "central_policy_buy"),
         target_position_id=decision.target_position_id,
     )
     client_order_id = _client_order_id("buy", decision.entity_id, decision.ticker, pd.Timestamp(day).strftime("%Y-%m-%d"))
@@ -312,7 +332,7 @@ def _execute_buy(day, decision, ledger, broker: SimBroker, provider: CacheOnlyDa
             shares=float(order.filled_shares or 0.0),
             price=float(order.filled_avg_price or 0.0),
             notional=float(order.filled_shares or 0.0) * float(order.filled_avg_price or 0.0),
-            reason="central_policy_buy",
+            reason=str(reason or "central_policy_buy"),
             position_id=execution.position_id,
         )
     )
@@ -327,6 +347,194 @@ def _cash_capped_shares(cash: float, requested_shares: float, d_close_price: flo
     max_affordable = (float(cash or 0.0) * ratio) / price
     capped = normalize_shares(min(requested, max_affordable))
     return capped if capped > MIN_ORDER_SHARES else 0.0
+
+
+def _execute_score_swaps(
+    day,
+    candidates: list[BuyCandidate],
+    decisions: list[BuyDecision],
+    ledger: EntityPositionLedger,
+    broker: SimBroker,
+    provider: CacheOnlyDataProvider,
+    entity_by_id: dict[str, EntityRecord],
+    rb_by_entity: dict[str, Rulebook],
+    alloc_params: AllocationParams,
+    result: BacktestResult,
+    *,
+    swap_enabled: bool,
+    swap_score_gap_threshold: float,
+    swap_score_metric: str,
+) -> set[str]:
+    if not swap_enabled:
+        return set()
+    metric = str(swap_score_metric or "confidence").strip().lower()
+    if metric not in {"confidence", "allocation_score"}:
+        raise ValueError(f"unsupported swap_score_metric: {swap_score_metric}")
+    max_positions = max(int(alloc_params.max_positions or 0), 0)
+    if max_positions <= 0:
+        return set()
+    open_positions = [p for p in list(ledger.open_positions()) if normalize_shares(getattr(p, "open_shares", 0.0)) > 0.0]
+    open_tickers = {normalize_ticker(getattr(p, "ticker", "")) for p in open_positions if normalize_ticker(getattr(p, "ticker", ""))}
+    if len(open_tickers) < max_positions:
+        return set()
+
+    candidate_by_entity = {str(c.entity_id or ""): c for c in candidates}
+    selected_entities = {str(d.entity_id or "") for d in decisions or []}
+    selected_tickers = {normalize_ticker(getattr(d, "ticker", "")) for d in decisions or [] if normalize_ticker(getattr(d, "ticker", ""))}
+
+    a_pool = []
+    for pos in open_positions:
+        ticker = normalize_ticker(getattr(pos, "ticker", ""))
+        current_price = _close_price_on_day(provider, ticker, day)
+        entry_price = float(getattr(pos, "avg_entry_price", 0.0) or 0.0)
+        if current_price <= 0.0 or entry_price <= 0.0:
+            continue
+        unrealized_pct = (current_price - entry_price) / entry_price * 100.0
+        if unrealized_pct <= 0.0:
+            continue
+        score = _score_for_position(pos, metric, candidate_by_entity, entity_by_id, alloc_params)
+        if score is None:
+            continue
+        a_pool.append((float(score), str(getattr(pos, "position_id", "") or ""), pos, float(unrealized_pct)))
+    if not a_pool:
+        return set()
+
+    b_pool = []
+    used_b_tickers: set[str] = set()
+    open_entities = {str(getattr(p, "entity_id", "") or "") for p in open_positions}
+    for cand in sorted(candidates, key=lambda c: (_score_for_candidate(c, metric, alloc_params) or -1e100, str(c.entity_id or "")), reverse=True):
+        ticker = normalize_ticker(cand.ticker)
+        entity_id = str(cand.entity_id or "")
+        if not ticker or ticker in open_tickers or ticker in selected_tickers or ticker in used_b_tickers:
+            continue
+        if entity_id in open_entities or entity_id in selected_entities:
+            continue
+        price = float(cand.price or 0.0)
+        if price <= 0.0:
+            continue
+        confidence = float(cand.confidence or 0.0)
+        if confidence < float(alloc_params.min_confidence or 0.0):
+            continue
+        allocation_score = _allocation_score_for_candidate(cand, alloc_params)
+        if allocation_score <= 0.0:
+            continue
+        score = _score_for_candidate(cand, metric, alloc_params)
+        if score is None:
+            continue
+        b_pool.append((float(score), entity_id, ticker, cand))
+        used_b_tickers.add(ticker)
+    if not b_pool:
+        return set()
+
+    a_pool.sort(key=lambda row: (row[0], row[1]))
+    b_pool.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    swapped_position_ids: set[str] = set()
+    threshold = float(swap_score_gap_threshold or 0.0)
+    for a_row, b_row in zip(a_pool, b_pool):
+        a_score, _, pos, _ = a_row
+        b_score, _, _, cand = b_row
+        if b_score - a_score < threshold:
+            break
+        ok, proceeds = _execute_swap_sell(day, pos, ledger, broker, result)
+        if not ok or proceeds <= 0.0:
+            continue
+        swapped_position_ids.add(str(pos.position_id or ""))
+        _execute_swap_buy(day, cand, proceeds, ledger, broker, provider, entity_by_id, rb_by_entity, alloc_params, result, b_score)
+    return swapped_position_ids
+
+
+def _score_for_candidate(cand: BuyCandidate, metric: str, alloc_params: AllocationParams) -> Optional[float]:
+    if metric == "confidence":
+        return float(cand.confidence or 0.0)
+    if metric == "allocation_score":
+        return _allocation_score_for_candidate(cand, alloc_params)
+    return None
+
+
+def _score_for_position(pos, metric: str, candidate_by_entity: dict[str, BuyCandidate], entity_by_id: dict[str, EntityRecord], alloc_params: AllocationParams) -> Optional[float]:
+    entity_id = str(getattr(pos, "entity_id", "") or "")
+    cand = candidate_by_entity.get(entity_id)
+    if cand is not None:
+        return _score_for_candidate(cand, metric, alloc_params)
+    entity = entity_by_id.get(entity_id)
+    if entity is None:
+        return None
+    confidence = float(getattr(entity, "confidence", 0.0) or 0.0)
+    if metric == "confidence":
+        return confidence
+    if metric == "allocation_score":
+        return float(alloc_params.confidence_weight) * confidence
+    return None
+
+
+def _execute_swap_sell(day, pos, ledger: EntityPositionLedger, broker: SimBroker, result: BacktestResult) -> tuple[bool, float]:
+    date_str = pd.Timestamp(day).strftime("%Y-%m-%d")
+    shares = normalize_shares(getattr(pos, "open_shares", 0.0))
+    if shares <= MIN_ORDER_SHARES:
+        return False, 0.0
+    intent = ledger.open_intent(
+        pos.entity_id,
+        pos.ticker,
+        OrderSide.SELL.value,
+        "exit",
+        shares,
+        "swap_exit",
+        target_position_id=pos.position_id,
+    )
+    client_order_id = _client_order_id("swap-sell", pos.entity_id, pos.ticker, date_str)
+    execution = ledger.dispatch_execution(intent.intent_id, broker, client_order_id)
+    order = broker.get_order(execution.order_id)
+    if order is None:
+        _record_reject(result, date_str, pos.entity_id, pos.ticker, "sell", shares, order)
+        return False, 0.0
+    if order.status != OrderStatus.FILLED:
+        _record_reject(result, date_str, pos.entity_id, pos.ticker, "sell", shares, order)
+        return False, 0.0
+    ledger.apply_fill(execution.execution_id, order)
+    notional = float(order.filled_shares or 0.0) * float(order.filled_avg_price or 0.0)
+    result.trades.append(
+        TradeRecord(
+            date=str(order.filled_at or date_str),
+            entity_id=pos.entity_id,
+            ticker=pos.ticker,
+            side="sell",
+            shares=float(order.filled_shares or 0.0),
+            price=float(order.filled_avg_price or 0.0),
+            notional=notional,
+            reason="swap_exit",
+            position_id=pos.position_id,
+            realized_pnl=float(getattr(pos, "realized_pnl", 0.0) or 0.0),
+        )
+    )
+    return True, notional
+
+
+def _execute_swap_buy(day, cand: BuyCandidate, proceeds: float, ledger: EntityPositionLedger, broker: SimBroker, provider: CacheOnlyDataProvider, entity_by_id: dict[str, EntityRecord], rb_by_entity: dict[str, Rulebook], alloc_params: AllocationParams, result: BacktestResult, score: float) -> None:
+    entity = entity_by_id.get(cand.entity_id)
+    rb = rb_by_entity.get(cand.entity_id)
+    if entity is None or rb is None:
+        return
+    date_close = _close_price_on_day(provider, cand.ticker, day)
+    if date_close <= 0.0:
+        date_close = float(cand.price or 0.0)
+    if date_close <= 0.0:
+        return
+    spend_cap = min(float(proceeds or 0.0), float(broker.cash or 0.0))
+    shares = _cash_capped_shares(spend_cap, spend_cap / date_close, date_close, alloc_params.cash_buffer_ratio)
+    if shares <= MIN_ORDER_SHARES:
+        return
+    decision = BuyDecision(
+        entity_id=str(cand.entity_id or ""),
+        ticker=normalize_ticker(cand.ticker),
+        shares=shares,
+        notional=shares * date_close,
+        score=float(score or 0.0),
+        confidence=float(cand.confidence or 0.0),
+        strength=float(cand.strength or 0.0),
+        purpose="entry",
+        target_position_id="",
+    )
+    _execute_buy(day, decision, ledger, broker, provider, entity, rb, alloc_params, result, reason="swap_entry")
 
 
 def _append_candidate_log_rows(rows: list[dict], day, candidates: list[BuyCandidate], decisions, ledger: EntityPositionLedger, provider: CacheOnlyDataProvider, alloc_params: AllocationParams) -> None:

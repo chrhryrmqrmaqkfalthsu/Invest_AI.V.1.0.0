@@ -1,0 +1,318 @@
+{
+  "schema_version": 1,
+  "purpose": "turnover_score_direction_validation",
+  "run_meta": {
+    "stage2_limit": 533,
+    "confidence_metric": "profit_factor",
+    "max_positions": 8,
+    "position_sizing": "score_weighted",
+    "confidence_weight": 0.5,
+    "signal_strength_weight": 0.5,
+    "capital": 10000.0,
+    "per_ticker_exposure_cap": 0.25,
+    "cash_buffer_ratio": 0.98,
+    "sell_omen": "OFF forced in loaded rulebooks",
+    "swap": "OFF defaults",
+    "costs_slippage": "SimBroker default FillPolicy, identical for both metrics",
+    "turnover_definition": "sum absolute buy/sell notional / initial capital * 100",
+    "recovery_definition": "maximum consecutive underwater trading days"
+  },
+  "pool": {
+    "survivors": 533,
+    "usable_entities": 533,
+    "unique_tickers": 161,
+    "turnover_fields_missing": 0,
+    "matched_stage2_trades": 34051,
+    "eligible_trade_count_ge_30": 532,
+    "ineligible_trade_count_lt_30": 1,
+    "eligible_unique_tickers": 161,
+    "n8_pool_sufficient": true
+  },
+  "regression": {
+    "default_equals_explicit_confidence": true,
+    "default_canonical_sha256": "11d9e3ce4c8461b40dbbb83a1f45eb54a6ab4fe187e2ca96258fe12ed1066d86",
+    "explicit_confidence_canonical_sha256": "11d9e3ce4c8461b40dbbb83a1f45eb54a6ab4fe187e2ca96258fe12ed1066d86",
+    "known_baseline_expected": {
+      "total_return_pct": 64.66211670427089,
+      "MDD_pct": -5.807895076304301,
+      "trades": 476
+    },
+    "known_baseline_actual": {
+      "total_return_pct": 64.66211670427089,
+      "MDD_pct": -5.807895076304301,
+      "trades": 476
+    },
+    "known_baseline_exact": true
+  },
+  "comparison": [
+    {
+      "period": "OOS",
+      "selection_metric": "confidence",
+      "start": "2025-07-01",
+      "end": "2026-06-15",
+      "total_return_pct": 64.66211670427089,
+      "MDD_pct": -5.807895076304301,
+      "worst_month": {
+        "label": "2026-03",
+        "return_pct": -3.4671126824006637
+      },
+      "recovery_trading_days": 29,
+      "trades": 476,
+      "buy_trades": 242,
+      "sell_trades": 234,
+      "turnover_pct": 7609.013959071196,
+      "return_over_abs_mdd": 11.133485687110053,
+      "rejected_orders": 3,
+      "reconcile_failures": 0,
+      "elapsed_sec": 12.635,
+      "monthly_returns": [
+        {
+          "label": "2025-07",
+          "return_pct": 9.937149014303003
+        },
+        {
+          "label": "2025-08",
+          "return_pct": 3.008249119867945
+        },
+        {
+          "label": "2025-09",
+          "return_pct": 1.0954712713946213
+        },
+        {
+          "label": "2025-10",
+          "return_pct": 1.2706530228127066
+        },
+        {
+          "label": "2025-11",
+          "return_pct": 9.953304118151362
+        },
+        {
+          "label": "2025-12",
+          "return_pct": 3.9181237234199084
+        },
+        {
+          "label": "2026-01",
+          "return_pct": 6.967891119689651
+        },
+        {
+          "label": "2026-02",
+          "return_pct": 9.525012874721206
+        },
+        {
+          "label": "2026-03",
+          "return_pct": -3.4671126824006637
+        },
+        {
+          "label": "2026-04",
+          "return_pct": 5.979967256726426
+        },
+        {
+          "label": "2026-05",
+          "return_pct": -1.0982221372482281
+        },
+        {
+          "label": "2026-06",
+          "return_pct": 4.855786699219777
+        }
+      ]
+    },
+    {
+      "period": "OOS",
+      "selection_metric": "turnover_score",
+      "start": "2025-07-01",
+      "end": "2026-06-15",
+      "total_return_pct": 83.71638598341029,
+      "MDD_pct": -9.428113944401218,
+      "worst_month": {
+        "label": "2025-12",
+        "return_pct": -7.36396115537169
+      },
+      "recovery_trading_days": 40,
+      "trades": 814,
+      "buy_trades": 411,
+      "sell_trades": 403,
+      "turnover_pct": 13257.16319723332,
+      "return_over_abs_mdd": 8.879441474413273,
+      "rejected_orders": 5,
+      "reconcile_failures": 0,
+      "elapsed_sec": 14.612,
+      "monthly_returns": [
+        {
+          "label": "2025-07",
+          "return_pct": 12.027014618318255
+        },
+        {
+          "label": "2025-08",
+          "return_pct": 2.2053008692297427
+        },
+        {
+          "label": "2025-09",
+          "return_pct": 19.441327320226275
+        },
+        {
+          "label": "2025-10",
+          "return_pct": -0.7421859391357533
+        },
+        {
+          "label": "2025-11",
+          "return_pct": 6.815670054031964
+        },
+        {
+          "label": "2025-12",
+          "return_pct": -7.36396115537169
+        },
+        {
+          "label": "2026-01",
+          "return_pct": 13.390769445714978
+        },
+        {
+          "label": "2026-02",
+          "return_pct": 8.42882209357314
+        },
+        {
+          "label": "2026-03",
+          "return_pct": 0.6705433113460169
+        },
+        {
+          "label": "2026-04",
+          "return_pct": 8.142790683349821
+        },
+        {
+          "label": "2026-05",
+          "return_pct": 1.1889568083105262
+        },
+        {
+          "label": "2026-06",
+          "return_pct": 0.9861675681161142
+        }
+      ]
+    },
+    {
+      "period": "Stress",
+      "selection_metric": "confidence",
+      "start": "2022-01-01",
+      "end": "2022-06-30",
+      "total_return_pct": 0.4886541679346374,
+      "MDD_pct": -12.972470198640373,
+      "worst_month": {
+        "label": "2022-01",
+        "return_pct": -7.234256411995954
+      },
+      "recovery_trading_days": 49,
+      "trades": 264,
+      "buy_trades": 136,
+      "sell_trades": 128,
+      "turnover_pct": 3597.410175741744,
+      "return_over_abs_mdd": 0.037668551976003196,
+      "rejected_orders": 9,
+      "reconcile_failures": 0,
+      "elapsed_sec": 7.695,
+      "monthly_returns": [
+        {
+          "label": "2022-01",
+          "return_pct": -7.234256411995954
+        },
+        {
+          "label": "2022-02",
+          "return_pct": 3.6303415271497608
+        },
+        {
+          "label": "2022-03",
+          "return_pct": 7.215907166356117
+        },
+        {
+          "label": "2022-04",
+          "return_pct": 3.0686002361788978
+        },
+        {
+          "label": "2022-05",
+          "return_pct": -0.323628344096627
+        },
+        {
+          "label": "2022-06",
+          "return_pct": -5.100342073935337
+        }
+      ]
+    },
+    {
+      "period": "Stress",
+      "selection_metric": "turnover_score",
+      "start": "2022-01-01",
+      "end": "2022-06-30",
+      "total_return_pct": 7.830807939942279,
+      "MDD_pct": -13.074061920385674,
+      "worst_month": {
+        "label": "2022-04",
+        "return_pct": -8.328838808800377
+      },
+      "recovery_trading_days": 25,
+      "trades": 400,
+      "buy_trades": 204,
+      "sell_trades": 196,
+      "turnover_pct": 5009.426540283825,
+      "return_over_abs_mdd": 0.5989575380343064,
+      "rejected_orders": 10,
+      "reconcile_failures": 0,
+      "elapsed_sec": 7.891,
+      "monthly_returns": [
+        {
+          "label": "2022-01",
+          "return_pct": -3.9610404772619567
+        },
+        {
+          "label": "2022-02",
+          "return_pct": 8.186865080253348
+        },
+        {
+          "label": "2022-03",
+          "return_pct": 6.05043060276218
+        },
+        {
+          "label": "2022-04",
+          "return_pct": -8.328838808800377
+        },
+        {
+          "label": "2022-05",
+          "return_pct": 12.460103486306151
+        },
+        {
+          "label": "2022-06",
+          "return_pct": -5.075738108936234
+        }
+      ]
+    }
+  ],
+  "deltas": {
+    "OOS": {
+      "total_return_delta_pp": 19.054269279139405,
+      "MDD_delta_pp": -3.6202188680969174,
+      "return_over_abs_mdd_delta": -2.2540442126967797,
+      "turnover_delta_pp": 5648.149238162124,
+      "recovery_days_delta": 11,
+      "trade_count_delta": 338
+    },
+    "Stress": {
+      "total_return_delta_pp": 7.3421537720076415,
+      "MDD_delta_pp": -0.10159172174530084,
+      "return_over_abs_mdd_delta": 0.5612889860583032,
+      "turnover_delta_pp": 1412.0163645420807,
+      "recovery_days_delta": -24,
+      "trade_count_delta": 136
+    }
+  },
+  "gates": {
+    "oos_return_over_mdd_improved": false,
+    "stress_total_return_noninferior": true,
+    "stress_mdd_noninferior": false,
+    "direction_consistent_return_over_mdd": false
+  },
+  "verdict": "기각 또는 보류",
+  "limitations": [
+    "in-sample 방향 탐색이며 채택 근거가 아니다.",
+    "oos_2025h2가 survivor 선정에 사용된 누수가 양쪽 풀에 동일하게 존재하며 상쇄를 가정한다.",
+    "batch가 미완료일 수 있어 첫 533개 survivor의 부분 풀이다.",
+    "진짜 판정은 cutoff walk-forward에서 해야 한다.",
+    "절대 수치가 아니라 confidence 대비 상대 우위만 해석한다."
+  ],
+  "elapsed_sec": 947.407
+}

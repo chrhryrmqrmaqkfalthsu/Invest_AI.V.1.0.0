@@ -6,8 +6,9 @@ broker fills, EntityPositionLedger accounting, and daily reconcile checks.
 from __future__ import annotations
 
 import json
+import math
 import tempfile
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -142,10 +143,18 @@ def run_central_backtest(
     exit_imminence_threshold: float = 0.75,
     turnover_guard: float = 0.0,
     queue_signal_ttl: int = 5,
+    selection_metric: str = "confidence",
 ) -> BacktestResult:
     entity_list = list(entities)
     if not entity_list:
         raise ValueError("entities required")
+    selection_metric_name = _normalize_selection_metric(selection_metric)
+    selection_scores = None
+    if selection_metric_name == "turnover_score":
+        selection_scores = {
+            entity.entity_id: _turnover_score_for_entity(entity)
+            for entity in entity_list
+        }
     provider = data_provider or CacheOnlyDataProvider()
     collector = SignalCollector(provider, use_llm_events=use_llm_events)
     price_data = {ticker: provider.load_price_df(ticker) for ticker in sorted({e.ticker for e in entity_list})}
@@ -183,7 +192,15 @@ def run_central_backtest(
         ]
         if guard_stats is not None:
             _refresh_swap_guard_queue(day, guard_queue, candidates, int(queue_signal_ttl or 0), guard_stats)
-        decisions = decide_buys(candidates, ledger, alloc_params)
+        if selection_metric_name == "confidence":
+            decisions = decide_buys(candidates, ledger, alloc_params)
+        else:
+            decisions = _decide_buys_with_selection_metric(
+                candidates,
+                ledger,
+                alloc_params,
+                selection_scores or {},
+            )
         if candidate_log_path is not None:
             _append_candidate_log_rows(candidate_log_rows, day, candidates, decisions, ledger, provider, alloc_params)
         swapped_position_ids = _execute_score_swaps(
@@ -242,6 +259,69 @@ def run_central_backtest(
     if should_flush:
         ledger.flush()
     return result
+
+
+def _normalize_selection_metric(value: str) -> str:
+    metric = str(value or "confidence").strip().lower()
+    if metric not in {"confidence", "turnover_score"}:
+        raise ValueError(f"unsupported selection_metric: {value}")
+    return metric
+
+
+def _turnover_score_for_entity(entity: EntityRecord) -> Optional[float]:
+    tags = dict(entity.tags or {})
+    required = ("avg_realized_pnl_pct", "avg_holding_days", "trade_count")
+    missing = [key for key in required if key not in tags or tags.get(key) is None]
+    if missing:
+        raise ValueError(
+            f"turnover_score fields missing for {entity.entity_id}: {', '.join(missing)}"
+        )
+    try:
+        avg_pnl = float(tags["avg_realized_pnl_pct"])
+        avg_holding_days = float(tags["avg_holding_days"])
+        trade_count = float(tags["trade_count"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid turnover_score fields for {entity.entity_id}") from exc
+    if not all(math.isfinite(value) for value in (avg_pnl, avg_holding_days, trade_count)):
+        raise ValueError(f"non-finite turnover_score fields for {entity.entity_id}")
+    if avg_holding_days <= 0.0:
+        raise ValueError(f"avg_holding_days must be positive for {entity.entity_id}")
+    if trade_count < 30.0:
+        return None
+    return avg_pnl / avg_holding_days
+
+
+def _decide_buys_with_selection_metric(
+    candidates: list[BuyCandidate],
+    ledger: EntityPositionLedger,
+    alloc_params: AllocationParams,
+    selection_scores: dict[str, Optional[float]],
+) -> list[BuyDecision]:
+    selection_candidates: list[BuyCandidate] = []
+    original_by_entity: dict[str, BuyCandidate] = {}
+    for candidate in candidates:
+        original_by_entity[candidate.entity_id] = candidate
+        score = selection_scores.get(candidate.entity_id)
+        if score is None or float(candidate.confidence or 0.0) < float(alloc_params.min_confidence or 0.0):
+            continue
+        selection_candidates.append(
+            replace(candidate, confidence=float(score), strength=0.0)
+        )
+
+    selection_params = replace(
+        alloc_params,
+        confidence_weight=1.0,
+        signal_strength_weight=0.0,
+        min_confidence=float("-inf"),
+        position_sizing="equal",
+    )
+    selected = decide_buys(selection_candidates, ledger, selection_params)
+    selected_originals = [
+        original_by_entity[decision.entity_id]
+        for decision in selected
+        if decision.entity_id in original_by_entity
+    ]
+    return decide_buys(selected_originals, ledger, alloc_params)
 
 
 def _process_exits(day, ledger, broker: SimBroker, provider: CacheOnlyDataProvider, entity_by_id: dict, rb_by_entity: dict, result: BacktestResult) -> None:

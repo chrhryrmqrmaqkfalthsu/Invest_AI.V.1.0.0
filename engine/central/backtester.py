@@ -138,6 +138,10 @@ def run_central_backtest(
     swap_enabled: bool = False,
     swap_score_gap_threshold: float = 0.0,
     swap_score_metric: str = "confidence",
+    swap_guard_queue_enabled: bool = False,
+    exit_imminence_threshold: float = 0.75,
+    turnover_guard: float = 0.0,
+    queue_signal_ttl: int = 5,
 ) -> BacktestResult:
     entity_list = list(entities)
     if not entity_list:
@@ -153,6 +157,8 @@ def run_central_backtest(
     entity_by_id = {e.entity_id: e for e in entity_list}
     rb_by_entity = {e.entity_id: Rulebook.from_dict(e.rulebook) for e in entity_list}
     candidate_log_rows: list[dict] = []
+    guard_queue: dict[str, dict] = {}
+    guard_stats = _new_swap_guard_queue_stats() if bool(swap_guard_queue_enabled) else None
 
     result = BacktestResult()
     days = _trading_days(price_data.values(), start, end)
@@ -175,6 +181,8 @@ def run_central_backtest(
             )
             for s in signals
         ]
+        if guard_stats is not None:
+            _refresh_swap_guard_queue(day, guard_queue, candidates, int(queue_signal_ttl or 0), guard_stats)
         decisions = decide_buys(candidates, ledger, alloc_params)
         if candidate_log_path is not None:
             _append_candidate_log_rows(candidate_log_rows, day, candidates, decisions, ledger, provider, alloc_params)
@@ -193,8 +201,30 @@ def run_central_backtest(
             swap_score_gap_threshold=float(swap_score_gap_threshold or 0.0),
             swap_score_metric=str(swap_score_metric or "confidence"),
         )
+        if guard_stats is not None:
+            guard_swapped = _execute_swap_guard_queue(
+                day,
+                candidates,
+                decisions,
+                guard_queue,
+                guard_stats,
+                ledger,
+                broker,
+                provider,
+                entity_by_id,
+                rb_by_entity,
+                alloc_params,
+                result,
+                exit_imminence_threshold=float(exit_imminence_threshold if exit_imminence_threshold is not None else 0.75),
+                turnover_guard=float(turnover_guard or 0.0),
+                queue_signal_ttl=int(queue_signal_ttl or 0),
+            )
+            swapped_position_ids.update(guard_swapped)
         for decision in decisions:
             if decision.target_position_id and decision.target_position_id in swapped_position_ids:
+                continue
+            if guard_stats is not None and not _decision_still_allowed(decision, ledger, alloc_params):
+                guard_stats["normal_decisions_skipped_after_queue"] += 1
                 continue
             _execute_buy(day, decision, ledger, broker, provider, entity_by_id[decision.entity_id], rb_by_entity[decision.entity_id], alloc_params, result)
         rec = ledger.reconcile(broker)
@@ -202,6 +232,10 @@ def run_central_backtest(
             result.reconcile_failures.append({"date": pd.Timestamp(day).strftime("%Y-%m-%d"), **rec})
         result.equity_curve.append(_equity_point(day, broker, ledger))
     _finalize_result(result, alloc_params.total_capital, ledger, broker)
+    if guard_stats is not None:
+        guard_stats["queue_active_end"] = len(guard_queue)
+        guard_stats["queue_conversion_rate"] = _safe_ratio(guard_stats["queue_converted"], guard_stats["queue_registered"])
+        result.swap_guard_queue_stats = guard_stats
     if candidate_log_path is not None:
         _flush_candidate_log(candidate_log_path, candidate_log_rows, append=bool(candidate_log_append))
     should_flush = (ledger_dir_was_provided and not bool(persist_ledger)) if flush_ledger_on_finish is None else bool(flush_ledger_on_finish)
@@ -443,6 +477,396 @@ def _execute_score_swaps(
     return swapped_position_ids
 
 
+def _new_swap_guard_queue_stats() -> dict:
+    return {
+        "schema_version": 1,
+        "queue_registered": 0,
+        "queue_refreshed": 0,
+        "queue_expired": 0,
+        "queue_signal_lost": 0,
+        "queue_converted": 0,
+        "queue_active_end": 0,
+        "queue_conversion_rate": 0.0,
+        "swap_attempt_days": 0,
+        "swap_executed": 0,
+        "swap_blocked_no_safe_a": 0,
+        "swap_blocked_turnover": 0,
+        "swap_blocked_churn": 0,
+        "swap_blocked_score_gap": 0,
+        "swap_blocked_no_b": 0,
+        "normal_decisions_skipped_after_queue": 0,
+        "queued_entry_trades": 0,
+        "proxy_uses_future_data": False,
+        "guard_samples": [],
+        "swap_events": [],
+        "queue_events": [],
+    }
+
+
+def _refresh_swap_guard_queue(day, queue: dict[str, dict], candidates: list[BuyCandidate], ttl: int, stats: dict) -> None:
+    date_str = pd.Timestamp(day).strftime("%Y-%m-%d")
+    current_entities = {str(c.entity_id or "") for c in candidates}
+    ttl_days = max(int(ttl or 0), 1)
+    for entity_id, row in list(queue.items()):
+        queued_at = str(row.get("queued_at") or date_str)
+        age = _calendar_days_between(queued_at, date_str)
+        if age > ttl_days:
+            stats["queue_expired"] += 1
+            stats["queue_events"].append({"date": date_str, "event": "expired", "entity_id": entity_id, "ticker": row.get("ticker", ""), "age_days": age})
+            queue.pop(entity_id, None)
+            continue
+        if entity_id not in current_entities:
+            stats["queue_signal_lost"] += 1
+            stats["queue_events"].append({"date": date_str, "event": "signal_lost", "entity_id": entity_id, "ticker": row.get("ticker", ""), "age_days": age})
+            queue.pop(entity_id, None)
+            continue
+
+
+def _execute_swap_guard_queue(
+    day,
+    candidates: list[BuyCandidate],
+    decisions: list[BuyDecision],
+    queue: dict[str, dict],
+    stats: dict,
+    ledger: EntityPositionLedger,
+    broker: SimBroker,
+    provider: CacheOnlyDataProvider,
+    entity_by_id: dict[str, EntityRecord],
+    rb_by_entity: dict[str, Rulebook],
+    alloc_params: AllocationParams,
+    result: BacktestResult,
+    *,
+    exit_imminence_threshold: float,
+    turnover_guard: float,
+    queue_signal_ttl: int,
+) -> set[str]:
+    swapped_position_ids: set[str] = set()
+    _execute_queued_entries(day, candidates, queue, stats, ledger, broker, provider, entity_by_id, rb_by_entity, alloc_params, result)
+
+    max_positions = max(int(alloc_params.max_positions or 0), 0)
+    if max_positions <= 0:
+        return swapped_position_ids
+    open_positions = [p for p in list(ledger.open_positions()) if normalize_shares(getattr(p, "open_shares", 0.0)) > 0.0]
+    open_tickers = {normalize_ticker(getattr(p, "ticker", "")) for p in open_positions if normalize_ticker(getattr(p, "ticker", ""))}
+    if len(open_tickers) < max_positions:
+        return swapped_position_ids
+
+    selected_entities = {str(d.entity_id or "") for d in decisions or []}
+    selected_tickers = {normalize_ticker(getattr(d, "ticker", "")) for d in decisions or [] if normalize_ticker(getattr(d, "ticker", ""))}
+    open_entities = {str(getattr(p, "entity_id", "") or "") for p in open_positions}
+    b_pool = []
+    used_b_tickers: set[str] = set()
+    for cand in sorted(candidates, key=lambda c: (_allocation_score_for_candidate(c, alloc_params), str(c.entity_id or "")), reverse=True):
+        ticker = normalize_ticker(cand.ticker)
+        entity_id = str(cand.entity_id or "")
+        if not ticker or ticker in open_tickers or ticker in selected_tickers or ticker in used_b_tickers:
+            continue
+        if entity_id in open_entities or entity_id in selected_entities:
+            continue
+        if float(cand.price or 0.0) <= 0.0:
+            continue
+        if float(cand.confidence or 0.0) < float(alloc_params.min_confidence or 0.0):
+            continue
+        score = _allocation_score_for_candidate(cand, alloc_params)
+        if score <= 0.0:
+            continue
+        b_pool.append((score, entity_id, ticker, cand))
+        used_b_tickers.add(ticker)
+    if not b_pool:
+        stats["swap_blocked_no_b"] += 1
+        return swapped_position_ids
+
+    stats["swap_attempt_days"] += 1
+    b_score, b_entity_id, b_ticker, b_cand = b_pool[0]
+    date_str = pd.Timestamp(day).strftime("%Y-%m-%d")
+    turnover_ratio = _recent_turnover_ratio(day, result, broker, lookback_days=20)
+    if float(turnover_guard or 0.0) > 0.0 and turnover_ratio > float(turnover_guard or 0.0):
+        stats["swap_blocked_turnover"] += 1
+        _queue_candidate(day, b_cand, queue, stats, reason="turnover_guard", ttl=queue_signal_ttl)
+        return swapped_position_ids
+    if _recent_trade_match(b_cand, result.trades, day, lookback_days=20):
+        stats["swap_blocked_churn"] += 1
+        _queue_candidate(day, b_cand, queue, stats, reason="churn_guard", ttl=queue_signal_ttl)
+        return swapped_position_ids
+
+    candidate_by_entity = {str(c.entity_id or ""): c for c in candidates}
+    a_pool = []
+    for pos in open_positions:
+        ticker = normalize_ticker(getattr(pos, "ticker", ""))
+        current_price = _close_price_on_day(provider, ticker, day)
+        entry_price = float(getattr(pos, "avg_entry_price", 0.0) or 0.0)
+        if current_price <= 0.0 or entry_price <= 0.0:
+            continue
+        unrealized_pct = (current_price - entry_price) / entry_price * 100.0
+        if unrealized_pct <= 0.0:
+            continue
+        score = _score_for_position(pos, "allocation_score", candidate_by_entity, entity_by_id, alloc_params)
+        if score is None:
+            continue
+        imminence = _exit_imminence_proxy(day, pos, provider)
+        sample = {
+            "date": date_str,
+            "position_id": str(getattr(pos, "position_id", "") or ""),
+            "entity_id": str(getattr(pos, "entity_id", "") or ""),
+            "ticker": ticker,
+            "entry_date": str(getattr(pos, "entry_date", "") or ""),
+            "unrealized_pnl_pct": float(unrealized_pct),
+            "allocation_score": float(score),
+            **imminence,
+        }
+        stats["guard_samples"].append(sample)
+        if float(imminence["exit_imminence_score"]) >= float(exit_imminence_threshold):
+            continue
+        a_pool.append((float(score), str(getattr(pos, "position_id", "") or ""), pos, float(unrealized_pct), imminence))
+    if not a_pool:
+        stats["swap_blocked_no_safe_a"] += 1
+        _queue_candidate(day, b_cand, queue, stats, reason="no_safe_a", ttl=queue_signal_ttl)
+        return swapped_position_ids
+
+    a_pool.sort(key=lambda row: (row[0], row[1]))
+    a_score, _, pos, unrealized_pct, imminence = a_pool[0]
+    if b_score <= a_score:
+        stats["swap_blocked_score_gap"] += 1
+        _queue_candidate(day, b_cand, queue, stats, reason="non_positive_score_gap", ttl=queue_signal_ttl)
+        return swapped_position_ids
+    ok, proceeds = _execute_swap_sell(day, pos, ledger, broker, result, reason="swap_guard_queue_exit")
+    if not ok or proceeds <= 0.0:
+        _queue_candidate(day, b_cand, queue, stats, reason="swap_sell_failed", ttl=queue_signal_ttl)
+        return swapped_position_ids
+    swapped_position_ids.add(str(pos.position_id or ""))
+    _execute_swap_buy(day, b_cand, proceeds, ledger, broker, provider, entity_by_id, rb_by_entity, alloc_params, result, b_score, reason="swap_guard_queue_entry")
+    queue.pop(b_entity_id, None)
+    stats["swap_executed"] += 1
+    stats["swap_events"].append(
+        {
+            "date": date_str,
+            "a_position_id": str(getattr(pos, "position_id", "") or ""),
+            "a_entity_id": str(getattr(pos, "entity_id", "") or ""),
+            "a_ticker": normalize_ticker(getattr(pos, "ticker", "")),
+            "a_entry_date": str(getattr(pos, "entry_date", "") or ""),
+            "a_score": float(a_score),
+            "a_unrealized_pnl_pct": float(unrealized_pct),
+            "b_entity_id": b_entity_id,
+            "b_ticker": b_ticker,
+            "b_score": float(b_score),
+            "score_gap": float(b_score - a_score),
+            "turnover_ratio_20d": float(turnover_ratio),
+            **imminence,
+        }
+    )
+    return swapped_position_ids
+
+
+def _execute_queued_entries(
+    day,
+    candidates: list[BuyCandidate],
+    queue: dict[str, dict],
+    stats: dict,
+    ledger: EntityPositionLedger,
+    broker: SimBroker,
+    provider: CacheOnlyDataProvider,
+    entity_by_id: dict[str, EntityRecord],
+    rb_by_entity: dict[str, Rulebook],
+    alloc_params: AllocationParams,
+    result: BacktestResult,
+) -> None:
+    if not queue:
+        return
+    max_positions = max(int(alloc_params.max_positions or 0), 0)
+    if max_positions <= 0:
+        return
+    open_tickers = {normalize_ticker(getattr(p, "ticker", "")) for p in ledger.open_positions() if normalize_ticker(getattr(p, "ticker", ""))}
+    if len(open_tickers) >= max_positions:
+        return
+    cand_by_entity = {str(c.entity_id or ""): c for c in candidates}
+    queued_candidates = []
+    for entity_id, row in sorted(queue.items(), key=lambda item: (str(item[1].get("queued_at") or ""), str(item[0]))):
+        cand = cand_by_entity.get(entity_id)
+        if cand is None:
+            continue
+        queued_candidates.append(cand)
+    if not queued_candidates:
+        return
+    queue_decisions = decide_buys(queued_candidates, ledger, alloc_params)
+    for decision in queue_decisions:
+        if not _decision_still_allowed(decision, ledger, alloc_params):
+            continue
+        entity = entity_by_id.get(decision.entity_id)
+        rb = rb_by_entity.get(decision.entity_id)
+        if entity is None or rb is None:
+            continue
+        _execute_buy(day, decision, ledger, broker, provider, entity, rb, alloc_params, result, reason="swap_guard_queue_entry")
+        stats["queue_converted"] += 1
+        stats["queued_entry_trades"] += 1
+        row = queue.pop(str(decision.entity_id or ""), {})
+        stats["queue_events"].append(
+            {
+                "date": pd.Timestamp(day).strftime("%Y-%m-%d"),
+                "event": "converted",
+                "entity_id": str(decision.entity_id or ""),
+                "ticker": normalize_ticker(decision.ticker),
+                "queued_at": row.get("queued_at", ""),
+            }
+        )
+
+
+def _queue_candidate(day, cand: BuyCandidate, queue: dict[str, dict], stats: dict, *, reason: str, ttl: int) -> None:
+    entity_id = str(cand.entity_id or "")
+    ticker = normalize_ticker(cand.ticker)
+    if not entity_id or not ticker:
+        return
+    date_str = pd.Timestamp(day).strftime("%Y-%m-%d")
+    row = queue.get(entity_id)
+    if row is None:
+        queue[entity_id] = {
+            "entity_id": entity_id,
+            "ticker": ticker,
+            "queued_at": date_str,
+            "last_seen": date_str,
+            "reason": str(reason or ""),
+            "ttl": int(ttl or 0),
+            "score": float(_allocation_score_for_candidate(cand, AllocationParams()) or 0.0),
+        }
+        stats["queue_registered"] += 1
+        stats["queue_events"].append({"date": date_str, "event": "registered", "entity_id": entity_id, "ticker": ticker, "reason": str(reason or "")})
+        return
+    row["last_seen"] = date_str
+    row["reason"] = str(reason or row.get("reason", ""))
+    stats["queue_refreshed"] += 1
+
+
+def _decision_still_allowed(decision: BuyDecision, ledger: EntityPositionLedger, alloc_params: AllocationParams) -> bool:
+    active_open_positions = [p for p in list(ledger.open_positions()) if normalize_shares(getattr(p, "open_shares", 0.0)) > 0.0]
+    open_by_entity = {str(getattr(p, "entity_id", "") or ""): p for p in active_open_positions}
+    open_tickers = {normalize_ticker(getattr(p, "ticker", "")) for p in active_open_positions if normalize_ticker(getattr(p, "ticker", ""))}
+    if decision.purpose == "add_buy":
+        return str(decision.target_position_id or "") in {str(getattr(p, "position_id", "") or "") for p in active_open_positions}
+    if str(decision.entity_id or "") in open_by_entity:
+        return False
+    ticker = normalize_ticker(decision.ticker)
+    if not ticker or ticker in open_tickers:
+        return False
+    max_positions = max(int(alloc_params.max_positions or 0), 0)
+    return len(open_tickers) < max_positions
+
+
+def _exit_imminence_proxy(day, pos, provider: CacheOnlyDataProvider) -> dict:
+    """Current-bar-only exit-imminence proxy.
+
+    This intentionally uses only position state saved before/at ``day`` and the
+    OHLCV row at ``day``. It never scans future rows or actual future exits.
+    """
+    ticker = normalize_ticker(getattr(pos, "ticker", ""))
+    df = provider.load_price_df(ticker)
+    idx = _index_for_date(df, day)
+    if idx is None:
+        return {
+            "exit_imminence_score": 1.0,
+            "time_imminence": 1.0,
+            "take_profit_imminence": 1.0,
+            "stop_imminence": 1.0,
+            "trailing_imminence": 1.0,
+            "holding_days": 0,
+            "max_holding_days": int(getattr(pos, "max_holding_days", 0) or 0),
+            "uses_future_data": False,
+        }
+    row = df.iloc[idx]
+    close = _float(row.get("Close", row.get("close", 0.0)))
+    atr = _float(row.get("ATR", 0.0))
+    if atr <= 0.0:
+        atr = max(close * 0.02, 1e-9)
+    holding_days = _holding_days(df, str(getattr(pos, "entry_date", "") or ""), idx)
+    max_holding_days = max(int(getattr(pos, "max_holding_days", 0) or 0), 0)
+    if max_holding_days > 0:
+        remaining = max(max_holding_days - holding_days, 0)
+        time_imminence = 1.0 - min(remaining / max(float(max_holding_days), 1.0), 1.0)
+    else:
+        remaining = 9999
+        time_imminence = 0.0
+    target = float(getattr(pos, "target_price", 0.0) or 0.0)
+    stop = float(getattr(pos, "stop_price", 0.0) or 0.0)
+    trailing = float(getattr(pos, "trailing_stop", 0.0) or 0.0)
+    take_profit_imminence = _upper_boundary_imminence(close, target, atr)
+    stop_imminence = _lower_boundary_imminence(close, stop, atr)
+    trailing_imminence = _lower_boundary_imminence(close, trailing, atr)
+    score = max(time_imminence, take_profit_imminence, stop_imminence, trailing_imminence)
+    return {
+        "exit_imminence_score": float(max(0.0, min(score, 1.0))),
+        "time_imminence": float(max(0.0, min(time_imminence, 1.0))),
+        "take_profit_imminence": float(max(0.0, min(take_profit_imminence, 1.0))),
+        "stop_imminence": float(max(0.0, min(stop_imminence, 1.0))),
+        "trailing_imminence": float(max(0.0, min(trailing_imminence, 1.0))),
+        "holding_days": int(holding_days),
+        "max_holding_days": int(max_holding_days),
+        "time_stop_remaining_days": int(remaining),
+        "current_close": float(close),
+        "current_atr": float(atr),
+        "target_price": float(target),
+        "stop_price": float(stop),
+        "trailing_stop": float(trailing),
+        "uses_future_data": False,
+    }
+
+
+def _upper_boundary_imminence(close: float, boundary: float, atr: float) -> float:
+    if close <= 0.0 or boundary <= 0.0 or atr <= 0.0:
+        return 0.0
+    gap_atr = (boundary - close) / atr
+    if gap_atr <= 0.0:
+        return 1.0
+    return max(0.0, 1.0 - min(gap_atr / 3.0, 1.0))
+
+
+def _lower_boundary_imminence(close: float, boundary: float, atr: float) -> float:
+    if close <= 0.0 or boundary <= 0.0 or atr <= 0.0:
+        return 0.0
+    gap_atr = (close - boundary) / atr
+    if gap_atr <= 0.0:
+        return 1.0
+    return max(0.0, 1.0 - min(gap_atr / 3.0, 1.0))
+
+
+def _recent_turnover_ratio(day, result: BacktestResult, broker: SimBroker, *, lookback_days: int) -> float:
+    date = pd.Timestamp(day).normalize()
+    start = date - pd.Timedelta(days=max(int(lookback_days or 0), 1) * 2)
+    notional = 0.0
+    for trade in result.trades:
+        tdate = pd.Timestamp(trade.date).normalize()
+        if start <= tdate < date:
+            notional += abs(float(trade.notional or 0.0))
+    equity = float(broker.cash or 0.0) + sum(float(h.market_value or 0.0) for h in broker.get_holdings())
+    return notional / equity if equity > 0.0 else 0.0
+
+
+def _recent_trade_match(cand: BuyCandidate, trades: list[TradeRecord], day, *, lookback_days: int) -> bool:
+    date = pd.Timestamp(day).normalize()
+    start = date - pd.Timedelta(days=max(int(lookback_days or 0), 1))
+    ticker = normalize_ticker(cand.ticker)
+    entity_id = str(cand.entity_id or "")
+    for trade in trades:
+        tdate = pd.Timestamp(trade.date).normalize()
+        if not (start <= tdate < date):
+            continue
+        if normalize_ticker(trade.ticker) == ticker or str(trade.entity_id or "") == entity_id:
+            return True
+    return False
+
+
+def _calendar_days_between(start: str, end: str) -> int:
+    try:
+        return max(0, int((pd.Timestamp(end).normalize() - pd.Timestamp(start).normalize()).days))
+    except Exception:
+        return 0
+
+
+def _safe_ratio(numerator: float, denominator: float) -> float:
+    try:
+        den = float(denominator or 0.0)
+        return float(numerator or 0.0) / den if den else 0.0
+    except Exception:
+        return 0.0
+
+
 def _score_for_candidate(cand: BuyCandidate, metric: str, alloc_params: AllocationParams) -> Optional[float]:
     if metric == "confidence":
         return float(cand.confidence or 0.0)
@@ -467,7 +891,7 @@ def _score_for_position(pos, metric: str, candidate_by_entity: dict[str, BuyCand
     return None
 
 
-def _execute_swap_sell(day, pos, ledger: EntityPositionLedger, broker: SimBroker, result: BacktestResult) -> tuple[bool, float]:
+def _execute_swap_sell(day, pos, ledger: EntityPositionLedger, broker: SimBroker, result: BacktestResult, *, reason: str = "swap_exit") -> tuple[bool, float]:
     date_str = pd.Timestamp(day).strftime("%Y-%m-%d")
     shares = normalize_shares(getattr(pos, "open_shares", 0.0))
     if shares <= MIN_ORDER_SHARES:
@@ -478,7 +902,7 @@ def _execute_swap_sell(day, pos, ledger: EntityPositionLedger, broker: SimBroker
         OrderSide.SELL.value,
         "exit",
         shares,
-        "swap_exit",
+        str(reason or "swap_exit"),
         target_position_id=pos.position_id,
     )
     client_order_id = _client_order_id("swap-sell", pos.entity_id, pos.ticker, date_str)
@@ -501,7 +925,7 @@ def _execute_swap_sell(day, pos, ledger: EntityPositionLedger, broker: SimBroker
             shares=float(order.filled_shares or 0.0),
             price=float(order.filled_avg_price or 0.0),
             notional=notional,
-            reason="swap_exit",
+            reason=str(reason or "swap_exit"),
             position_id=pos.position_id,
             realized_pnl=float(getattr(pos, "realized_pnl", 0.0) or 0.0),
         )
@@ -509,7 +933,7 @@ def _execute_swap_sell(day, pos, ledger: EntityPositionLedger, broker: SimBroker
     return True, notional
 
 
-def _execute_swap_buy(day, cand: BuyCandidate, proceeds: float, ledger: EntityPositionLedger, broker: SimBroker, provider: CacheOnlyDataProvider, entity_by_id: dict[str, EntityRecord], rb_by_entity: dict[str, Rulebook], alloc_params: AllocationParams, result: BacktestResult, score: float) -> None:
+def _execute_swap_buy(day, cand: BuyCandidate, proceeds: float, ledger: EntityPositionLedger, broker: SimBroker, provider: CacheOnlyDataProvider, entity_by_id: dict[str, EntityRecord], rb_by_entity: dict[str, Rulebook], alloc_params: AllocationParams, result: BacktestResult, score: float, *, reason: str = "swap_entry") -> None:
     entity = entity_by_id.get(cand.entity_id)
     rb = rb_by_entity.get(cand.entity_id)
     if entity is None or rb is None:
@@ -534,7 +958,7 @@ def _execute_swap_buy(day, cand: BuyCandidate, proceeds: float, ledger: EntityPo
         purpose="entry",
         target_position_id="",
     )
-    _execute_buy(day, decision, ledger, broker, provider, entity, rb, alloc_params, result, reason="swap_entry")
+    _execute_buy(day, decision, ledger, broker, provider, entity, rb, alloc_params, result, reason=str(reason or "swap_entry"))
 
 
 def _append_candidate_log_rows(rows: list[dict], day, candidates: list[BuyCandidate], decisions, ledger: EntityPositionLedger, provider: CacheOnlyDataProvider, alloc_params: AllocationParams) -> None:

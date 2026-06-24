@@ -194,6 +194,9 @@ def main():
     parser.add_argument("--promotion-id", default=DEFAULT_LIVE_PROMOTION_ID)
     parser.add_argument("--central-control", choices=["on", "off"], default="off", help="신규 BUY만 중앙통제기 선정/배분으로 전환")
     parser.add_argument("--central-selection-metric", choices=["confidence", "turnover_score"], default="confidence")
+    parser.add_argument("--central-confidence-mode", choices=["raw", "adjusted"], default="adjusted", help="central confidence 산식: raw=기존 PF 평균, adjusted=PF cap+min trades neutral guard")
+    parser.add_argument("--central-pf-cap", type=float, default=10.0, help="adjusted confidence의 구간별 profit_factor 상한")
+    parser.add_argument("--central-min-trades", type=int, default=15, help="adjusted confidence에서 이 값 미만 trade_count 구간은 PF=1.0으로 중립 대체")
     parser.add_argument("--central-max-positions", type=int, default=8)
     parser.add_argument("--central-position-sizing", choices=["score_weighted", "equal"], default="score_weighted")
     parser.add_argument("--central-pool-limit", type=int, default=533)
@@ -275,12 +278,18 @@ def main():
             max_positions=int(args.central_max_positions),
             position_sizing=args.central_position_sizing,
             pool_limit=int(args.central_pool_limit),
+            confidence_mode=args.central_confidence_mode,
+            pf_cap=float(args.central_pf_cap),
+            min_trades=int(args.central_min_trades),
         )
         central_controller = LiveCentralController(runner, central_config)
         runner.tick_market = central_controller.tick_market
         logger.warning(
-            "[CENTRAL-CONTROL] ON: metric=%s max_positions=%s sizing=%s universe=promoted∩central pool_limit=%s exits=unchanged existing_positions=unchanged",
+            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s universe=promoted∩central pool_limit=%s exits=unchanged existing_positions=unchanged",
             args.central_selection_metric,
+            args.central_confidence_mode,
+            args.central_pf_cap,
+            args.central_min_trades,
             args.central_max_positions,
             args.central_position_sizing,
             args.central_pool_limit,

@@ -58,7 +58,7 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
     active_open_positions = [p for p in open_positions if normalize_shares(getattr(p, "open_shares", 0.0)) > 0.0]
     open_by_entity = {p.entity_id: p for p in active_open_positions}
     open_tickers = {normalize_ticker(getattr(p, "ticker", "")) for p in active_open_positions if normalize_ticker(getattr(p, "ticker", ""))}
-    ticker_exposure = _ticker_exposure(active_open_positions)
+    ticker_exposure, unknown_exposure_tickers = _ticker_exposure(active_open_positions)
     max_tickers = max(int(params.max_positions or 0), 0)
     remaining_new_ticker_slots = max(max_tickers - len(open_tickers), 0)
 
@@ -79,6 +79,10 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
             if not bool(rb.get("add_buy_enabled", False)):
                 continue
             if int(getattr(existing, "add_buy_count", 0) or 0) >= int(rb.get("add_buy_max_count", 0) or 0):
+                continue
+            if ticker in unknown_exposure_tickers:
+                # Existing exposure cannot be valued safely. Fail closed for add-buy
+                # instead of treating unknown exposure as zero and bypassing caps.
                 continue
             purpose = "add_buy"
             target_position_id = str(getattr(existing, "position_id", "") or "")
@@ -114,6 +118,8 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
     weights = _weights([row[0] for row in selected_rows], params.position_sizing)
     decisions: list[BuyDecision] = []
     for weight, (score, cand, purpose, target_position_id, ticker, price) in zip(weights, selected_rows):
+        if ticker in unknown_exposure_tickers:
+            continue
         desired_notional = investable_capital * float(weight)
         cap_notional = capital * max(float(params.per_ticker_exposure_cap or 0.0), 0.0)
         used = ticker_exposure.get(ticker, 0.0)
@@ -162,18 +168,34 @@ def _cash_use_ratio(cash_buffer_ratio: float) -> float:
     return max(0.0, min(float(cash_buffer_ratio or 0.0), 1.0))
 
 
-def _ticker_exposure(open_positions) -> dict[str, float]:
+def _ticker_exposure(open_positions) -> tuple[dict[str, float], set[str]]:
     exposure: dict[str, float] = {}
+    unknown: set[str] = set()
     for pos in open_positions or []:
         ticker = normalize_ticker(getattr(pos, "ticker", ""))
         if not ticker:
             continue
         shares = normalize_shares(getattr(pos, "open_shares", 0.0))
-        price = float(
-            getattr(pos, "current_price", 0.0)
-            or getattr(pos, "market_price", 0.0)
-            or getattr(pos, "avg_entry_price", 0.0)
-            or 0.0
+        if shares <= 0.0:
+            continue
+        price = _first_positive(
+            getattr(pos, "current_price", 0.0),
+            getattr(pos, "market_price", 0.0),
+            getattr(pos, "avg_entry_price", 0.0),
         )
+        if price <= 0.0:
+            unknown.add(ticker)
+            continue
         exposure[ticker] = exposure.get(ticker, 0.0) + shares * price
-    return exposure
+    return exposure, unknown
+
+
+def _first_positive(*values) -> float:
+    for value in values:
+        try:
+            out = float(value or 0.0)
+        except Exception:
+            out = 0.0
+        if out > 0.0:
+            return out
+    return 0.0

@@ -110,6 +110,24 @@ def test_central_control_never_emits_sell_order():
     assert runner.stats.signals_sell == 1
 
 
+def test_position_manager_load_error_blocks_central_new_buy(tmp_path, monkeypatch):
+    from engine.live import position_manager as pm_module
+
+    broken = tmp_path / "positions.json"
+    broken.write_text("{not-valid-json", encoding="utf-8")
+    monkeypatch.setattr(pm_module, "POSITIONS_PATH", broken)
+    real_pm = pm_module.PositionManager()
+    assert real_pm.load_error
+
+    runner = Runner()
+    runner.position_manager = real_pm
+    ctl = make_controller(runner)
+
+    ctl._process_central_buy_selection()
+
+    assert runner.orders == []
+
+
 def test_pending_buy_and_orphan_holding_reduce_live_slots():
     pending_buy = SimpleNamespace(
         ticker="BBB",
@@ -190,6 +208,36 @@ def test_allocation_applies_cash_buffer_and_current_price_exposure_cap():
     assert capped[0].notional <= 500.0 + 1e-6
 
 
+def test_allocation_blocks_add_buy_when_existing_exposure_price_unknown():
+    class Ledger:
+        def open_positions(self):
+            return [
+                SimpleNamespace(
+                    entity_id="aaa",
+                    ticker="AAA",
+                    open_shares=10.0,
+                    current_price=0.0,
+                    market_price=0.0,
+                    avg_entry_price=0.0,
+                    add_buy_count=0,
+                    position_id="pos-aaa",
+                )
+            ]
+
+    add_buy = [
+        BuyCandidate(
+            "aaa",
+            "AAA",
+            confidence=1.0,
+            strength=1.0,
+            price=200.0,
+            rulebook={"add_buy_enabled": True, "add_buy_max_count": 1},
+        )
+    ]
+
+    assert decide_buys(add_buy, Ledger(), AllocationParams(max_positions=1, total_capital=10_000.0)) == []
+
+
 def test_buy_reconciliation_drops_pending_after_retry_limit(tmp_path):
     class RulebookProvider:
         def get_last_atr(self, ticker):
@@ -224,3 +272,42 @@ def test_buy_reconciliation_drops_pending_after_retry_limit(tmp_path):
     svc.track_failure(order, purpose="entry", error="no atr")
 
     assert pending.all() == []
+
+
+def test_buy_reconciliation_keeps_pending_after_retry_limit_when_broker_holding_exists(tmp_path):
+    class RulebookProvider:
+        def get_last_atr(self, ticker):
+            return None
+
+        def get_rulebook(self, ticker):
+            return object()
+
+    class PM:
+        pass
+
+    holding = Holding("AAA", 1.0, 100.0, 100.0, 100.0, 0.0, 0.0)
+    pending = PendingOrderManager(Broker(holdings=[holding]), path=tmp_path / "pending.json")
+    svc = BuyReconciliationService(
+        broker=Broker(holdings=[holding]),
+        rulebook_provider=RulebookProvider(),
+        position_manager=PM(),
+        pending_manager=pending,
+        max_reconcile_retries=1,
+    )
+    order = Order(
+        order_id="B1",
+        ticker="AAA",
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        shares=1.0,
+        price=0.0,
+        status=OrderStatus.FILLED,
+        filled_shares=1.0,
+        filled_avg_price=100.0,
+    )
+
+    svc.track_failure(order, purpose="entry", error="no atr")
+
+    rows = pending.all()
+    assert len(rows) == 1
+    assert rows[0].ticker == "AAA"

@@ -144,18 +144,27 @@ class PositionManager:
 
     def __init__(self):
         self._positions: Dict[str, PositionEntry] = {}
+        self._load_error: str = ""
         self._load()
         log.info(f"PositionManager 초기화: 추적 중 {len(self._positions)}건")
 
+    @property
+    def load_error(self) -> str:
+        """Non-empty when positions.json could not be trusted at startup/load time."""
+        return self._load_error
+
     def _load(self) -> None:
+        self._load_error = ""
         if not POSITIONS_PATH.exists():
             return
         try:
             with open(POSITIONS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self._positions = {t: PositionEntry.from_dict(d) for t, d in data.items()}
+            self._load_error = ""
             log.info(f"positions.json 로드: {len(self._positions)}건")
         except Exception as e:
+            self._load_error = str(e)
             log.error(f"positions.json 로드 실패: {e}")
             self._positions = {}
 

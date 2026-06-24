@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 from engine.central.allocation_policy import AllocationParams, BuyCandidate, decide_buys
@@ -114,6 +115,27 @@ def make_controller(runner):
     return ctl
 
 
+def position_payload(ticker="AAA"):
+    return {
+        "ticker": ticker,
+        "entry_date": "2026-01-01T00:00:00+09:00",
+        "entry_price": 100.0,
+        "shares": 1.0,
+        "atr_at_entry": 2.0,
+        "stop_price": 95.0,
+        "target_price": 110.0,
+        "trailing_distance": 3.0,
+        "trailing_stop": 97.0,
+        "highest_price": 101.0,
+        "lowest_price": 99.0,
+        "exit_strategy": "fixed",
+        "max_holding_days": 30,
+        "rulebook_direction": "long",
+        "rulebook_snapshot": {},
+        "member_hash": "member123456",
+    }
+
+
 def filled_buy_order(ticker="AAA", order_id="B1"):
     return Order(
         order_id=order_id,
@@ -171,6 +193,7 @@ def test_position_manager_load_error_blocks_central_new_buy(tmp_path, monkeypatc
     monkeypatch.setattr(pm_module, "POSITIONS_PATH", broken)
     real_pm = pm_module.PositionManager()
     assert real_pm.load_error
+    assert real_pm.all() == []
 
     runner = Runner()
     runner.position_manager = real_pm
@@ -225,6 +248,34 @@ def test_position_manager_marker_write_failure_sets_load_error_and_blocks_buys(t
     assert runner.orders == []
 
 
+def test_position_manager_marker_write_failure_preserves_loaded_positions_and_blocks_buys(tmp_path, monkeypatch):
+    from engine.live import position_manager as pm_module
+
+    positions = tmp_path / "positions.json"
+    positions.write_text(json.dumps({"AAA": position_payload("AAA")}), encoding="utf-8")
+    monkeypatch.setattr(pm_module, "POSITIONS_PATH", positions)
+    original_write_text = pm_module.Path.write_text
+
+    def fake_write_text(self, *args, **kwargs):
+        if str(self).endswith("positions.json.initialized"):
+            raise OSError("marker disk error")
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(pm_module.Path, "write_text", fake_write_text)
+    real_pm = pm_module.PositionManager()
+
+    assert "init marker write failed" in real_pm.load_error
+    assert len(real_pm.all()) == 1
+    assert real_pm.get("AAA") is not None
+
+    runner = Runner()
+    runner.position_manager = real_pm
+    ctl = make_controller(runner)
+    ctl._process_central_buy_selection()
+
+    assert runner.orders == []
+
+
 def test_position_manager_marker_normal_creation_keeps_load_error_empty(tmp_path, monkeypatch):
     from engine.live import position_manager as pm_module
 
@@ -246,6 +297,7 @@ def test_position_manager_load_error_clears_after_normal_reload(tmp_path, monkey
     monkeypatch.setattr(pm_module, "POSITIONS_PATH", positions)
     manager = pm_module.PositionManager()
     assert manager.load_error
+    assert manager.all() == []
 
     positions.write_text("{}", encoding="utf-8")
     manager._load()

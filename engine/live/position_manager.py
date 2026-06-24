@@ -206,7 +206,6 @@ class PositionManager:
                 marker.write_text(datetime.now(KST).isoformat(), encoding="utf-8")
         except Exception as exc:
             self._load_error = f"positions init marker write failed: {exc}"
-            self._positions = {}
             log.error(self._load_error)
 
     def _save(self) -> None:

@@ -47,6 +47,20 @@ class Broker:
         return SimpleNamespace(total_value_usd=100_000.0)
 
 
+class SequenceBroker(Broker):
+    def __init__(self, sequences, *, price=100.0):
+        super().__init__(holdings=[], price=price)
+        self._sequences = list(sequences)
+
+    def get_holdings(self):
+        if not self._sequences:
+            return []
+        value = self._sequences.pop(0)
+        if isinstance(value, Exception):
+            raise value
+        return list(value)
+
+
 class PositionManager:
     load_error = ""
 
@@ -100,6 +114,45 @@ def make_controller(runner):
     return ctl
 
 
+def filled_buy_order(ticker="AAA", order_id="B1"):
+    return Order(
+        order_id=order_id,
+        ticker=ticker,
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        shares=1.0,
+        price=0.0,
+        status=OrderStatus.FILLED,
+        filled_shares=1.0,
+        filled_avg_price=100.0,
+    )
+
+
+class RulebookProvider:
+    def get_last_atr(self, ticker):
+        return None
+
+    def get_rulebook(self, ticker):
+        return object()
+
+
+class PM:
+    pass
+
+
+def make_reconcile_service(tmp_path, broker, *, max_retries=1, confirm_seconds=0):
+    pending = PendingOrderManager(broker, path=tmp_path / "pending.json")
+    svc = BuyReconciliationService(
+        broker=broker,
+        rulebook_provider=RulebookProvider(),
+        position_manager=PM(),
+        pending_manager=pending,
+        max_reconcile_retries=max_retries,
+        empty_holding_confirm_seconds=confirm_seconds,
+    )
+    return svc, pending
+
+
 def test_central_control_never_emits_sell_order():
     runner = Runner(rulebook=SellRulebook())
     ctl = make_controller(runner)
@@ -126,6 +179,39 @@ def test_position_manager_load_error_blocks_central_new_buy(tmp_path, monkeypatc
     ctl._process_central_buy_selection()
 
     assert runner.orders == []
+
+
+def test_position_manager_missing_file_policy_first_run_allowed_then_marker_blocks(tmp_path, monkeypatch):
+    from engine.live import position_manager as pm_module
+
+    positions = tmp_path / "positions.json"
+    monkeypatch.setattr(pm_module, "POSITIONS_PATH", positions)
+
+    first = pm_module.PositionManager()
+    assert first.load_error == ""
+    assert positions.exists()
+    assert (tmp_path / "positions.json.initialized").exists()
+
+    positions.unlink()
+    second = pm_module.PositionManager()
+    assert second.load_error
+    assert second.all() == []
+
+
+def test_position_manager_load_error_clears_after_normal_reload(tmp_path, monkeypatch):
+    from engine.live import position_manager as pm_module
+
+    positions = tmp_path / "positions.json"
+    positions.write_text("{broken", encoding="utf-8")
+    monkeypatch.setattr(pm_module, "POSITIONS_PATH", positions)
+    manager = pm_module.PositionManager()
+    assert manager.load_error
+
+    positions.write_text("{}", encoding="utf-8")
+    manager._load()
+
+    assert manager.load_error == ""
+    assert manager.all() == []
 
 
 def test_pending_buy_and_orphan_holding_reduce_live_slots():
@@ -238,75 +324,87 @@ def test_allocation_blocks_add_buy_when_existing_exposure_price_unknown():
     assert decide_buys(add_buy, Ledger(), AllocationParams(max_positions=1, total_capital=10_000.0)) == []
 
 
-def test_buy_reconciliation_drops_pending_after_retry_limit(tmp_path):
-    class RulebookProvider:
-        def get_last_atr(self, ticker):
-            return None
+def test_unknown_exposure_ticker_does_not_block_unrelated_new_ticker():
+    class Ledger:
+        def open_positions(self):
+            return [
+                SimpleNamespace(
+                    entity_id="aaa",
+                    ticker="AAA",
+                    open_shares=10.0,
+                    current_price=0.0,
+                    market_price=0.0,
+                    avg_entry_price=0.0,
+                    add_buy_count=0,
+                    position_id="pos-aaa",
+                )
+            ]
 
-        def get_rulebook(self, ticker):
-            return object()
-
-    class PM:
-        pass
-
-    pending = PendingOrderManager(Broker(), path=tmp_path / "pending.json")
-    svc = BuyReconciliationService(
-        broker=Broker(),
-        rulebook_provider=RulebookProvider(),
-        position_manager=PM(),
-        pending_manager=pending,
-        max_reconcile_retries=1,
-    )
-    order = Order(
-        order_id="B1",
-        ticker="AAA",
-        side=OrderSide.BUY,
-        order_type=OrderType.MARKET,
-        shares=1.0,
-        price=0.0,
-        status=OrderStatus.FILLED,
-        filled_shares=1.0,
-        filled_avg_price=100.0,
+    decision = decide_buys(
+        [BuyCandidate("ddd", "DDD", confidence=1.0, strength=1.0, price=100.0)],
+        Ledger(),
+        AllocationParams(max_positions=2, total_capital=10_000.0, per_ticker_exposure_cap=1.0),
     )
 
-    svc.track_failure(order, purpose="entry", error="no atr")
+    assert len(decision) == 1
+    assert decision[0].ticker == "DDD"
 
+
+def test_buy_reconciliation_get_holdings_exception_keeps_pending(tmp_path):
+    broker = SequenceBroker([RuntimeError("temporary outage")])
+    svc, pending = make_reconcile_service(tmp_path, broker, max_retries=1)
+
+    svc.track_failure(filled_buy_order(), purpose="entry", error="no atr")
+
+    rows = pending.all()
+    assert len(rows) == 1
+    assert rows[0].ticker == "AAA"
+
+
+def test_buy_reconciliation_transient_empty_then_holding_keeps_pending(tmp_path):
+    holding = Holding("AAA", 1.0, 100.0, 100.0, 100.0, 0.0, 0.0)
+    broker = SequenceBroker([[], [holding]])
+    svc, pending = make_reconcile_service(tmp_path, broker, max_retries=1, confirm_seconds=0)
+
+    svc.track_failure(filled_buy_order(), purpose="entry", error="no atr")
+    rows = pending.all()
+    assert len(rows) == 1
+    assert rows[0].metadata["zero_holding_seen_count"] == 1
+
+    svc.track_failure(filled_buy_order(), purpose="entry", error="no atr again")
+
+    rows = pending.all()
+    assert len(rows) == 1
+    assert "zero_holding_seen_count" not in rows[0].metadata
+
+
+def test_buy_reconciliation_drops_only_after_two_zero_holding_confirmations(tmp_path):
+    broker = SequenceBroker([[], []])
+    svc, pending = make_reconcile_service(tmp_path, broker, max_retries=1, confirm_seconds=0)
+
+    svc.track_failure(filled_buy_order(), purpose="entry", error="no atr")
+    assert len(pending.all()) == 1
+
+    svc.track_failure(filled_buy_order(), purpose="entry", error="no atr again")
     assert pending.all() == []
 
 
+def test_buy_reconciliation_zero_confirmation_too_soon_keeps_pending(tmp_path):
+    broker = SequenceBroker([[], []])
+    svc, pending = make_reconcile_service(tmp_path, broker, max_retries=1, confirm_seconds=60)
+
+    svc.track_failure(filled_buy_order(), purpose="entry", error="no atr")
+    svc.track_failure(filled_buy_order(), purpose="entry", error="no atr again")
+
+    assert len(pending.all()) == 1
+
+
 def test_buy_reconciliation_keeps_pending_after_retry_limit_when_broker_holding_exists(tmp_path):
-    class RulebookProvider:
-        def get_last_atr(self, ticker):
-            return None
-
-        def get_rulebook(self, ticker):
-            return object()
-
-    class PM:
-        pass
-
     holding = Holding("AAA", 1.0, 100.0, 100.0, 100.0, 0.0, 0.0)
-    pending = PendingOrderManager(Broker(holdings=[holding]), path=tmp_path / "pending.json")
-    svc = BuyReconciliationService(
-        broker=Broker(holdings=[holding]),
-        rulebook_provider=RulebookProvider(),
-        position_manager=PM(),
-        pending_manager=pending,
-        max_reconcile_retries=1,
-    )
-    order = Order(
-        order_id="B1",
-        ticker="AAA",
-        side=OrderSide.BUY,
-        order_type=OrderType.MARKET,
-        shares=1.0,
-        price=0.0,
-        status=OrderStatus.FILLED,
-        filled_shares=1.0,
-        filled_avg_price=100.0,
-    )
+    broker = Broker(holdings=[holding])
+    svc, pending = make_reconcile_service(tmp_path, broker, max_retries=1)
 
-    svc.track_failure(order, purpose="entry", error="no atr")
+    svc.track_failure(filled_buy_order(), purpose="entry", error="no atr")
 
     rows = pending.all()
     assert len(rows) == 1

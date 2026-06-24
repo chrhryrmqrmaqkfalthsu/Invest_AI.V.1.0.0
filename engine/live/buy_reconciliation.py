@@ -3,12 +3,13 @@
 BUY가 브로커에서 체결된 뒤 PositionEntry 등록/추가매수 반영이 끝날 때까지
 주문을 완료로 보지 않는다. 실패하면 pending_orders.json의 RECONCILING 상태로
 영속화하고 ticker 잠금을 유지한다. 단, 동일 BUY reconciliation 실패가 반복되고
-브로커 실보유가 없을 때만 pending lock을 정리한다.
+브로커 실보유가 시간 간격을 둔 연속 2회 확인에도 없을 때만 pending lock을 정리한다.
 """
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 from engine.live.broker.base import Holding, Order, OrderSide, OrderStatus, OrderType
@@ -16,6 +17,9 @@ from engine.live.broker.base import Holding, Order, OrderSide, OrderStatus, Orde
 log = logging.getLogger("buy_reconciliation")
 SHARE_EPS = 1e-6
 DEFAULT_MAX_RECONCILE_RETRIES = 3
+DEFAULT_EMPTY_HOLDING_CONFIRM_SECONDS = 10
+ZERO_HOLDING_COUNT_KEY = "zero_holding_seen_count"
+ZERO_HOLDING_FIRST_SEEN_KEY = "zero_holding_first_seen_at"
 
 
 @dataclass(frozen=True)
@@ -35,6 +39,7 @@ class BuyReconciliationService:
         pending_manager=None,
         notifier=None,
         max_reconcile_retries: int = DEFAULT_MAX_RECONCILE_RETRIES,
+        empty_holding_confirm_seconds: int = DEFAULT_EMPTY_HOLDING_CONFIRM_SECONDS,
     ):
         self.broker = broker
         self.rulebook_provider = rulebook_provider
@@ -42,6 +47,7 @@ class BuyReconciliationService:
         self.pending_manager = pending_manager
         self.notifier = notifier
         self.max_reconcile_retries = max(1, int(max_reconcile_retries or DEFAULT_MAX_RECONCILE_RETRIES))
+        self.empty_holding_confirm_seconds = max(0, int(empty_holding_confirm_seconds or 0))
 
     def preflight(self, ticker: str) -> BuyPreflight:
         provider = self.rulebook_provider
@@ -151,6 +157,7 @@ class BuyReconciliationService:
             self._notify_error(warning)
             return False
         if holding_shares > SHARE_EPS:
+            self._clear_zero_holding_probe(record)
             warning = (
                 f"[ORPHAN-BUY-KEEP] {ticker} retry limit reached but broker holding exists "
                 f"shares={holding_shares:g}; pending lock 유지: {message}"
@@ -158,11 +165,13 @@ class BuyReconciliationService:
             log.error(warning)
             self._notify_error(warning)
             return False
+        if not self._confirm_repeated_zero_holding(record, ticker, message):
+            return False
 
         warning = (
             f"[ORPHAN-BUY-DROP] {ticker or getattr(record, 'ticker', '?')} BUY reconciliation retry limit "
             f"reached ({getattr(record, 'retry_count', 0)}+1/{self.max_reconcile_retries}); "
-            f"broker holding 없음 → pending lock 정리: {message}"
+            f"broker holding 없음 2회 확인 → pending lock 정리: {message}"
         )
         log.error(warning)
         self._notify_error(warning)
@@ -189,6 +198,57 @@ class BuyReconciliationService:
             except Exception:
                 return None
         return 0.0
+
+    def _confirm_repeated_zero_holding(self, record, ticker: str, message: str) -> bool:
+        metadata = dict(getattr(record, "metadata", {}) or {})
+        now = datetime.now().astimezone()
+        first_seen_raw = str(metadata.get(ZERO_HOLDING_FIRST_SEEN_KEY) or "")
+        count = int(metadata.get(ZERO_HOLDING_COUNT_KEY) or 0)
+        first_seen = _parse_time(first_seen_raw)
+        if count <= 0 or first_seen is None:
+            metadata[ZERO_HOLDING_COUNT_KEY] = 1
+            metadata[ZERO_HOLDING_FIRST_SEEN_KEY] = now.isoformat()
+            record.metadata = metadata
+            record.updated_at = _manager_now_iso(self.pending_manager)
+            self._save_pending_state()
+            warning = (
+                f"[ORPHAN-BUY-KEEP] {ticker or '?'} retry limit reached but broker holding 0 is first observation; "
+                f"pending lock 유지: {message}"
+            )
+            log.error(warning)
+            self._notify_error(warning)
+            return False
+        elapsed = (now - first_seen).total_seconds()
+        if elapsed < self.empty_holding_confirm_seconds:
+            warning = (
+                f"[ORPHAN-BUY-KEEP] {ticker or '?'} broker holding 0 repeated too soon "
+                f"elapsed={elapsed:.1f}s < {self.empty_holding_confirm_seconds}s; pending lock 유지: {message}"
+            )
+            log.error(warning)
+            self._notify_error(warning)
+            return False
+        metadata[ZERO_HOLDING_COUNT_KEY] = count + 1
+        record.metadata = metadata
+        record.updated_at = _manager_now_iso(self.pending_manager)
+        self._save_pending_state()
+        return True
+
+    def _clear_zero_holding_probe(self, record) -> None:
+        metadata = dict(getattr(record, "metadata", {}) or {})
+        changed = False
+        for key in (ZERO_HOLDING_COUNT_KEY, ZERO_HOLDING_FIRST_SEEN_KEY):
+            if key in metadata:
+                metadata.pop(key, None)
+                changed = True
+        if changed:
+            record.metadata = metadata
+            record.updated_at = _manager_now_iso(self.pending_manager)
+            self._save_pending_state()
+
+    def _save_pending_state(self) -> None:
+        saver = getattr(self.pending_manager, "_save", None)
+        if callable(saver):
+            saver()
 
     def _notify_error(self, message: str) -> None:
         if self.notifier is None:
@@ -233,3 +293,22 @@ class BuyReconciliationService:
             )
             detected.append(ticker)
         return detected
+
+
+def _parse_time(value: str) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.now().astimezone().tzinfo)
+        return parsed
+    except Exception:
+        return None
+
+
+def _manager_now_iso(manager) -> str:
+    now_iso = getattr(manager, "_now_iso", None)
+    if callable(now_iso):
+        return now_iso()
+    return datetime.now().astimezone().isoformat()

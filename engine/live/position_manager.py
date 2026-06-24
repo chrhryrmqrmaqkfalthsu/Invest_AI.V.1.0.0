@@ -31,6 +31,10 @@ SHARE_ROUND_DIGITS = 6
 SHARE_EPS = 10 ** (-SHARE_ROUND_DIGITS)
 
 
+def _positions_init_marker_path() -> Path:
+    return POSITIONS_PATH.with_name(POSITIONS_PATH.name + ".initialized")
+
+
 def _env_enabled(name: str) -> bool:
     return str(os.environ.get(name, "0")).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -155,24 +159,55 @@ class PositionManager:
 
     def _load(self) -> None:
         self._load_error = ""
+        marker_path = _positions_init_marker_path()
         if not POSITIONS_PATH.exists():
+            if marker_path.exists():
+                self._load_error = f"positions file missing after initialization: {POSITIONS_PATH}"
+                self._positions = {}
+                log.error(self._load_error)
+                return
+            self._positions = {}
+            self._initialize_empty_state(marker_path)
             return
         try:
             with open(POSITIONS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("positions.json root must be object")
             self._positions = {t: PositionEntry.from_dict(d) for t, d in data.items()}
             self._load_error = ""
+            self._mark_initialized(marker_path)
             log.info(f"positions.json 로드: {len(self._positions)}건")
         except Exception as e:
             self._load_error = str(e)
             log.error(f"positions.json 로드 실패: {e}")
             self._positions = {}
 
+    def _initialize_empty_state(self, marker_path: Path) -> None:
+        try:
+            POSITIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            POSITIONS_PATH.write_text("{}", encoding="utf-8")
+            self._mark_initialized(marker_path)
+            log.info("positions.json 최초 초기화: 0건")
+        except Exception as exc:
+            self._load_error = f"positions empty-state initialization failed: {exc}"
+            log.error(self._load_error)
+
+    def _mark_initialized(self, marker_path: Optional[Path] = None) -> None:
+        marker = marker_path or _positions_init_marker_path()
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            if not marker.exists():
+                marker.write_text(datetime.now(KST).isoformat(), encoding="utf-8")
+        except Exception as exc:
+            log.warning("positions init marker 기록 실패: %s", exc)
+
     def _save(self) -> None:
         POSITIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
         try:
             with open(POSITIONS_PATH, "w", encoding="utf-8") as f:
                 json.dump({t: p.to_dict() for t, p in self._positions.items()}, f, ensure_ascii=False, indent=2)
+            self._mark_initialized()
         except Exception as e:
             log.error(f"positions.json 저장 실패: {e}")
 

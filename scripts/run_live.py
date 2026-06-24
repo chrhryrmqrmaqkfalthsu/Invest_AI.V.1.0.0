@@ -27,6 +27,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from engine.live.broker.factory import make_broker
+from engine.live.central_control import LiveCentralControlConfig, LiveCentralController
 from engine.live.daily_report import (
     send_daily_report_from_runner,
     send_monthly_report_from_runner,
@@ -179,6 +180,10 @@ def make_holding_news_tick_market_job(runner: Runner):
     return tick_market_with_holding_news
 
 
+def _central_control_enabled(value: str) -> bool:
+    return str(value or "off").strip().lower() == "on"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Kingmaker live trading bot")
     parser.add_argument("--mode", choices=["paper", "real", "vts", "live", "alpaca", "alpaca_paper"], default=None)
@@ -187,6 +192,11 @@ def main():
     parser.add_argument("--market", choices=["US", "KRX"], default="US")
     parser.add_argument("--universe", choices=["promoted", "parameters"], default="promoted")
     parser.add_argument("--promotion-id", default=DEFAULT_LIVE_PROMOTION_ID)
+    parser.add_argument("--central-control", choices=["on", "off"], default="off", help="신규 BUY만 중앙통제기 선정/배분으로 전환")
+    parser.add_argument("--central-selection-metric", choices=["confidence", "turnover_score"], default="confidence")
+    parser.add_argument("--central-max-positions", type=int, default=8)
+    parser.add_argument("--central-position-sizing", choices=["score_weighted", "equal"], default="score_weighted")
+    parser.add_argument("--central-pool-limit", type=int, default=533)
     parser.add_argument("--market-tick", type=int, default=60)
     parser.add_argument("--offmarket-tick", type=int, default=3600)
     parser.add_argument("--sma-window", type=int, default=20)
@@ -254,6 +264,29 @@ def main():
         order_notional=order_notional if order_notional > 0 else None,
         universe_config=universe.config,
     )
+    if _central_control_enabled(args.central_control):
+        broker_mode = str(getattr(broker, "mode", "") or "").lower()
+        if broker_mode not in {"paper", "alpaca_paper"}:
+            logger.error("central-control은 alpaca_paper/paper에서만 허용: broker.mode=%s", broker_mode)
+            sys.exit(4)
+        central_config = LiveCentralControlConfig(
+            enabled=True,
+            selection_metric=args.central_selection_metric,
+            max_positions=int(args.central_max_positions),
+            position_sizing=args.central_position_sizing,
+            pool_limit=int(args.central_pool_limit),
+        )
+        central_controller = LiveCentralController(runner, central_config)
+        runner.tick_market = central_controller.tick_market
+        logger.warning(
+            "[CENTRAL-CONTROL] ON: metric=%s max_positions=%s sizing=%s universe=promoted∩central pool_limit=%s exits=unchanged existing_positions=unchanged",
+            args.central_selection_metric,
+            args.central_max_positions,
+            args.central_position_sizing,
+            args.central_pool_limit,
+        )
+    else:
+        logger.info("[CENTRAL-CONTROL] OFF: 기존 live 개별 ticker BUY 경로 유지")
     if hasattr(runner, "notifier") and hasattr(runner, "tick_market"):
         install_position_dashboard(runner)
 

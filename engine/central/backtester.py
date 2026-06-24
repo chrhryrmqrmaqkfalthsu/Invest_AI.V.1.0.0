@@ -18,7 +18,7 @@ from engine.central.allocation_policy import AllocationParams, BuyCandidate, Buy
 from engine.central.entity_loader import EntityRecord
 from engine.central.ledger import EntityPositionLedger
 from engine.central.models import normalize_shares, normalize_ticker
-from engine.central.signal_collector import CacheOnlyDataProvider, SignalCollector
+from engine.central.signal_collector import CacheOnlyDataProvider, SignalCollector, SignalSnapshot
 from engine.central.sim_broker import FillPolicy, SimBroker
 from engine.core.exit_policy import (
     ExitExecutionConfig,
@@ -78,6 +78,7 @@ class BacktestResult:
     max_drawdown_pct: float = 0.0
     final_equity: float = 0.0
     reconcile_failures: list[dict] = field(default_factory=list)
+    diagnostics: dict = field(default_factory=dict)
 
     @property
     def rejected_order_count(self) -> int:
@@ -94,6 +95,7 @@ class BacktestResult:
             "max_drawdown_pct": self.max_drawdown_pct,
             "final_equity": self.final_equity,
             "reconcile_failures": list(self.reconcile_failures),
+            "diagnostics": dict(self.diagnostics or {}),
         }
 
 
@@ -144,17 +146,32 @@ def run_central_backtest(
     turnover_guard: float = 0.0,
     queue_signal_ttl: int = 5,
     selection_metric: str = "confidence",
+    min_trades_for_turnover: int = 30,
+    signal_cache: Optional[dict[str, list[SignalSnapshot]]] = None,
 ) -> BacktestResult:
     entity_list = list(entities)
     if not entity_list:
         raise ValueError("entities required")
     selection_metric_name = _normalize_selection_metric(selection_metric)
+    if getattr(alloc_params, "allocation_stats", None) is None:
+        alloc_params = replace(alloc_params, allocation_stats={})
+    min_trades_for_turnover = max(int(min_trades_for_turnover or 0), 0)
     selection_scores = None
+    selection_stats = {
+        "selection_metric": selection_metric_name,
+        "turnover_min_trades": min_trades_for_turnover,
+        "turnover_excluded_min_trades": 0,
+        "turnover_scored_entities": 0,
+    }
     if selection_metric_name == "turnover_score":
-        selection_scores = {
-            entity.entity_id: _turnover_score_for_entity(entity)
-            for entity in entity_list
-        }
+        selection_scores = {}
+        for entity in entity_list:
+            score = _turnover_score_for_entity(entity, min_trades=min_trades_for_turnover)
+            selection_scores[entity.entity_id] = score
+            if score is None:
+                selection_stats["turnover_excluded_min_trades"] += 1
+            else:
+                selection_stats["turnover_scored_entities"] += 1
     provider = data_provider or CacheOnlyDataProvider()
     collector = SignalCollector(provider, use_llm_events=use_llm_events)
     price_data = {ticker: provider.load_price_df(ticker) for ticker in sorted({e.ticker for e in entity_list})}
@@ -176,7 +193,7 @@ def run_central_backtest(
         if exit_via != "rulebook":
             raise ValueError(f"unsupported exit_via: {exit_via}")
         _process_exits(day, ledger, broker, provider, entity_by_id, rb_by_entity, result)
-        signals = collector.collect(entity_list, day)
+        signals = _collect_signals_with_cache(collector, entity_list, day, signal_cache)
         candidates = [
             BuyCandidate(
                 entity_id=s.entity_id,
@@ -249,6 +266,7 @@ def run_central_backtest(
             result.reconcile_failures.append({"date": pd.Timestamp(day).strftime("%Y-%m-%d"), **rec})
         result.equity_curve.append(_equity_point(day, broker, ledger))
     _finalize_result(result, alloc_params.total_capital, ledger, broker)
+    result.diagnostics = _backtest_diagnostics(result, ledger, alloc_params, selection_stats)
     if guard_stats is not None:
         guard_stats["queue_active_end"] = len(guard_queue)
         guard_stats["queue_conversion_rate"] = _safe_ratio(guard_stats["queue_converted"], guard_stats["queue_registered"])
@@ -268,7 +286,7 @@ def _normalize_selection_metric(value: str) -> str:
     return metric
 
 
-def _turnover_score_for_entity(entity: EntityRecord) -> Optional[float]:
+def _turnover_score_for_entity(entity: EntityRecord, *, min_trades: int = 30) -> Optional[float]:
     tags = dict(entity.tags or {})
     required = ("avg_realized_pnl_pct", "avg_holding_days", "trade_count")
     missing = [key for key in required if key not in tags or tags.get(key) is None]
@@ -286,9 +304,86 @@ def _turnover_score_for_entity(entity: EntityRecord) -> Optional[float]:
         raise ValueError(f"non-finite turnover_score fields for {entity.entity_id}")
     if avg_holding_days <= 0.0:
         raise ValueError(f"avg_holding_days must be positive for {entity.entity_id}")
-    if trade_count < 30.0:
+    if trade_count < float(min_trades or 0):
         return None
     return avg_pnl / avg_holding_days
+
+
+def build_signal_cache(
+    entities: Iterable[EntityRecord],
+    start: str,
+    end: str,
+    *,
+    data_provider: Optional[CacheOnlyDataProvider] = None,
+    use_llm_events: bool = False,
+) -> dict[str, list[SignalSnapshot]]:
+    """Precompute daily BUY signals once so A/B sweeps can share them."""
+    entity_list = list(entities)
+    if not entity_list:
+        return {}
+    provider = data_provider or CacheOnlyDataProvider()
+    collector = SignalCollector(provider, use_llm_events=use_llm_events)
+    price_data = {ticker: provider.load_price_df(ticker) for ticker in sorted({e.ticker for e in entity_list})}
+    cache: dict[str, list[SignalSnapshot]] = {}
+    for day in _trading_days(price_data.values(), start, end):
+        cache[pd.Timestamp(day).strftime("%Y-%m-%d")] = collector.collect(entity_list, day)
+    return cache
+
+
+def _collect_signals_with_cache(
+    collector: SignalCollector,
+    entity_list: list[EntityRecord],
+    day,
+    signal_cache: Optional[dict[str, list[SignalSnapshot]]],
+) -> list[SignalSnapshot]:
+    date_key = pd.Timestamp(day).strftime("%Y-%m-%d")
+    if signal_cache is None:
+        return collector.collect(entity_list, day)
+    if date_key not in signal_cache:
+        signal_cache[date_key] = collector.collect(entity_list, day)
+    allowed = {entity.entity_id for entity in entity_list}
+    return [signal for signal in signal_cache.get(date_key, []) if signal.entity_id in allowed]
+
+
+def _backtest_diagnostics(result: BacktestResult, ledger: EntityPositionLedger, alloc_params: AllocationParams, selection_stats: dict) -> dict:
+    open_counts = [point.open_position_count for point in result.equity_curve]
+    positions = list(getattr(ledger, "_positions", {}).values())
+    ticker_entity_counts: dict[str, int] = {}
+    entity_notionals: list[float] = []
+    for pos in positions:
+        ticker = normalize_ticker(getattr(pos, "ticker", ""))
+        if ticker:
+            ticker_entity_counts[ticker] = ticker_entity_counts.get(ticker, 0) + 1
+        opened_shares = normalize_shares(getattr(pos, "opened_shares", 0.0))
+        avg_entry = float(getattr(pos, "avg_entry_price", 0.0) or 0.0)
+        notional = opened_shares * avg_entry
+        if notional > 0.0 and float(alloc_params.total_capital or 0.0) > 0.0:
+            entity_notionals.append(notional / float(alloc_params.total_capital) * 100.0)
+    allocation_stats = dict(getattr(alloc_params, "allocation_stats", None) or {})
+    cap_hits = dict(allocation_stats.get("ticker_cap_hit_by_ticker", {}) or {})
+    return {
+        "avg_open_entity_positions": float(sum(open_counts) / len(open_counts)) if open_counts else 0.0,
+        "max_open_entity_positions": int(max(open_counts)) if open_counts else 0,
+        "ticker_entity_count_distribution": _distribution(ticker_entity_counts.values()),
+        "ticker_entity_count_top": sorted(ticker_entity_counts.items(), key=lambda kv: (kv[1], kv[0]), reverse=True)[:20],
+        "ticker_cap_hit_events": int(allocation_stats.get("ticker_cap_hit_events", 0) or 0),
+        "ticker_cap_hit_tickers": len(cap_hits),
+        "ticker_cap_hit_top": sorted(cap_hits.items(), key=lambda kv: (kv[1], kv[0]), reverse=True)[:20],
+        "entity_avg_allocation_pct": float(sum(entity_notionals) / len(entity_notionals)) if entity_notionals else 0.0,
+        "entity_median_allocation_pct": float(pd.Series(entity_notionals).median()) if entity_notionals else 0.0,
+        "entity_min_allocation_pct": float(min(entity_notionals)) if entity_notionals else 0.0,
+        "entity_p10_allocation_pct": float(pd.Series(entity_notionals).quantile(0.10)) if entity_notionals else 0.0,
+        "allocation_stats": allocation_stats,
+        "selection_stats": dict(selection_stats or {}),
+    }
+
+
+def _distribution(values) -> dict[int, int]:
+    out: dict[int, int] = {}
+    for value in values or []:
+        key = int(value)
+        out[key] = out.get(key, 0) + 1
+    return dict(sorted(out.items()))
 
 
 def _decide_buys_with_selection_metric(
@@ -1089,11 +1184,15 @@ def _candidate_rejection_reason(cand: BuyCandidate, selected: bool, ledger: Enti
             return "already_open_entity_add_buy_disabled"
         if int(getattr(existing, "add_buy_count", 0) or 0) >= int(rb.get("add_buy_max_count", 0) or 0):
             return "add_buy_max_count"
-    elif ticker in open_tickers:
+    elif (not bool(getattr(alloc_params, "allow_same_ticker_entities", False))) and ticker in open_tickers:
         return "already_held_ticker"
     if allocation_score <= 0.0:
         return "non_positive_allocation_score"
     max_positions = max(int(alloc_params.max_positions or 0), 0)
+    if bool(getattr(alloc_params, "allow_same_ticker_entities", False)):
+        if len(active_open_positions) >= max_positions:
+            return "max_entity_positions_full_or_ranked_out"
+        return "ranked_out_or_duplicate_entity"
     if len(open_tickers) >= max_positions:
         return "max_positions_full_or_ranked_out"
     return "ranked_out_or_duplicate_ticker"

@@ -1,7 +1,7 @@
 """Score-based allocation policy for central-controller backtests."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Optional
 
 from engine.central.models import normalize_shares, normalize_ticker
@@ -20,6 +20,14 @@ class AllocationParams:
     position_sizing: str = "score_weighted"  # score_weighted | equal
     min_notional: float = 0.0
     cash_buffer_ratio: float = 0.98
+    # False preserves the original behavior: max_positions is a distinct-ticker
+    # cap and same-ticker duplicate entities are de-duped. True makes
+    # max_positions an entity/position cap while per_ticker_exposure_cap still
+    # aggregates exposure across all entities for the ticker.
+    allow_same_ticker_entities: bool = False
+    # Optional mutable diagnostics sink used by research backtests. The dataclass
+    # remains frozen, but the referenced dict may be updated by decide_buys().
+    allocation_stats: Optional[dict] = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -50,67 +58,104 @@ class BuyDecision:
 def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: AllocationParams) -> list[BuyDecision]:
     """Select and size BUY candidates.
 
-    ``max_positions`` is interpreted as a concurrent distinct-ticker cap for
-    entry positions. Existing positions for the same entity are skipped unless
-    the candidate rulebook explicitly allows add-buy.
+    Default mode keeps the historical central-controller semantics: ``max_positions``
+    is a concurrent distinct-ticker cap, and duplicate tickers are de-duped.
+
+    When ``allow_same_ticker_entities=True``, ``max_positions`` becomes an
+    entity/position cap. Multiple entities for the same ticker may be selected,
+    while ticker-level exposure is still capped by the sum of all open/selected
+    positions for that ticker.
     """
+    allow_same_ticker_entities = bool(getattr(params, "allow_same_ticker_entities", False))
     open_positions = list(current_ledger.open_positions()) if current_ledger is not None else []
     active_open_positions = [p for p in open_positions if normalize_shares(getattr(p, "open_shares", 0.0)) > 0.0]
-    open_by_entity = {p.entity_id: p for p in active_open_positions}
+    open_by_entity = {str(getattr(p, "entity_id", "") or ""): p for p in active_open_positions}
     open_tickers = {normalize_ticker(getattr(p, "ticker", "")) for p in active_open_positions if normalize_ticker(getattr(p, "ticker", ""))}
     ticker_exposure, unknown_exposure_tickers = _ticker_exposure(active_open_positions)
-    max_tickers = max(int(params.max_positions or 0), 0)
-    remaining_new_ticker_slots = max(max_tickers - len(open_tickers), 0)
+    max_positions = max(int(params.max_positions or 0), 0)
+    if allow_same_ticker_entities:
+        remaining_new_slots = max(max_positions - len(active_open_positions), 0)
+    else:
+        remaining_new_slots = max(max_positions - len(open_tickers), 0)
+
+    stats = _stats_sink(params)
+    _bump(stats, "calls")
+    _bump(stats, "open_position_count", len(active_open_positions))
+    _bump(stats, "open_ticker_count", len(open_tickers))
 
     candidate_rows = []
     for cand in buy_candidates:
+        _bump(stats, "candidates_seen")
         ticker = normalize_ticker(cand.ticker)
         price = float(cand.price or 0.0)
         if not ticker or price <= 0.0:
+            _bump(stats, "rejected_invalid_ticker_or_price")
             continue
         confidence = float(cand.confidence or 0.0)
         if confidence < params.min_confidence:
+            _bump(stats, "rejected_below_min_confidence")
             continue
+        entity_id = str(cand.entity_id or "")
         purpose = "entry"
         target_position_id = ""
-        existing = open_by_entity.get(cand.entity_id)
+        existing = open_by_entity.get(entity_id)
         if existing is not None:
             rb = dict(cand.rulebook or {})
             if not bool(rb.get("add_buy_enabled", False)):
+                _bump(stats, "rejected_already_open_entity_add_buy_disabled")
                 continue
             if int(getattr(existing, "add_buy_count", 0) or 0) >= int(rb.get("add_buy_max_count", 0) or 0):
+                _bump(stats, "rejected_add_buy_max_count")
                 continue
             if ticker in unknown_exposure_tickers:
                 # Existing exposure cannot be valued safely. Fail closed for add-buy
                 # instead of treating unknown exposure as zero and bypassing caps.
+                _bump(stats, "rejected_unknown_existing_exposure")
                 continue
             purpose = "add_buy"
             target_position_id = str(getattr(existing, "position_id", "") or "")
-        elif ticker in open_tickers:
-            # A different rulebook for an already-held ticker must not consume a
-            # new slot or create duplicate ticker exposure.
+        elif (not allow_same_ticker_entities) and ticker in open_tickers:
+            # Historical ticker-mode behavior: a different rulebook for an
+            # already-held ticker must not create duplicate ticker exposure.
+            _bump(stats, "rejected_already_held_ticker")
             continue
         score = float(params.confidence_weight) * confidence + float(params.signal_strength_weight) * float(cand.strength or 0.0)
         if score <= 0.0:
+            _bump(stats, "rejected_non_positive_score")
             continue
         candidate_rows.append((score, cand, purpose, target_position_id, ticker, price))
 
     candidate_rows.sort(key=lambda row: (row[0], row[1].confidence, row[1].strength, row[1].entity_id), reverse=True)
     selected_rows = []
     selected_new_tickers: set[str] = set()
+    selected_new_entities: set[str] = set()
     for row in candidate_rows:
         purpose = row[2]
         ticker = row[4]
+        entity_id = str(row[1].entity_id or "")
         if purpose == "add_buy":
             selected_rows.append(row)
             continue
-        if ticker in selected_new_tickers:
-            continue
-        if len(selected_new_tickers) >= remaining_new_ticker_slots:
-            continue
-        selected_rows.append(row)
-        selected_new_tickers.add(ticker)
+        if allow_same_ticker_entities:
+            if entity_id in selected_new_entities:
+                _bump(stats, "rejected_duplicate_entity_same_tick")
+                continue
+            if len(selected_new_entities) >= remaining_new_slots:
+                _bump(stats, "rejected_entity_slots_full")
+                continue
+            selected_rows.append(row)
+            selected_new_entities.add(entity_id)
+        else:
+            if ticker in selected_new_tickers:
+                _bump(stats, "rejected_duplicate_ticker_same_tick")
+                continue
+            if len(selected_new_tickers) >= remaining_new_slots:
+                _bump(stats, "rejected_ticker_slots_full")
+                continue
+            selected_rows.append(row)
+            selected_new_tickers.add(ticker)
     if not selected_rows:
+        _bump(stats, "empty_decision_days")
         return []
 
     capital = float(params.total_capital or 0.0)
@@ -119,16 +164,22 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
     decisions: list[BuyDecision] = []
     for weight, (score, cand, purpose, target_position_id, ticker, price) in zip(weights, selected_rows):
         if ticker in unknown_exposure_tickers:
+            _bump(stats, "rejected_unknown_ticker_exposure")
             continue
         desired_notional = investable_capital * float(weight)
         cap_notional = capital * max(float(params.per_ticker_exposure_cap or 0.0), 0.0)
         used = ticker_exposure.get(ticker, 0.0)
         allowed = max(0.0, cap_notional - used)
         notional = min(desired_notional, allowed)
+        if allowed <= 0.0 or notional < desired_notional - 1e-9:
+            _bump(stats, "ticker_cap_hit_events")
+            _bump_nested(stats, "ticker_cap_hit_by_ticker", ticker)
         if notional <= max(float(params.min_notional or 0.0), 0.0):
+            _bump(stats, "rejected_min_notional_or_cap")
             continue
         shares = normalize_shares(notional / price)
         if shares <= MIN_ORDER_SHARES:
+            _bump(stats, "rejected_dust_shares")
             continue
         decisions.append(
             BuyDecision(
@@ -144,6 +195,9 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
             )
         )
         ticker_exposure[ticker] = ticker_exposure.get(ticker, 0.0) + shares * price
+        _bump(stats, "decisions")
+        _bump(stats, "allocated_notional", shares * price)
+        _bump_nested(stats, "selected_entities_by_ticker", ticker)
     return decisions
 
 
@@ -199,3 +253,21 @@ def _first_positive(*values) -> float:
         if out > 0.0:
             return out
     return 0.0
+
+
+def _stats_sink(params: AllocationParams) -> Optional[dict]:
+    stats = getattr(params, "allocation_stats", None)
+    return stats if isinstance(stats, dict) else None
+
+
+def _bump(stats: Optional[dict], key: str, amount: float = 1.0) -> None:
+    if stats is None:
+        return
+    stats[key] = stats.get(key, 0.0) + amount
+
+
+def _bump_nested(stats: Optional[dict], key: str, item: str) -> None:
+    if stats is None:
+        return
+    nested = stats.setdefault(key, {})
+    nested[item] = nested.get(item, 0) + 1

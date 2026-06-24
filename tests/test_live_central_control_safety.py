@@ -198,6 +198,46 @@ def test_position_manager_missing_file_policy_first_run_allowed_then_marker_bloc
     assert second.all() == []
 
 
+def test_position_manager_marker_write_failure_sets_load_error_and_blocks_buys(tmp_path, monkeypatch):
+    from engine.live import position_manager as pm_module
+
+    positions = tmp_path / "positions.json"
+    positions.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(pm_module, "POSITIONS_PATH", positions)
+    original_write_text = pm_module.Path.write_text
+
+    def fake_write_text(self, *args, **kwargs):
+        if str(self).endswith("positions.json.initialized"):
+            raise OSError("marker disk error")
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(pm_module.Path, "write_text", fake_write_text)
+    real_pm = pm_module.PositionManager()
+
+    assert "init marker write failed" in real_pm.load_error
+    assert real_pm.all() == []
+    runner = Runner()
+    runner.position_manager = real_pm
+    ctl = make_controller(runner)
+
+    ctl._process_central_buy_selection()
+
+    assert runner.orders == []
+
+
+def test_position_manager_marker_normal_creation_keeps_load_error_empty(tmp_path, monkeypatch):
+    from engine.live import position_manager as pm_module
+
+    positions = tmp_path / "positions.json"
+    monkeypatch.setattr(pm_module, "POSITIONS_PATH", positions)
+
+    manager = pm_module.PositionManager()
+
+    assert manager.load_error == ""
+    assert positions.exists()
+    assert (tmp_path / "positions.json.initialized").exists()
+
+
 def test_position_manager_load_error_clears_after_normal_reload(tmp_path, monkeypatch):
     from engine.live import position_manager as pm_module
 
@@ -376,6 +416,24 @@ def test_buy_reconciliation_transient_empty_then_holding_keeps_pending(tmp_path)
     rows = pending.all()
     assert len(rows) == 1
     assert "zero_holding_seen_count" not in rows[0].metadata
+
+
+def test_buy_reconciliation_zero_probe_resets_on_lookup_exception(tmp_path):
+    broker = SequenceBroker([[], RuntimeError("temporary outage"), []])
+    svc, pending = make_reconcile_service(tmp_path, broker, max_retries=1, confirm_seconds=0)
+
+    svc.track_failure(filled_buy_order(), purpose="entry", error="no atr")
+    assert pending.all()[0].metadata["zero_holding_seen_count"] == 1
+
+    svc.track_failure(filled_buy_order(), purpose="entry", error="lookup outage")
+    rows = pending.all()
+    assert len(rows) == 1
+    assert "zero_holding_seen_count" not in rows[0].metadata
+
+    svc.track_failure(filled_buy_order(), purpose="entry", error="no atr again")
+    rows = pending.all()
+    assert len(rows) == 1
+    assert rows[0].metadata["zero_holding_seen_count"] == 1
 
 
 def test_buy_reconciliation_drops_only_after_two_zero_holding_confirmations(tmp_path):

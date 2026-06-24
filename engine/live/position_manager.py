@@ -177,6 +177,8 @@ class PositionManager:
             self._positions = {t: PositionEntry.from_dict(d) for t, d in data.items()}
             self._load_error = ""
             self._mark_initialized(marker_path)
+            if self._load_error:
+                return
             log.info(f"positions.json 로드: {len(self._positions)}건")
         except Exception as e:
             self._load_error = str(e)
@@ -188,9 +190,12 @@ class PositionManager:
             POSITIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
             POSITIONS_PATH.write_text("{}", encoding="utf-8")
             self._mark_initialized(marker_path)
+            if self._load_error:
+                return
             log.info("positions.json 최초 초기화: 0건")
         except Exception as exc:
             self._load_error = f"positions empty-state initialization failed: {exc}"
+            self._positions = {}
             log.error(self._load_error)
 
     def _mark_initialized(self, marker_path: Optional[Path] = None) -> None:
@@ -200,7 +205,9 @@ class PositionManager:
             if not marker.exists():
                 marker.write_text(datetime.now(KST).isoformat(), encoding="utf-8")
         except Exception as exc:
-            log.warning("positions init marker 기록 실패: %s", exc)
+            self._load_error = f"positions init marker write failed: {exc}"
+            self._positions = {}
+            log.error(self._load_error)
 
     def _save(self) -> None:
         POSITIONS_PATH.parent.mkdir(parents=True, exist_ok=True)

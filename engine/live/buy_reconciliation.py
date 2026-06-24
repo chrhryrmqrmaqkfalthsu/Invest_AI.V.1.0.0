@@ -149,9 +149,10 @@ class BuyReconciliationService:
         ticker = str(getattr(record, "ticker", "") or "").strip().upper()
         holding_shares = self._broker_holding_shares(ticker)
         if holding_shares is None:
+            self._clear_zero_holding_probe(record)
             warning = (
                 f"[ORPHAN-BUY-KEEP] {ticker or '?'} retry limit reached but holdings lookup failed; "
-                f"pending lock 유지: {message}"
+                f"zero-holding probe reset, pending lock 유지: {message}"
             )
             log.error(warning)
             self._notify_error(warning)

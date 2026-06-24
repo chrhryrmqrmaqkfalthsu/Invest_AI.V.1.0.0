@@ -2,7 +2,8 @@
 
 BUY가 브로커에서 체결된 뒤 PositionEntry 등록/추가매수 반영이 끝날 때까지
 주문을 완료로 보지 않는다. 실패하면 pending_orders.json의 RECONCILING 상태로
-영속화하고 ticker 잠금을 유지한다.
+영속화하고 ticker 잠금을 유지한다. 단, 동일 BUY reconciliation 실패가 반복되면
+상한 이후 pending lock을 정리해 무한 orphan retry를 막는다.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ from engine.live.broker.base import Holding, Order, OrderSide, OrderStatus, Orde
 
 log = logging.getLogger("buy_reconciliation")
 SHARE_EPS = 1e-6
+DEFAULT_MAX_RECONCILE_RETRIES = 3
 
 
 @dataclass(frozen=True)
@@ -32,12 +34,14 @@ class BuyReconciliationService:
         position_manager,
         pending_manager=None,
         notifier=None,
+        max_reconcile_retries: int = DEFAULT_MAX_RECONCILE_RETRIES,
     ):
         self.broker = broker
         self.rulebook_provider = rulebook_provider
         self.position_manager = position_manager
         self.pending_manager = pending_manager
         self.notifier = notifier
+        self.max_reconcile_retries = max(1, int(max_reconcile_retries or DEFAULT_MAX_RECONCILE_RETRIES))
 
     def preflight(self, ticker: str) -> BuyPreflight:
         provider = self.rulebook_provider
@@ -111,6 +115,9 @@ class BuyReconciliationService:
                 metadata=metadata,
                 error=message,
             )
+            if self._should_drop_reconciling_record(record):
+                self._drop_reconciling_record(record, message)
+                return record
         critical = (
             f"[CRITICAL][ORPHAN-BUY] {order.ticker} BUY 체결 후 포지션 등록 미완료 — "
             f"신규 주문 잠금 및 재조정 유지: {message}"
@@ -122,6 +129,31 @@ class BuyReconciliationService:
             except Exception as exc:
                 log.warning("고아 포지션 긴급 알림 실패: %s", exc)
         return record
+
+    def _should_drop_reconciling_record(self, record) -> bool:
+        if record is None:
+            return False
+        retry_count = int(getattr(record, "retry_count", 0) or 0)
+        # Runner.mark_reconcile_error increments retry_count after this call. Drop
+        # on the Nth attempt, not the N+1th.
+        return retry_count >= max(self.max_reconcile_retries - 1, 0)
+
+    def _drop_reconciling_record(self, record, message: str) -> None:
+        warning = (
+            f"[ORPHAN-BUY-DROP] {getattr(record, 'ticker', '?')} BUY reconciliation retry limit "
+            f"reached ({getattr(record, 'retry_count', 0)}+1/{self.max_reconcile_retries}); "
+            f"pending lock 정리: {message}"
+        )
+        log.error(warning)
+        if self.notifier is not None:
+            try:
+                self.notifier.send_error(warning)
+            except Exception as exc:
+                log.warning("orphan retry limit 알림 실패: %s", exc)
+        try:
+            self.pending_manager.mark_finalized(record.order_id)
+        except Exception as exc:
+            log.error("%s pending 정리 실패: %s", getattr(record, "ticker", "?"), exc)
 
     def detect_orphan_holdings(self, holdings: list[Holding]) -> list[str]:
         """브로커 보유는 있으나 PositionEntry가 없는 ticker를 durable lock으로 만든다."""

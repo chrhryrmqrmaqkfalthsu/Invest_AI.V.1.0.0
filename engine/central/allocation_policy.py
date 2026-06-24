@@ -110,10 +110,11 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
         return []
 
     capital = float(params.total_capital or 0.0)
+    investable_capital = capital * _cash_use_ratio(params.cash_buffer_ratio)
     weights = _weights([row[0] for row in selected_rows], params.position_sizing)
     decisions: list[BuyDecision] = []
     for weight, (score, cand, purpose, target_position_id, ticker, price) in zip(weights, selected_rows):
-        desired_notional = capital * float(weight)
+        desired_notional = investable_capital * float(weight)
         cap_notional = capital * max(float(params.per_ticker_exposure_cap or 0.0), 0.0)
         used = ticker_exposure.get(ticker, 0.0)
         allowed = max(0.0, cap_notional - used)
@@ -151,11 +152,28 @@ def _weights(scores: list[float], mode: str) -> list[float]:
     return [max(float(s), 0.0) / total for s in scores]
 
 
+def _cash_use_ratio(cash_buffer_ratio: float) -> float:
+    """Return the fraction of total capital that may be allocated.
+
+    Existing central-controller configs use ``cash_buffer_ratio=0.98`` to mean
+    "use 98% of capital and keep roughly 2% cash". Keep that convention here and
+    finally apply it inside ``decide_buys``.
+    """
+    return max(0.0, min(float(cash_buffer_ratio or 0.0), 1.0))
+
+
 def _ticker_exposure(open_positions) -> dict[str, float]:
     exposure: dict[str, float] = {}
     for pos in open_positions or []:
         ticker = normalize_ticker(getattr(pos, "ticker", ""))
+        if not ticker:
+            continue
         shares = normalize_shares(getattr(pos, "open_shares", 0.0))
-        price = float(getattr(pos, "avg_entry_price", 0.0) or 0.0)
+        price = float(
+            getattr(pos, "current_price", 0.0)
+            or getattr(pos, "market_price", 0.0)
+            or getattr(pos, "avg_entry_price", 0.0)
+            or 0.0
+        )
         exposure[ticker] = exposure.get(ticker, 0.0) + shares * price
     return exposure

@@ -65,8 +65,10 @@ class _LiveOpenPosition:
     ticker: str
     open_shares: float
     avg_entry_price: float
+    current_price: float = 0.0
     position_id: str = ""
     add_buy_count: int = 0
+    source: str = "position"
 
 
 class _LiveLedgerView:
@@ -74,34 +76,7 @@ class _LiveLedgerView:
         self._positions = list(positions or [])
 
     def open_positions(self) -> list[_LiveOpenPosition]:
-        output: list[_LiveOpenPosition] = []
-        for pos in self._positions:
-            ticker = normalize_ticker(getattr(pos, "ticker", ""))
-            if not ticker:
-                continue
-            try:
-                shares = float(getattr(pos, "shares", 0.0) or 0.0)
-            except Exception:
-                shares = 0.0
-            if shares <= 0.0:
-                continue
-            try:
-                entry_price = float(getattr(pos, "entry_price", 0.0) or 0.0)
-            except Exception:
-                entry_price = 0.0
-            member_hash = str(getattr(pos, "member_hash", "") or "").strip()
-            entity_id = f"{ticker}_{member_hash[:12]}" if member_hash else f"{ticker}__live_position"
-            output.append(
-                _LiveOpenPosition(
-                    entity_id=entity_id,
-                    ticker=ticker,
-                    open_shares=shares,
-                    avg_entry_price=entry_price,
-                    position_id=entity_id,
-                    add_buy_count=int(getattr(pos, "add_buy_count", 0) or 0),
-                )
-            )
-        return output
+        return list(self._positions)
 
 
 class LiveCentralController:
@@ -250,6 +225,9 @@ class LiveCentralController:
             self.runner._handle_error("central_control.tick_market", exc)
 
     def _process_central_buy_selection(self) -> None:
+        if self._state_unavailable_for_new_buys():
+            logger.error("[CENTRAL-CONTROL] position/pending state unavailable → 신규 BUY fail-closed")
+            return
         pending_mgr = getattr(self.runner, "pending_order_manager", None)
         candidates: list[BuyCandidate] = []
         candidate_signal_by_entity = {}
@@ -285,8 +263,10 @@ class LiveCentralController:
                     candidate_signal_by_entity[entity.entity_id] = sig
                     candidate_price_by_entity[entity.entity_id] = float(price)
             elif sig.signal == Signal.SELL:
+                # 중앙통제기는 신규 BUY 선정/배분 전용이다. SELL authority는
+                # PositionManager.check_exits() 경로에만 남겨 기존 포지션을 보호한다.
                 self.runner.stats.signals_sell += 1
-                self.runner._try_order("SELL", ticker, float(price), sig.reason, signal_result=sig)
+                logger.info("[CENTRAL-CONTROL] %s SELL signal ignored; exits are PositionManager-only", ticker)
             else:
                 self.runner.stats.signals_hold += 1
                 logger.debug("[CENTRAL-CONTROL] %s HOLD: %s", ticker, sig.reason)
@@ -300,19 +280,20 @@ class LiveCentralController:
             )
             return
 
-        ledger = _LiveLedgerView(self.runner.position_manager.all())
+        ledger = self._build_live_ledger_view()
         alloc = self._allocation_params()
         if self.selection_metric == "confidence":
             decisions = decide_buys(candidates, ledger, alloc)
         else:
             decisions = _decide_buys_with_selection_metric(candidates, ledger, alloc, self.selection_scores)
         logger.info(
-            "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=%s decisions=%s open_positions=%s max_positions=%s metric=%s confidence_mode=%s",
+            "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=%s decisions=%s open_positions=%s ledger_slots=%s max_positions=%s metric=%s confidence_mode=%s",
             self.runner.stats.market_ticks,
             evaluated_symbols,
             len(candidates),
             len(decisions),
             len(self.runner.position_manager.all()),
+            len(ledger.open_positions()),
             alloc.max_positions,
             self.selection_metric,
             self.confidence_mode,
@@ -321,6 +302,109 @@ class LiveCentralController:
             sig = candidate_signal_by_entity.get(decision.entity_id)
             price = candidate_price_by_entity.get(decision.entity_id, 0.0)
             self._execute_decision(decision, sig, price)
+
+    def _state_unavailable_for_new_buys(self) -> bool:
+        pm = getattr(self.runner, "position_manager", None)
+        if pm is None:
+            return True
+        if str(getattr(pm, "load_error", "") or getattr(pm, "_load_error", "") or ""):
+            return True
+        pending_mgr = getattr(self.runner, "pending_order_manager", None)
+        if pending_mgr is not None and str(getattr(pending_mgr, "load_error", "") or ""):
+            return True
+        return False
+
+    def _build_live_ledger_view(self) -> _LiveLedgerView:
+        positions: list[_LiveOpenPosition] = []
+        seen_tickers: set[str] = set()
+        for pos in self.runner.position_manager.all():
+            live_pos = self._position_entry_to_live_open(pos, source="position")
+            if live_pos is None:
+                continue
+            positions.append(live_pos)
+            seen_tickers.add(live_pos.ticker)
+
+        pending_mgr = getattr(self.runner, "pending_order_manager", None)
+        if pending_mgr is not None:
+            for record in pending_mgr.all():
+                ticker = normalize_ticker(getattr(record, "ticker", ""))
+                if not ticker or ticker in seen_tickers:
+                    continue
+                if str(getattr(record, "side", "") or "").lower() != "buy":
+                    continue
+                if str(getattr(record, "state", "") or "").upper() == "DONE":
+                    continue
+                shares = _safe_float(getattr(record, "filled_shares", 0.0), 0.0) or _safe_float(getattr(record, "requested_shares", 0.0), 0.0) or 1.0
+                price = _safe_float(getattr(record, "filled_avg_price", 0.0), 0.0) or self._safe_current_price(ticker)
+                positions.append(
+                    _LiveOpenPosition(
+                        entity_id=f"{ticker}__pending_buy",
+                        ticker=ticker,
+                        open_shares=max(float(shares), 1e-6),
+                        avg_entry_price=max(float(price), 0.0),
+                        current_price=max(float(price), 0.0),
+                        position_id=str(getattr(record, "order_id", "") or f"pending-{ticker}"),
+                        source="pending_buy",
+                    )
+                )
+                seen_tickers.add(ticker)
+
+        try:
+            holdings = self.runner.broker.get_holdings()
+        except Exception as exc:
+            logger.error("[CENTRAL-CONTROL] holdings 조회 실패 → 신규 BUY fail-closed: %s", exc)
+            raise
+        for holding in holdings or []:
+            ticker = normalize_ticker(getattr(holding, "ticker", ""))
+            if not ticker or ticker in seen_tickers:
+                continue
+            shares = _safe_float(getattr(holding, "shares", 0.0), 0.0)
+            if shares <= 0.0:
+                continue
+            current_price = _safe_float(getattr(holding, "current_price", 0.0), 0.0) or self._safe_current_price(ticker)
+            avg_cost = _safe_float(getattr(holding, "avg_cost", 0.0), 0.0) or current_price
+            positions.append(
+                _LiveOpenPosition(
+                    entity_id=f"{ticker}__orphan_holding",
+                    ticker=ticker,
+                    open_shares=shares,
+                    avg_entry_price=avg_cost,
+                    current_price=current_price,
+                    position_id=f"orphan-{ticker}",
+                    source="orphan_holding",
+                )
+            )
+            seen_tickers.add(ticker)
+        return _LiveLedgerView(positions)
+
+    def _position_entry_to_live_open(self, pos, *, source: str) -> Optional[_LiveOpenPosition]:
+        ticker = normalize_ticker(getattr(pos, "ticker", ""))
+        if not ticker:
+            return None
+        shares = _safe_float(getattr(pos, "shares", 0.0), 0.0)
+        if shares <= 0.0:
+            return None
+        entry_price = _safe_float(getattr(pos, "entry_price", 0.0), 0.0)
+        current_price = self._safe_current_price(ticker) or entry_price
+        member_hash = str(getattr(pos, "member_hash", "") or "").strip()
+        entity_id = f"{ticker}_{member_hash[:12]}" if member_hash else f"{ticker}__live_position"
+        return _LiveOpenPosition(
+            entity_id=entity_id,
+            ticker=ticker,
+            open_shares=shares,
+            avg_entry_price=entry_price,
+            current_price=current_price,
+            position_id=entity_id,
+            add_buy_count=int(getattr(pos, "add_buy_count", 0) or 0),
+            source=source,
+        )
+
+    def _safe_current_price(self, ticker: str) -> float:
+        try:
+            price = self.runner.broker.get_current_price(ticker)
+            return _safe_float(price, 0.0)
+        except Exception:
+            return 0.0
 
     def _allocation_params(self) -> AllocationParams:
         return AllocationParams(

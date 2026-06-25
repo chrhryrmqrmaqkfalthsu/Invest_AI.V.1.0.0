@@ -70,6 +70,12 @@ from engine.live.manual_buy_intent import (
     load_candidate_state,
     read_json,
 )
+from engine.live.manual_sell_intent import (
+    MANUAL_SELL_INTENT_PATH,
+    POSITIONS_PATH as MANUAL_SELL_POSITIONS_PATH,
+    create_manual_sell_intent,
+    load_manual_sell_state,
+)
 
 SYS = os.path.join("data", "_system")
 UNIVERSE_MANIFEST_PATH = os.path.join(SYS, "live_universe_lr8d_stage1_manifest.json")
@@ -418,6 +424,12 @@ class ManualBuyIntentRequest(BaseModel):
     source: str = "dashboard"
 
 
+class ManualSellIntentRequest(BaseModel):
+    ticker: str
+    shares_requested: float | None = None
+    source: str = "dashboard"
+
+
 @app.get("/api/live/central_candidates")
 def central_candidates():
     """central-control semi_auto 대기 후보. broker를 import하지 않고 파일만 읽는다."""
@@ -439,6 +451,28 @@ def manual_buy_intent(req: ManualBuyIntentRequest):
             source=req.source or "dashboard",
             candidate_path=CENTRAL_BUY_CANDIDATES_PATH,
             intent_path=MANUAL_BUY_INTENT_PATH,
+        )
+        return {"ok": True, "intent": row}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/live/manual_sell_intents")
+def manual_sell_intents():
+    """대시보드 확인용 manual SELL intent 상태. broker를 import하지 않고 파일만 읽는다."""
+    return load_manual_sell_state(MANUAL_SELL_INTENT_PATH)
+
+
+@app.post("/api/live/manual_sell_intent")
+def manual_sell_intent(req: ManualSellIntentRequest):
+    """보유 종목 청산 intent만 기록한다. 실제 broker 주문은 paper 프로세스가 처리한다."""
+    try:
+        row = create_manual_sell_intent(
+            ticker=req.ticker,
+            shares_requested=req.shares_requested,
+            source=req.source or "dashboard",
+            positions_path=MANUAL_SELL_POSITIONS_PATH,
+            intent_path=MANUAL_SELL_INTENT_PATH,
         )
         return {"ok": True, "intent": row}
     except ValueError as exc:

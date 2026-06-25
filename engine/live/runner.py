@@ -288,6 +288,10 @@ class Runner:
         except Exception as e:
             self._handle_error("position_manager.check_exits", e)
         try:
+            self._process_manual_sell_intents()
+        except Exception as e:
+            self._handle_error("_process_manual_sell_intents", e)
+        try:
             self._process_pending_approvals()
         except Exception as e:
             self._handle_error("_process_pending_approvals", e)
@@ -300,6 +304,109 @@ class Runner:
                 self._process_ticker(ticker)
         except Exception as e:
             self._handle_error("tick_market", e)
+
+    def _broker_holding_shares(self, ticker: str) -> float:
+        try:
+            holdings = {h.ticker: h for h in self.broker.get_holdings()}
+            return float(getattr(holdings.get(ticker), "shares", 0.0) or 0.0)
+        except Exception:
+            return 0.0
+
+    def _position_and_holding_missing(self, ticker: str) -> bool:
+        return self.position_manager.get(ticker) is None and self._broker_holding_shares(ticker) <= SHARE_EPS
+
+    def _latest_pending_exit_order_id(self, ticker: str) -> str:
+        pending_mgr = getattr(self, "pending_order_manager", None)
+        if pending_mgr is None:
+            return ""
+        rows = [
+            r for r in pending_mgr.all()
+            if str(getattr(r, "ticker", "") or "").upper() == str(ticker or "").upper()
+            and str(getattr(r, "side", "") or "").lower() == "sell"
+            and str(getattr(r, "state", "") or "").upper() != "DONE"
+        ]
+        rows.sort(key=lambda r: str(getattr(r, "updated_at", "") or getattr(r, "created_at", "")), reverse=True)
+        return str(getattr(rows[0], "order_id", "") or "") if rows else ""
+
+    def _process_manual_sell_intents(self) -> None:
+        from engine.live.manual_sell_intent import (
+            load_pending_manual_sell_intents,
+            load_submitted_manual_sell_intents,
+            mark_sell_intent_status,
+        )
+
+        pending_mgr = getattr(self, "pending_order_manager", None)
+        if pending_mgr is not None and str(getattr(pending_mgr, "load_error", "") or ""):
+            logger.error("[MANUAL-SELL] pending 주문 상태 unavailable → 수동 SELL fail-closed")
+            return
+        if str(getattr(self.position_manager, "load_error", "") or ""):
+            logger.error("[MANUAL-SELL] positions 상태 unavailable → 수동 SELL fail-closed")
+            return
+
+        for intent in load_submitted_manual_sell_intents():
+            intent_id = str(intent.get("intent_id") or "")
+            ticker = str(intent.get("ticker") or "").upper()
+            if not intent_id or not ticker:
+                continue
+            has_pending_exit = bool(pending_mgr is not None and pending_mgr.has_pending_exit(ticker))
+            if self.position_manager.get(ticker) is None and self._broker_holding_shares(ticker) <= SHARE_EPS:
+                mark_sell_intent_status(intent_id, "consumed", note="sell finalized")
+                logger.warning("[MANUAL-SELL] consumed finalized ticker=%s intent=%s", ticker, intent_id)
+            elif not has_pending_exit:
+                mark_sell_intent_status(intent_id, "rejected", note="sell order not pending and position still held")
+                logger.warning("[MANUAL-SELL] rejected stale submitted ticker=%s intent=%s", ticker, intent_id)
+
+        for intent in load_pending_manual_sell_intents():
+            intent_id = str(intent.get("intent_id") or "")
+            ticker = str(intent.get("ticker") or "").upper()
+            if not intent_id or not ticker:
+                continue
+            pos = self.position_manager.get(ticker)
+            held_shares = self._broker_holding_shares(ticker)
+            if pos is None or held_shares <= SHARE_EPS:
+                mark_sell_intent_status(intent_id, "rejected", note="already exited")
+                logger.warning("[MANUAL-SELL] rejected already exited ticker=%s intent=%s", ticker, intent_id)
+                continue
+            if pending_mgr is not None and pending_mgr.is_ticker_locked(ticker):
+                note = "already exiting" if pending_mgr.has_pending_exit(ticker) else "ticker locked by pending order"
+                mark_sell_intent_status(intent_id, "rejected", note=note)
+                logger.warning("[MANUAL-SELL] rejected locked ticker=%s intent=%s note=%s", ticker, intent_id, note)
+                continue
+            requested = float(intent.get("shares_requested") or held_shares)
+            sell_shares = min(max(requested, 0.0), held_shares)
+            if sell_shares <= SHARE_EPS:
+                mark_sell_intent_status(intent_id, "rejected", note="sell shares resolved to zero")
+                continue
+            price = self.broker.get_current_price(ticker) or float(getattr(pos, "entry_price", 0.0) or 0.0)
+            if price <= 0:
+                mark_sell_intent_status(intent_id, "rejected", note="current price unavailable")
+                continue
+            old_notional = self.order_notional
+            old_shares = self.order_shares
+            before_blocked = int(getattr(self.stats, "orders_blocked", 0) or 0)
+            before_attempted = int(getattr(self.stats, "orders_attempted", 0) or 0)
+            try:
+                self.order_notional = None
+                self.order_shares = sell_shares
+                self._try_order("SELL", ticker, float(price), "manual_exit", signal_result=None)
+            finally:
+                self.order_notional = old_notional
+                self.order_shares = old_shares
+            if pending_mgr is not None and pending_mgr.has_pending_exit(ticker):
+                order_id = self._latest_pending_exit_order_id(ticker)
+                mark_sell_intent_status(intent_id, "submitted", note="sell submitted", order_id=order_id)
+                logger.warning("[MANUAL-SELL] submitted ticker=%s intent=%s order_id=%s", ticker, intent_id, order_id)
+            elif self._position_and_holding_missing(ticker):
+                mark_sell_intent_status(intent_id, "consumed", note="sell filled immediately")
+                logger.warning("[MANUAL-SELL] consumed immediate ticker=%s intent=%s", ticker, intent_id)
+            else:
+                note = "runner blocked or did not attempt order"
+                if int(getattr(self.stats, "orders_blocked", 0) or 0) > before_blocked:
+                    note = "runner blocked sell order"
+                elif int(getattr(self.stats, "orders_attempted", 0) or 0) == before_attempted:
+                    note = "runner did not attempt sell order"
+                mark_sell_intent_status(intent_id, "rejected", note=note)
+                logger.warning("[MANUAL-SELL] rejected ticker=%s intent=%s note=%s", ticker, intent_id, note)
 
     def _process_ticker(self, ticker: str) -> None:
         pending_mgr = getattr(self, "pending_order_manager", None)
@@ -762,7 +869,9 @@ class Runner:
             self.stats.orders_blocked += 1
             logger.info(f"{ticker} {side} 차단: 주문 수량 계산 결과 0")
             return
-        check = self.safety.check_order(side, ticker, order_shares, price, purpose="entry")
+        order_purpose = "exit" if side == "SELL" else "entry"
+        exit_reason = str(reason or "manual_exit") if side == "SELL" else ""
+        check = self.safety.check_order(side, ticker, order_shares, price, purpose=order_purpose)
         if not check.allowed:
             self.stats.orders_blocked += 1
             logger.info(f"{ticker} {side} 차단: [{check.code}] {check.reason}")
@@ -779,12 +888,13 @@ class Runner:
                 side=side,
                 ticker=ticker,
                 shares=order_shares,
-                purpose="entry",
+                purpose=order_purpose,
                 order_type=OrderType.MARKET,
                 metadata=order_metadata,
+                exit_reason=exit_reason,
                 seed=f"signal|{ticker}|{side}|{reason}|{self.stats.market_ticks}",
             )
-            self.safety.record_order(order, side, purpose="entry")
+            self.safety.record_order(order, side, purpose=order_purpose)
             if not hasattr(self, "_tick_locked_tickers"):
                 self._tick_locked_tickers = set()
             self._tick_locked_tickers.add(ticker)
@@ -794,7 +904,7 @@ class Runner:
                         order.price = float(price)
                 except Exception:
                     pass
-                pending_mgr.track_order(order, purpose="entry", metadata=order_metadata)
+                pending_mgr.track_order(order, purpose=order_purpose, metadata=order_metadata, exit_reason=exit_reason)
                 self.notifier.send_order(order)
                 logger.info(f"{ticker} {side} pending 추적 시작: id={order.order_id} status={order.status.value}")
                 return
@@ -820,6 +930,13 @@ class Runner:
                         )
                         return
                 else:
+                    trade_record = self.position_manager.finalize_sell_fill(
+                        order,
+                        exit_reason=exit_reason or "manual_exit",
+                        broker=self.broker,
+                        notifier=self.notifier,
+                    )
+                    self._record_realized_pnl_from_trade(trade_record)
                     self.notifier.send_order(order)
             logger.info(f"{ticker} {side} 발주 완료: shares={order_shares:g} id={order.order_id} status={order.status.value}")
         except Exception as e:

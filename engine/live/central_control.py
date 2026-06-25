@@ -241,6 +241,10 @@ class LiveCentralController:
         except Exception as exc:
             self.runner._handle_error("central_control.position_manager.check_exits", exc)
         try:
+            self.runner._process_manual_sell_intents()
+        except Exception as exc:
+            self.runner._handle_error("central_control._process_manual_sell_intents", exc)
+        try:
             self.runner._process_pending_approvals()
         except Exception as exc:
             self.runner._handle_error("central_control._process_pending_approvals", exc)

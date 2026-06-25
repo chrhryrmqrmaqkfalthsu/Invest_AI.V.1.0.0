@@ -398,12 +398,13 @@ class SafetyLayer:
         if self.max_shares is not None and shares_f > self.max_shares:
             return SafetyDecision(False, f"수량 {shares_f:g} > 한도 {self.max_shares:g}주", "LIMIT_SHARES")
 
-        max_notional, limit_error = self._current_order_notional_limit()
-        if limit_error:
-            log.error("주문당 동적 상한 계산 실패: %s", limit_error)
-            return SafetyDecision(False, f"주문당 동적 상한 계산 실패: {limit_error}", "LIMIT_NOTIONAL")
-        if order_notional > max_notional + NOTIONAL_EPS:
-            return SafetyDecision(False, f"주문금액 {order_notional:,.2f} > 한도 {max_notional:,.2f}", "LIMIT_NOTIONAL")
+        if side_lower == "buy":
+            max_notional, limit_error = self._current_order_notional_limit()
+            if limit_error:
+                log.error("주문당 동적 상한 계산 실패: %s", limit_error)
+                return SafetyDecision(False, f"주문당 동적 상한 계산 실패: {limit_error}", "LIMIT_NOTIONAL")
+            if order_notional > max_notional + NOTIONAL_EPS:
+                return SafetyDecision(False, f"주문금액 {order_notional:,.2f} > 한도 {max_notional:,.2f}", "LIMIT_NOTIONAL")
 
         if st.orders_today >= self.max_orders_per_day:
             return SafetyDecision(False, f"일일 주문 {st.orders_today}회 >= 한도 {self.max_orders_per_day}", "LIMIT_DAILY")

@@ -68,3 +68,53 @@ def test_dashboard_central_candidates_endpoint_reads_file_only(tmp_path, monkeyp
     endpoint_source = inspect.getsource(api_server.central_candidates)
     assert "make_broker" not in endpoint_source
     assert "place_buy" not in endpoint_source
+
+
+
+def test_dashboard_manual_sell_intent_endpoint_writes_file_without_broker_import(tmp_path, monkeypatch):
+    from engine.live.manual_sell_intent import atomic_write_json as sell_write
+
+    positions_path = tmp_path / "positions.json"
+    intent_path = tmp_path / "manual_sell_intent.json"
+    sell_write(
+        positions_path,
+        {
+            "AR": {
+                "ticker": "AR",
+                "entry_date": "2026-06-25T00:00:00+09:00",
+                "entry_price": 34.53,
+                "shares": 301.169956,
+                "atr_at_entry": 1.0,
+                "stop_price": 32.0,
+                "target_price": 36.0,
+                "trailing_distance": 1.0,
+                "trailing_stop": 33.0,
+                "highest_price": 34.53,
+                "lowest_price": 34.53,
+                "exit_strategy": "fixed",
+                "max_holding_days": 10,
+                "rulebook_direction": "long",
+            }
+        },
+    )
+    monkeypatch.setattr(api_server, "MANUAL_SELL_POSITIONS_PATH", positions_path)
+    monkeypatch.setattr(api_server, "MANUAL_SELL_INTENT_PATH", intent_path)
+    client = TestClient(api_server.app)
+
+    res = client.post("/api/live/manual_sell_intent", json={"ticker": "AR", "source": "test-dashboard"})
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is True
+    assert body["intent"]["ticker"] == "AR"
+    assert body["intent"]["status"] == "pending"
+    assert body["intent"]["shares_requested"] == 301.169956
+    assert intent_path.exists()
+
+    get_res = client.get("/api/live/manual_sell_intents")
+    assert get_res.status_code == 200
+    assert next(iter(get_res.json()["intents"].values()))["ticker"] == "AR"
+
+    source = Path(api_server.__file__).read_text(encoding="utf-8")
+    forbidden = ["make_broker", "AlpacaBroker", "place_buy", "place_sell"]
+    assert all(token not in source for token in forbidden)

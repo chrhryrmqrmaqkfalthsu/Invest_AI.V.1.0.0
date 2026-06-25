@@ -610,6 +610,28 @@ async function loadAccount(){
 // ===== 슬롯 =====
 function slotCard(s,onclick){
   if(s.empty) return `<div class="mslot empty">슬롯 ${s.slot}<br>비어있음</div>`;
+
+  const invested = (s.entry_price || 0) * (s.shares || 0);
+  const investedTxt = invested
+    ? `$${invested.toLocaleString(undefined,{maximumFractionDigits:0})}`
+    : '-';
+
+  const fmtP = v => v == null || !isFinite(v)
+    ? '-'
+    : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+
+  const stopPct = s.stop_price && s.entry_price
+    ? (s.stop_price / s.entry_price - 1) * 100
+    : null;
+
+  const targetPct = s.target_price && s.entry_price
+    ? (s.target_price / s.entry_price - 1) * 100
+    : null;
+
+  const trailPct = s.trailing_stop && s.entry_price
+    ? (s.trailing_stop / s.entry_price - 1) * 100
+    : null;
+
   // 손절(0%) ~ 목표(100%) 사이에서 현재가 위치 계산
   let gauge='';
   if(s.stop_price!=null && s.target_price!=null && s.current_price!=null
@@ -618,15 +640,21 @@ function slotCard(s,onclick){
     p=Math.max(0,Math.min(100,p));
     gauge=`<div class="gauge">
       <div class="gauge-bar"><div class="gauge-mark" style="left:${p}%"></div></div>
-      <div class="gauge-labels"><span>손절 ${fmt(s.stop_price)}</span><span>목표 ${fmt(s.target_price)}</span></div>
+      <div class="gauge-labels">
+        <span>손절 ${fmtP(stopPct)}</span>
+        <span>익절 ${fmtP(targetPct)}</span>
+      </div>
     </div>`;
   }
+
   return `<div class="mslot" onclick="${onclick}('${s.ticker}')">
     <div class="mslot-top"><span class="mslot-tk">${s.ticker}</span>
       <span class="mslot-pnl" style="color:${col(s.pnl_pct)}">${pct(s.pnl_pct)}</span></div>
-    <div class="mslot-sub">현재 ${fmt(s.current_price)} · 진입 ${fmt(s.entry_price)}</div>
+    <div class="mslot-sub">현재 ${fmt(s.current_price)} · 진입 ${fmt(s.entry_price)} · 투입 ${investedTxt}</div>
     ${gauge}
-    <div class="mslot-sub" style="margin-top:7px;"><span class="tag">${s.exit_strategy||'?'}</span> ${s.direction||''} · 최대 ${s.max_holding_days}일</div>
+    <div class="mslot-sub" style="margin-top:7px;">
+      <span class="tag">${s.exit_strategy||'?'}</span> ${s.direction||''} · 최대 ${s.max_holding_days}일 · 트레일 ${fmtP(trailPct)}
+    </div>
   </div>`;
 }
 async function loadSlots(){

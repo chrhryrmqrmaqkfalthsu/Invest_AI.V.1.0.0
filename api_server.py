@@ -257,3 +257,24 @@ def live_account():
     acct["realized_pnl_today"] = safety.get("realized_pnl_today")
     acct["consecutive_losses"] = safety.get("consecutive_losses")
     return acct
+
+
+@app.get("/api/live/equity_curve")
+def equity_curve():
+    """equity_snapshots.csv를 시간순 (time, value) 배열로 반환."""
+    out = []
+    path = os.path.join(SYS, "equity_snapshots.csv")
+    try:
+        with open(path, encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                ts = r.get("timestamp")
+                val = r.get("total_value")
+                if not ts or not val:
+                    continue
+                try:
+                    out.append({"time": ts, "value": round(float(val), 2)})
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return out

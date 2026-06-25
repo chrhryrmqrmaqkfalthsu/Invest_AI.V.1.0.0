@@ -87,6 +87,21 @@
   .rb-kv:last-child{border:none;}
   .rb-kv span:first-child{color:var(--dim);}
   .rb-kv span:last-child{font-weight:600;font-variant-numeric:tabular-nums;}
+  .cmt-block{margin-bottom:13px;}
+  .cmt-block .cmt-h{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:7px;}
+  .cmt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .cmt-item{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:9px;text-align:center;}
+  .cmt-item .v{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .cmt-item .l{font-size:10px;color:var(--dim);margin-top:2px;}
+  .cmt-status{padding:11px 13px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);
+    font-size:13px;line-height:1.6;margin-bottom:11px;}
+  .cmt-status b{color:var(--accent);}
+  .cmt-note{font-size:11px;color:var(--dim);font-style:italic;border-top:1px solid var(--line);
+    padding-top:9px;margin-top:4px;}
+  .pill{display:inline-block;padding:2px 9px;border-radius:5px;font-size:11px;font-weight:600;margin-right:5px;}
+  .pill-ok{background:rgba(38,208,124,.15);color:var(--up);}
+  .pill-warn{background:rgba(255,77,106,.15);color:var(--down);}
+  .pill-neutral{background:rgba(95,110,133,.15);color:var(--dim);}
 
   /* 뉴스 상세 */
   .news-card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:14px;margin-bottom:10px;}
@@ -162,18 +177,24 @@
     <div id="slot-detail-view" style="display:none;">
       <span class="back" onclick="closeDetail()">← 목록으로</span>
       <div class="detail-grid">
-        <div class="panel">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;">
-            <h3 id="detail-title" style="margin:0;">차트</h3>
-            <div id="tf-buttons" style="display:flex;gap:5px;">
-              <button class="tf active" data-tf="1d">일봉</button>
-              <button class="tf" data-tf="60m">60분</button>
-              <button class="tf" data-tf="15m">15분</button>
-              <button class="tf" data-tf="5m">5분</button>
-              <button class="tf" data-tf="1m">1분</button>
+        <div>
+          <div class="panel">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;">
+              <h3 id="detail-title" style="margin:0;">차트</h3>
+              <div id="tf-buttons" style="display:flex;gap:5px;">
+                <button class="tf active" data-tf="1d">일봉</button>
+                <button class="tf" data-tf="60m">60분</button>
+                <button class="tf" data-tf="15m">15분</button>
+                <button class="tf" data-tf="5m">5분</button>
+                <button class="tf" data-tf="1m">1분</button>
+              </div>
             </div>
+            <div id="chart"></div>
           </div>
-          <div id="chart"></div>
+          <div class="panel" style="margin-top:14px;" id="commentary-panel">
+            <h3 style="margin-top:0;">🧭 포지션 해설</h3>
+            <div id="commentary"><div class="loading">슬롯을 선택하세요</div></div>
+          </div>
         </div>
         <div class="panel"><h3 style="margin-top:0;">룰북 / 포지션</h3><div id="detail-kv"></div></div>
       </div>
@@ -418,6 +439,55 @@ function rbSection(title, rb, keys){
     <span>${title}</span><span class="rb-arrow">▶</span></div>
     <div class="rb-sec-b">${body}</div></div>`;
 }
+function daysBetween(iso){
+  if(!iso) return null;
+  try{ return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }catch(e){ return null; }
+}
+function renderCommentary(s){
+  const e=s.entry||{}, rb=s.rulebook||{};
+  // 진입 당시 기록
+  const entryGrid=`<div class="cmt-grid">
+    <div class="cmt-item"><div class="v">${e.market_score??'—'}</div><div class="l">시장점수</div></div>
+    <div class="cmt-item"><div class="v">${e.sector_score??'—'}</div><div class="l">섹터점수</div></div>
+    <div class="cmt-item"><div class="v">${e.vix!=null?Number(e.vix).toFixed(1):'—'}</div><div class="l">VIX</div></div>
+    <div class="cmt-item"><div class="v" style="color:var(--up)">${e.win_rate??'—'}%</div><div class="l">진입승률</div></div>
+  </div>`;
+  // 현재 진단 계산
+  let parts=[];
+  // 손절~목표 진행률
+  if(s.stop_price!=null && s.target_price!=null && s.current_price!=null && s.target_price>s.stop_price){
+    let prog=(s.current_price-s.stop_price)/(s.target_price-s.stop_price)*100;
+    prog=Math.max(0,Math.min(100,prog));
+    let pill = prog<=15 ? '<span class="pill pill-warn">손절 근접</span>'
+             : prog>=85 ? '<span class="pill pill-ok">목표 근접</span>'
+             : '<span class="pill pill-neutral">중립 구간</span>';
+    parts.push(`${pill} 손절~목표 구간에서 현재 <b>${prog.toFixed(0)}%</b> 지점`);
+  }
+  // 손익
+  if(s.pnl_pct!=null){
+    const c=s.pnl_pct>=0?'var(--up)':'var(--down)';
+    parts.push(`평가손익 <b style="color:${c}">${pct(s.pnl_pct)}</b>`);
+  }
+  // 보유일
+  const held=daysBetween(s.entry_date);
+  if(held!=null && s.max_holding_days){
+    const near = held>=s.max_holding_days*0.8;
+    parts.push(`보유 <b>${held}일</b> / 최대 ${s.max_holding_days}일${near?' <span class="pill pill-warn">기간 임박</span>':''}`);
+  }
+  // 브레이크이븐
+  if(rb.breakeven_enabled && s.pnl_pct!=null && rb.breakeven_trigger_profit_pct!=null){
+    const reached=s.pnl_pct>=rb.breakeven_trigger_profit_pct;
+    parts.push(`본전보호(브레이크이븐) ${reached?'<span class="pill pill-ok">도달</span>':`미도달 (트리거 +${rb.breakeven_trigger_profit_pct}%)`}`);
+  }
+  // sell_omen
+  if(rb.sell_omen_enabled){
+    parts.push(`매도신호(sell_omen) 감시 <span class="pill pill-neutral">활성</span>`);
+  }
+  const status=`<div class="cmt-status">${parts.join('<br>')}</div>`;
+  const note=`<div class="cmt-note">※ 명시적 진입 사유 로그는 없습니다. 위 내용은 진입 당시 기록값과 현재 룰북 기준에 따른 진단이며, 봇의 실제 판단과 다를 수 있습니다.</div>`;
+  return `<div class="cmt-block"><div class="cmt-h">진입 당시 기록 (${(s.entry_date||'').slice(0,16).replace('T',' ')})</div>${entryGrid}</div>
+          <div class="cmt-block"><div class="cmt-h">현재 진단</div>${status}</div>${note}`;
+}
 function renderRulebook(s){
   const rb=s.rulebook||{};
   const stats=`<div class="rb-stats">
@@ -475,6 +545,7 @@ async function openDetail(ticker){
     <div class="kv"><span>최대 보유</span><span>${s.max_holding_days}일</span></div>
     <div class="kv"><span>진입일</span><span>${(s.entry_date||'').slice(0,10)}</span></div>`;
   document.getElementById('detail-kv').innerHTML += renderRulebook(s);
+  document.getElementById('commentary').innerHTML = renderCommentary(s);
 }
 function closeDetail(){
   document.getElementById('slot-detail-view').style.display='none';

@@ -174,3 +174,22 @@ def live_rulebooks():
             "promotion_id": (d.get("promotion", {}) or {}).get("promotion_id"),
         })
     return out
+
+
+@app.get("/api/live/candles/{ticker}")
+def live_candles(ticker: str, period: str = "6mo"):
+    """yfinance로 과거 OHLC 받아 캔들 데이터로 반환 (읽기 전용)."""
+    try:
+        df = yf.Ticker(ticker).history(period=period, interval="1d")
+    except Exception:
+        return []
+    out = []
+    for idx, row in df.iterrows():
+        out.append({
+            "time": idx.strftime("%Y-%m-%d"),
+            "open": round(float(row["Open"]), 4),
+            "high": round(float(row["High"]), 4),
+            "low": round(float(row["Low"]), 4),
+            "close": round(float(row["Close"]), 4),
+        })
+    return out

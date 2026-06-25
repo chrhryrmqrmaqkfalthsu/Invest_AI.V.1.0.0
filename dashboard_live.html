@@ -121,14 +121,10 @@ async function selectSlot(ticker){
   activeTicker=ticker; markActive();
   const s=slotData.find(x=>x.ticker===ticker); if(!s) return;
   document.getElementById('chart-title').textContent=`${ticker} — 보유 차트`;
-  // 과거 캔들: exit_shadow 로그가 있으면 사용, 없으면 yfinance 차트가 없으니 라인만 표시
+  // 과거 캔들: yfinance 독립 조회 API 사용
   let candles=[];
   try{
-    const rows=await (await fetch(`${API}/api/trades/${ticker}`)).json();
-    const seen=new Set();
-    rows.forEach(r=>{ if(r.open!=null&&r.date&&!seen.has(r.date)){seen.add(r.date);
-      candles.push({time:r.date,open:r.open,high:r.high,low:r.low,close:r.close});}});
-    candles.sort((a,b)=>a.time<b.time?-1:1);
+    candles=await (await fetch(`${API}/api/live/candles/${ticker}`)).json();
   }catch(e){}
   series.setData(candles);
   // 진입/목표/손절/트레일링/현재가 라인

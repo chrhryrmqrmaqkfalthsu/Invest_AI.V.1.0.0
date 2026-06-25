@@ -191,6 +191,7 @@ async function openDetail(ticker){
   document.querySelectorAll('.nav button')[1].classList.add('active');
   document.getElementById('slot-list-view').style.display='none';
   document.getElementById('slot-detail-view').style.display='block';
+  chart.resize(document.getElementById('chart').clientWidth, 440);
 
   const s=slotData.find(x=>x.ticker===ticker); if(!s) return;
   document.getElementById('detail-title').textContent=`${ticker} — 보유 차트`;
@@ -206,7 +207,10 @@ async function openDetail(ticker){
     priceLines.push(series.createPriceLine({price:p,color:c,lineWidth:t==='현재'?2:1,
       lineStyle:t==='현재'?0:2,axisLabelVisible:true,title:t}));
   });
-  if(candles.length) chart.timeScale().fitContent();
+  if(candles.length){
+    chart.resize(document.getElementById('chart').clientWidth, 440);
+    chart.timeScale().fitContent();
+  }
   // 룰북/포지션 표
   document.getElementById('detail-kv').innerHTML=`
     <div class="kv"><span>현재가</span><span>${fmt(s.current_price)}</span></div>

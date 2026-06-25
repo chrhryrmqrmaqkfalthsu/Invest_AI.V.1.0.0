@@ -204,6 +204,9 @@ def install_legacy_buy_guard(runner: Runner) -> None:
     """
     if getattr(runner, "_legacy_buy_guard_installed", False):
         return
+    if not hasattr(runner, "_try_order"):
+        logger.warning("[%s] runner has no _try_order; legacy BUY guard 설치 스킵(test double/headless)", LEGACY_BUY_DISABLED_CODE)
+        return
     original_try_order = runner._try_order
 
     def guarded_try_order(side: str, ticker: str, price: float, reason: str, signal_result=None) -> None:

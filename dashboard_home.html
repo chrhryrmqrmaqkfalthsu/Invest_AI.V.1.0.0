@@ -136,7 +136,10 @@
 </head>
 <body>
   <div class="topbar">
-    <div class="logo">KING<span>MAKER</span></div>
+    <div id="clock-box" style="line-height:1.3;">
+      <div id="clock" style="font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;">--:--:--</div>
+      <div id="market-status" style="font-size:11px;color:var(--dim);">미국장 확인 중...</div>
+    </div>
     <div class="nav">
       <button class="active" onclick="go('home',this)">홈</button>
       <button onclick="go('slots',this)">슬롯</button>
@@ -663,6 +666,44 @@ document.addEventListener('fullscreenchange', ()=>{
   const b=document.getElementById('fs-btn');
   if(b) b.textContent = document.fullscreenElement ? '🗗' : '⛶';
 });
+
+function updateClock(){
+  const now=new Date();
+  // 현재 시각 (브라우저 로컬, 보통 한국시간)
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('ko-KR',{hour12:false});
+
+  // 미국 동부시간 구하기 (서머타임 자동 반영)
+  const etStr = now.toLocaleString('en-US',{timeZone:'America/New_York'});
+  const et = new Date(etStr);
+  const day = et.getDay();          // 0=일,6=토
+  const mins = et.getHours()*60 + et.getMinutes();
+  const open = 9*60+30;             // 09:30
+  const close = 16*60;              // 16:00
+  const el = document.getElementById('market-status');
+
+  const fmtDur = m=>{
+    const h=Math.floor(m/60), mm=m%60;
+    return (h>0?`${h}시간 `:'')+`${mm}분`;
+  };
+
+  if(day===0 || day===6){
+    el.innerHTML = `🇺🇸 미국장 <span style="color:var(--dim)">주말 휴장</span>`;
+    return;
+  }
+  if(mins < open){
+    el.innerHTML = `🇺🇸 미국장 <span style="color:var(--gold)">개장 ${fmtDur(open-mins)} 전</span>`;
+  }else if(mins < close){
+    el.innerHTML = `🇺🇸 미국장 <span style="color:var(--up)">열림</span> · 마감 ${fmtDur(close-mins)} 전`;
+  }else{
+    // 다음 개장까지 (다음 영업일 09:30)
+    const toMidnight = 24*60 - mins;
+    let toOpen = toMidnight + open;
+    el.innerHTML = `🇺🇸 미국장 <span style="color:var(--down)">마감</span> · 개장 ${fmtDur(toOpen)} 전`;
+  }
+}
+setInterval(updateClock, 1000);
+updateClock();
 
 // ===== 초기 로드 + 주기 갱신 =====
 function refresh(){

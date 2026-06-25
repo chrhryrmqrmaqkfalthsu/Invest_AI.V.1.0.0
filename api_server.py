@@ -278,3 +278,51 @@ def equity_curve():
     except Exception:
         pass
     return out
+
+
+@app.get("/api/live/trades_history")
+def trades_history():
+    """trade_log.csv 거래 내역 + 요약 통계."""
+    rows = []
+    path = os.path.join(SYS, "trade_log.csv")
+    try:
+        with open(path, encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                def fnum(k):
+                    try: return float(r.get(k) or 0)
+                    except Exception: return None
+                rows.append({
+                    "exited_at": r.get("exited_at"),
+                    "ticker": r.get("ticker"),
+                    "direction": r.get("direction"),
+                    "entry_date": r.get("entry_date"),
+                    "entry_price": fnum("entry_price"),
+                    "exit_price": fnum("exit_price"),
+                    "shares": fnum("shares"),
+                    "exit_reason": r.get("exit_reason"),
+                    "holding_days": fnum("holding_days"),
+                    "pnl_pct": fnum("pnl_pct"),
+                    "pnl_krw": fnum("pnl_krw"),
+                    "exit_strategy": r.get("exit_strategy"),
+                })
+    except Exception:
+        pass
+    # 통계
+    n = len(rows)
+    wins = [r for r in rows if (r["pnl_pct"] or 0) > 0]
+    losses = [r for r in rows if (r["pnl_pct"] or 0) < 0]
+    total_pnl = sum(r["pnl_krw"] or 0 for r in rows)
+    avg_win = (sum(r["pnl_pct"] or 0 for r in wins) / len(wins)) if wins else 0
+    avg_loss = (sum(r["pnl_pct"] or 0 for r in losses) / len(losses)) if losses else 0
+    stats = {
+        "total_trades": n,
+        "wins": len(wins),
+        "losses": len(losses),
+        "win_rate": (len(wins) / n * 100) if n else 0,
+        "total_pnl": round(total_pnl, 2),
+        "avg_win_pct": round(avg_win, 2),
+        "avg_loss_pct": round(avg_loss, 2),
+    }
+    # 최신순 정렬
+    rows.sort(key=lambda x: x["exited_at"] or "", reverse=True)
+    return {"stats": stats, "trades": rows}

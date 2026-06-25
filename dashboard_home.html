@@ -71,6 +71,22 @@
     border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:.15s;}
   .tf:hover{color:var(--txt);border-color:var(--accent);}
   .tf.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .rb-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:12px 0;}
+  .rb-stat{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center;}
+  .rb-stat .v{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;}
+  .rb-stat .l{font-size:10px;color:var(--dim);text-transform:uppercase;margin-top:3px;}
+  .rb-sec{border:1px solid var(--line);border-radius:8px;margin-bottom:8px;overflow:hidden;}
+  .rb-sec-h{padding:10px 13px;cursor:pointer;font-weight:600;font-size:12px;
+    display:flex;justify-content:space-between;background:var(--panel2);}
+  .rb-sec-h:hover{color:#fff;}
+  .rb-sec-b{padding:4px 13px 10px;display:none;}
+  .rb-sec.open .rb-sec-b{display:block;}
+  .rb-sec.open .rb-arrow{transform:rotate(90deg);}
+  .rb-arrow{transition:.2s;color:var(--dim);}
+  .rb-kv{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid var(--line);}
+  .rb-kv:last-child{border:none;}
+  .rb-kv span:first-child{color:var(--dim);}
+  .rb-kv span:last-child{font-weight:600;font-variant-numeric:tabular-nums;}
 
   /* 뉴스 상세 */
   .news-card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:14px;margin-bottom:10px;}
@@ -388,6 +404,48 @@ async function drawChart(ticker, interval){
   }
 }
 
+function rbVal(v){
+  if(v===true) return '✓'; if(v===false) return '✗';
+  if(v==null) return '—';
+  if(typeof v==='number') return Number.isInteger(v)?v:v.toFixed(3);
+  return v;
+}
+function rbSection(title, rb, keys){
+  let body=keys.filter(k=>rb[k]!==undefined)
+    .map(k=>`<div class="rb-kv"><span>${k}</span><span>${rbVal(rb[k])}</span></div>`).join('');
+  if(!body) body='<div class="rb-kv"><span>—</span><span></span></div>';
+  return `<div class="rb-sec"><div class="rb-sec-h" onclick="this.parentElement.classList.toggle('open')">
+    <span>${title}</span><span class="rb-arrow">▶</span></div>
+    <div class="rb-sec-b">${body}</div></div>`;
+}
+function renderRulebook(s){
+  const rb=s.rulebook||{};
+  const stats=`<div class="rb-stats">
+    <div class="rb-stat"><div class="v" style="color:var(--up)">${rbVal(rb.win_rate)}%</div><div class="l">승률</div></div>
+    <div class="rb-stat"><div class="v">${rbVal(rb.fitness)}</div><div class="l">Fitness</div></div>
+    <div class="rb-stat"><div class="v" style="color:${(rb.expectancy_pct||0)>=0?'var(--up)':'var(--down)'}">${rbVal(rb.expectancy_pct)}</div><div class="l">기대값%</div></div>
+    <div class="rb-stat"><div class="v">${rbVal(rb.avg_return_pct)}</div><div class="l">평균수익%</div></div>
+    <div class="rb-stat"><div class="v" style="color:var(--down)">${rbVal(rb.max_drawdown_pct)}</div><div class="l">MDD%</div></div>
+    <div class="rb-stat"><div class="v">${rbVal(rb.trade_count)}</div><div class="l">거래수</div></div>
+  </div>`;
+  const strat=rbSection('⚙️ 전략 / 진입', rb,
+    ['direction','exit_strategy','signal_threshold','signal_multiplier','rsi_low','rsi_high',
+     'macd_min_hist','bb_proximity','volume_surge_ratio','position_sizing_strategy','base_position_ratio']);
+  const risk=rbSection('🛡️ 리스크 / 청산', rb,
+    ['max_holding_days','stop_loss_atr','stop_loss_atr_bear','take_profit_atr','take_profit_atr_bull',
+     'trailing_atr','trailing_atr_volatile','trailing_activation_profit_pct',
+     'breakeven_enabled','breakeven_trigger_profit_pct','breakeven_floor_profit_pct',
+     'add_buy_enabled','add_buy_max_count','add_buy_trigger_profit_pct']);
+  const news=rbSection('📰 뉴스 / 시장 / 섹터', rb,
+    ['sector_name','use_news_global','news_block_cap','use_market_entry_adjustment',
+     'market_score_weight','market_adjustment_strength','sector_strength_weight',
+     'sell_omen_enabled','sell_omen_threshold','crash_buy_enabled']);
+  const event=rbSection('⚡ 이벤트 반응', rb,
+    ['event_response_rate_hike','event_response_rate_cut','event_response_fed_statement',
+     'event_response_inflation','event_response_war','event_response_geopolitical','event_response_tariff']);
+  return stats + strat + risk + news + event;
+}
+
 async function openDetail(ticker){
   // 슬롯 탭으로 전환 + 상세뷰 표시
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -416,6 +474,7 @@ async function openDetail(ticker){
     <div class="kv"><span>청산 전략</span><span>${s.exit_strategy||'—'}</span></div>
     <div class="kv"><span>최대 보유</span><span>${s.max_holding_days}일</span></div>
     <div class="kv"><span>진입일</span><span>${(s.entry_date||'').slice(0,10)}</span></div>`;
+  document.getElementById('detail-kv').innerHTML += renderRulebook(s);
 }
 function closeDetail(){
   document.getElementById('slot-detail-view').style.display='none';

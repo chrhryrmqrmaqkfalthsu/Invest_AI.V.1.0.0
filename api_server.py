@@ -177,7 +177,7 @@ def live_rulebooks():
 
 
 @app.get("/api/live/candles/{ticker}")
-def live_candles(ticker: str, period: str = "6mo"):
+def live_candles(ticker: str, period: str = "2y"):
     """yfinance로 과거 OHLC 받아 캔들 데이터로 반환 (읽기 전용)."""
     try:
         df = yf.Ticker(ticker).history(period=period, interval="1d")

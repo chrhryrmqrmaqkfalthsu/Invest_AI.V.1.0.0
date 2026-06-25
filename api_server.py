@@ -215,6 +215,7 @@ def live_candles(ticker: str, interval: str = "1d", period: str = None):
                 "high": round(float(row["High"]), 4),
                 "low": round(float(row["Low"]), 4),
                 "close": round(float(row["Close"]), 4),
+                "volume": int(row["Volume"]) if not (row["Volume"] != row["Volume"]) else 0,
             })
         except Exception:
             continue

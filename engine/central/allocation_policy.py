@@ -1,12 +1,16 @@
 """Score-based allocation policy for central-controller backtests."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Iterable, Optional
 
 from engine.central.models import normalize_shares, normalize_ticker
 
 MIN_ORDER_SHARES = 1e-6
+SHARE_ROUND_DIGITS = 6
+SHARE_SCALE = 10 ** SHARE_ROUND_DIGITS
+MAX_ORDER_NOTIONAL_SAFETY_BUFFER = 0.005
 
 
 @dataclass(frozen=True)
@@ -20,6 +24,10 @@ class AllocationParams:
     position_sizing: str = "score_weighted"  # score_weighted | equal
     min_notional: float = 0.0
     cash_buffer_ratio: float = 0.98
+    # Apply only when desired_notional is clipped by per-ticker cap.  The live
+    # SafetyLayer remains the final 25% cap; this buffer sizes cap-bound orders
+    # slightly below that cap so small quote moves do not trip LIMIT_NOTIONAL.
+    order_notional_safety_buffer: float = 0.0
     # False preserves the original behavior: max_positions is a distinct-ticker
     # cap and same-ticker duplicate entities are de-duped. True makes
     # max_positions an entity/position cap while per_ticker_exposure_cap still
@@ -160,6 +168,7 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
 
     capital = float(params.total_capital or 0.0)
     investable_capital = capital * _cash_use_ratio(params.cash_buffer_ratio)
+    buffer = _order_notional_safety_buffer(getattr(params, "order_notional_safety_buffer", 0.0))
     weights = _weights([row[0] for row in selected_rows], params.position_sizing)
     decisions: list[BuyDecision] = []
     for weight, (score, cand, purpose, target_position_id, ticker, price) in zip(weights, selected_rows):
@@ -170,14 +179,19 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
         cap_notional = capital * max(float(params.per_ticker_exposure_cap or 0.0), 0.0)
         used = ticker_exposure.get(ticker, 0.0)
         allowed = max(0.0, cap_notional - used)
-        notional = min(desired_notional, allowed)
-        if allowed <= 0.0 or notional < desired_notional - 1e-9:
+        cap_limited = allowed <= 0.0 or desired_notional > allowed + 1e-9
+        effective_allowed = allowed
+        if cap_limited and buffer > 0.0:
+            effective_allowed = allowed * (1.0 - buffer)
+            _bump(stats, "order_notional_safety_buffer_applied")
+        notional = min(desired_notional, effective_allowed)
+        if cap_limited:
             _bump(stats, "ticker_cap_hit_events")
             _bump_nested(stats, "ticker_cap_hit_by_ticker", ticker)
         if notional <= max(float(params.min_notional or 0.0), 0.0):
             _bump(stats, "rejected_min_notional_or_cap")
             continue
-        shares = normalize_shares(notional / price)
+        shares = _floor_shares(notional / price) if cap_limited and buffer > 0.0 else normalize_shares(notional / price)
         if shares <= MIN_ORDER_SHARES:
             _bump(stats, "rejected_dust_shares")
             continue
@@ -220,6 +234,25 @@ def _cash_use_ratio(cash_buffer_ratio: float) -> float:
     finally apply it inside ``decide_buys``.
     """
     return max(0.0, min(float(cash_buffer_ratio or 0.0), 1.0))
+
+
+def _order_notional_safety_buffer(value: float) -> float:
+    try:
+        out = float(value or 0.0)
+    except Exception:
+        out = 0.0
+    return max(0.0, min(out, MAX_ORDER_NOTIONAL_SAFETY_BUFFER))
+
+
+def _floor_shares(value: float) -> float:
+    try:
+        raw = float(value or 0.0)
+    except Exception:
+        return 0.0
+    if raw <= 0.0:
+        return 0.0
+    floored = math.floor(raw * SHARE_SCALE) / SHARE_SCALE
+    return 0.0 if floored <= MIN_ORDER_SHARES else floored
 
 
 def _ticker_exposure(open_positions) -> tuple[dict[str, float], set[str]]:

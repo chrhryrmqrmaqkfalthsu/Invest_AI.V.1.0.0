@@ -27,7 +27,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from engine.live.broker.factory import make_broker
-from engine.live.central_control import LiveCentralControlConfig, LiveCentralController
+from engine.live.central_control import LiveCentralControlConfig, LiveCentralController, order_notional_safety_buffer_from_policy
 from engine.live.daily_report import (
     send_daily_report_from_runner,
     send_monthly_report_from_runner,
@@ -328,6 +328,7 @@ def main():
         if broker_mode not in {"paper", "alpaca_paper"}:
             logger.error("central-control은 alpaca_paper/paper에서만 허용: broker.mode=%s", broker_mode)
             sys.exit(4)
+        sizing_buffer = order_notional_safety_buffer_from_policy(getattr(safety, "policy", {}) or {})
         central_config = LiveCentralControlConfig(
             enabled=True,
             selection_metric=args.central_selection_metric,
@@ -338,11 +339,12 @@ def main():
             pf_cap=float(args.central_pf_cap),
             min_trades=int(args.central_min_trades),
             buy_mode=args.buy_mode,
+            order_notional_safety_buffer=sizing_buffer,
         )
         central_controller = LiveCentralController(runner, central_config)
         runner.tick_market = central_controller.tick_market
         logger.warning(
-            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s universe=promoted∩central pool_limit=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
+            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f universe=promoted∩central pool_limit=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
             args.central_selection_metric,
             args.central_confidence_mode,
             args.central_pf_cap,
@@ -350,6 +352,7 @@ def main():
             args.central_max_positions,
             args.central_position_sizing,
             args.buy_mode,
+            sizing_buffer,
             args.central_pool_limit,
         )
     else:

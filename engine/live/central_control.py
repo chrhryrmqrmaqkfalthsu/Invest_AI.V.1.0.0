@@ -44,6 +44,8 @@ logger = logging.getLogger("live_central_control")
 DEFAULT_BATCH_ROOT = Path("exp_batch_stage123_2009_20260616_full")
 DEFAULT_CENTRAL_INDEX = DEFAULT_BATCH_ROOT / "central_index.jsonl"
 DEFAULT_ENTITY_CONFIDENCE_PATH = Path("data/_system/central/stage2_b/swap_score_test2/entity_confidence_oos.json")
+DEFAULT_ORDER_NOTIONAL_SAFETY_BUFFER = 0.003
+MAX_ORDER_NOTIONAL_SAFETY_BUFFER = 0.005
 ET = ZoneInfo("America/New_York")
 PERIOD_ORDER = (
     "stress_pre_2022h1",
@@ -72,6 +74,7 @@ class LiveCentralControlConfig:
     buy_mode: str = "auto"  # auto | semi_auto
     auto_fallback_hour_et: int = 15
     auto_fallback_minute_et: int = 30
+    order_notional_safety_buffer: float = DEFAULT_ORDER_NOTIONAL_SAFETY_BUFFER
     manual_intent_path: Path = MANUAL_BUY_INTENT_PATH
     candidate_state_path: Path = CENTRAL_BUY_CANDIDATES_PATH
     batch_root: Path = DEFAULT_BATCH_ROOT
@@ -109,6 +112,9 @@ class LiveCentralController:
         self.position_sizing = _normalize_position_sizing(config.position_sizing)
         self.confidence_mode = _normalize_confidence_mode(config.confidence_mode)
         self.buy_mode = _normalize_buy_mode(config.buy_mode)
+        self.order_notional_safety_buffer = _normalize_order_notional_safety_buffer(
+            getattr(config, "order_notional_safety_buffer", DEFAULT_ORDER_NOTIONAL_SAFETY_BUFFER)
+        )
         self.entities = self._load_entities()
         self.entity_by_ticker: dict[str, list[EntityRecord]] = {}
         for entity in self.entities:
@@ -120,7 +126,7 @@ class LiveCentralController:
                 for entity in self.entities
             }
         logger.warning(
-            "[CENTRAL-CONTROL] enabled metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s promoted_symbols=%s central_entities=%s tickers=%s",
+            "[CENTRAL-CONTROL] enabled metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f promoted_symbols=%s central_entities=%s tickers=%s",
             self.selection_metric,
             self.confidence_mode,
             self.config.pf_cap,
@@ -128,6 +134,7 @@ class LiveCentralController:
             self.config.max_positions,
             self.position_sizing,
             self.buy_mode,
+            self.order_notional_safety_buffer,
             len(getattr(self.runner, "symbols", []) or []),
             len(self.entities),
             len(self.entity_by_ticker),
@@ -316,7 +323,7 @@ class LiveCentralController:
         else:
             decisions = _decide_buys_with_selection_metric(candidates, ledger, alloc, self.selection_scores)
         logger.info(
-            "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=%s decisions=%s open_positions=%s ledger_slots=%s max_positions=%s metric=%s confidence_mode=%s buy_mode=%s",
+            "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=%s decisions=%s open_positions=%s ledger_slots=%s max_positions=%s metric=%s confidence_mode=%s buy_mode=%s sizing_buffer=%.4f",
             self.runner.stats.market_ticks,
             evaluated_symbols,
             len(candidates),
@@ -327,6 +334,7 @@ class LiveCentralController:
             self.selection_metric,
             self.confidence_mode,
             getattr(self, "buy_mode", "auto"),
+            alloc.order_notional_safety_buffer,
         )
         if getattr(self, "buy_mode", "auto") == "semi_auto":
             self._process_semi_auto_decisions(decisions, candidate_signal_by_entity, candidate_price_by_entity)
@@ -556,6 +564,9 @@ class LiveCentralController:
             total_capital=max(float(self._account_total_value_notional() or 0.0), 0.0),
             position_sizing=self.position_sizing,
             cash_buffer_ratio=float(self.config.cash_buffer_ratio),
+            order_notional_safety_buffer=_normalize_order_notional_safety_buffer(
+                getattr(self, "order_notional_safety_buffer", getattr(self.config, "order_notional_safety_buffer", 0.0))
+            ),
         )
 
     def _account_total_value_notional(self) -> float:
@@ -625,6 +636,20 @@ def _normalize_buy_mode(value: str) -> str:
     if mode not in {"auto", "semi_auto"}:
         raise ValueError(f"unsupported central buy mode: {value}")
     return mode
+
+
+def _normalize_order_notional_safety_buffer(value) -> float:
+    try:
+        out = float(value if value is not None else DEFAULT_ORDER_NOTIONAL_SAFETY_BUFFER)
+    except Exception:
+        out = DEFAULT_ORDER_NOTIONAL_SAFETY_BUFFER
+    return max(0.0, min(out, MAX_ORDER_NOTIONAL_SAFETY_BUFFER))
+
+
+def order_notional_safety_buffer_from_policy(policy: dict) -> float:
+    sa = (policy or {}).get("small_amount_safety", {}) or {}
+    raw = sa.get("order_notional_safety_buffer", DEFAULT_ORDER_NOTIONAL_SAFETY_BUFFER)
+    return _normalize_order_notional_safety_buffer(raw)
 
 
 def _adjusted_confidence_from_metrics(validation_metrics, *, pf_cap: float, min_trades: int) -> float:

@@ -70,6 +70,17 @@
   .news-card .nt{color:var(--dim);font-size:11px;margin:4px 0;}
   .news-card a{color:var(--accent);text-decoration:none;font-size:12px;}
   .loading{color:var(--dim);padding:18px;text-align:center;}
+
+  /* 거래내역 */
+  .trow{display:grid;grid-template-columns:1.2fr .8fr 1fr 1fr 1fr .9fr 1.2fr;
+    padding:11px 16px;border-bottom:1px solid var(--line);font-size:12px;
+    font-variant-numeric:tabular-nums;align-items:center;}
+  .trow.head{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+  .trow .tk{font-weight:700;font-size:13px;}
+  .reason{padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;}
+  .r-stop{background:rgba(255,77,106,.15);color:var(--down);}
+  .r-target{background:rgba(38,208,124,.15);color:var(--up);}
+  .r-other{background:rgba(95,110,133,.15);color:var(--dim);}
 </style>
 </head>
 <body>
@@ -79,6 +90,7 @@
       <button class="active" onclick="go('home',this)">홈</button>
       <button onclick="go('slots',this)">슬롯</button>
       <button onclick="go('news',this)">뉴스</button>
+      <button onclick="go('history',this)">거래내역</button>
     </div>
     <div class="regime" id="regime"><span class="dot"></span> 연결 중...</div>
   </div>
@@ -140,6 +152,16 @@
     </div>
   </div>
 
+  <!-- 거래내역 -->
+  <div class="page" id="page-history">
+    <h3>📜 거래 통계</h3>
+    <div class="acct" id="hist-stats" style="grid-template-columns:repeat(5,1fr);"></div>
+    <h3 style="margin-top:18px;">청산 거래 내역</h3>
+    <div class="panel" style="padding:0;">
+      <div id="hist-table"><div class="loading">로딩...</div></div>
+    </div>
+  </div>
+
 <script>
 const API="http://localhost:8001";
 const fmt=(n,d=2)=>n==null?'—':Number(n).toFixed(d);
@@ -173,6 +195,33 @@ async function loadEquityCurve(){
   equitySeries.setData(points);
   equityChart.timeScale().fitContent();
   equityChart.resize(document.getElementById('equity-chart').clientWidth, 220);
+}
+
+async function loadHistory(){
+  let d; try{ d=await (await fetch(`${API}/api/live/trades_history`)).json(); }catch(e){ return; }
+  const s=d.stats||{};
+  document.getElementById('hist-stats').innerHTML=`
+    <div class="acard"><div class="lab">총 거래</div><div class="val">${s.total_trades??0}</div></div>
+    <div class="acard"><div class="lab">승률</div><div class="val">${fmt(s.win_rate,1)}%</div>
+      <div class="sub">${s.wins??0}승 ${s.losses??0}패</div></div>
+    <div class="acard"><div class="lab">누적 손익</div>
+      <div class="val" style="color:${col(s.total_pnl)}">${s.total_pnl>=0?'+':''}${usd(s.total_pnl)}</div></div>
+    <div class="acard"><div class="lab">평균 이익</div>
+      <div class="val" style="color:var(--up)">${pct(s.avg_win_pct)}</div></div>
+    <div class="acard"><div class="lab">평균 손실</div>
+      <div class="val" style="color:var(--down)">${pct(s.avg_loss_pct)}</div></div>`;
+  const head=`<div class="trow head"><div>종목</div><div>방향</div><div>진입가</div>
+    <div>청산가</div><div>손익률</div><div>보유</div><div>청산사유</div></div>`;
+  const rows=(d.trades||[]).map(t=>{
+    const rc=t.exit_reason==='stop_loss'?'r-stop':(t.exit_reason==='take_profit'?'r-target':'r-other');
+    return `<div class="trow"><div class="tk">${t.ticker}</div>
+      <div>${t.direction||''}</div><div>${fmt(t.entry_price)}</div>
+      <div>${fmt(t.exit_price)}</div>
+      <div style="color:${col(t.pnl_pct)};font-weight:700">${pct(t.pnl_pct)}</div>
+      <div>${t.holding_days??'—'}일</div>
+      <div><span class="reason ${rc}">${t.exit_reason||'—'}</span></div></div>`;
+  }).join('');
+  document.getElementById('hist-table').innerHTML=head+(rows||'<div class="loading">청산된 거래 없음</div>');
 }
 
 function go(page,btn){
@@ -341,7 +390,7 @@ document.querySelectorAll('.tf').forEach(btn=>{
 });
 
 // ===== 초기 로드 + 주기 갱신 =====
-function refresh(){ loadAccount(); loadSlots(); loadMarket(); loadNews(); loadEquityCurve(); }
+function refresh(){ loadAccount(); loadSlots(); loadMarket(); loadNews(); loadEquityCurve(); loadHistory(); }
 refresh();
 setInterval(refresh, 30000);
 </script>

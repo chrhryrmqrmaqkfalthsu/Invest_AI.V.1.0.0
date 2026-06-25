@@ -43,6 +43,12 @@
   .mslot-tk{font-size:16px;font-weight:800;}
   .mslot-pnl{font-weight:700;font-variant-numeric:tabular-nums;}
   .mslot-sub{font-size:11px;color:var(--dim);margin-top:5px;font-variant-numeric:tabular-nums;}
+  .gauge{margin-top:8px;}
+  .gauge-bar{position:relative;height:7px;border-radius:4px;
+    background:linear-gradient(90deg,var(--down) 0%,#5f6e85 50%,var(--up) 100%);}
+  .gauge-mark{position:absolute;top:-3px;width:3px;height:13px;background:#fff;
+    border-radius:2px;box-shadow:0 0 5px rgba(255,255,255,.8);transform:translateX(-50%);}
+  .gauge-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-top:3px;}
 
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;}
   .ev{padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer;}
@@ -253,12 +259,23 @@ async function loadAccount(){
 // ===== 슬롯 =====
 function slotCard(s,onclick){
   if(s.empty) return `<div class="mslot empty">슬롯 ${s.slot}<br>비어있음</div>`;
+  // 손절(0%) ~ 목표(100%) 사이에서 현재가 위치 계산
+  let gauge='';
+  if(s.stop_price!=null && s.target_price!=null && s.current_price!=null
+     && s.target_price>s.stop_price){
+    let p=(s.current_price - s.stop_price)/(s.target_price - s.stop_price)*100;
+    p=Math.max(0,Math.min(100,p));
+    gauge=`<div class="gauge">
+      <div class="gauge-bar"><div class="gauge-mark" style="left:${p}%"></div></div>
+      <div class="gauge-labels"><span>손절 ${fmt(s.stop_price)}</span><span>목표 ${fmt(s.target_price)}</span></div>
+    </div>`;
+  }
   return `<div class="mslot" onclick="${onclick}('${s.ticker}')">
     <div class="mslot-top"><span class="mslot-tk">${s.ticker}</span>
       <span class="mslot-pnl" style="color:${col(s.pnl_pct)}">${pct(s.pnl_pct)}</span></div>
     <div class="mslot-sub">현재 ${fmt(s.current_price)} · 진입 ${fmt(s.entry_price)}</div>
-    <div class="mslot-sub">목표 <span style="color:var(--up)">${fmt(s.target_price)}</span> · 손절 <span style="color:var(--down)">${fmt(s.stop_price)}</span></div>
-    <div class="mslot-sub"><span class="tag">${s.exit_strategy||'?'}</span> ${s.direction||''} · 최대 ${s.max_holding_days}일</div>
+    ${gauge}
+    <div class="mslot-sub" style="margin-top:7px;"><span class="tag">${s.exit_strategy||'?'}</span> ${s.direction||''} · 최대 ${s.max_holding_days}일</div>
   </div>`;
 }
 async function loadSlots(){

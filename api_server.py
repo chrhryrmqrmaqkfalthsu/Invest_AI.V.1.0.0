@@ -232,8 +232,9 @@ def live_candles(ticker: str, interval: str = "1d", period: str = None):
 
 @app.get("/api/live/account")
 def live_account():
-    """계좌 요약: equity_snapshots.csv 마지막 줄 + trade_log.csv 누적손익 + safety_state.json 당일."""
+    """계좌 요약: 스냅샷 기본값에 실시간 positions 현재가 합계를 우선 반영."""
     acct = {}
+    rows = []
     snap_path = os.path.join(SYS, "equity_snapshots.csv")
     try:
         with open(snap_path, encoding="utf-8") as f:
@@ -250,15 +251,55 @@ def live_account():
                 "holdings_count": int(float(last.get("holdings_count") or 0)),
                 "orders_today": int(float(last.get("orders_today") or 0)),
                 "snapshot_time": last.get("timestamp"),
+                "account_source": "equity_snapshot",
             })
-            try:
-                first_total = float(rows[0].get("total_value") or 0)
-                if first_total:
-                    acct["total_return_pct"] = (total / first_total - 1) * 100
-            except Exception:
-                pass
     except Exception:
         pass
+
+    # equity_snapshots.csv는 하루/주기 스냅샷이라 장중 신규 매수를 늦게 반영할 수 있다.
+    # 따라서 현재 positions.json + yfinance 현재가로 보유 투자금/평가금/미실현손익을 우선 보정한다.
+    try:
+        positions = live_positions()
+        active = [
+            p for p in positions
+            if (p.get("shares") is not None and p.get("entry_price") is not None)
+        ]
+        if active:
+            rt_invested = 0.0
+            rt_market_value = 0.0
+            for p in active:
+                try:
+                    shares = float(p.get("shares") or 0)
+                    entry = float(p.get("entry_price") or 0)
+                    cur = p.get("current_price")
+                    cur = float(cur) if cur is not None else entry
+                except Exception:
+                    continue
+                rt_invested += entry * shares
+                rt_market_value += cur * shares
+            rt_unreal = rt_market_value - rt_invested
+            base_total = acct.get("total_value") or (acct.get("cash") or 0) + (acct.get("invested") or 0)
+            est_cash = base_total - rt_invested if base_total else acct.get("cash")
+            acct.update({
+                "cash": round(est_cash, 2) if est_cash is not None else None,
+                "invested": round(rt_invested, 6),
+                "total_value": round((est_cash or 0) + rt_market_value, 2) if est_cash is not None else round(rt_market_value, 2),
+                "unrealized_pnl": round(rt_unreal, 6),
+                "holdings_count": len(active),
+                "positions_market_value": round(rt_market_value, 6),
+                "account_source": "realtime_positions_estimated_cash",
+            })
+    except Exception:
+        pass
+
+    try:
+        first_total = float(rows[0].get("total_value") or 0) if rows else 0
+        total = float(acct.get("total_value") or 0)
+        if first_total and total:
+            acct["total_return_pct"] = (total / first_total - 1) * 100
+    except Exception:
+        pass
+
     try:
         with open(os.path.join(SYS, "trade_log.csv"), encoding="utf-8") as f:
             tot = 0.0
@@ -271,6 +312,8 @@ def live_account():
     safety = _read_json(os.path.join(SYS, "safety_state.json"), {})
     acct["realized_pnl_today"] = safety.get("realized_pnl_today")
     acct["consecutive_losses"] = safety.get("consecutive_losses")
+    if safety.get("orders_today") is not None:
+        acct["orders_today"] = safety.get("orders_today")
     return acct
 
 

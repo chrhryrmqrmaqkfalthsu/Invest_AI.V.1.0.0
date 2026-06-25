@@ -115,7 +115,9 @@ def test_buffered_cap_bound_order_still_passes_safety_layer_dynamic_cap(tmp_path
         "  max_shares_per_order: 0\n"
         "  max_notional_ratio: 0.25\n"
         "  max_orders_per_day: 1000000\n"
-        "  require_first_order_approval: false\n",
+        "  require_first_order_approval: false\n"
+        "entry:\n"
+        "  cooldown_after_buy_hours: 0\n",
         encoding="utf-8",
     )
 

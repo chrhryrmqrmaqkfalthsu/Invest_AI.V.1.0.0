@@ -9,6 +9,7 @@ This module intentionally keeps the live integration narrow:
 """
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import math
@@ -28,6 +29,7 @@ from engine.central.stage2_survivor_loader import load_stage2_survivors_with_rep
 from engine.live.manual_buy_intent import (
     CENTRAL_BUY_CANDIDATES_PATH,
     MANUAL_BUY_INTENT_PATH,
+    TERMINAL_CANDIDATE_STATUSES,
     candidate_from_decision,
     candidate_id_for,
     load_candidate_state,
@@ -37,6 +39,7 @@ from engine.live.manual_buy_intent import (
     publish_candidate_state,
     trade_date_et,
 )
+from engine.live.position_manager import TRADE_LOG_PATH
 from engine.strategies.demo_rulebook import Signal
 
 logger = logging.getLogger("live_central_control")
@@ -47,6 +50,7 @@ DEFAULT_ENTITY_CONFIDENCE_PATH = Path("data/_system/central/stage2_b/swap_score_
 DEFAULT_ORDER_NOTIONAL_SAFETY_BUFFER = 0.003
 MAX_ORDER_NOTIONAL_SAFETY_BUFFER = 0.005
 ET = ZoneInfo("America/New_York")
+KST = ZoneInfo("Asia/Seoul")
 PERIOD_ORDER = (
     "stress_pre_2022h1",
     "train_1_eval",
@@ -266,8 +270,16 @@ class LiveCentralController:
         candidate_signal_by_entity = {}
         candidate_price_by_entity: dict[str, float] = {}
         evaluated_symbols = 0
+        skipped_reentry_symbols = 0
+        trade_date = self._trade_date_et()
+        same_day_blocked_tickers = self._same_day_reentry_blocked_tickers(trade_date)
         eligible_symbols = sorted(set(getattr(self.runner, "symbols", []) or []) & set(self.entity_by_ticker))
         for ticker in eligible_symbols:
+            ticker_u = normalize_ticker(ticker)
+            if ticker_u in same_day_blocked_tickers:
+                skipped_reentry_symbols += 1
+                logger.info("[CENTRAL-CONTROL] %s same-day terminal/exit → 신규 BUY 후보 제외", ticker_u)
+                continue
             if pending_mgr is not None and pending_mgr.is_ticker_locked(ticker):
                 logger.info("[CENTRAL-CONTROL] %s pending 주문 잠금 → 시그널 처리 스킵", ticker)
                 continue
@@ -304,6 +316,14 @@ class LiveCentralController:
                 self.runner.stats.signals_hold += 1
                 logger.debug("[CENTRAL-CONTROL] %s HOLD: %s", ticker, sig.reason)
 
+        if skipped_reentry_symbols:
+            logger.info(
+                "[CENTRAL-CONTROL] same-day reentry filter skipped_symbols=%s blocked=%s trade_date=%s",
+                skipped_reentry_symbols,
+                ",".join(sorted(same_day_blocked_tickers)),
+                trade_date,
+            )
+
         if not candidates:
             logger.info(
                 "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=0 open_positions=%s",
@@ -316,7 +336,7 @@ class LiveCentralController:
                     [],
                     path=self.config.candidate_state_path,
                     buy_mode=getattr(self, "buy_mode", "auto"),
-                    trade_date=self._trade_date_et(),
+                    trade_date=trade_date,
                 )
             return
 
@@ -327,7 +347,7 @@ class LiveCentralController:
         else:
             decisions = _decide_buys_with_selection_metric(candidates, ledger, alloc, self.selection_scores)
         logger.info(
-            "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=%s decisions=%s open_positions=%s ledger_slots=%s max_positions=%s metric=%s confidence_mode=%s buy_mode=%s sizing_buffer=%.4f",
+            "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=%s decisions=%s open_positions=%s ledger_slots=%s max_positions=%s metric=%s confidence_mode=%s buy_mode=%s sizing_buffer=%.4f reentry_blocked=%s",
             self.runner.stats.market_ticks,
             evaluated_symbols,
             len(candidates),
@@ -339,6 +359,7 @@ class LiveCentralController:
             self.confidence_mode,
             getattr(self, "buy_mode", "auto"),
             alloc.order_notional_safety_buffer,
+            skipped_reentry_symbols,
         )
         if getattr(self, "buy_mode", "auto") == "semi_auto":
             self._process_semi_auto_decisions(decisions, candidate_signal_by_entity, candidate_price_by_entity)
@@ -347,6 +368,64 @@ class LiveCentralController:
             sig = candidate_signal_by_entity.get(decision.entity_id)
             price = candidate_price_by_entity.get(decision.entity_id, 0.0)
             self._execute_decision(decision, sig, price, execution_reason="auto")
+
+    def _same_day_reentry_blocked_tickers(self, trade_date: str) -> set[str]:
+        """Tickers that must not be re-entered on the same US trading day.
+
+        This deliberately filters before decision creation and does not loosen the
+        candidate terminal preservation logic. It covers both BUY candidate terminal
+        state and SELL exits recorded in trade_log.csv.
+        """
+        out = set()
+        out.update(self._same_day_terminal_candidate_tickers(trade_date))
+        out.update(self._same_day_exited_tickers(trade_date))
+        return {ticker for ticker in out if ticker}
+
+    def _same_day_terminal_candidate_tickers(self, trade_date: str) -> set[str]:
+        state = load_candidate_state(getattr(self.config, "candidate_state_path", CENTRAL_BUY_CANDIDATES_PATH))
+        if str(state.get("trade_date") or "") != str(trade_date or ""):
+            return set()
+        tickers: set[str] = set()
+        for row in (state.get("candidates") or {}).values():
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("status") or "") not in TERMINAL_CANDIDATE_STATUSES:
+                continue
+            ticker = normalize_ticker(row.get("ticker", ""))
+            if ticker:
+                tickers.add(ticker)
+        return tickers
+
+    def _same_day_exited_tickers(self, trade_date: str) -> set[str]:
+        path = Path(TRADE_LOG_PATH)
+        if not path.exists():
+            return set()
+        tickers: set[str] = set()
+        try:
+            with path.open("r", encoding="utf-8", newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    ticker = normalize_ticker(row.get("ticker", ""))
+                    if not ticker:
+                        continue
+                    exited_at = self._trade_log_exit_trade_date_et(row.get("exited_at", ""))
+                    if exited_at == trade_date:
+                        tickers.add(ticker)
+        except Exception as exc:
+            logger.warning("[CENTRAL-CONTROL] trade_log same-day exit filter read failed: %s", exc)
+        return tickers
+
+    def _trade_log_exit_trade_date_et(self, exited_at: str) -> str:
+        raw = str(exited_at or "").strip()
+        if not raw:
+            return ""
+        try:
+            dt = datetime.fromisoformat(raw)
+        except Exception:
+            return ""
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=KST)
+        return dt.astimezone(ET).date().isoformat()
 
     def _process_semi_auto_decisions(self, decisions: list[BuyDecision], signal_by_entity: dict, price_by_entity: dict[str, float]) -> None:
         trade_date = self._trade_date_et()
@@ -426,11 +505,11 @@ class LiveCentralController:
                 logger.warning("[CENTRAL-CONTROL][SEMI-AUTO] auto_fallback blocked candidate=%s", cid)
 
     def _candidate_terminal(self, candidate_id: str) -> bool:
-        state = load_candidate_state(self.config.candidate_state_path)
+        state = load_candidate_state(getattr(self.config, "candidate_state_path", CENTRAL_BUY_CANDIDATES_PATH))
         row = (state.get("candidates") or {}).get(candidate_id)
         if not isinstance(row, dict):
             return False
-        return str(row.get("status") or "") in {"manual_executed", "auto_executed", "blocked", "expired"}
+        return str(row.get("status") or "") in TERMINAL_CANDIDATE_STATUSES
 
     def _trade_date_et(self) -> str:
         return trade_date_et(self._now_et())

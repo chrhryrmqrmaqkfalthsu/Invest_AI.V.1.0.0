@@ -86,14 +86,17 @@
   .univ-list{display:flex;flex-direction:column;gap:2px;}
   .univ-empty{color:var(--dim);font-size:13px;padding:12px;text-align:center;}
   .univ-head,.univ-row{display:grid;
-    grid-template-columns:64px 1fr 70px 70px 70px 70px;
+    grid-template-columns:44px 76px minmax(130px,1fr) 84px 70px 70px 70px 82px;
     gap:8px;align-items:center;padding:7px 10px;font-size:12px;}
   .univ-head{color:var(--dim);font-size:11px;border-bottom:1px solid var(--line);}
   .univ-row{border-bottom:1px solid #1a1f28;}
   .univ-row:hover{background:var(--panel2);}
-  .univ-tkr{font-weight:700;color:var(--txt);font-size:13px;}
-  .univ-combo{color:var(--dim);font-size:11px;}
+  .univ-rank{font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums;}
+  .univ-tkr{font-weight:800;color:var(--txt);font-size:13px;}
+  .univ-combo{color:var(--dim);font-size:11px;line-height:1.35;}
+  .univ-muted{display:block;color:#4d5868;font-size:10px;margin-top:2px;}
   .univ-num{text-align:right;color:#b8c1cf;font-variant-numeric:tabular-nums;}
+  .univ-score{font-weight:800;}
   .univ-pos{color:var(--up);}
   .univ-neg{color:var(--down);}
   .cand-modal{position:fixed;inset:0;background:rgba(0,0,0,0.7);
@@ -217,7 +220,7 @@
         <span>🔭 라이브 유니버스 후보군</span>
         <span id="univ-meta" style="font-size:12px;color:var(--dim);"></span>
       </div>
-      <div class="univ-note">백테스트 성과 기준 후보군 · 진입 신호 아님 · 매수 불가</div>
+      <div class="univ-note">순위점수=기대값 기준 내림차순 · 진입 신호 아님 · 매수 불가</div>
       <div id="univ-list" class="univ-list">
         <div class="univ-empty">불러오는 중…</div>
       </div>
@@ -518,32 +521,43 @@ async function loadUniverse(){
     document.getElementById('univ-list').innerHTML = '<div class="univ-empty">후보군 조회 실패</div>';
     return;
   }
-  const items = d.items || [];
+  const items = (d.items || []).slice().sort((a,b)=>(Number(b.expectancy_pct ?? -999))-(Number(a.expectancy_pct ?? -999)));
   const meta = document.getElementById('univ-meta');
   const exp = d.exported_at ? d.exported_at.slice(0,10) : '?';
-  meta.textContent = `${d.count || items.length}종목 · 기준 ${exp}`;
+  meta.textContent = `${d.count || items.length}종목 · 기준 ${exp} · 순위점수=기대값`;
   if(items.length===0){
     document.getElementById('univ-list').innerHTML = '<div class="univ-empty">후보군 없음</div>';
     return;
   }
   const head = `<div class="univ-head">
-    <span>종목</span><span></span><span class="univ-num">승률</span>
-    <span class="univ-num">PF</span><span class="univ-num">기대값</span>
+    <span class="univ-num">순위</span><span>종목</span><span>룰북</span>
+    <span class="univ-num">기대수익</span><span class="univ-num">승률</span>
+    <span class="univ-num">PF</span><span class="univ-num">거래수</span>
     <span class="univ-num">MDD</span></div>`;
-  document.getElementById('univ-list').innerHTML = head + items.map(univRow).join('');
+  document.getElementById('univ-list').innerHTML = head + items.map((it,i)=>univRow(it,i+1)).join('');
 }
-function univRow(it){
-  const pctText = v => (v==null) ? '-' : `${Number(v).toFixed(1)}%`;
+function univRow(it, rank){
+  const pctText = (v, signed=false) => {
+    if(v==null || v==='') return '-';
+    const n=Number(v);
+    if(!Number.isFinite(n)) return '-';
+    return `${signed && n>=0?'+':''}${n.toFixed(1)}%`;
+  };
   const pf = it.profit_factor==null ? '-' : Number(it.profit_factor).toFixed(2);
   const exp = it.expectancy_pct;
   const mdd = it.worst_drawdown_pct;
+  const stress = it.stress_worst_expectancy_pct;
+  const tradeCount = it.trade_count==null ? '-' : it.trade_count;
   const expCls = (exp!=null && exp>=0) ? 'univ-pos' : 'univ-neg';
   return `<div class="univ-row">
+    <span class="univ-rank">#${rank}</span>
     <span class="univ-tkr">${htmlEsc(it.ticker || '-')}</span>
-    <span class="univ-combo">${htmlEsc(it.combo_id || '')} ${it.source_label ? '· '+htmlEsc(it.source_label) : ''}</span>
+    <span class="univ-combo">${htmlEsc(it.combo_id || '')} ${it.source_label ? '· '+htmlEsc(it.source_label) : ''}
+      <span class="univ-muted">스트레스 ${pctText(stress, true)}</span></span>
+    <span class="univ-num univ-score ${expCls}">${pctText(exp, true)}</span>
     <span class="univ-num">${pctText(it.win_rate)}</span>
     <span class="univ-num">${pf}</span>
-    <span class="univ-num ${expCls}">${pctText(exp)}</span>
+    <span class="univ-num">${htmlEsc(tradeCount)}</span>
     <span class="univ-num univ-neg">${pctText(mdd)}</span>
   </div>`;
 }

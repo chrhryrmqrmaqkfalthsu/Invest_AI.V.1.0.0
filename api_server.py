@@ -129,6 +129,15 @@ def live_positions():
             "entry_date": p.get("entry_date"),
             "pnl_pct": pnl_pct,
             "rulebook": p.get("rulebook_snapshot", {}),
+            "entry": {
+                "signal_score": p.get("signal_score_at_entry"),
+                "signal_threshold": p.get("signal_threshold_at_entry"),
+                "win_rate": p.get("win_rate_at_entry"),
+                "market_score": p.get("entry_market_score"),
+                "sector_score": p.get("entry_sector_score"),
+                "vix": p.get("entry_vix_level"),
+                "atr": p.get("atr_at_entry"),
+            },
         })
     return out
 

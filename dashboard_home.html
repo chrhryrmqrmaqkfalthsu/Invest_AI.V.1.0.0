@@ -52,12 +52,33 @@
   .gauge-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-top:3px;}
 
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:13px;margin-bottom:11px;}
   .ev{padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer;}
   .ev:hover{color:#fff;}.ev:last-child{border:none;}
   .ev-risk{color:var(--down);font-weight:700;}.ev-benefit{color:var(--up);font-weight:700;}
   .sector{display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:var(--dim);}
   .bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin:4px 0 8px;}
   .bar>div{height:100%;background:var(--accent);}
+  .cand-list{display:flex;flex-direction:column;gap:8px;}
+  .cand-empty{color:var(--dim);font-size:13px;padding:16px;text-align:center;}
+  .cand-card{display:flex;align-items:center;justify-content:space-between;
+    background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+  .cand-info{display:flex;flex-direction:column;gap:4px;}
+  .cand-tkr{font-weight:700;font-size:15px;color:var(--txt);}
+  .cand-sub{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;}
+  .cand-right{display:flex;align-items:center;gap:10px;}
+  .cand-badge{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600;white-space:nowrap;}
+  .b-pending{background:rgba(38,208,124,.15);color:var(--up);}
+  .b-requested{background:rgba(245,196,81,.15);color:var(--gold);}
+  .b-executed{background:rgba(59,130,246,.15);color:var(--accent);}
+  .b-auto{background:rgba(139,92,246,.15);color:var(--purple);}
+  .b-blocked{background:rgba(255,77,106,.15);color:var(--down);}
+  .b-expired{background:rgba(95,110,133,.15);color:var(--dim);}
+  .cand-buy{background:#2d6a4f;color:#fff;border:none;border-radius:8px;
+    padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;}
+  .cand-buy:hover{background:#358760;}
+  .cand-buy:disabled{background:#2a2f38;color:var(--dim);cursor:not-allowed;}
+  .cand-buy.processing{background:#5c5220;color:var(--gold);}
 
   /* 슬롯 상세 */
   #chart{width:100%;height:440px;}
@@ -157,6 +178,15 @@
       <h3 style="margin-top:0;">📈 자산 추이</h3>
       <div id="equity-chart" style="width:100%;height:220px;"></div>
     </div>
+    <div id="candidates-panel" class="panel" style="margin-bottom:16px;">
+      <div class="panel-head">
+        <span>🛒 매수 대기 후보</span>
+        <span id="cand-meta" style="font-size:12px;color:var(--dim);"></span>
+      </div>
+      <div id="cand-list" class="cand-list">
+        <div class="cand-empty">대기 중인 후보 없음</div>
+      </div>
+    </div>
     <div class="home-grid">
       <div>
         <h3>📦 보유 슬롯 (8)</h3>
@@ -232,6 +262,15 @@ const col=n=>n>=0?'var(--up)':'var(--down)';
 
 let slotData=[], marketData={};
 let _alertState={ near:{}, lastTradeId:null, firstRun:true };
+const CAND_BADGE = {
+  pending: {cls:'b-pending', txt:'매수 가능'},
+  manual_requested: {cls:'b-requested', txt:'처리 중'},
+  manual_executed: {cls:'b-executed', txt:'수동 체결'},
+  auto_executed: {cls:'b-auto', txt:'자동 체결'},
+  blocked: {cls:'b-blocked', txt:'차단됨'},
+  expired: {cls:'b-expired', txt:'만료'},
+};
+const _candBusy = {};
 
 function toast(title, body, type){
   const wrap=document.getElementById('toasts');
@@ -240,6 +279,9 @@ function toast(title, body, type){
   el.innerHTML=`<div class="tt">${title}</div><div class="tb">${body}</div>`;
   wrap.appendChild(el);
   setTimeout(()=>{ el.classList.add('fade'); setTimeout(()=>el.remove(),400); }, 6000);
+}
+function htmlEsc(v){
+  return String(v??'').replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
 // 슬롯 데이터 받을 때마다 손절/목표 임박 체크
@@ -273,6 +315,81 @@ function checkTradeAlerts(trades){
       `${latest.exit_reason||''} · ${pct(latest.pnl_pct)}`, good?'good':'warn');
   }
   _alertState.lastTradeId=id;
+}
+
+async function loadCandidates(){
+  let state;
+  try{
+    const r = await fetch(`${API}/api/live/central_candidates`);
+    state = await r.json();
+  }catch(e){
+    document.getElementById('cand-list').innerHTML = '<div class="cand-empty">후보 조회 실패</div>';
+    return;
+  }
+  const cands = Object.values(state.candidates || {}).filter(x=>x && typeof x==='object');
+  const meta = document.getElementById('cand-meta');
+  meta.textContent = state.trade_date ? `거래일 ${state.trade_date}` : '';
+  if(cands.length===0){
+    document.getElementById('cand-list').innerHTML = '<div class="cand-empty">대기 중인 후보 없음</div>';
+    return;
+  }
+  document.getElementById('cand-list').innerHTML = cands.map(candCard).join('');
+  document.querySelectorAll('.cand-buy[data-candidate-id]').forEach(btn=>{
+    btn.onclick=()=>requestBuy(btn.dataset.candidateId);
+  });
+}
+function candCard(c){
+  const st = c.status || 'pending';
+  const b = CAND_BADGE[st] || CAND_BADGE.expired;
+  const cid = String(c.candidate_id || '');
+  const canBuy = st === 'pending';
+  const processing = st === 'manual_requested';
+  const notional = Number(c.notional || 0).toLocaleString();
+  const price = c.price ? `$${Number(c.price).toFixed(2)}` : '-';
+  const shares = c.shares != null ? `${c.shares}주` : '';
+  const score = c.score != null ? `점수 ${Number(c.score).toFixed(1)}` : '';
+  let btn;
+  if(canBuy){
+    const busy = _candBusy[cid];
+    btn = `<button class="cand-buy${busy?' processing':''}" ${busy?'disabled':''} data-candidate-id="${htmlEsc(cid)}">${busy?'요청 중…':'지금 매수'}</button>`;
+  }else if(processing){
+    btn = '<button class="cand-buy processing" disabled>처리 중…</button>';
+  }else{
+    btn = '<button class="cand-buy" disabled>—</button>';
+  }
+  return `<div class="cand-card">
+    <div class="cand-info">
+      <span class="cand-tkr">${htmlEsc(c.ticker || cid)}</span>
+      <span class="cand-sub">$${notional} · ${htmlEsc(price)} ${htmlEsc(shares)} ${htmlEsc(score)}</span>
+    </div>
+    <div class="cand-right">
+      <span class="cand-badge ${b.cls}">${b.txt}</span>
+      ${btn}
+    </div>
+  </div>`;
+}
+async function requestBuy(candidateId){
+  if(_candBusy[candidateId]) return;
+  _candBusy[candidateId] = true;
+  loadCandidates();
+  try{
+    const r = await fetch(`${API}/api/live/manual_buy_intent`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({candidate_id:candidateId, source:'dashboard'})
+    });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({detail:'요청 실패'}));
+      toast('매수 요청 거부', err.detail || `HTTP ${r.status}`, 'warn');
+    }else{
+      toast('매수 요청됨', '다음 tick에서 검증·체결됩니다', 'good');
+    }
+  }catch(e){
+    toast('통신 오류', String(e), 'warn');
+  }finally{
+    _candBusy[candidateId] = false;
+    loadCandidates();
+  }
 }
 
 let equityChart=null, equitySeries=null;
@@ -707,11 +824,12 @@ updateClock();
 
 // ===== 초기 로드 + 주기 갱신 =====
 function refresh(){
-  loadAccount(); loadSlots(); loadMarket(); loadNews(); loadEquityCurve(); loadHistory();
+  loadAccount(); loadSlots(); loadMarket(); loadNews(); loadEquityCurve(); loadHistory(); loadCandidates();
   setTimeout(()=>{ _alertState.firstRun=false; }, 1500);
 }
 refresh();
 setInterval(refresh, 30000);
+setInterval(loadCandidates, 20000);
 </script>
   <div class="toast-wrap" id="toasts"></div>
 </body>

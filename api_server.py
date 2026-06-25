@@ -128,6 +128,7 @@ def live_positions():
             "max_holding_days": p.get("max_holding_days"),
             "entry_date": p.get("entry_date"),
             "pnl_pct": pnl_pct,
+            "rulebook": p.get("rulebook_snapshot", {}),
         })
     return out
 

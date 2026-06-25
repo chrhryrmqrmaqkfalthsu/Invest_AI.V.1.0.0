@@ -19,6 +19,8 @@ SYS_DIR = Path("data/_system")
 MANUAL_BUY_INTENT_PATH = SYS_DIR / "manual_buy_intent.json"
 CENTRAL_BUY_CANDIDATES_PATH = SYS_DIR / "central_buy_candidates.json"
 TERMINAL_CANDIDATE_STATUSES = {"manual_executed", "auto_executed", "blocked", "expired"}
+LIMIT_NOTIONAL_RETRY_CODE = "LIMIT_NOTIONAL"
+MAX_LIMIT_NOTIONAL_RETRIES = 1
 
 
 def utc_now_iso() -> str:
@@ -132,6 +134,65 @@ def publish_candidate_state(
     return state
 
 
+def _as_int(value, default: int = 0) -> int:
+    try:
+        return int(value or 0)
+    except Exception:
+        return default
+
+
+def _has_limit_notional_text(*values) -> bool:
+    haystack = " ".join(str(v or "") for v in values).upper()
+    return LIMIT_NOTIONAL_RETRY_CODE in haystack
+
+
+def _has_legacy_limit_notional_log_evidence(candidate_id: str, ticker: str, *, logs_dir: Path | str = "logs") -> bool:
+    """Return True only for legacy blocked rows whose state lacks block_code.
+
+    Older live code stored a generic note but logged the precise SafetyLayer code.
+    This keeps same-day one-off retry possible without hand-editing state files.
+    """
+    ticker_u = str(ticker or "").upper()
+    cid = str(candidate_id or "")
+    if not ticker_u or not cid:
+        return False
+    root = Path(logs_dir)
+    try:
+        files = sorted(list(root.glob("live_semiauto*.log")) + list(root.glob("live_semiauto_buffer*.log")), key=lambda p: p.stat().st_mtime)[-12:]
+    except Exception:
+        files = []
+    for path in reversed(files):
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception:
+            continue
+        for idx, line in enumerate(lines):
+            line_u = line.upper()
+            if ticker_u not in line_u or LIMIT_NOTIONAL_RETRY_CODE not in line_u:
+                continue
+            window = "\n".join(lines[idx : idx + 6])
+            if cid in window:
+                return True
+    return False
+
+
+def _limit_notional_retry_allowed(candidate: dict, candidate_id: str) -> bool:
+    status = str(candidate.get("status") or "")
+    if status != "blocked":
+        return False
+    if _as_int(candidate.get("retry_count"), 0) >= MAX_LIMIT_NOTIONAL_RETRIES:
+        return False
+    if _has_limit_notional_text(
+        candidate.get("block_code"),
+        candidate.get("block_reason"),
+        candidate.get("retry_code"),
+        candidate.get("retry_reason"),
+        candidate.get("note"),
+    ):
+        return True
+    return _has_legacy_limit_notional_log_evidence(candidate_id, str(candidate.get("ticker") or ""))
+
+
 def create_manual_buy_intent(
     *,
     candidate_id: str,
@@ -146,8 +207,15 @@ def create_manual_buy_intent(
     candidate = (candidate_state.get("candidates") or {}).get(candidate_id)
     if not isinstance(candidate, dict):
         raise ValueError(f"candidate not found or stale: {candidate_id}")
-    if str(candidate.get("status") or "pending") not in {"pending", "manual_requested"}:
-        raise ValueError(f"candidate is not pending: {candidate_id}")
+    status = str(candidate.get("status") or "pending")
+    retrying_limit_notional = False
+    retry_count = _as_int(candidate.get("retry_count"), 0)
+    if status not in {"pending", "manual_requested"}:
+        if _limit_notional_retry_allowed(candidate, candidate_id):
+            retrying_limit_notional = True
+            retry_count += 1
+        else:
+            raise ValueError(f"candidate is not pending: {candidate_id}")
     trade_date = str(candidate.get("trade_date") or candidate_state.get("trade_date") or "")
     if not trade_date:
         raise ValueError("candidate trade_date missing")
@@ -161,14 +229,14 @@ def create_manual_buy_intent(
             for k, v in intents.items()
             if isinstance(v, dict)
             and v.get("candidate_id") == candidate_id
-            and str(v.get("status") or "") in {"pending", "consumed"}
+            and str(v.get("status") or "") == "pending"
         ),
         None,
     )
     if existing is not None:
         return existing
     now = utc_now_iso()
-    intent_id = f"manual:{candidate_id}"
+    intent_id = f"manual-retry{retry_count}:{candidate_id}" if retrying_limit_notional else f"manual:{candidate_id}"
     row = {
         "intent_id": intent_id,
         "candidate_id": candidate_id,
@@ -185,12 +253,22 @@ def create_manual_buy_intent(
         "rejected_at": "",
         "reason": "manual_timing",
     }
+    if retrying_limit_notional:
+        row["retry_count"] = retry_count
+        row["retry_of"] = str(candidate.get("manual_intent_id") or "")
+        row["retry_code"] = LIMIT_NOTIONAL_RETRY_CODE
+        row["retry_reason"] = "blocked LIMIT_NOTIONAL candidate retry requested by dashboard"
     intents[intent_id] = row
     intent_state["updated_at"] = now
     atomic_write_json(intent_path, intent_state)
     candidate["status"] = "manual_requested"
     candidate["manual_intent_id"] = intent_id
     candidate["updated_at"] = now
+    if retrying_limit_notional:
+        candidate["retry_count"] = retry_count
+        candidate["retry_code"] = LIMIT_NOTIONAL_RETRY_CODE
+        candidate["retry_reason"] = "blocked LIMIT_NOTIONAL retry requested"
+        candidate["retry_requested_at"] = now
     candidate_state["updated_at"] = now
     atomic_write_json(candidate_path, candidate_state)
     return row
@@ -224,6 +302,8 @@ def mark_intent_status(
     *,
     intent_path: Path | str = MANUAL_BUY_INTENT_PATH,
     note: str = "",
+    block_code: str = "",
+    block_reason: str = "",
 ) -> dict:
     data = read_json(intent_path, {})
     if not isinstance(data, dict):
@@ -240,6 +320,10 @@ def mark_intent_status(
         row["rejected_at"] = now
     if note:
         row["note"] = note
+    if block_code:
+        row["block_code"] = block_code
+    if block_reason:
+        row["block_reason"] = block_reason
     data["updated_at"] = now
     atomic_write_json(intent_path, data)
     return row
@@ -252,6 +336,8 @@ def mark_candidate_status(
     candidate_path: Path | str = CENTRAL_BUY_CANDIDATES_PATH,
     manual_intent_id: str = "",
     note: str = "",
+    block_code: str = "",
+    block_reason: str = "",
 ) -> dict:
     data = load_candidate_state(candidate_path)
     row = (data.get("candidates") or {}).get(candidate_id)
@@ -264,6 +350,10 @@ def mark_candidate_status(
         row["manual_intent_id"] = manual_intent_id
     if note:
         row["note"] = note
+    if block_code:
+        row["block_code"] = block_code
+    if block_reason:
+        row["block_reason"] = block_reason
     data["updated_at"] = now
     atomic_write_json(candidate_path, data)
     return row

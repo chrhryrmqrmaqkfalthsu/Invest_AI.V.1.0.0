@@ -308,7 +308,7 @@ function changePct(signalPrice, curPrice){
 }
 async function fetchCandPrice(ticker){
   try{
-    const r = await fetch(`${API}/api/live/candles/${ticker}?interval=15m`);
+    const r = await fetch(`${API}/api/live/candles/${ticker}?interval=1m`);
     const d = await r.json();
     if(Array.isArray(d) && d.length){
       return d[d.length-1].close;

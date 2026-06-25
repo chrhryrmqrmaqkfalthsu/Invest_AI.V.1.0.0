@@ -28,7 +28,7 @@ def make_policy(tmp_path: Path, *, first_approval: bool = False) -> Path:
 small_amount_safety:
   enabled: false
   max_shares_per_order: 1
-  max_notional_per_order: 10
+  max_notional_ratio: 0.25
   max_total_invested_krw: 10
   max_orders_per_day: 1
   require_first_order_approval: {str(first_approval).lower()}

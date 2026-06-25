@@ -82,7 +82,7 @@ def _write_policy(tmp_path: Path) -> Path:
                 "  min_notional_per_order: 1.0",
                 "  min_fractional_shares_per_order: 0.001",
                 "  max_shares_per_order: 1000000",
-                "  max_notional_per_order: 1000000",
+                "  max_notional_ratio: 10.0",
                 "  max_bought_notional_per_day: 1000000",
                 "  max_total_exposure_notional: 1000000",
                 "  max_orders_per_day: 100",

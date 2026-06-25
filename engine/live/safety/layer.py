@@ -15,11 +15,12 @@ BN-1 invariants:
 BS-1a invariants:
 - KILL_SWITCH/손실잠금/쿨다운/시장시간/whitelist/첫주문승인은
   small_amount_safety.enabled 값과 무관하게 항상 강제한다.
-- enabled=False는 주문당 수량·금액·일일 주문 수·당일 매수/전체 노출 소액 한도만 비활성화한다.
+- enabled=False는 주문당 수량·금액비율·일일 주문 수·당일 매수/전체 노출 소액 한도만 비활성화한다.
 """
 from __future__ import annotations
 
 import json
+import logging
 import yaml
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -29,6 +30,8 @@ from typing import Optional
 from . import state as state_mod
 from ..broker.base import Broker, Order, OrderStatus
 
+log = logging.getLogger("safety_layer")
+
 KILL_SWITCH_PATH = Path.home() / "kingmaker" / "data" / "_system" / "KILL_SWITCH"
 POLICY_PATH = Path.home() / "kingmaker" / "config" / "policy.yaml"
 SYMBOLS_DIR = Path.home() / "kingmaker" / "data" / "symbols"
@@ -37,6 +40,7 @@ SHARE_EPS = 1e-6
 NOTIONAL_EPS = 0.01
 DEFAULT_MIN_NOTIONAL_PER_ORDER = 1.0
 DEFAULT_MIN_FRACTIONAL_SHARES_PER_ORDER = 0.001
+DEFAULT_MAX_NOTIONAL_RATIO = 0.25
 
 
 @dataclass
@@ -71,8 +75,10 @@ class SafetyLayer:
             or 0.0
         )
         self.max_shares = self._optional_float(sa.get("max_shares_per_order", 1))
-        self.max_notional_per_order = float(sa.get("max_notional_per_order", sa.get("max_krw_per_order", 10000)))
-        self.max_krw = self.max_notional_per_order
+        try:
+            self.max_notional_ratio = float(sa.get("max_notional_ratio", DEFAULT_MAX_NOTIONAL_RATIO))
+        except Exception:
+            self.max_notional_ratio = 0.0
         daily_bought = sa.get("max_bought_notional_per_day", sa.get("max_daily_bought_notional", 0))
         self.max_bought_notional_per_day = float(daily_bought or 0.0)
         exposure_limit = sa.get("max_total_exposure_notional", sa.get("max_total_notional", sa.get("max_total_invested_krw", 100000)))
@@ -134,11 +140,36 @@ class SafetyLayer:
             reference = reference.replace(tzinfo=parsed.tzinfo)
         return parsed
 
-    def _current_order_notional_limit(self) -> float:
-        return max(
-            float(getattr(self, "max_notional_per_order", 0.0) or 0.0),
-            float(getattr(self, "max_krw", 0.0) or 0.0),
-        )
+    def _account_total_value_notional(self) -> tuple[float, Optional[str]]:
+        if self.broker is None:
+            return 0.0, "broker 없음"
+        try:
+            balance = self.broker.get_balance()
+        except Exception as exc:
+            return 0.0, f"잔고 조회 실패: {exc}"
+        for key in ("total_value_usd", "total_value", "total_value_krw"):
+            value = getattr(balance, key, None)
+            if value is None:
+                continue
+            try:
+                out = float(value or 0.0)
+            except Exception:
+                continue
+            if out > 0.0:
+                return out, None
+        return 0.0, "계좌 총액 0 또는 조회 불가"
+
+    def _current_order_notional_limit(self) -> tuple[float, Optional[str]]:
+        try:
+            ratio = float(getattr(self, "max_notional_ratio", DEFAULT_MAX_NOTIONAL_RATIO) or 0.0)
+        except Exception:
+            ratio = 0.0
+        if ratio <= 0.0:
+            return 0.0, "max_notional_ratio는 양수여야 함"
+        total_value, error = self._account_total_value_notional()
+        if error:
+            return 0.0, error
+        return total_value * ratio, None
 
     def _current_total_notional_limit(self) -> float:
         return max(
@@ -367,8 +398,11 @@ class SafetyLayer:
         if self.max_shares is not None and shares_f > self.max_shares:
             return SafetyDecision(False, f"수량 {shares_f:g} > 한도 {self.max_shares:g}주", "LIMIT_SHARES")
 
-        max_notional = self._current_order_notional_limit()
-        if max_notional > 0 and order_notional > max_notional + NOTIONAL_EPS:
+        max_notional, limit_error = self._current_order_notional_limit()
+        if limit_error:
+            log.error("주문당 동적 상한 계산 실패: %s", limit_error)
+            return SafetyDecision(False, f"주문당 동적 상한 계산 실패: {limit_error}", "LIMIT_NOTIONAL")
+        if order_notional > max_notional + NOTIONAL_EPS:
             return SafetyDecision(False, f"주문금액 {order_notional:,.2f} > 한도 {max_notional:,.2f}", "LIMIT_NOTIONAL")
 
         if st.orders_today >= self.max_orders_per_day:

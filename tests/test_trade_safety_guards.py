@@ -172,7 +172,7 @@ def policy_text(*, first_approval: bool = False, entry_cooldown_hours: int = 24,
 small_amount_safety:
   enabled: true
   max_shares_per_order: 100000
-  max_notional_per_order: 100000000
+  max_notional_ratio: 10.0
   max_total_notional: 100000000
   max_orders_per_day: 100
   require_first_order_approval: {str(first_approval).lower()}

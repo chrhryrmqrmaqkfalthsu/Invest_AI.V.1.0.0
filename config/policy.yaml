@@ -18,9 +18,7 @@ capital:
 small_amount_safety:
   enabled: true
   max_shares_per_order: 0
-  max_notional_per_order: 30
-  max_usd_per_order: 30
-  max_krw_per_order: 30                # legacy field name; USD notional in US-only mode
+  max_notional_ratio: 0.25             # 계좌 총자본 대비 주문당 상한 비율
   max_bought_notional_per_day: 0
   max_total_exposure_notional: 0
   max_total_notional: 0

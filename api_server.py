@@ -56,6 +56,7 @@ def trades(ticker: str):
     return load_ticker(ticker.upper())
 
 # ===== 라이브 대시보드 엔드포인트 (읽기 전용) =====
+import csv
 import glob
 import time
 from functools import lru_cache
@@ -193,3 +194,51 @@ def live_candles(ticker: str, period: str = "2y"):
             "close": round(float(row["Close"]), 4),
         })
     return out
+
+
+@app.get("/api/live/account")
+def live_account():
+    """계좌 요약: equity_snapshots.csv 마지막 줄 + trade_log.csv 누적손익 + safety_state.json 당일."""
+    acct = {}
+    # 1) 최신 스냅샷 (csv 마지막 줄)
+    snap_path = os.path.join(SYS, "equity_snapshots.csv")
+    try:
+        with open(snap_path, encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        if rows:
+            last = rows[-1]
+            cash = float(last.get("cash") or 0)
+            invested = float(last.get("invested") or 0)
+            total = float(last.get("total_value") or 0)
+            unreal = float(last.get("unrealized_pnl") or 0)
+            acct.update({
+                "cash": cash, "invested": invested, "total_value": total,
+                "unrealized_pnl": unreal,
+                "holdings_count": int(float(last.get("holdings_count") or 0)),
+                "orders_today": int(float(last.get("orders_today") or 0)),
+                "snapshot_time": last.get("timestamp"),
+            })
+            # 첫 스냅샷 대비 총수익률
+            try:
+                first_total = float(rows[0].get("total_value") or 0)
+                if first_total:
+                    acct["total_return_pct"] = (total / first_total - 1) * 100
+            except Exception:
+                pass
+    except Exception:
+        pass
+    # 2) 누적 실현손익 (trade_log.csv pnl 합산)
+    try:
+        with open(os.path.join(SYS, "trade_log.csv"), encoding="utf-8") as f:
+            tot = 0.0
+            for r in csv.DictReader(f):
+                try: tot += float(r.get("pnl_krw") or 0)
+                except Exception: pass
+            acct["realized_pnl_total"] = tot
+    except Exception:
+        pass
+    # 3) 당일 실현손익
+    safety = _read_json(os.path.join(SYS, "safety_state.json"), {})
+    acct["realized_pnl_today"] = safety.get("realized_pnl_today")
+    acct["consecutive_losses"] = safety.get("consecutive_losses")
+    return acct

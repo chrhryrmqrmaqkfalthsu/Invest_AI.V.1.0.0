@@ -67,6 +67,7 @@
   .cand-info{display:flex;flex-direction:column;gap:4px;}
   .cand-tkr{font-weight:700;font-size:15px;color:var(--txt);}
   .cand-chg{font-size:12px;font-weight:700;margin-left:6px;}
+  .cand-fill{color:var(--accent);font-weight:700;}
   .cand-sub{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;}
   .cand-right{display:flex;align-items:center;gap:10px;}
   .cand-badge{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600;white-space:nowrap;}
@@ -286,6 +287,7 @@ const CAND_BADGE = {
 };
 const _candBusy = {};
 const _candPrice = {};
+const _posEntry = {};
 let _candChart = null, _candSeries = null;
 
 function toast(title, body, type){
@@ -312,6 +314,18 @@ async function fetchCandPrice(ticker){
     }
   }catch(e){}
   return null;
+}
+async function loadPositionEntries(){
+  try{
+    const r = await fetch(`${API}/api/live/slots`);
+    const slots = await r.json();
+    Object.keys(_posEntry).forEach(k=>delete _posEntry[k]);
+    (Array.isArray(slots) ? slots : []).filter(s=>!s.empty).forEach(s=>{
+      const tk = String(s.ticker || '').toUpperCase();
+      const entry = s.entry_price ?? s.avg_cost;
+      if(tk && entry!=null) _posEntry[tk] = Number(entry);
+    });
+  }catch(e){}
 }
 
 // 슬롯 데이터 받을 때마다 손절/목표 임박 체크
@@ -363,12 +377,17 @@ async function loadCandidates(){
     document.getElementById('cand-list').innerHTML = '<div class="cand-empty">대기 중인 후보 없음</div>';
     return;
   }
+  await loadPositionEntries();
   await Promise.all(cands.map(async c=>{
     if(c.ticker) _candPrice[c.ticker] = await fetchCandPrice(c.ticker);
   }));
   document.getElementById('cand-list').innerHTML = cands.map(candCard).join('');
   document.querySelectorAll('.cand-card[data-cand-ticker]').forEach(card=>{
-    card.onclick=()=>openCandChart(card.dataset.candTicker, Number(card.dataset.signalPrice || 0));
+    card.onclick=()=>openCandChart(
+      card.dataset.candTicker,
+      Number(card.dataset.signalPrice || 0),
+      Number(card.dataset.fillPrice || 0)
+    );
   });
   document.querySelectorAll('.cand-buy[data-candidate-id]').forEach(btn=>{
     btn.onclick=(ev)=>{ ev.stopPropagation(); requestBuy(btn.dataset.candidateId); };
@@ -381,13 +400,17 @@ function candCard(c){
   const ticker = String(c.ticker || cid || '').toUpperCase();
   const canBuy = st === 'pending';
   const processing = st === 'manual_requested';
+  const filled = st === 'manual_executed' || st === 'auto_executed';
   const signalPrice = Number(c.price || 0);
+  const fillPrice = filled ? _posEntry[ticker] : null;
   const curPrice = _candPrice[ticker];
   const chg = changePct(signalPrice, curPrice);
   const chgCls = chg!=null && chg>=0 ? 'univ-pos' : 'univ-neg';
   const chgBadge = chg==null ? '' : `<span class="cand-chg ${chgCls}">${chg>=0?'+':''}${chg.toFixed(2)}%</span>`;
   const sigTxt = signalPrice ? `$${signalPrice.toFixed(2)}` : '-';
   const curTxt = curPrice ? `$${Number(curPrice).toFixed(2)}` : '—';
+  const fillTxt = fillPrice ? `$${Number(fillPrice).toFixed(2)}` : '';
+  const fillPart = filled ? `체결가 <span class="cand-fill">${htmlEsc(fillTxt || '확인중')}</span>` : '';
   const notional = Number(c.notional || 0).toLocaleString();
   const shares = c.shares != null ? `${c.shares}주` : '';
   const score = c.score != null ? `점수 ${Number(c.score).toFixed(1)}` : '';
@@ -401,10 +424,10 @@ function candCard(c){
   }else{
     btn = '<button class="cand-buy" disabled>—</button>';
   }
-  return `<div class="cand-card" data-cand-ticker="${htmlEsc(ticker)}" data-signal-price="${signalPrice}">
+  return `<div class="cand-card" data-cand-ticker="${htmlEsc(ticker)}" data-signal-price="${signalPrice}" data-fill-price="${fillPrice || ''}">
     <div class="cand-info">
       <span class="cand-tkr">${htmlEsc(ticker || cid)} ${chgBadge}</span>
-      <span class="cand-sub">신호가 ${htmlEsc(sigTxt)} → 현재 ${htmlEsc(curTxt)}${tail ? ' · '+htmlEsc(tail) : ''}</span>
+      <span class="cand-sub">신호가 ${htmlEsc(sigTxt)} → 현재 ${htmlEsc(curTxt)}${fillPart ? ' · '+fillPart : ''}${tail ? ' · '+htmlEsc(tail) : ''}</span>
     </div>
     <div class="cand-right">
       <span class="cand-badge ${b.cls}">${b.txt}</span>
@@ -435,9 +458,10 @@ async function requestBuy(candidateId){
     loadCandidates();
   }
 }
-async function openCandChart(ticker, signalPrice){
+async function openCandChart(ticker, signalPrice, fillPrice){
   ticker = String(ticker || '').toUpperCase();
   const signal = Number(signalPrice || 0);
+  const fill = Number(fillPrice || 0);
   if(!ticker) return;
   const modal = document.getElementById('cand-modal');
   modal.style.display = 'flex';
@@ -473,16 +497,25 @@ async function openCandChart(ticker, signalPrice){
       axisLabelVisible:true, title:`신호가 ${signal.toFixed(2)}`,
     });
   }
+  if(fill){
+    _candSeries.createPriceLine({
+      price: fill, color:'#f5c451', lineWidth:2,
+      lineStyle: (LightweightCharts.LineStyle && LightweightCharts.LineStyle.Dashed) || 2,
+      axisLabelVisible:true, title:`체결가 ${fill.toFixed(2)}`,
+    });
+  }
   const n = candles.length;
   _candChart.timeScale().setVisibleLogicalRange({from: Math.max(0, n-80), to: n});
   const cur = candles[n-1].close;
   const chg = changePct(signal, cur);
   const cls = chg!=null && chg>=0 ? 'univ-pos' : 'univ-neg';
   const chgTxt = chg==null ? '-' : `${chg>=0?'+':''}${chg.toFixed(2)}%`;
+  const fillSummary = fill ? `<div><div class="cand-sub">체결가</div><div class="big cand-fill">$${fill.toFixed(2)}</div></div>` : '';
   document.getElementById('cm-summary').innerHTML = `
     <div><div class="cand-sub">신호가</div><div class="big">${signal ? '$'+signal.toFixed(2) : '—'}</div></div>
+    ${fillSummary}
     <div><div class="cand-sub">현재가</div><div class="big">$${Number(cur).toFixed(2)}</div></div>
-    <div><div class="cand-sub">변화율</div><div class="big ${cls}">${chgTxt}</div></div>`;
+    <div><div class="cand-sub">신호가 대비</div><div class="big ${cls}">${chgTxt}</div></div>`;
 }
 function closeCandChart(){
   document.getElementById('cand-modal').style.display = 'none';
@@ -939,7 +972,7 @@ setInterval(loadCandidates, 20000);
       </div>
       <div id="cm-summary" class="cm-summary"></div>
       <div id="cm-chart" class="cm-chart"></div>
-      <div class="univ-note" style="margin:10px 0 0;">참고용 · 진입 신호 아님 · 신호가 기준선(파랑) 대비 현재가 위치</div>
+      <div class="univ-note" style="margin:10px 0 0;">참고용 · 진입 신호 아님 · 신호가(파랑)·체결가(노랑) 기준선 대비 현재가 위치</div>
     </div>
   </div>
   <div class="toast-wrap" id="toasts"></div>

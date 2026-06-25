@@ -62,9 +62,11 @@
   .cand-list{display:flex;flex-direction:column;gap:8px;}
   .cand-empty{color:var(--dim);font-size:13px;padding:16px;text-align:center;}
   .cand-card{display:flex;align-items:center;justify-content:space-between;
-    background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+    background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer;}
+  .cand-card:hover{border-color:var(--accent);}
   .cand-info{display:flex;flex-direction:column;gap:4px;}
   .cand-tkr{font-weight:700;font-size:15px;color:var(--txt);}
+  .cand-chg{font-size:12px;font-weight:700;margin-left:6px;}
   .cand-sub{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;}
   .cand-right{display:flex;align-items:center;gap:10px;}
   .cand-badge{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600;white-space:nowrap;}
@@ -94,6 +96,14 @@
   .univ-num{text-align:right;color:#b8c1cf;font-variant-numeric:tabular-nums;}
   .univ-pos{color:var(--up);}
   .univ-neg{color:var(--down);}
+  .cand-modal{position:fixed;inset:0;background:rgba(0,0,0,0.7);
+    display:flex;align-items:center;justify-content:center;z-index:1000;}
+  .cand-modal-box{background:#0f141b;border:1px solid var(--line);border-radius:14px;
+    padding:18px;width:min(720px,92vw);box-shadow:0 12px 40px rgba(0,0,0,.55);}
+  .cand-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .cm-summary{display:flex;gap:18px;margin-bottom:12px;font-size:13px;color:#b8c1cf;}
+  .cm-summary .big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .cm-chart{height:340px;width:100%;}
 
   /* 슬롯 상세 */
   #chart{width:100%;height:440px;}
@@ -296,6 +306,8 @@ const CAND_BADGE = {
   expired: {cls:'b-expired', txt:'만료'},
 };
 const _candBusy = {};
+const _candPrice = {};
+let _candChart = null, _candSeries = null;
 
 function toast(title, body, type){
   const wrap=document.getElementById('toasts');
@@ -307,6 +319,20 @@ function toast(title, body, type){
 }
 function htmlEsc(v){
   return String(v??'').replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function changePct(signalPrice, curPrice){
+  if(!signalPrice || !curPrice) return null;
+  return ((curPrice - signalPrice) / signalPrice) * 100;
+}
+async function fetchCandPrice(ticker){
+  try{
+    const r = await fetch(`${API}/api/live/candles/${ticker}?interval=15m`);
+    const d = await r.json();
+    if(Array.isArray(d) && d.length){
+      return d[d.length-1].close;
+    }
+  }catch(e){}
+  return null;
 }
 
 // 슬롯 데이터 받을 때마다 손절/목표 임박 체크
@@ -358,21 +384,35 @@ async function loadCandidates(){
     document.getElementById('cand-list').innerHTML = '<div class="cand-empty">대기 중인 후보 없음</div>';
     return;
   }
+  await Promise.all(cands.map(async c=>{
+    if(c.ticker) _candPrice[c.ticker] = await fetchCandPrice(c.ticker);
+  }));
   document.getElementById('cand-list').innerHTML = cands.map(candCard).join('');
+  document.querySelectorAll('.cand-card[data-cand-ticker]').forEach(card=>{
+    card.onclick=()=>openCandChart(card.dataset.candTicker, Number(card.dataset.signalPrice || 0));
+  });
   document.querySelectorAll('.cand-buy[data-candidate-id]').forEach(btn=>{
-    btn.onclick=()=>requestBuy(btn.dataset.candidateId);
+    btn.onclick=(ev)=>{ ev.stopPropagation(); requestBuy(btn.dataset.candidateId); };
   });
 }
 function candCard(c){
   const st = c.status || 'pending';
   const b = CAND_BADGE[st] || CAND_BADGE.expired;
   const cid = String(c.candidate_id || '');
+  const ticker = String(c.ticker || cid || '').toUpperCase();
   const canBuy = st === 'pending';
   const processing = st === 'manual_requested';
+  const signalPrice = Number(c.price || 0);
+  const curPrice = _candPrice[ticker];
+  const chg = changePct(signalPrice, curPrice);
+  const chgCls = chg!=null && chg>=0 ? 'univ-pos' : 'univ-neg';
+  const chgBadge = chg==null ? '' : `<span class="cand-chg ${chgCls}">${chg>=0?'+':''}${chg.toFixed(2)}%</span>`;
+  const sigTxt = signalPrice ? `$${signalPrice.toFixed(2)}` : '-';
+  const curTxt = curPrice ? `$${Number(curPrice).toFixed(2)}` : '—';
   const notional = Number(c.notional || 0).toLocaleString();
-  const price = c.price ? `$${Number(c.price).toFixed(2)}` : '-';
   const shares = c.shares != null ? `${c.shares}주` : '';
   const score = c.score != null ? `점수 ${Number(c.score).toFixed(1)}` : '';
+  const tail = [notional ? `$${notional}` : '', shares, score].filter(Boolean).join(' · ');
   let btn;
   if(canBuy){
     const busy = _candBusy[cid];
@@ -382,10 +422,10 @@ function candCard(c){
   }else{
     btn = '<button class="cand-buy" disabled>—</button>';
   }
-  return `<div class="cand-card">
+  return `<div class="cand-card" data-cand-ticker="${htmlEsc(ticker)}" data-signal-price="${signalPrice}">
     <div class="cand-info">
-      <span class="cand-tkr">${htmlEsc(c.ticker || cid)}</span>
-      <span class="cand-sub">$${notional} · ${htmlEsc(price)} ${htmlEsc(shares)} ${htmlEsc(score)}</span>
+      <span class="cand-tkr">${htmlEsc(ticker || cid)} ${chgBadge}</span>
+      <span class="cand-sub">신호가 ${htmlEsc(sigTxt)} → 현재 ${htmlEsc(curTxt)}${tail ? ' · '+htmlEsc(tail) : ''}</span>
     </div>
     <div class="cand-right">
       <span class="cand-badge ${b.cls}">${b.txt}</span>
@@ -415,6 +455,59 @@ async function requestBuy(candidateId){
     _candBusy[candidateId] = false;
     loadCandidates();
   }
+}
+async function openCandChart(ticker, signalPrice){
+  ticker = String(ticker || '').toUpperCase();
+  const signal = Number(signalPrice || 0);
+  if(!ticker) return;
+  const modal = document.getElementById('cand-modal');
+  modal.style.display = 'flex';
+  document.getElementById('cm-tkr').textContent = ticker;
+  document.getElementById('cm-summary').innerHTML = '<span>불러오는 중…</span>';
+  const el = document.getElementById('cm-chart');
+  if(_candChart){ _candChart.remove(); _candChart = null; }
+  el.innerHTML = '';
+  _candChart = LightweightCharts.createChart(el, {
+    layout:{background:{color:'#0f141b'}, textColor:'#b8c1cf'},
+    grid:{vertLines:{color:'#1a1f28'}, horzLines:{color:'#1a1f28'}},
+    timeScale:{timeVisible:true, secondsVisible:false},
+    width: Math.max(el.clientWidth, 300), height: 340,
+  });
+  _candSeries = _candChart.addCandlestickSeries({
+    upColor:'#52e09a', downColor:'#e05252',
+    borderVisible:false, wickUpColor:'#52e09a', wickDownColor:'#e05252',
+  });
+  let candles=[];
+  try{
+    const r = await fetch(`${API}/api/live/candles/${ticker}?interval=15m`);
+    candles = await r.json();
+  }catch(e){}
+  if(!Array.isArray(candles) || !candles.length){
+    document.getElementById('cm-summary').innerHTML = '<span>차트 데이터 없음</span>';
+    return;
+  }
+  _candSeries.setData(candles);
+  if(signal){
+    _candSeries.createPriceLine({
+      price: signal, color:'#4a9eff', lineWidth:2,
+      lineStyle: (LightweightCharts.LineStyle && LightweightCharts.LineStyle.Dashed) || 2,
+      axisLabelVisible:true, title:`신호가 ${signal.toFixed(2)}`,
+    });
+  }
+  const n = candles.length;
+  _candChart.timeScale().setVisibleLogicalRange({from: Math.max(0, n-80), to: n});
+  const cur = candles[n-1].close;
+  const chg = changePct(signal, cur);
+  const cls = chg!=null && chg>=0 ? 'univ-pos' : 'univ-neg';
+  const chgTxt = chg==null ? '-' : `${chg>=0?'+':''}${chg.toFixed(2)}%`;
+  document.getElementById('cm-summary').innerHTML = `
+    <div><div class="cand-sub">신호가</div><div class="big">${signal ? '$'+signal.toFixed(2) : '—'}</div></div>
+    <div><div class="cand-sub">현재가</div><div class="big">$${Number(cur).toFixed(2)}</div></div>
+    <div><div class="cand-sub">변화율</div><div class="big ${cls}">${chgTxt}</div></div>`;
+}
+function closeCandChart(){
+  document.getElementById('cand-modal').style.display = 'none';
+  if(_candChart){ _candChart.remove(); _candChart = null; }
 }
 async function loadUniverse(){
   let d;
@@ -894,6 +987,20 @@ refresh();
 setInterval(refresh, 30000);
 setInterval(loadCandidates, 20000);
 </script>
+  <div id="cand-modal" class="cand-modal" style="display:none;" onclick="closeCandChart()">
+    <div class="cand-modal-box" onclick="event.stopPropagation()">
+      <div class="cand-modal-head">
+        <div>
+          <span id="cm-tkr" class="cand-tkr"></span>
+          <span class="cand-sub" style="margin-left:8px;">신호 시점 대비</span>
+        </div>
+        <span id="cm-close" onclick="closeCandChart()" style="cursor:pointer;font-size:20px;color:var(--dim);">✕</span>
+      </div>
+      <div id="cm-summary" class="cm-summary"></div>
+      <div id="cm-chart" class="cm-chart"></div>
+      <div class="univ-note" style="margin:10px 0 0;">참고용 · 진입 신호 아님 · 신호가 기준선(파랑) 대비 현재가 위치</div>
+    </div>
+  </div>
   <div class="toast-wrap" id="toasts"></div>
 </body>
 </html>

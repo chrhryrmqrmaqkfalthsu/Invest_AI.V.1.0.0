@@ -178,21 +178,36 @@ def live_rulebooks():
 
 
 @app.get("/api/live/candles/{ticker}")
-def live_candles(ticker: str, period: str = "2y"):
-    """yfinance로 과거 OHLC 받아 캔들 데이터로 반환 (읽기 전용)."""
+def live_candles(ticker: str, interval: str = "1d", period: str = None):
+    """yfinance OHLC. interval=1d/15m/5m/1m 등. 분봉은 시간(초)까지 반환."""
+    # interval별 안전한 기본 기간 (yfinance 제약)
+    default_period = {
+        "1m": "5d", "2m": "5d", "5m": "1mo", "15m": "1mo",
+        "30m": "1mo", "60m": "3mo", "1h": "3mo", "1d": "2y",
+    }
+    if period is None:
+        period = default_period.get(interval, "1mo")
     try:
-        df = yf.Ticker(ticker).history(period=period, interval="1d")
+        df = yf.Ticker(ticker).history(period=period, interval=interval)
     except Exception:
         return []
+    intraday = interval not in ("1d", "1wk", "1mo")
     out = []
     for idx, row in df.iterrows():
-        out.append({
-            "time": idx.strftime("%Y-%m-%d"),
-            "open": round(float(row["Open"]), 4),
-            "high": round(float(row["High"]), 4),
-            "low": round(float(row["Low"]), 4),
-            "close": round(float(row["Close"]), 4),
-        })
+        if intraday:
+            t = int(idx.timestamp())  # 분봉: UNIX 초 (UTC 기준 타임스탬프)
+        else:
+            t = idx.strftime("%Y-%m-%d")
+        try:
+            out.append({
+                "time": t,
+                "open": round(float(row["Open"]), 4),
+                "high": round(float(row["High"]), 4),
+                "low": round(float(row["Low"]), 4),
+                "close": round(float(row["Close"]), 4),
+            })
+        except Exception:
+            continue
     return out
 
 

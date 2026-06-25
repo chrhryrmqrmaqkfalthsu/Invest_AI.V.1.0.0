@@ -54,7 +54,11 @@ logging.basicConfig(
 logger = logging.getLogger("run_live")
 
 RUN_BOT_PID_PATH = Path("data/_system/run_bot.pid")
+# 구 개별 ticker BUY 경로는 install_legacy_buy_guard()에서 fail-safe 차단된다.
+# 이 기본값은 central-control이 decision.notional로 덮어쓰기 전 runner sizing 초기값으로만 남긴다.
 DEFAULT_ORDER_NOTIONAL_USD = 30.0
+CENTRAL_CONTROL_REASON_PREFIX = "central_control "
+LEGACY_BUY_DISABLED_CODE = "LEGACY_BUY_DISABLED"
 
 
 def assert_no_legacy_run_bot(pid_path: Path | str = RUN_BOT_PID_PATH) -> None:
@@ -184,6 +188,53 @@ def _central_control_enabled(value: str) -> bool:
     return str(value or "off").strip().lower() == "on"
 
 
+def _is_central_control_buy_reason(reason: str) -> bool:
+    return str(reason or "").strip().startswith(CENTRAL_CONTROL_REASON_PREFIX)
+
+
+def install_legacy_buy_guard(runner: Runner) -> None:
+    """Fail-safe guard that disables the old per-ticker signal BUY path.
+
+    Runner._try_order is shared by the legacy signal path and central-control.
+    The live central adapter tags its BUY reason with ``central_control`` and
+    temporarily overwrites runner.order_notional with decision.notional. This
+    guard allows that explicit central path, but blocks every other BUY before
+    preflight/safety/broker submission. SELL, pending reconciliation, and exit
+    handling are not affected.
+    """
+    if getattr(runner, "_legacy_buy_guard_installed", False):
+        return
+    original_try_order = runner._try_order
+
+    def guarded_try_order(side: str, ticker: str, price: float, reason: str, signal_result=None) -> None:
+        side_u = str(side or "").upper()
+        if side_u == "BUY" and not _is_central_control_buy_reason(reason):
+            try:
+                runner.stats.orders_attempted += 1
+                runner.stats.orders_blocked += 1
+            except Exception:
+                pass
+            logger.warning(
+                "[%s] %s BUY 차단: 구 개별 ticker 신호 BUY 경로 폐기. central-control BUY만 허용. reason=%s",
+                LEGACY_BUY_DISABLED_CODE,
+                ticker,
+                reason,
+            )
+            try:
+                runner.notifier.send_safety_block(
+                    LEGACY_BUY_DISABLED_CODE,
+                    f"{ticker} BUY: 구 신호 BUY 경로는 비활성화됨. central-control BUY만 허용됩니다.",
+                )
+            except Exception as exc:
+                logger.warning("[%s] 차단 알림 실패: %s", LEGACY_BUY_DISABLED_CODE, exc)
+            return None
+        return original_try_order(side, ticker, price, reason, signal_result=signal_result)
+
+    runner._try_order = guarded_try_order
+    runner._legacy_buy_guard_installed = True
+    logger.warning("[%s] 구 개별 ticker BUY 경로 fail-safe 차단 설치 완료; SELL/청산/central BUY는 유지", LEGACY_BUY_DISABLED_CODE)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Kingmaker live trading bot")
     parser.add_argument("--mode", choices=["paper", "real", "vts", "live", "alpaca", "alpaca_paper"], default=None)
@@ -204,7 +255,7 @@ def main():
     parser.add_argument("--offmarket-tick", type=int, default=3600)
     parser.add_argument("--sma-window", type=int, default=20)
     parser.add_argument("--stop-loss", type=float, default=0.03)
-    parser.add_argument("--order-notional", type=float, default=DEFAULT_ORDER_NOTIONAL_USD, help="기본 신규 매수 주문 금액(USD notional). 0 이하이면 --order-shares 사용")
+    parser.add_argument("--order-notional", type=float, default=DEFAULT_ORDER_NOTIONAL_USD, help="central-control 주문금액 초기값. 구 개별 BUY는 LEGACY_BUY_DISABLED로 차단되며 central은 decision.notional로 덮어씀")
     parser.add_argument("--order-shares", type=float, default=1.0, help="--order-notional이 0 이하일 때만 쓰는 fallback 수량")
     parser.add_argument("--summary-hour", type=int, default=6)
     parser.add_argument("--summary-minute", type=int, default=15)
@@ -252,9 +303,9 @@ def main():
     order_notional = float(args.order_notional or 0.0)
     order_shares = float(args.order_shares or 1.0)
     if order_notional > 0:
-        logger.info(f"Order sizing: notional={order_notional:g} USD")
+        logger.info(f"Order sizing: notional={order_notional:g} USD (legacy BUY disabled; central-control overrides per decision)")
     else:
-        logger.warning(f"Order sizing: shares fallback={order_shares:g} (--order-notional<=0)")
+        logger.warning(f"Order sizing: shares fallback={order_shares:g} (--order-notional<=0; legacy BUY disabled)")
 
     runner = Runner(
         broker=broker,
@@ -267,6 +318,7 @@ def main():
         order_notional=order_notional if order_notional > 0 else None,
         universe_config=universe.config,
     )
+    install_legacy_buy_guard(runner)
     if _central_control_enabled(args.central_control):
         broker_mode = str(getattr(broker, "mode", "") or "").lower()
         if broker_mode not in {"paper", "alpaca_paper"}:
@@ -285,7 +337,7 @@ def main():
         central_controller = LiveCentralController(runner, central_config)
         runner.tick_market = central_controller.tick_market
         logger.warning(
-            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s universe=promoted∩central pool_limit=%s exits=unchanged existing_positions=unchanged",
+            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s universe=promoted∩central pool_limit=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
             args.central_selection_metric,
             args.central_confidence_mode,
             args.central_pf_cap,
@@ -295,7 +347,7 @@ def main():
             args.central_pool_limit,
         )
     else:
-        logger.info("[CENTRAL-CONTROL] OFF: 기존 live 개별 ticker BUY 경로 유지")
+        logger.warning("[CENTRAL-CONTROL] OFF: 구 live 개별 ticker BUY 경로는 LEGACY_BUY_DISABLED로 차단; SELL/청산/보유관리는 유지")
     if hasattr(runner, "notifier") and hasattr(runner, "tick_market"):
         install_position_dashboard(runner)
 

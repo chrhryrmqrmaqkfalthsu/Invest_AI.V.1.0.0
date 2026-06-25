@@ -72,6 +72,7 @@ from engine.live.manual_buy_intent import (
 )
 
 SYS = os.path.join("data", "_system")
+UNIVERSE_MANIFEST_PATH = os.path.join(SYS, "live_universe_lr8d_stage1_manifest.json")
 
 
 def _read_json(path, default=None):
@@ -338,6 +339,35 @@ def trades_history():
     }
     rows.sort(key=lambda x: x["exited_at"] or "", reverse=True)
     return {"stats": stats, "trades": rows}
+
+
+@app.get("/api/live/universe")
+def live_universe():
+    """라이브 유니버스 후보군 manifest. broker를 import하지 않고 파일만 읽는다."""
+    data = read_json(UNIVERSE_MANIFEST_PATH, {})
+    items = data.get("items", []) if isinstance(data, dict) else []
+    rows = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        rows.append({
+            "ticker": it.get("ticker"),
+            "combo_id": it.get("combo_id"),
+            "win_rate": it.get("selected_rulebook_win_rate"),
+            "profit_factor": it.get("selected_rulebook_profit_factor"),
+            "expectancy_pct": it.get("selected_rulebook_expectancy_pct"),
+            "stress_worst_expectancy_pct": it.get("stress_worst_expectancy_pct"),
+            "worst_drawdown_pct": it.get("worst_drawdown_pct"),
+            "trade_count": it.get("selected_rulebook_trade_count"),
+            "source_label": it.get("selected_rulebook_source_label"),
+        })
+    rows.sort(key=lambda r: (r.get("expectancy_pct") or -999), reverse=True)
+    return {
+        "count": data.get("count", len(rows)) if isinstance(data, dict) else len(rows),
+        "exported_at": data.get("exported_at", "") if isinstance(data, dict) else "",
+        "run_id": data.get("run_id", "") if isinstance(data, dict) else "",
+        "items": rows,
+    }
 
 
 class ManualBuyIntentRequest(BaseModel):

@@ -447,6 +447,38 @@ async function drawChart(ticker, interval){
   }
 }
 
+const RB_LABELS = {
+  // 성과
+  fitness:"적합도(Fitness)", win_rate:"승률", expectancy_pct:"기대수익률",
+  avg_return_pct:"평균 수익률", max_drawdown_pct:"최대 낙폭(MDD)", trade_count:"거래 횟수",
+  // 전략/진입
+  direction:"매매 방향", exit_strategy:"청산 방식", signal_threshold:"진입 신호 기준값",
+  signal_multiplier:"신호 배율", rsi_low:"RSI 하단", rsi_high:"RSI 상단",
+  macd_min_hist:"MACD 최소 히스토그램", bb_proximity:"볼린저밴드 근접도",
+  volume_surge_ratio:"거래량 급증 배수", position_sizing_strategy:"포지션 크기 전략",
+  base_position_ratio:"기본 투입 비율",
+  // 리스크/청산
+  max_holding_days:"최대 보유일", stop_loss_atr:"손절 ATR 배수",
+  stop_loss_atr_bear:"손절 ATR(하락장)", take_profit_atr:"익절 ATR 배수",
+  take_profit_atr_bull:"익절 ATR(상승장)", trailing_atr:"트레일링 ATR 배수",
+  trailing_atr_volatile:"트레일링 ATR(변동성장)", trailing_activation_profit_pct:"트레일링 발동 수익률",
+  breakeven_enabled:"본전보호 사용", breakeven_trigger_profit_pct:"본전보호 발동 수익률",
+  breakeven_floor_profit_pct:"본전보호 최소 확보 수익률",
+  add_buy_enabled:"추가매수 사용", add_buy_max_count:"추가매수 최대 횟수",
+  add_buy_trigger_profit_pct:"추가매수 발동 수익률",
+  // 뉴스/시장/섹터
+  sector_name:"섹터", use_news_global:"뉴스 반영 사용", news_block_cap:"뉴스 차단 상한",
+  use_market_entry_adjustment:"시장 상황 진입 보정", market_score_weight:"시장 점수 가중치",
+  market_adjustment_strength:"시장 보정 강도", sector_strength_weight:"섹터 강도 가중치",
+  sell_omen_enabled:"매도신호(sell_omen) 사용", sell_omen_threshold:"매도신호 기준값",
+  crash_buy_enabled:"급락 매수 사용",
+  // 이벤트 반응
+  event_response_rate_hike:"금리 인상 대응", event_response_rate_cut:"금리 인하 대응",
+  event_response_fed_statement:"연준 성명 대응", event_response_inflation:"물가 대응",
+  event_response_war:"전쟁 대응", event_response_geopolitical:"지정학 리스크 대응",
+  event_response_tariff:"관세 대응",
+};
+
 function rbVal(v){
   if(v===true) return '✓'; if(v===false) return '✗';
   if(v==null) return '—';
@@ -455,7 +487,7 @@ function rbVal(v){
 }
 function rbSection(title, rb, keys){
   let body=keys.filter(k=>rb[k]!==undefined)
-    .map(k=>`<div class="rb-kv"><span>${k}</span><span>${rbVal(rb[k])}</span></div>`).join('');
+    .map(k=>`<div class="rb-kv"><span>${RB_LABELS[k]||k}</span><span>${rbVal(rb[k])}</span></div>`).join('');
   if(!body) body='<div class="rb-kv"><span>—</span><span></span></div>';
   return `<div class="rb-sec"><div class="rb-sec-h" onclick="this.parentElement.classList.toggle('open')">
     <span>${title}</span><span class="rb-arrow">▶</span></div>

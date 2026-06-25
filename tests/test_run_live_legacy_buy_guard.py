@@ -69,6 +69,19 @@ def test_legacy_buy_guard_allows_central_control_buy_reason():
     assert runner.notifier.blocks == []
 
 
+def test_legacy_buy_guard_allows_semi_auto_manual_and_fallback_reasons():
+    runner = DummyRunner()
+    install_legacy_buy_guard(runner)
+
+    runner._try_order("BUY", "AAA", 100.0, "central_control manual_timing metric=confidence entity=AAA", signal_result=None)
+    runner._try_order("BUY", "BBB", 101.0, "central_control auto_fallback metric=confidence entity=BBB", signal_result=None)
+
+    assert [call[1] for call in runner.calls] == ["AAA", "BBB"]
+    assert runner.stats.orders_attempted == 2
+    assert runner.stats.orders_blocked == 0
+    assert runner.notifier.blocks == []
+
+
 def test_legacy_buy_guard_install_is_idempotent():
     runner = DummyRunner()
     install_legacy_buy_guard(runner)

@@ -1,7 +1,8 @@
-# api_server.py — 읽기 전용 대시보드 API (봇 코드는 건드리지 않음)
+# api_server.py — 대시보드 API. broker 직접 주문 금지, semi-auto는 intent 파일만 기록.
 import json, glob, os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 LOG_DIR = "logs"
 app = FastAPI()
@@ -55,13 +56,20 @@ def list_tickers():
 def trades(ticker: str):
     return load_ticker(ticker.upper())
 
-# ===== 라이브 대시보드 엔드포인트 (읽기 전용) =====
+# ===== 라이브 대시보드 엔드포인트 =====
 import csv
 import glob
 import time
-from functools import lru_cache
 
 import yfinance as yf
+
+from engine.live.manual_buy_intent import (
+    CENTRAL_BUY_CANDIDATES_PATH,
+    MANUAL_BUY_INTENT_PATH,
+    create_manual_buy_intent,
+    load_candidate_state,
+    read_json,
+)
 
 SYS = os.path.join("data", "_system")
 
@@ -190,7 +198,6 @@ def live_rulebooks():
 @app.get("/api/live/candles/{ticker}")
 def live_candles(ticker: str, interval: str = "1d", period: str = None):
     """yfinance OHLC. interval=1d/15m/5m/1m 등. 분봉은 시간(초)까지 반환."""
-    # interval별 안전한 기본 기간 (yfinance 제약)
     default_period = {
         "1m": "5d", "2m": "5d", "5m": "1mo", "15m": "1mo",
         "30m": "1mo", "60m": "3mo", "1h": "3mo", "1d": "2y",
@@ -205,7 +212,7 @@ def live_candles(ticker: str, interval: str = "1d", period: str = None):
     out = []
     for idx, row in df.iterrows():
         if intraday:
-            t = int(idx.timestamp())  # 분봉: UNIX 초 (UTC 기준 타임스탬프)
+            t = int(idx.timestamp())
         else:
             t = idx.strftime("%Y-%m-%d")
         try:
@@ -226,7 +233,6 @@ def live_candles(ticker: str, interval: str = "1d", period: str = None):
 def live_account():
     """계좌 요약: equity_snapshots.csv 마지막 줄 + trade_log.csv 누적손익 + safety_state.json 당일."""
     acct = {}
-    # 1) 최신 스냅샷 (csv 마지막 줄)
     snap_path = os.path.join(SYS, "equity_snapshots.csv")
     try:
         with open(snap_path, encoding="utf-8") as f:
@@ -244,7 +250,6 @@ def live_account():
                 "orders_today": int(float(last.get("orders_today") or 0)),
                 "snapshot_time": last.get("timestamp"),
             })
-            # 첫 스냅샷 대비 총수익률
             try:
                 first_total = float(rows[0].get("total_value") or 0)
                 if first_total:
@@ -253,7 +258,6 @@ def live_account():
                 pass
     except Exception:
         pass
-    # 2) 누적 실현손익 (trade_log.csv pnl 합산)
     try:
         with open(os.path.join(SYS, "trade_log.csv"), encoding="utf-8") as f:
             tot = 0.0
@@ -263,7 +267,6 @@ def live_account():
             acct["realized_pnl_total"] = tot
     except Exception:
         pass
-    # 3) 당일 실현손익
     safety = _read_json(os.path.join(SYS, "safety_state.json"), {})
     acct["realized_pnl_today"] = safety.get("realized_pnl_today")
     acct["consecutive_losses"] = safety.get("consecutive_losses")
@@ -318,7 +321,6 @@ def trades_history():
                 })
     except Exception:
         pass
-    # 통계
     n = len(rows)
     wins = [r for r in rows if (r["pnl_pct"] or 0) > 0]
     losses = [r for r in rows if (r["pnl_pct"] or 0) < 0]
@@ -334,6 +336,37 @@ def trades_history():
         "avg_win_pct": round(avg_win, 2),
         "avg_loss_pct": round(avg_loss, 2),
     }
-    # 최신순 정렬
     rows.sort(key=lambda x: x["exited_at"] or "", reverse=True)
     return {"stats": stats, "trades": rows}
+
+
+class ManualBuyIntentRequest(BaseModel):
+    candidate_id: str
+    source: str = "dashboard"
+
+
+@app.get("/api/live/central_candidates")
+def central_candidates():
+    """central-control semi_auto 대기 후보. broker를 import하지 않고 파일만 읽는다."""
+    return load_candidate_state(CENTRAL_BUY_CANDIDATES_PATH)
+
+
+@app.get("/api/live/manual_buy_intents")
+def manual_buy_intents():
+    """대시보드 확인용 manual BUY intent 상태. broker를 import하지 않고 파일만 읽는다."""
+    return read_json(MANUAL_BUY_INTENT_PATH, {"schema_version": 1, "intents": {}})
+
+
+@app.post("/api/live/manual_buy_intent")
+def manual_buy_intent(req: ManualBuyIntentRequest):
+    """후보 매수 intent만 기록한다. 실제 broker 주문은 paper 프로세스가 처리한다."""
+    try:
+        row = create_manual_buy_intent(
+            candidate_id=req.candidate_id,
+            source=req.source or "dashboard",
+            candidate_path=CENTRAL_BUY_CANDIDATES_PATH,
+            intent_path=MANUAL_BUY_INTENT_PATH,
+        )
+        return {"ok": True, "intent": row}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))

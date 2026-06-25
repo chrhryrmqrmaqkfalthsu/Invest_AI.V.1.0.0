@@ -247,6 +247,7 @@ def main():
     parser.add_argument("--universe", choices=["promoted", "parameters"], default="promoted")
     parser.add_argument("--promotion-id", default=DEFAULT_LIVE_PROMOTION_ID)
     parser.add_argument("--central-control", choices=["on", "off"], default="off", help="신규 BUY만 중앙통제기 선정/배분으로 전환")
+    parser.add_argument("--buy-mode", choices=["auto", "semi_auto"], default="auto", help="central-control BUY 실행 방식: auto=즉시 실행, semi_auto=후보 대기 후 수동 intent 또는 15:30 ET fallback")
     parser.add_argument("--central-selection-metric", choices=["confidence", "turnover_score"], default="confidence")
     parser.add_argument("--central-confidence-mode", choices=["raw", "adjusted"], default="adjusted", help="central confidence 산식: raw=기존 PF 평균, adjusted=PF cap+min trades neutral guard")
     parser.add_argument("--central-pf-cap", type=float, default=10.0, help="adjusted confidence의 구간별 profit_factor 상한")
@@ -336,20 +337,24 @@ def main():
             confidence_mode=args.central_confidence_mode,
             pf_cap=float(args.central_pf_cap),
             min_trades=int(args.central_min_trades),
+            buy_mode=args.buy_mode,
         )
         central_controller = LiveCentralController(runner, central_config)
         runner.tick_market = central_controller.tick_market
         logger.warning(
-            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s universe=promoted∩central pool_limit=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
+            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s universe=promoted∩central pool_limit=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
             args.central_selection_metric,
             args.central_confidence_mode,
             args.central_pf_cap,
             args.central_min_trades,
             args.central_max_positions,
             args.central_position_sizing,
+            args.buy_mode,
             args.central_pool_limit,
         )
     else:
+        if args.buy_mode != "auto":
+            logger.warning("[CENTRAL-CONTROL] OFF: --buy-mode=%s는 central-control ON에서만 적용됨", args.buy_mode)
         logger.warning("[CENTRAL-CONTROL] OFF: 구 live 개별 ticker BUY 경로는 LEGACY_BUY_DISABLED로 차단; SELL/청산/보유관리는 유지")
     if hasattr(runner, "notifier") and hasattr(runner, "tick_market"):
         install_position_dashboard(runner)

@@ -14,8 +14,10 @@ import logging
 import math
 import statistics
 from dataclasses import dataclass, replace
+from datetime import datetime, time as dt_time
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from engine.central.allocation_policy import AllocationParams, BuyCandidate, BuyDecision, decide_buys
 from engine.central.backtester import _decide_buys_with_selection_metric, _turnover_score_for_entity
@@ -23,6 +25,18 @@ from engine.central.entity_loader import EntityRecord
 from engine.central.models import normalize_ticker
 from engine.central.policy_search import apply_confidence_metric
 from engine.central.stage2_survivor_loader import load_stage2_survivors_with_report
+from engine.live.manual_buy_intent import (
+    CENTRAL_BUY_CANDIDATES_PATH,
+    MANUAL_BUY_INTENT_PATH,
+    candidate_from_decision,
+    candidate_id_for,
+    load_candidate_state,
+    load_pending_manual_intents,
+    mark_candidate_status,
+    mark_intent_status,
+    publish_candidate_state,
+    trade_date_et,
+)
 from engine.strategies.demo_rulebook import Signal
 
 logger = logging.getLogger("live_central_control")
@@ -30,6 +44,7 @@ logger = logging.getLogger("live_central_control")
 DEFAULT_BATCH_ROOT = Path("exp_batch_stage123_2009_20260616_full")
 DEFAULT_CENTRAL_INDEX = DEFAULT_BATCH_ROOT / "central_index.jsonl"
 DEFAULT_ENTITY_CONFIDENCE_PATH = Path("data/_system/central/stage2_b/swap_score_test2/entity_confidence_oos.json")
+ET = ZoneInfo("America/New_York")
 PERIOD_ORDER = (
     "stress_pre_2022h1",
     "train_1_eval",
@@ -54,6 +69,11 @@ class LiveCentralControlConfig:
     confidence_mode: str = "adjusted"
     pf_cap: float = 10.0
     min_trades: int = 15
+    buy_mode: str = "auto"  # auto | semi_auto
+    auto_fallback_hour_et: int = 15
+    auto_fallback_minute_et: int = 30
+    manual_intent_path: Path = MANUAL_BUY_INTENT_PATH
+    candidate_state_path: Path = CENTRAL_BUY_CANDIDATES_PATH
     batch_root: Path = DEFAULT_BATCH_ROOT
     central_index_path: Path = DEFAULT_CENTRAL_INDEX
     entity_confidence_path: Path = DEFAULT_ENTITY_CONFIDENCE_PATH
@@ -88,6 +108,7 @@ class LiveCentralController:
         self.selection_metric = _normalize_selection_metric(config.selection_metric)
         self.position_sizing = _normalize_position_sizing(config.position_sizing)
         self.confidence_mode = _normalize_confidence_mode(config.confidence_mode)
+        self.buy_mode = _normalize_buy_mode(config.buy_mode)
         self.entities = self._load_entities()
         self.entity_by_ticker: dict[str, list[EntityRecord]] = {}
         for entity in self.entities:
@@ -99,13 +120,14 @@ class LiveCentralController:
                 for entity in self.entities
             }
         logger.warning(
-            "[CENTRAL-CONTROL] enabled metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s promoted_symbols=%s central_entities=%s tickers=%s",
+            "[CENTRAL-CONTROL] enabled metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s promoted_symbols=%s central_entities=%s tickers=%s",
             self.selection_metric,
             self.confidence_mode,
             self.config.pf_cap,
             self.config.min_trades,
             self.config.max_positions,
             self.position_sizing,
+            self.buy_mode,
             len(getattr(self.runner, "symbols", []) or []),
             len(self.entities),
             len(self.entity_by_ticker),
@@ -278,6 +300,13 @@ class LiveCentralController:
                 evaluated_symbols,
                 len(self.runner.position_manager.all()),
             )
+            if getattr(self, "buy_mode", "auto") == "semi_auto":
+                publish_candidate_state(
+                    [],
+                    path=self.config.candidate_state_path,
+                    buy_mode=getattr(self, "buy_mode", "auto"),
+                    trade_date=self._trade_date_et(),
+                )
             return
 
         ledger = self._build_live_ledger_view()
@@ -287,7 +316,7 @@ class LiveCentralController:
         else:
             decisions = _decide_buys_with_selection_metric(candidates, ledger, alloc, self.selection_scores)
         logger.info(
-            "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=%s decisions=%s open_positions=%s ledger_slots=%s max_positions=%s metric=%s confidence_mode=%s",
+            "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=%s decisions=%s open_positions=%s ledger_slots=%s max_positions=%s metric=%s confidence_mode=%s buy_mode=%s",
             self.runner.stats.market_ticks,
             evaluated_symbols,
             len(candidates),
@@ -297,11 +326,122 @@ class LiveCentralController:
             alloc.max_positions,
             self.selection_metric,
             self.confidence_mode,
+            getattr(self, "buy_mode", "auto"),
         )
+        if getattr(self, "buy_mode", "auto") == "semi_auto":
+            self._process_semi_auto_decisions(decisions, candidate_signal_by_entity, candidate_price_by_entity)
+            return
         for decision in decisions:
             sig = candidate_signal_by_entity.get(decision.entity_id)
             price = candidate_price_by_entity.get(decision.entity_id, 0.0)
-            self._execute_decision(decision, sig, price)
+            self._execute_decision(decision, sig, price, execution_reason="auto")
+
+    def _process_semi_auto_decisions(self, decisions: list[BuyDecision], signal_by_entity: dict, price_by_entity: dict[str, float]) -> None:
+        trade_date = self._trade_date_et()
+        candidate_rows = []
+        decision_by_candidate_id = {}
+        signal_by_candidate_id = {}
+        price_by_candidate_id = {}
+        for decision in decisions:
+            price = float(price_by_entity.get(decision.entity_id, 0.0) or 0.0)
+            sig = signal_by_entity.get(decision.entity_id)
+            row = candidate_from_decision(decision, sig, price, trade_date=trade_date)
+            cid = row["candidate_id"]
+            candidate_rows.append(row)
+            decision_by_candidate_id[cid] = decision
+            signal_by_candidate_id[cid] = sig
+            price_by_candidate_id[cid] = price
+        publish_candidate_state(
+            candidate_rows,
+            path=self.config.candidate_state_path,
+            buy_mode=getattr(self, "buy_mode", "auto"),
+            trade_date=trade_date,
+        )
+        executed_this_tick: set[str] = set()
+        pending_intents = load_pending_manual_intents(intent_path=self.config.manual_intent_path, trade_date=trade_date)
+        for intent in pending_intents:
+            cid = str(intent.get("candidate_id") or "")
+            intent_id = str(intent.get("intent_id") or "")
+            if not cid or not intent_id:
+                continue
+            if cid not in decision_by_candidate_id:
+                mark_intent_status(intent_id, "rejected", intent_path=self.config.manual_intent_path, note="candidate not current")
+                mark_candidate_status(cid, "expired", candidate_path=self.config.candidate_state_path, manual_intent_id=intent_id, note="candidate not current")
+                logger.warning("[CENTRAL-CONTROL][SEMI-AUTO] manual intent rejected stale candidate=%s", cid)
+                continue
+            if cid in executed_this_tick or self._candidate_terminal(cid):
+                mark_intent_status(intent_id, "rejected", intent_path=self.config.manual_intent_path, note="candidate already executed or terminal")
+                logger.warning("[CENTRAL-CONTROL][SEMI-AUTO] duplicate manual intent rejected candidate=%s", cid)
+                continue
+            ok = self._execute_decision(
+                decision_by_candidate_id[cid],
+                signal_by_candidate_id.get(cid),
+                price_by_candidate_id.get(cid, 0.0),
+                execution_reason="manual_timing",
+                manual_intent_id=intent_id,
+            )
+            if ok:
+                executed_this_tick.add(cid)
+                mark_intent_status(intent_id, "consumed", intent_path=self.config.manual_intent_path)
+                mark_candidate_status(cid, "manual_executed", candidate_path=self.config.candidate_state_path, manual_intent_id=intent_id)
+                logger.warning("[CENTRAL-CONTROL][SEMI-AUTO] manual_timing executed candidate=%s", cid)
+            else:
+                mark_intent_status(intent_id, "blocked", intent_path=self.config.manual_intent_path, note="runner blocked or did not attempt order")
+                mark_candidate_status(cid, "blocked", candidate_path=self.config.candidate_state_path, manual_intent_id=intent_id, note="runner blocked or did not attempt order")
+                logger.warning("[CENTRAL-CONTROL][SEMI-AUTO] manual_timing blocked candidate=%s", cid)
+        if not self._auto_fallback_due():
+            logger.info(
+                "[CENTRAL-CONTROL][SEMI-AUTO] waiting for manual timing: candidates=%s intents=%s fallback_due=False",
+                len(candidate_rows),
+                len(pending_intents),
+            )
+            return
+        for cid, decision in decision_by_candidate_id.items():
+            if cid in executed_this_tick or self._candidate_terminal(cid):
+                continue
+            ok = self._execute_decision(
+                decision,
+                signal_by_candidate_id.get(cid),
+                price_by_candidate_id.get(cid, 0.0),
+                execution_reason="auto_fallback",
+            )
+            if ok:
+                executed_this_tick.add(cid)
+                mark_candidate_status(cid, "auto_executed", candidate_path=self.config.candidate_state_path)
+                logger.warning("[CENTRAL-CONTROL][SEMI-AUTO] auto_fallback executed candidate=%s", cid)
+            else:
+                mark_candidate_status(cid, "blocked", candidate_path=self.config.candidate_state_path, note="runner blocked or did not attempt order")
+                logger.warning("[CENTRAL-CONTROL][SEMI-AUTO] auto_fallback blocked candidate=%s", cid)
+
+    def _candidate_terminal(self, candidate_id: str) -> bool:
+        state = load_candidate_state(self.config.candidate_state_path)
+        row = (state.get("candidates") or {}).get(candidate_id)
+        if not isinstance(row, dict):
+            return False
+        return str(row.get("status") or "") in {"manual_executed", "auto_executed", "blocked", "expired"}
+
+    def _trade_date_et(self) -> str:
+        return trade_date_et(self._now_et())
+
+    def _now_et(self) -> datetime:
+        try:
+            trading = getattr(getattr(self.runner, "broker", None), "trading", None)
+            if trading is not None and hasattr(trading, "get_clock"):
+                clock = trading.get_clock()
+                ts = getattr(clock, "timestamp", None)
+                if ts is not None:
+                    return ts.astimezone(ET) if hasattr(ts, "astimezone") else datetime.now(ET)
+        except Exception as exc:
+            logger.warning("[CENTRAL-CONTROL] clock 조회 실패 — local ET fallback 사용: %s", exc)
+        return datetime.now(ET)
+
+    def _auto_fallback_due(self) -> bool:
+        now = self._now_et()
+        cutoff = dt_time(
+            hour=max(0, min(23, int(self.config.auto_fallback_hour_et or 0))),
+            minute=max(0, min(59, int(self.config.auto_fallback_minute_et or 0))),
+        )
+        return now.time() >= cutoff
 
     def _state_unavailable_for_new_buys(self) -> bool:
         pm = getattr(self.runner, "position_manager", None)
@@ -431,21 +571,32 @@ class LiveCentralController:
             logger.warning("[CENTRAL-CONTROL] 계좌 총액 조회 실패: %s", exc)
         return float(getattr(self.runner, "order_notional", 0.0) or 0.0) * max(int(self.config.max_positions or 0), 1)
 
-    def _execute_decision(self, decision: BuyDecision, signal_result, price: float) -> None:
+    def _execute_decision(self, decision: BuyDecision, signal_result, price: float, *, execution_reason: str = "auto", manual_intent_id: str = "") -> bool:
         if float(decision.notional or 0.0) <= 0.0 or float(price or 0.0) <= 0.0:
             logger.info("[CENTRAL-CONTROL] %s 주문 스킵: invalid notional/price", decision.ticker)
-            return
+            return False
         original_notional = getattr(self.runner, "order_notional", None)
+        before_blocked = int(getattr(getattr(self.runner, "stats", None), "orders_blocked", 0) or 0)
+        before_attempted = int(getattr(getattr(self.runner, "stats", None), "orders_attempted", 0) or 0)
         try:
             self.runner.order_notional = float(decision.notional)
             reason = (
-                f"central_control metric={self.selection_metric} confidence_mode={self.confidence_mode} "
+                f"central_control {execution_reason} metric={self.selection_metric} confidence_mode={self.confidence_mode} "
                 f"entity={decision.entity_id} score={decision.score:.4f} "
                 f"conf={decision.confidence:.4f} strength={decision.strength:.4f}"
             )
+            if manual_intent_id:
+                reason += f" manual_intent={manual_intent_id}"
             self.runner._try_order("BUY", decision.ticker, float(price), reason, signal_result=signal_result)
         finally:
             self.runner.order_notional = original_notional
+        after_blocked = int(getattr(getattr(self.runner, "stats", None), "orders_blocked", 0) or 0)
+        after_attempted = int(getattr(getattr(self.runner, "stats", None), "orders_attempted", 0) or 0)
+        if after_blocked > before_blocked:
+            return False
+        if after_attempted > before_attempted:
+            return True
+        return True
 
 
 def _normalize_selection_metric(value: str) -> str:
@@ -466,6 +617,13 @@ def _normalize_confidence_mode(value: str) -> str:
     mode = str(value or "adjusted").strip().lower()
     if mode not in {"raw", "adjusted"}:
         raise ValueError(f"unsupported central confidence mode: {value}")
+    return mode
+
+
+def _normalize_buy_mode(value: str) -> str:
+    mode = str(value or "auto").strip().lower().replace("-", "_")
+    if mode not in {"auto", "semi_auto"}:
+        raise ValueError(f"unsupported central buy mode: {value}")
     return mode
 
 

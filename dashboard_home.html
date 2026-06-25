@@ -288,6 +288,7 @@ const CAND_BADGE = {
 const _candBusy = {};
 const _candPrice = {};
 const _posEntry = {};
+const _posCurrent = {};
 let _candChart = null, _candSeries = null;
 
 function toast(title, body, type){
@@ -320,10 +321,13 @@ async function loadPositionEntries(){
     const r = await fetch(`${API}/api/live/slots`);
     const slots = await r.json();
     Object.keys(_posEntry).forEach(k=>delete _posEntry[k]);
+    Object.keys(_posCurrent).forEach(k=>delete _posCurrent[k]);
     (Array.isArray(slots) ? slots : []).filter(s=>!s.empty).forEach(s=>{
       const tk = String(s.ticker || '').toUpperCase();
       const entry = s.entry_price ?? s.avg_cost;
+      const cur = s.current_price;
       if(tk && entry!=null) _posEntry[tk] = Number(entry);
+      if(tk && cur!=null) _posCurrent[tk] = Number(cur);
     });
   }catch(e){}
 }
@@ -403,7 +407,7 @@ function candCard(c){
   const filled = st === 'manual_executed' || st === 'auto_executed';
   const signalPrice = Number(c.price || 0);
   const fillPrice = filled ? _posEntry[ticker] : null;
-  const curPrice = _candPrice[ticker];
+  const curPrice = _posCurrent[ticker] ?? _candPrice[ticker];
   const chg = changePct(signalPrice, curPrice);
   const chgCls = chg!=null && chg>=0 ? 'univ-pos' : 'univ-neg';
   const chgBadge = chg==null ? '' : `<span class="cand-chg ${chgCls}">${chg>=0?'+':''}${chg.toFixed(2)}%</span>`;
@@ -506,7 +510,7 @@ async function openCandChart(ticker, signalPrice, fillPrice){
   }
   const n = candles.length;
   _candChart.timeScale().setVisibleLogicalRange({from: Math.max(0, n-80), to: n});
-  const cur = candles[n-1].close;
+  const cur = _posCurrent[ticker] ?? candles[n-1].close;
   const chg = changePct(signal, cur);
   const cls = chg!=null && chg>=0 ? 'univ-pos' : 'univ-neg';
   const chgTxt = chg==null ? '-' : `${chg>=0?'+':''}${chg.toFixed(2)}%`;

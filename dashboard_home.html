@@ -18,6 +18,7 @@
     border-radius:7px;cursor:pointer;font-weight:600;font-size:13px;transition:.15s;}
   .nav button:hover{color:var(--txt);}
   .nav button.active{background:var(--accent);color:#fff;}
+  #fs-btn{font-size:15px;padding:6px 12px;}
   .regime{display:flex;gap:12px;align-items:center;font-size:12px;}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);
     animation:pulse 1.5s infinite;display:inline-block;}
@@ -110,6 +111,7 @@
       <button onclick="go('slots',this)">슬롯</button>
       <button onclick="go('news',this)">뉴스</button>
       <button onclick="go('history',this)">거래내역</button>
+      <button id="fs-btn" onclick="toggleFullscreen()" title="전체화면">⛶</button>
     </div>
     <div class="regime" id="regime"><span class="dot"></span> 연결 중...</div>
   </div>
@@ -463,6 +465,19 @@ document.querySelectorAll('.tf').forEach(btn=>{
     btn.classList.add('active');
     if(curTicker) drawChart(curTicker, btn.dataset.tf);
   };
+});
+
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen().catch(()=>{});
+  }else{
+    document.exitFullscreen();
+  }
+}
+// 전체화면 상태에 따라 버튼 모양 변경
+document.addEventListener('fullscreenchange', ()=>{
+  const b=document.getElementById('fs-btn');
+  if(b) b.textContent = document.fullscreenElement ? '🗗' : '⛶';
 });
 
 // ===== 초기 로드 + 주기 갱신 =====

@@ -391,6 +391,10 @@ const chart=LightweightCharts.createChart(document.getElementById('chart'),{
 });
 const series=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',
   wickUpColor:'#26d07c',wickDownColor:'#ff4d6a',borderVisible:false});
+const volSeries=chart.addHistogramSeries({
+  priceFormat:{type:'volume'}, priceScaleId:'vol',
+});
+volSeries.priceScale().applyOptions({ scaleMargins:{ top:0.82, bottom:0 } });
 let priceLines=[];
 let curTicker=null, curInterval='1d';
 
@@ -401,7 +405,25 @@ async function drawChart(ticker, interval){
   let candles=[];
   try{ candles=await (await fetch(`${API}/api/live/candles/${ticker}?interval=${interval}`)).json(); }catch(e){}
   series.setData(candles);
+  // 거래량 막대 (오른날 초록/내린날 빨강)
+  volSeries.setData(candles.map(c=>({
+    time:c.time, value:c.volume||0,
+    color: c.close>=c.open ? 'rgba(38,208,124,.5)' : 'rgba(255,77,106,.5)'
+  })));
   const s=slotData.find(x=>x.ticker===ticker);
+  // 진입 마커 (일봉일 때만 날짜 매칭이 정확)
+  series.setMarkers([]);
+  if(s && s.entry_date && !intraday){
+    const entryDay=s.entry_date.slice(0,10);
+    // 진입일 이후 첫 캔들에 마커 (정확히 같은 날 없으면 가장 가까운 이후 날짜)
+    const hit=candles.find(c=>c.time>=entryDay);
+    if(hit){
+      series.setMarkers([{
+        time:hit.time, position:'belowBar', color:'#3b82f6', shape:'arrowUp',
+        text:`진입 ${fmt(s.entry_price)}`,
+      }]);
+    }
+  }
   priceLines.forEach(l=>series.removePriceLine(l)); priceLines=[];
   if(s){
     [['진입',s.entry_price,'#3b82f6'],['목표',s.target_price,'#26d07c'],

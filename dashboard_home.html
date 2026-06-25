@@ -87,6 +87,19 @@
   .r-stop{background:rgba(255,77,106,.15);color:var(--down);}
   .r-target{background:rgba(38,208,124,.15);color:var(--up);}
   .r-other{background:rgba(95,110,133,.15);color:var(--dim);}
+
+  /* 토스트 알림 */
+  .toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;
+    gap:9px;z-index:9999;max-width:320px;}
+  .toast{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:9px;padding:12px 15px;box-shadow:0 6px 20px rgba(0,0,0,.4);
+    animation:toastin .35s;font-size:13px;}
+  .toast.warn{border-left-color:var(--down);}
+  .toast.good{border-left-color:var(--up);}
+  .toast .tt{font-weight:700;margin-bottom:3px;}
+  .toast .tb{color:var(--dim);font-size:12px;}
+  @keyframes toastin{from{opacity:0;transform:translateX(30px);}to{opacity:1;}}
+  .toast.fade{opacity:0;transform:translateX(30px);transition:.4s;}
 </style>
 </head>
 <body>
@@ -176,6 +189,50 @@ const pct=n=>n==null?'—':(n>=0?'+':'')+Number(n).toFixed(2)+'%';
 const col=n=>n>=0?'var(--up)':'var(--down)';
 
 let slotData=[], marketData={};
+let _alertState={ near:{}, lastTradeId:null, firstRun:true };
+
+function toast(title, body, type){
+  const wrap=document.getElementById('toasts');
+  const el=document.createElement('div');
+  el.className='toast '+(type||'');
+  el.innerHTML=`<div class="tt">${title}</div><div class="tb">${body}</div>`;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.classList.add('fade'); setTimeout(()=>el.remove(),400); }, 6000);
+}
+
+// 슬롯 데이터 받을 때마다 손절/목표 임박 체크
+function checkSlotAlerts(slots){
+  slots.forEach(s=>{
+    if(s.empty || s.stop_price==null || s.target_price==null || s.current_price==null) return;
+    if(s.target_price<=s.stop_price) return;
+    const pos=(s.current_price-s.stop_price)/(s.target_price-s.stop_price); // 0~1
+    let zone=null;
+    if(pos<=0.12) zone='stop';
+    else if(pos>=0.88) zone='target';
+    const prev=_alertState.near[s.ticker];
+    if(zone && zone!==prev && !_alertState.firstRun){
+      if(zone==='stop') toast(`⚠️ ${s.ticker} 손절 임박`,
+        `현재 ${fmt(s.current_price)} / 손절 ${fmt(s.stop_price)}`, 'warn');
+      else toast(`🎯 ${s.ticker} 목표 임박`,
+        `현재 ${fmt(s.current_price)} / 목표 ${fmt(s.target_price)}`, 'good');
+    }
+    _alertState.near[s.ticker]=zone;
+  });
+}
+
+// 거래내역 받을 때 새 청산 체크
+function checkTradeAlerts(trades){
+  if(!trades || !trades.length) return;
+  const latest=trades[0];
+  const id=latest.exited_at;
+  if(_alertState.lastTradeId!==null && id!==_alertState.lastTradeId && !_alertState.firstRun){
+    const good=(latest.pnl_pct||0)>=0;
+    toast(`${good?'✅':'❌'} ${latest.ticker} 청산`,
+      `${latest.exit_reason||''} · ${pct(latest.pnl_pct)}`, good?'good':'warn');
+  }
+  _alertState.lastTradeId=id;
+}
+
 let equityChart=null, equitySeries=null;
 function initEquityChart(){
   if(equityChart) return;
@@ -205,6 +262,7 @@ async function loadEquityCurve(){
 
 async function loadHistory(){
   let d; try{ d=await (await fetch(`${API}/api/live/trades_history`)).json(); }catch(e){ return; }
+  checkTradeAlerts(d.trades);
   const s=d.stats||{};
   document.getElementById('hist-stats').innerHTML=`
     <div class="acard"><div class="lab">총 거래</div><div class="val">${s.total_trades??0}</div></div>
@@ -281,6 +339,7 @@ function slotCard(s,onclick){
 async function loadSlots(){
   try{ slotData=await (await fetch(`${API}/api/live/slots`)).json(); }
   catch(e){ document.getElementById('mini-slots').innerHTML='<div class="loading">API 연결 실패</div>'; return; }
+  checkSlotAlerts(slotData);
   document.getElementById('mini-slots').innerHTML=slotData.map(s=>slotCard(s,'openDetail')).join('');
   document.getElementById('slots-full').innerHTML=slotData.map(s=>slotCard(s,'openDetail')).join('');
 }
@@ -407,9 +466,13 @@ document.querySelectorAll('.tf').forEach(btn=>{
 });
 
 // ===== 초기 로드 + 주기 갱신 =====
-function refresh(){ loadAccount(); loadSlots(); loadMarket(); loadNews(); loadEquityCurve(); loadHistory(); }
+function refresh(){
+  loadAccount(); loadSlots(); loadMarket(); loadNews(); loadEquityCurve(); loadHistory();
+  setTimeout(()=>{ _alertState.firstRun=false; }, 1500);
+}
 refresh();
 setInterval(refresh, 30000);
 </script>
+  <div class="toast-wrap" id="toasts"></div>
 </body>
 </html>

@@ -60,6 +60,10 @@
   .tag{display:inline-block;padding:2px 9px;border-radius:5px;background:rgba(139,92,246,.15);color:var(--purple);font-weight:600;font-size:11px;}
   .back{color:var(--accent);cursor:pointer;font-size:13px;margin-bottom:12px;display:inline-block;}
   .back:hover{text-decoration:underline;}
+  .tf{background:transparent;border:1px solid var(--line);color:var(--dim);padding:4px 11px;
+    border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:.15s;}
+  .tf:hover{color:var(--txt);border-color:var(--accent);}
+  .tf.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 
   /* 뉴스 상세 */
   .news-card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:14px;margin-bottom:10px;}
@@ -105,7 +109,19 @@
     <div id="slot-detail-view" style="display:none;">
       <span class="back" onclick="closeDetail()">← 목록으로</span>
       <div class="detail-grid">
-        <div class="panel"><h3 id="detail-title" style="margin-top:0;">차트</h3><div id="chart"></div></div>
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;">
+            <h3 id="detail-title" style="margin:0;">차트</h3>
+            <div id="tf-buttons" style="display:flex;gap:5px;">
+              <button class="tf active" data-tf="1d">일봉</button>
+              <button class="tf" data-tf="60m">60분</button>
+              <button class="tf" data-tf="15m">15분</button>
+              <button class="tf" data-tf="5m">5분</button>
+              <button class="tf" data-tf="1m">1분</button>
+            </div>
+          </div>
+          <div id="chart"></div>
+        </div>
         <div class="panel"><h3 style="margin-top:0;">룰북 / 포지션</h3><div id="detail-kv"></div></div>
       </div>
     </div>
@@ -182,6 +198,31 @@ const chart=LightweightCharts.createChart(document.getElementById('chart'),{
 const series=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',
   wickUpColor:'#26d07c',wickDownColor:'#ff4d6a',borderVisible:false});
 let priceLines=[];
+let curTicker=null, curInterval='1d';
+
+async function drawChart(ticker, interval){
+  curTicker=ticker; curInterval=interval;
+  const intraday = !['1d','1wk','1mo'].includes(interval);
+  chart.applyOptions({ timeScale:{ timeVisible:intraday, secondsVisible:false, borderColor:'#1c2535' } });
+  let candles=[];
+  try{ candles=await (await fetch(`${API}/api/live/candles/${ticker}?interval=${interval}`)).json(); }catch(e){}
+  series.setData(candles);
+  const s=slotData.find(x=>x.ticker===ticker);
+  priceLines.forEach(l=>series.removePriceLine(l)); priceLines=[];
+  if(s){
+    [['진입',s.entry_price,'#3b82f6'],['목표',s.target_price,'#26d07c'],
+     ['손절',s.stop_price,'#ff4d6a'],['트레일',s.trailing_stop,'#f5c451'],
+     ['현재',s.current_price,'#c9d4e5']].forEach(([t,p,c])=>{
+      if(p==null) return;
+      priceLines.push(series.createPriceLine({price:p,color:c,lineWidth:t==='현재'?2:1,
+        lineStyle:t==='현재'?0:2,axisLabelVisible:true,title:t}));
+    });
+  }
+  if(candles.length){
+    chart.resize(document.getElementById('chart').clientWidth, 440);
+    chart.timeScale().fitContent();
+  }
+}
 
 async function openDetail(ticker){
   // 슬롯 탭으로 전환 + 상세뷰 표시
@@ -195,22 +236,9 @@ async function openDetail(ticker){
 
   const s=slotData.find(x=>x.ticker===ticker); if(!s) return;
   document.getElementById('detail-title').textContent=`${ticker} — 보유 차트`;
-  // 캔들
-  let candles=[];
-  try{ candles=await (await fetch(`${API}/api/live/candles/${ticker}`)).json(); }catch(e){}
-  series.setData(candles);
-  priceLines.forEach(l=>series.removePriceLine(l)); priceLines=[];
-  [['진입',s.entry_price,'#3b82f6'],['목표',s.target_price,'#26d07c'],
-   ['손절',s.stop_price,'#ff4d6a'],['트레일',s.trailing_stop,'#f5c451'],
-   ['현재',s.current_price,'#c9d4e5']].forEach(([t,p,c])=>{
-    if(p==null) return;
-    priceLines.push(series.createPriceLine({price:p,color:c,lineWidth:t==='현재'?2:1,
-      lineStyle:t==='현재'?0:2,axisLabelVisible:true,title:t}));
-  });
-  if(candles.length){
-    chart.resize(document.getElementById('chart').clientWidth, 440);
-    chart.timeScale().fitContent();
-  }
+  // 캔들 (간격 버튼은 일봉으로 리셋)
+  document.querySelectorAll('.tf').forEach(b=>b.classList.toggle('active', b.dataset.tf==='1d'));
+  await drawChart(ticker, '1d');
   // 룰북/포지션 표
   document.getElementById('detail-kv').innerHTML=`
     <div class="kv"><span>현재가</span><span>${fmt(s.current_price)}</span></div>
@@ -266,6 +294,14 @@ async function loadNews(){
      <span style="color:${e.score>=0?'var(--up)':'var(--down)'}">${fmt(e.score,3)} <small style="color:var(--dim)">(${e.article_count||0}건)</small></span></div>`).join('');
   document.getElementById('news-sentiment').innerHTML=rows||'<div class="loading">데이터 없음</div>';
 }
+
+document.querySelectorAll('.tf').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.tf').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    if(curTicker) drawChart(curTicker, btn.dataset.tf);
+  };
+});
 
 // ===== 초기 로드 + 주기 갱신 =====
 function refresh(){ loadAccount(); loadSlots(); loadMarket(); loadNews(); }

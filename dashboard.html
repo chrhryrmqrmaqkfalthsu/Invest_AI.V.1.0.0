@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KINGMAKER — Trade Dashboard</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root{--bg:#0a0e17;--panel:#111722;--line:#1c2535;--txt:#c9d4e5;--dim:#5f6e85;
+    --up:#26d07c;--down:#ff4d6a;--accent:#3b82f6;--gold:#f5c451;--sl:#ff4d6a;--tp:#26d07c;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Malgun Gothic",sans-serif;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;
+    padding:12px 22px;border-bottom:1px solid var(--line);
+    background:linear-gradient(90deg,#0d121c,#111722);}
+  .logo{font-size:20px;font-weight:800;letter-spacing:2px;}
+  .logo span{color:var(--gold);}
+  .tickers{display:flex;gap:8px;}
+  .tbtn{background:var(--panel);border:1px solid var(--line);color:var(--dim);
+    padding:7px 16px;border-radius:7px;cursor:pointer;font-weight:600;font-size:13px;transition:.15s;}
+  .tbtn:hover{border-color:var(--accent);color:var(--txt);}
+  .tbtn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .grid{display:grid;grid-template-columns:2.2fr 1fr;gap:14px;padding:14px 22px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .panel h3{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;
+    color:var(--dim);margin-bottom:12px;font-weight:600;}
+  #chart{width:100%;height:420px;}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .card .lab{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;}
+  .card .val{font-size:22px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums;}
+  .feed{height:360px;overflow-y:auto;font-size:13px;}
+  .feed::-webkit-scrollbar{width:6px;}.feed::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+  .ev{padding:8px 10px;border-bottom:1px solid var(--line);}
+  .ev .d{color:var(--dim);font-variant-numeric:tabular-nums;}
+  .ev .exit{color:var(--gold);font-weight:700;}
+  .loading{color:var(--dim);padding:20px;text-align:center;}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="logo">KING<span>MAKER</span></div>
+    <div class="tickers" id="tickers"></div>
+  </div>
+  <div class="grid">
+    <div>
+      <div class="cards">
+        <div class="card"><div class="lab">종목</div><div class="val" id="c-ticker">—</div></div>
+        <div class="card"><div class="lab">방향</div><div class="val" id="c-dir">—</div></div>
+        <div class="card"><div class="lab">진입가</div><div class="val" id="c-entry">—</div></div>
+        <div class="card"><div class="lab">기록 수</div><div class="val" id="c-count">—</div></div>
+      </div>
+      <div class="panel">
+        <h3 id="chart-title">캔들차트</h3>
+        <div id="chart"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>📡 청산 / 매매 이벤트</h3>
+      <div class="feed" id="feed"><div class="loading">로딩 중...</div></div>
+    </div>
+  </div>
+<script>
+const API = "http://localhost:8001";   // ← 서버 주소. 환경 바뀌면 여기만 수정
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+  layout:{background:{color:'transparent'},textColor:'#5f6e85'},
+  grid:{vertLines:{color:'#1c2535'},horzLines:{color:'#1c2535'}},
+  timeScale:{borderColor:'#1c2535'}, rightPriceScale:{borderColor:'#1c2535'},
+});
+const candleSeries = chart.addCandlestickSeries({
+  upColor:'#26d07c',downColor:'#ff4d6a',wickUpColor:'#26d07c',
+  wickDownColor:'#ff4d6a',borderVisible:false,
+});
+
+async function loadTickers(){
+  const res = await fetch(`${API}/api/tickers`);
+  const list = await res.json();
+  const box = document.getElementById('tickers');
+  box.innerHTML = '';
+  list.forEach((t,i)=>{
+    const b=document.createElement('button');
+    b.className='tbtn'+(i===0?' active':''); b.textContent=t;
+    b.onclick=()=>{document.querySelectorAll('.tbtn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active'); loadTrades(t);};
+    box.appendChild(b);
+  });
+  if(list.length) loadTrades(list[0]);
+}
+
+async function loadTrades(ticker){
+  document.getElementById('chart-title').textContent = ticker + ' 캔들차트';
+  const res = await fetch(`${API}/api/trades/${ticker}`);
+  const rows = await res.json();
+
+  // 캔들 데이터 (날짜 중복 제거, 정렬)
+  const seen=new Set(); const candles=[];
+  rows.forEach(r=>{
+    if(r.open==null||r.date==null||seen.has(r.date)) return;
+    seen.add(r.date);
+    candles.push({time:r.date,open:r.open,high:r.high,low:r.low,close:r.close});
+  });
+  candles.sort((a,b)=>a.time<b.time?-1:1);
+  candleSeries.setData(candles);
+
+  // 진입가 / 손절 / 익절 라인 (첫 레코드 기준)
+  candleSeries.setMarkers([]);
+  const first = rows.find(r=>r.entry_price!=null);
+  if(first){
+    [['진입',first.entry_price,'#3b82f6'],
+     ['손절',first.stop_loss,'#ff4d6a'],
+     ['익절',first.take_profit,'#26d07c']].forEach(([title,price,color])=>{
+      if(price==null) return;
+      candleSeries.createPriceLine({price,color,lineWidth:1,
+        lineStyle:LightweightCharts.LineStyle.Dashed,axisLabelVisible:true,title});
+    });
+  }
+
+  // 청산 지점 마커
+  const markers = rows.filter(r=>r.exit_reason).map(r=>({
+    time:r.date,position:'aboveBar',color:'#f5c451',shape:'arrowDown',
+    text:'청산: '+r.exit_reason,
+  }));
+  if(markers.length) candleSeries.setMarkers(markers);
+  chart.timeScale().fitContent();
+
+  // 카드
+  document.getElementById('c-ticker').textContent = ticker;
+  document.getElementById('c-dir').textContent =
+    first ? (first.direction==='long'?'롱 ▲':'숏 ▼') : '—';
+  document.getElementById('c-dir').style.color =
+    first && first.direction==='long' ? 'var(--up)':'var(--down)';
+  document.getElementById('c-entry').textContent =
+    first && first.entry_price!=null ? first.entry_price.toFixed(2) : '—';
+  document.getElementById('c-count').textContent = rows.length;
+
+  // 이벤트 피드 (청산건 우선, 없으면 최근 기록)
+  const feed=document.getElementById('feed');
+  const exits = rows.filter(r=>r.exit_reason);
+  const items = exits.length ? exits : rows.slice(-15).reverse();
+  feed.innerHTML = items.map(r=>{
+    if(r.exit_reason){
+      return `<div class="ev"><span class="d">${r.date}</span> ·
+        <span class="exit">청산</span> ${r.exit_reason}
+        ${r.exit_price!=null?' @ '+Number(r.exit_price).toFixed(2):''}
+        <span class="d">(보유 ${r.holding_days}일)</span></div>`;
+    }
+    return `<div class="ev"><span class="d">${r.date}</span> ·
+      종가 ${r.close!=null?r.close.toFixed(2):'—'}
+      <span class="d">(보유 ${r.holding_days}일)</span></div>`;
+  }).join('') || '<div class="loading">기록 없음</div>';
+}
+
+loadTickers().catch(e=>{
+  document.getElementById('feed').innerHTML =
+    '<div class="loading">API 연결 실패<br>서버(8001)가 켜져 있는지,<br>주소가 맞는지 확인하세요</div>';
+});
+</script>
+</body>
+</html>

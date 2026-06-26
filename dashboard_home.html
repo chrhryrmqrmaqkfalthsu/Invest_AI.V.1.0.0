@@ -107,7 +107,15 @@
   .cm-chart{height:340px;width:100%;}
 
   /* 슬롯 상세 */
-  #chart{width:100%;height:440px;}
+  #chart{width:100%;height:440px;position:relative;}
+  .chart-tooltip{position:absolute;display:none;z-index:30;pointer-events:none;
+    min-width:190px;background:rgba(15,20,27,.96);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;box-shadow:0 8px 24px rgba(0,0,0,.35);
+    color:var(--txt);font-size:12px;font-variant-numeric:tabular-nums;}
+  .chart-tooltip .ct-date{font-weight:700;color:#fff;margin-bottom:6px;}
+  .chart-tooltip .ct-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;}
+  .chart-tooltip .ct-grid span:nth-child(odd){color:var(--dim);}
+  .chart-tooltip .ct-grid span:nth-child(even){text-align:right;font-weight:700;}
   .detail-grid{display:grid;grid-template-columns:2.3fr 1fr;gap:16px;}
   .kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;}
   .kv span:first-child{color:var(--dim);}.kv span:last-child{font-weight:600;font-variant-numeric:tabular-nums;}
@@ -935,11 +943,87 @@ const volSeries=chart.addHistogramSeries({
 volSeries.priceScale().applyOptions({ scaleMargins:{ top:0.82, bottom:0 } });
 let priceLines=[];
 let curTicker=null, curInterval='1d';
+let _slotChartTooltip = null;
+
+function ensureSlotChartTooltip(){
+  const el = document.getElementById('chart');
+  if(!el) return null;
+  let tip = document.getElementById('slot-chart-tooltip');
+  if(!tip){
+    tip = document.createElement('div');
+    tip.id = 'slot-chart-tooltip';
+    tip.className = 'chart-tooltip';
+    el.appendChild(tip);
+  }
+  _slotChartTooltip = tip;
+  return tip;
+}
+function hideSlotChartTooltip(){
+  const tip = _slotChartTooltip || document.getElementById('slot-chart-tooltip');
+  if(tip) tip.style.display = 'none';
+}
+function formatChartTimeLabel(time){
+  if(time == null) return '—';
+  if(typeof time === 'string') return time;
+  if(typeof time === 'number'){
+    const d = new Date(time * 1000);
+    const date = d.toLocaleDateString('ko-KR', {timeZone:'America/New_York', year:'numeric', month:'2-digit', day:'2-digit'});
+    const clock = d.toLocaleTimeString('ko-KR', {timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false});
+    return `${date} ${clock} ET`;
+  }
+  if(typeof time === 'object' && time.year && time.month && time.day){
+    const mm = String(time.month).padStart(2, '0');
+    const dd = String(time.day).padStart(2, '0');
+    return `${time.year}-${mm}-${dd}`;
+  }
+  return String(time);
+}
+function setupSlotChartTooltip(){
+  const el = document.getElementById('chart');
+  const tip = ensureSlotChartTooltip();
+  if(!el || !tip) return;
+  chart.subscribeCrosshairMove(param=>{
+    if(!param || !param.point || param.time == null){
+      hideSlotChartTooltip();
+      return;
+    }
+    const x = Number(param.point.x || 0);
+    const y = Number(param.point.y || 0);
+    if(x < 0 || y < 0 || x > el.clientWidth || y > el.clientHeight){
+      hideSlotChartTooltip();
+      return;
+    }
+    const data = param.seriesData && param.seriesData.get ? param.seriesData.get(series) : null;
+    if(!data){
+      hideSlotChartTooltip();
+      return;
+    }
+    tip.innerHTML = `
+      <div class="ct-date">${htmlEsc(formatChartTimeLabel(param.time))}</div>
+      <div class="ct-grid">
+        <span>시가</span><span>${fmt(data.open)}</span>
+        <span>고가</span><span>${fmt(data.high)}</span>
+        <span>저가</span><span>${fmt(data.low)}</span>
+        <span>종가</span><span>${fmt(data.close)}</span>
+      </div>`;
+    const w = tip.offsetWidth || 210;
+    const h = tip.offsetHeight || 112;
+    let left = x + 14;
+    let top = y + 14;
+    if(left + w + 8 > el.clientWidth) left = x - w - 14;
+    if(top + h + 8 > el.clientHeight) top = y - h - 14;
+    tip.style.left = `${Math.max(8, left)}px`;
+    tip.style.top = `${Math.max(8, top)}px`;
+    tip.style.display = 'block';
+  });
+}
+setupSlotChartTooltip();
 
 async function drawChart(ticker, interval, opts){
   opts = opts || {};
   const preserve = !!opts.preserveRange;
   const savedRange = preserve ? chart.timeScale().getVisibleLogicalRange() : null;
+  hideSlotChartTooltip();
 
   curTicker=ticker; curInterval=interval;
   const intraday = !['1d','1wk','1mo'].includes(interval);

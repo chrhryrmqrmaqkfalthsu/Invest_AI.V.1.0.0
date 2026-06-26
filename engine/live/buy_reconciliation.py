@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Optional
 
 from engine.live.broker.base import Holding, Order, OrderSide, OrderStatus, OrderType
+from engine.strategies.rulebook import Rulebook
 
 log = logging.getLogger("buy_reconciliation")
 SHARE_EPS = 1e-6
@@ -49,12 +50,12 @@ class BuyReconciliationService:
         self.max_reconcile_retries = max(1, int(max_reconcile_retries or DEFAULT_MAX_RECONCILE_RETRIES))
         self.empty_holding_confirm_seconds = max(0, int(empty_holding_confirm_seconds or 0))
 
-    def preflight(self, ticker: str) -> BuyPreflight:
+    def preflight(self, ticker: str, *, rulebook_override=None) -> BuyPreflight:
         provider = self.rulebook_provider
         if not hasattr(provider, "get_last_atr") or not hasattr(provider, "get_rulebook"):
             raise RuntimeError(f"{ticker} BUY preflight 실패: ATR/rulebook provider 없음")
         atr = provider.get_last_atr(ticker)
-        rulebook = provider.get_rulebook(ticker)
+        rulebook = _coerce_rulebook_override(rulebook_override) if rulebook_override is not None else provider.get_rulebook(ticker)
         if atr is None or float(atr) <= 0:
             raise RuntimeError(f"{ticker} BUY preflight 실패: 유효한 ATR 없음")
         if rulebook is None:
@@ -313,3 +314,18 @@ def _manager_now_iso(manager) -> str:
     if callable(now_iso):
         return now_iso()
     return datetime.now().astimezone().isoformat()
+
+
+def _coerce_rulebook_override(value):
+    if value is None:
+        return None
+    if isinstance(value, Rulebook):
+        return value
+    if isinstance(value, dict):
+        return Rulebook.from_dict(value)
+    if hasattr(value, "to_dict"):
+        try:
+            return Rulebook.from_dict(value.to_dict())
+        except Exception:
+            return value
+    return value

@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 
 from engine.central.allocation_policy import AllocationParams, BuyCandidate, BuyDecision, decide_buys
 from engine.central.backtester import _decide_buys_with_selection_metric, _turnover_score_for_entity
-from engine.central.entity_loader import EntityRecord
+from engine.central.entity_loader import EntityRecord, load_entities_from_catalog
 from engine.central.models import normalize_ticker
 from engine.central.policy_search import apply_confidence_metric
 from engine.central.stage2_survivor_loader import load_stage2_survivors_with_report
@@ -47,6 +47,7 @@ logger = logging.getLogger("live_central_control")
 DEFAULT_BATCH_ROOT = Path("exp_batch_stage123_2009_20260616_full")
 DEFAULT_CENTRAL_INDEX = DEFAULT_BATCH_ROOT / "central_index.jsonl"
 DEFAULT_ENTITY_CONFIDENCE_PATH = Path("data/_system/central/stage2_b/swap_score_test2/entity_confidence_oos.json")
+DEFAULT_STAGE3_LIVE_POOL_PATH = Path("data/_system/central/stage3_live_pool/stage3_live_pool.jsonl")
 DEFAULT_ORDER_NOTIONAL_SAFETY_BUFFER = 0.003
 MAX_ORDER_NOTIONAL_SAFETY_BUFFER = 0.005
 ET = ZoneInfo("America/New_York")
@@ -84,6 +85,9 @@ class LiveCentralControlConfig:
     batch_root: Path = DEFAULT_BATCH_ROOT
     central_index_path: Path = DEFAULT_CENTRAL_INDEX
     entity_confidence_path: Path = DEFAULT_ENTITY_CONFIDENCE_PATH
+    stage3_mix_enabled: bool = False
+    stage3_live_pool_path: Path = DEFAULT_STAGE3_LIVE_POOL_PATH
+    stage3_pool_limit: int = 0
 
 
 @dataclass(frozen=True)
@@ -130,7 +134,7 @@ class LiveCentralController:
                 for entity in self.entities
             }
         logger.warning(
-            "[CENTRAL-CONTROL] enabled metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f promoted_symbols=%s central_entities=%s tickers=%s",
+            "[CENTRAL-CONTROL] enabled metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f stage3_mix=%s stage3_pool=%s promoted_symbols=%s central_entities=%s tickers=%s",
             self.selection_metric,
             self.confidence_mode,
             self.config.pf_cap,
@@ -139,6 +143,8 @@ class LiveCentralController:
             self.position_sizing,
             self.buy_mode,
             self.order_notional_safety_buffer,
+            bool(getattr(self.config, "stage3_mix_enabled", False)),
+            str(getattr(self.config, "stage3_live_pool_path", "")),
             len(getattr(self.runner, "symbols", []) or []),
             len(self.entities),
             len(self.entity_by_ticker),
@@ -165,7 +171,7 @@ class LiveCentralController:
             tickers=symbols,
         )
         entities = apply_confidence_metric(report.entities, "profit_factor")
-        filtered: list[EntityRecord] = []
+        stage2_filtered: list[EntityRecord] = []
         for entity in entities:
             if entity.entity_id not in allowed_ids:
                 continue
@@ -175,13 +181,47 @@ class LiveCentralController:
                 entity = self._apply_stored_raw_confidence(entity, confidence_rows)
             else:
                 entity = self._apply_adjusted_confidence(entity)
-            filtered.append(entity)
+            stage2_filtered.append(entity)
+
+        stage3_filtered = self._load_stage3_mix_entities(symbols)
+        filtered = _dedupe_entities_by_id([*stage2_filtered, *stage3_filtered])
+        logger.warning(
+            "[CENTRAL-CONTROL] entity pool loaded stage2=%s stage3_mix=%s total=%s unique_tickers=%s",
+            len(stage2_filtered),
+            len(stage3_filtered),
+            len(filtered),
+            len({normalize_ticker(entity.ticker) for entity in filtered}),
+        )
         if not filtered:
             raise RuntimeError(
                 "central-control promoted ∩ central survivor pool is empty "
-                f"(symbols={len(symbols)}, stage2_loaded={report.loaded})"
+                f"(symbols={len(symbols)}, stage2_loaded={report.loaded}, stage3_mix={len(stage3_filtered)})"
             )
         return filtered
+
+    def _load_stage3_mix_entities(self, symbols: set[str]) -> list[EntityRecord]:
+        if not bool(getattr(self.config, "stage3_mix_enabled", False)):
+            return []
+        path = Path(getattr(self.config, "stage3_live_pool_path", DEFAULT_STAGE3_LIVE_POOL_PATH))
+        if not path.exists():
+            raise FileNotFoundError(f"central-control Stage3 live pool missing: {path}")
+        entities = load_entities_from_catalog(path, require_eligible=True)
+        out: list[EntityRecord] = []
+        limit = max(0, int(getattr(self.config, "stage3_pool_limit", 0) or 0))
+        for entity in entities:
+            ticker = normalize_ticker(entity.ticker)
+            if ticker not in symbols:
+                continue
+            tags = dict(getattr(entity, "tags", {}) or {})
+            tags["stage"] = "stage3_live_pool"
+            tags["source_pool"] = str(path)
+            entity = replace(entity, tags=tags)
+            if self.confidence_mode == "adjusted":
+                entity = self._apply_adjusted_confidence(entity)
+            out.append(entity)
+            if limit > 0 and len(out) >= limit:
+                break
+        return out
 
     def _apply_stored_raw_confidence(self, entity: EntityRecord, confidence_rows: dict) -> EntityRecord:
         stored = confidence_rows.get(entity.entity_id)
@@ -681,7 +721,19 @@ class LiveCentralController:
             )
             if manual_intent_id:
                 reason += f" manual_intent={manual_intent_id}"
-            self.runner._try_order("BUY", decision.ticker, float(price), reason, signal_result=signal_result)
+            try:
+                self.runner._try_order(
+                    "BUY",
+                    decision.ticker,
+                    float(price),
+                    reason,
+                    signal_result=signal_result,
+                    rulebook_override=getattr(decision, "rulebook", None),
+                )
+            except TypeError as exc:
+                if "rulebook_override" not in str(exc):
+                    raise
+                self.runner._try_order("BUY", decision.ticker, float(price), reason, signal_result=signal_result)
         finally:
             self.runner.order_notional = original_notional
         after_blocked = int(getattr(getattr(self.runner, "stats", None), "orders_blocked", 0) or 0)
@@ -691,6 +743,18 @@ class LiveCentralController:
         if after_attempted > before_attempted:
             return True
         return True
+
+
+def _dedupe_entities_by_id(entities: list[EntityRecord]) -> list[EntityRecord]:
+    out: list[EntityRecord] = []
+    seen: set[str] = set()
+    for entity in entities:
+        entity_id = str(getattr(entity, "entity_id", "") or "")
+        if not entity_id or entity_id in seen:
+            continue
+        out.append(entity)
+        seen.add(entity_id)
+    return out
 
 
 def _normalize_selection_metric(value: str) -> str:
@@ -738,12 +802,21 @@ def order_notional_safety_buffer_from_policy(policy: dict) -> float:
 def _adjusted_confidence_from_metrics(validation_metrics, *, pf_cap: float, min_trades: int) -> float:
     cap = max(float(pf_cap), 1.0)
     floor = max(int(min_trades), 0)
+    metrics: list[dict] = []
+    if isinstance(validation_metrics, dict):
+        for label in PERIOD_ORDER:
+            metric = validation_metrics.get(label)
+            if isinstance(metric, dict):
+                metrics.append(metric)
+        # Stage3 live-pool rows use labels such as train_1/train_2/recent_1y.
+        # If none of the legacy Stage2 labels are present, score the available
+        # validation periods instead of neutralizing the whole Stage3 pool.
+        if not metrics:
+            metrics = [dict(metric) for metric in validation_metrics.values() if isinstance(metric, dict)]
+    if not metrics:
+        return 0.0
     adjusted: list[float] = []
-    for label in PERIOD_ORDER:
-        metric = validation_metrics.get(label) if isinstance(validation_metrics, dict) else None
-        if not isinstance(metric, dict):
-            adjusted.append(1.0)
-            continue
+    for metric in metrics:
         trade_count = _safe_float(metric.get("trade_count"), 0.0)
         profit_factor = _safe_float(metric.get("profit_factor"), 0.0)
         if trade_count < floor:

@@ -27,7 +27,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from engine.live.broker.factory import make_broker
-from engine.live.central_control import LiveCentralControlConfig, LiveCentralController, order_notional_safety_buffer_from_policy
+from engine.live.central_control import (
+    DEFAULT_STAGE3_LIVE_POOL_PATH,
+    LiveCentralControlConfig,
+    LiveCentralController,
+    order_notional_safety_buffer_from_policy,
+)
 from engine.live.daily_report import (
     send_daily_report_from_runner,
     send_monthly_report_from_runner,
@@ -209,7 +214,7 @@ def install_legacy_buy_guard(runner: Runner) -> None:
         return
     original_try_order = runner._try_order
 
-    def guarded_try_order(side: str, ticker: str, price: float, reason: str, signal_result=None) -> None:
+    def guarded_try_order(side: str, ticker: str, price: float, reason: str, signal_result=None, rulebook_override=None) -> None:
         side_u = str(side or "").upper()
         if side_u == "BUY" and not _is_central_control_buy_reason(reason):
             try:
@@ -231,7 +236,7 @@ def install_legacy_buy_guard(runner: Runner) -> None:
             except Exception as exc:
                 logger.warning("[%s] 차단 알림 실패: %s", LEGACY_BUY_DISABLED_CODE, exc)
             return None
-        return original_try_order(side, ticker, price, reason, signal_result=signal_result)
+        return original_try_order(side, ticker, price, reason, signal_result=signal_result, rulebook_override=rulebook_override)
 
     runner._try_order = guarded_try_order
     runner._legacy_buy_guard_installed = True
@@ -255,6 +260,9 @@ def main():
     parser.add_argument("--central-max-positions", type=int, default=8)
     parser.add_argument("--central-position-sizing", choices=["score_weighted", "equal"], default="score_weighted")
     parser.add_argument("--central-pool-limit", type=int, default=533)
+    parser.add_argument("--central-stage3-mix", choices=["on", "off"], default="off", help="Stage3 filtered live-pool을 기존 central entity pool에 추가")
+    parser.add_argument("--central-stage3-pool-path", default=str(DEFAULT_STAGE3_LIVE_POOL_PATH), help="Stage3 filtered live-pool JSONL 경로")
+    parser.add_argument("--central-stage3-pool-limit", type=int, default=0, help="Stage3 추가 entity 개수 상한(0=무제한)")
     parser.add_argument("--market-tick", type=int, default=60)
     parser.add_argument("--offmarket-tick", type=int, default=3600)
     parser.add_argument("--sma-window", type=int, default=20)
@@ -340,11 +348,14 @@ def main():
             min_trades=int(args.central_min_trades),
             buy_mode=args.buy_mode,
             order_notional_safety_buffer=sizing_buffer,
+            stage3_mix_enabled=str(args.central_stage3_mix).lower() == "on",
+            stage3_live_pool_path=Path(args.central_stage3_pool_path),
+            stage3_pool_limit=int(args.central_stage3_pool_limit),
         )
         central_controller = LiveCentralController(runner, central_config)
         runner.tick_market = central_controller.tick_market
         logger.warning(
-            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f universe=promoted∩central pool_limit=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
+            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f universe=promoted∩central pool_limit=%s stage3_mix=%s stage3_pool_path=%s stage3_pool_limit=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
             args.central_selection_metric,
             args.central_confidence_mode,
             args.central_pf_cap,
@@ -354,6 +365,9 @@ def main():
             args.buy_mode,
             sizing_buffer,
             args.central_pool_limit,
+            args.central_stage3_mix,
+            args.central_stage3_pool_path,
+            args.central_stage3_pool_limit,
         )
     else:
         if args.buy_mode != "auto":

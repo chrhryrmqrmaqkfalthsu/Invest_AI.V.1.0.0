@@ -889,7 +889,7 @@ class Runner:
             except Exception:
                 pass
 
-    def _try_order(self, side: str, ticker: str, price: float, reason: str, signal_result=None) -> None:
+    def _try_order(self, side: str, ticker: str, price: float, reason: str, signal_result=None, rulebook_override=None) -> None:
         self.stats.orders_attempted += 1
         pending_mgr = getattr(self, "pending_order_manager", None)
         tick_locks = getattr(self, "_tick_locked_tickers", set())
@@ -900,7 +900,7 @@ class Runner:
         buy_preflight: Optional[BuyPreflight] = None
         if side == "BUY":
             try:
-                buy_preflight = self._get_buy_reconciler().preflight(ticker)
+                buy_preflight = self._get_buy_reconciler().preflight(ticker, rulebook_override=rulebook_override)
             except Exception as preflight_exc:
                 self.stats.orders_blocked += 1
                 logger.error(f"{ticker} BUY preflight 차단: {preflight_exc}")

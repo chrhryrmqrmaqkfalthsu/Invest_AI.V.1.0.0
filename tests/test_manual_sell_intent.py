@@ -41,16 +41,19 @@ class FakeSafety:
 
 class FakeBroker:
     mode = "alpaca_paper"
-    def __init__(self, ticker="AR", shares=10.0, price=100.0, pending=True):
+    def __init__(self, ticker="AR", shares=10.0, price=100.0, pending=True, holdings_error=False):
         self.ticker = ticker
         self.shares = shares
         self.price = price
         self.pending = pending
+        self.holdings_error = holdings_error
         self.orders = {}
         self.sell_calls = 0
     def get_balance(self):
         return Balance(100000, 100000, self.shares * self.price, self.get_holdings())
     def get_holdings(self):
+        if self.holdings_error:
+            raise RuntimeError("holdings unavailable")
         if self.shares <= 1e-6:
             return []
         return [Holding(self.ticker, self.shares, self.price, self.price, self.shares * self.price, 0.0, 0.0)]
@@ -281,6 +284,32 @@ def test_pending_sell_intent_consumes_existing_exit_path_and_finalizes(tmp_path,
     assert runner.pending_order_manager.all() == []
 
 
+def test_pending_sell_intent_with_position_but_zero_broker_holding_stays_pending(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    broker.shares = 0.0
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "pending"}}})
+
+    runner._process_manual_sell_intents()
+
+    row = load_manual_sell_state(intent_path)["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "pending"
+    assert row.get("note", "") == ""
+    assert broker.sell_calls == 0
+
+
+def test_pending_sell_intent_with_broker_holding_but_missing_position_stays_pending(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    runner.position_manager.unregister("AR")
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "pending"}}})
+
+    runner._process_manual_sell_intents()
+
+    row = load_manual_sell_state(intent_path)["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "pending"
+    assert row.get("note", "") == ""
+    assert broker.sell_calls == 0
+
+
 def test_already_exited_manual_sell_intent_is_rejected_without_order(tmp_path, monkeypatch):
     runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
     # Simulate stale pending intent after the bot already exited and local state was cleaned.
@@ -294,6 +323,46 @@ def test_already_exited_manual_sell_intent_is_rejected_without_order(tmp_path, m
     row = state["intents"]["manual_sell:AR:x"]
     assert row["status"] == "rejected"
     assert row["note"] == "already exited"
+    assert broker.sell_calls == 0
+
+
+def test_pending_sell_intent_broker_holding_exception_stays_pending(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    broker.holdings_error = True
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "pending"}}})
+
+    runner._process_manual_sell_intents()
+
+    row = load_manual_sell_state(intent_path)["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "pending"
+    assert row.get("note", "") == ""
+    assert broker.sell_calls == 0
+
+
+def test_submitted_sell_intent_consumes_only_when_position_and_broker_holding_missing(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    runner.position_manager.unregister("AR")
+    broker.shares = 0.0
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "submitted"}}})
+
+    runner._process_manual_sell_intents()
+
+    row = load_manual_sell_state(intent_path)["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "consumed"
+    assert row["note"] == "sell finalized"
+    assert broker.sell_calls == 0
+
+
+def test_submitted_sell_intent_broker_holding_exception_stays_submitted(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    broker.holdings_error = True
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "submitted"}}})
+
+    runner._process_manual_sell_intents()
+
+    row = load_manual_sell_state(intent_path)["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "submitted"
+    assert row.get("note", "") == ""
     assert broker.sell_calls == 0
 
 

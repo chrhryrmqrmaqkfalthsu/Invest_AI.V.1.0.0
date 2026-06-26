@@ -314,15 +314,32 @@ class Runner:
         except Exception as e:
             self._handle_error("tick_market", e)
 
-    def _broker_holding_shares(self, ticker: str) -> float:
-        try:
-            holdings = {h.ticker: h for h in self.broker.get_holdings()}
-            return float(getattr(holdings.get(ticker), "shares", 0.0) or 0.0)
-        except Exception:
+    def _broker_holding_shares(self, ticker: str) -> Optional[float]:
+        ticker_u = str(ticker or "").strip().upper()
+        if not ticker_u:
             return 0.0
+        try:
+            holdings = self.broker.get_holdings()
+        except Exception as exc:
+            logger.error("[MANUAL-SELL] broker holdings lookup failed ticker=%s; retrying fail-closed: %s", ticker_u, exc)
+            return None
+        for holding in holdings or []:
+            if str(getattr(holding, "ticker", "") or "").strip().upper() != ticker_u:
+                continue
+            try:
+                return float(getattr(holding, "shares", 0.0) or 0.0)
+            except Exception as exc:
+                logger.error("[MANUAL-SELL] broker holding shares unreadable ticker=%s; retrying fail-closed: %s", ticker_u, exc)
+                return None
+        return 0.0
 
     def _position_and_holding_missing(self, ticker: str) -> bool:
-        return self.position_manager.get(ticker) is None and self._broker_holding_shares(ticker) <= SHARE_EPS
+        held_shares = self._broker_holding_shares(ticker)
+        return (
+            self.position_manager.get(ticker) is None
+            and held_shares is not None
+            and held_shares <= SHARE_EPS
+        )
 
     def _latest_pending_exit_order_id(self, ticker: str) -> str:
         pending_mgr = getattr(self, "pending_order_manager", None)
@@ -359,7 +376,15 @@ class Runner:
             if not intent_id or not ticker:
                 continue
             has_pending_exit = bool(pending_mgr is not None and pending_mgr.has_pending_exit(ticker))
-            if self.position_manager.get(ticker) is None and self._broker_holding_shares(ticker) <= SHARE_EPS:
+            pos = self.position_manager.get(ticker)
+            held_shares = self._broker_holding_shares(ticker)
+            if held_shares is None:
+                logger.warning(
+                    "[MANUAL-SELL] submitted intent held: broker holding unreadable ticker=%s intent=%s; retrying",
+                    ticker, intent_id,
+                )
+                continue
+            if pos is None and held_shares <= SHARE_EPS:
                 mark_sell_intent_status(intent_id, "consumed", intent_path=intent_path, note="sell finalized")
                 logger.warning("[MANUAL-SELL] consumed finalized ticker=%s intent=%s", ticker, intent_id)
             elif not has_pending_exit:
@@ -373,9 +398,21 @@ class Runner:
                 continue
             pos = self.position_manager.get(ticker)
             held_shares = self._broker_holding_shares(ticker)
-            if pos is None or held_shares <= SHARE_EPS:
+            if held_shares is None:
+                logger.warning(
+                    "[MANUAL-SELL] sell intent held: broker holding unreadable ticker=%s intent=%s; retrying",
+                    ticker, intent_id,
+                )
+                continue
+            if pos is None and held_shares <= SHARE_EPS:
                 mark_sell_intent_status(intent_id, "rejected", intent_path=intent_path, note="already exited")
                 logger.warning("[MANUAL-SELL] rejected already exited ticker=%s intent=%s", ticker, intent_id)
+                continue
+            if pos is None or held_shares <= SHARE_EPS:
+                logger.warning(
+                    "[MANUAL-SELL] sell intent held: pos_missing=%s broker_holding=%g ticker=%s intent=%s; retrying",
+                    pos is None, held_shares, ticker, intent_id,
+                )
                 continue
             if pending_mgr is not None and pending_mgr.is_ticker_locked(ticker):
                 note = "already exiting" if pending_mgr.has_pending_exit(ticker) else "ticker locked by pending order"

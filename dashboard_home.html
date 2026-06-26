@@ -936,7 +936,11 @@ volSeries.priceScale().applyOptions({ scaleMargins:{ top:0.82, bottom:0 } });
 let priceLines=[];
 let curTicker=null, curInterval='1d';
 
-async function drawChart(ticker, interval){
+async function drawChart(ticker, interval, opts){
+  opts = opts || {};
+  const preserve = !!opts.preserveRange;
+  const savedRange = preserve ? chart.timeScale().getVisibleLogicalRange() : null;
+
   curTicker=ticker; curInterval=interval;
   const intraday = !['1d','1wk','1mo'].includes(interval);
   chart.applyOptions({ timeScale:{ timeVisible:intraday, secondsVisible:false, borderColor:'#1c2535' } });
@@ -979,25 +983,30 @@ async function drawChart(ticker, interval){
   }
   if(candles.length){
     chart.resize(document.getElementById('chart').clientWidth, 440);
-    // 간격별로 보여줄 최근 캔들 개수 (없으면 전체)
-    const visibleBars = {'1m':80, '5m':80, '15m':70, '60m':60, '1d':120};
-    const n = visibleBars[interval];
-    if(entryMarkerHit && intraday){
-      const hitIdx = candles.findIndex(c=>c.time===entryMarkerHit.time);
-      if(hitIdx >= 0){
-        chart.timeScale().setVisibleLogicalRange({
-          from: Math.max(0, hitIdx - 10),
-          to: candles.length + 2,
-        });
+    if(preserve && savedRange){
+      // 자동 갱신: 사용자가 보던 줌/스크롤 범위를 유지한다.
+      chart.timeScale().setVisibleLogicalRange(savedRange);
+    }else{
+      // 최초 열기/타임프레임 전환: 기존 초기 범위 설정을 유지한다.
+      const visibleBars = {'1m':80, '5m':80, '15m':70, '60m':60, '1d':120};
+      const n = visibleBars[interval];
+      if(entryMarkerHit && intraday){
+        const hitIdx = candles.findIndex(c=>c.time===entryMarkerHit.time);
+        if(hitIdx >= 0){
+          chart.timeScale().setVisibleLogicalRange({
+            from: Math.max(0, hitIdx - 10),
+            to: candles.length + 2,
+          });
+        }else if(n && candles.length > n){
+          chart.timeScale().setVisibleLogicalRange({ from: candles.length - n, to: candles.length + 2 });
+        }else{
+          chart.timeScale().fitContent();
+        }
       }else if(n && candles.length > n){
         chart.timeScale().setVisibleLogicalRange({ from: candles.length - n, to: candles.length + 2 });
       }else{
         chart.timeScale().fitContent();
       }
-    }else if(n && candles.length > n){
-      chart.timeScale().setVisibleLogicalRange({ from: candles.length - n, to: candles.length + 2 });
-    }else{
-      chart.timeScale().fitContent();
     }
   }
   _activeChart = {type:'slot', ticker, interval};
@@ -1126,22 +1135,11 @@ function renderRulebook(s){
   return stats + strat + risk + news + event;
 }
 
-async function openDetail(ticker){
-  // 슬롯 탭으로 전환 + 상세뷰 표시
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.getElementById('page-slots').classList.add('active');
-  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.nav button')[1].classList.add('active');
-  document.getElementById('slot-list-view').style.display='none';
-  document.getElementById('slot-detail-view').style.display='block';
-  chart.resize(document.getElementById('chart').clientWidth, 440);
-
-  const s=slotData.find(x=>x.ticker===ticker); if(!s) return;
-  document.getElementById('detail-title').textContent=`${ticker} — 보유 차트`;
-  // 캔들 (간격 버튼은 일봉으로 리셋)
-  document.querySelectorAll('.tf').forEach(b=>b.classList.toggle('active', b.dataset.tf==='1d'));
-  await drawChart(ticker, '1d');
-  // 룰북/포지션 표
+function refreshDetailPanel(ticker){
+  const tk = String(ticker || '').toUpperCase();
+  const s = slotData.find(x=>String(x.ticker || '').toUpperCase()===tk);
+  if(!s) return;
+  document.getElementById('detail-title').textContent=`${tk} — 보유 차트`;
   document.getElementById('detail-kv').innerHTML=`
     <div class="kv"><span>현재가</span><span>${fmt(s.current_price)}</span></div>
     <div class="kv"><span>손익률</span><span style="color:${col(s.pnl_pct)}">${pct(s.pnl_pct)}</span></div>
@@ -1156,6 +1154,23 @@ async function openDetail(ticker){
     <div class="kv"><span>진입일</span><span>${(s.entry_date||'').slice(0,10)}</span></div>`;
   document.getElementById('detail-kv').innerHTML += renderRulebook(s);
   document.getElementById('commentary').innerHTML = renderCommentary(s);
+}
+
+async function openDetail(ticker){
+  // 슬롯 탭으로 전환 + 상세뷰 표시
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-slots').classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.nav button')[1].classList.add('active');
+  document.getElementById('slot-list-view').style.display='none';
+  document.getElementById('slot-detail-view').style.display='block';
+  chart.resize(document.getElementById('chart').clientWidth, 440);
+
+  const s=slotData.find(x=>String(x.ticker || '').toUpperCase()===String(ticker || '').toUpperCase()); if(!s) return;
+  // 캔들 (간격 버튼은 일봉으로 리셋)
+  document.querySelectorAll('.tf').forEach(b=>b.classList.toggle('active', b.dataset.tf==='1d'));
+  await drawChart(ticker, '1d');
+  refreshDetailPanel(ticker);
 }
 function closeDetail(){
   if(_activeChart && _activeChart.type === 'slot') _activeChart = null;
@@ -1266,7 +1281,8 @@ async function refreshActiveChart(){
     const detail = document.getElementById('slot-detail-view');
     const slotsPage = document.getElementById('page-slots');
     if(!detail || detail.style.display !== 'block' || !slotsPage || !slotsPage.classList.contains('active')) return;
-    await drawChart(active.ticker, active.interval);
+    await drawChart(active.ticker, active.interval, {preserveRange:true});
+    refreshDetailPanel(active.ticker);
     return;
   }
   if(active.type === 'cand'){

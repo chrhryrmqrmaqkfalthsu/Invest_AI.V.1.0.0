@@ -236,7 +236,12 @@ def install_legacy_buy_guard(runner: Runner) -> None:
             except Exception as exc:
                 logger.warning("[%s] 차단 알림 실패: %s", LEGACY_BUY_DISABLED_CODE, exc)
             return None
-        return original_try_order(side, ticker, price, reason, signal_result=signal_result, rulebook_override=rulebook_override)
+        try:
+            return original_try_order(side, ticker, price, reason, signal_result=signal_result, rulebook_override=rulebook_override)
+        except TypeError as exc:
+            if "rulebook_override" not in str(exc):
+                raise
+            return original_try_order(side, ticker, price, reason, signal_result=signal_result)
 
     runner._try_order = guarded_try_order
     runner._legacy_buy_guard_installed = True
@@ -263,6 +268,9 @@ def main():
     parser.add_argument("--central-stage3-mix", choices=["on", "off"], default="off", help="Stage3 filtered live-pool을 기존 central entity pool에 추가")
     parser.add_argument("--central-stage3-pool-path", default=str(DEFAULT_STAGE3_LIVE_POOL_PATH), help="Stage3 filtered live-pool JSONL 경로")
     parser.add_argument("--central-stage3-pool-limit", type=int, default=0, help="Stage3 추가 entity 개수 상한(0=무제한)")
+    parser.add_argument("--central-strength-cap", type=float, default=4.0, help="Stage3 mix ON일 때 Stage2 포함 일반 후보 strength 상한(0=비활성)")
+    parser.add_argument("--central-stage3-strength-cap", type=float, default=3.0, help="Stage3 mix ON일 때 Stage3 후보 strength 추가 상한(0=비활성)")
+    parser.add_argument("--central-stage3-min-confidence", type=float, default=0.0, help="Stage3 mix ON일 때 Stage3 후보 최소 confidence. confidence <= 값은 제외")
     parser.add_argument("--market-tick", type=int, default=60)
     parser.add_argument("--offmarket-tick", type=int, default=3600)
     parser.add_argument("--sma-window", type=int, default=20)
@@ -351,11 +359,14 @@ def main():
             stage3_mix_enabled=str(args.central_stage3_mix).lower() == "on",
             stage3_live_pool_path=Path(args.central_stage3_pool_path),
             stage3_pool_limit=int(args.central_stage3_pool_limit),
+            central_strength_cap=float(args.central_strength_cap),
+            central_stage3_strength_cap=float(args.central_stage3_strength_cap),
+            central_stage3_min_confidence=float(args.central_stage3_min_confidence),
         )
         central_controller = LiveCentralController(runner, central_config)
         runner.tick_market = central_controller.tick_market
         logger.warning(
-            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f universe=promoted∩central pool_limit=%s stage3_mix=%s stage3_pool_path=%s stage3_pool_limit=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
+            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f universe=promoted∩central pool_limit=%s stage3_mix=%s stage3_pool_path=%s stage3_pool_limit=%s strength_cap=%s stage3_strength_cap=%s stage3_min_confidence=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
             args.central_selection_metric,
             args.central_confidence_mode,
             args.central_pf_cap,
@@ -368,6 +379,9 @@ def main():
             args.central_stage3_mix,
             args.central_stage3_pool_path,
             args.central_stage3_pool_limit,
+            args.central_strength_cap,
+            args.central_stage3_strength_cap,
+            args.central_stage3_min_confidence,
         )
     else:
         if args.buy_mode != "auto":

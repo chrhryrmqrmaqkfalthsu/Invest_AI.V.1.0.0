@@ -900,7 +900,12 @@ class Runner:
         buy_preflight: Optional[BuyPreflight] = None
         if side == "BUY":
             try:
-                buy_preflight = self._get_buy_reconciler().preflight(ticker, rulebook_override=rulebook_override)
+                try:
+                    buy_preflight = self._get_buy_reconciler().preflight(ticker, rulebook_override=rulebook_override)
+                except TypeError as preflight_type_exc:
+                    if "rulebook_override" not in str(preflight_type_exc):
+                        raise
+                    buy_preflight = self._get_buy_reconciler().preflight(ticker)
             except Exception as preflight_exc:
                 self.stats.orders_blocked += 1
                 logger.error(f"{ticker} BUY preflight 차단: {preflight_exc}")

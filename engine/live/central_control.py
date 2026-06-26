@@ -91,6 +91,9 @@ class LiveCentralControlConfig:
     stage3_mix_enabled: bool = False
     stage3_live_pool_path: Path = DEFAULT_STAGE3_LIVE_POOL_PATH
     stage3_pool_limit: int = 0
+    central_strength_cap: float = 4.0
+    central_stage3_strength_cap: float = 3.0
+    central_stage3_min_confidence: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -137,7 +140,7 @@ class LiveCentralController:
                 for entity in self.entities
             }
         logger.warning(
-            "[CENTRAL-CONTROL] enabled metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f stage3_mix=%s stage3_pool=%s promoted_symbols=%s central_entities=%s tickers=%s",
+            "[CENTRAL-CONTROL] enabled metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f stage3_mix=%s stage3_pool=%s strength_cap=%.4f stage3_strength_cap=%.4f stage3_min_confidence=%.4f promoted_symbols=%s central_entities=%s tickers=%s",
             self.selection_metric,
             self.confidence_mode,
             self.config.pf_cap,
@@ -148,6 +151,9 @@ class LiveCentralController:
             self.order_notional_safety_buffer,
             bool(getattr(self.config, "stage3_mix_enabled", False)),
             str(getattr(self.config, "stage3_live_pool_path", "")),
+            _safe_float(getattr(self.config, "central_strength_cap", 4.0), 4.0),
+            _safe_float(getattr(self.config, "central_stage3_strength_cap", 3.0), 3.0),
+            _safe_float(getattr(self.config, "central_stage3_min_confidence", 0.0), 0.0),
             len(getattr(self.runner, "symbols", []) or []),
             len(self.entities),
             len(self.entity_by_ticker),
@@ -340,12 +346,33 @@ class LiveCentralController:
             for entity in self.entity_by_ticker.get(ticker, []):
                 sig = self._evaluate_entity_signal(entity, float(price))
                 if sig.signal == Signal.BUY:
+                    confidence = float(entity.confidence or 0.0)
+                    strength, orig_strength, guard_reason = self._candidate_strength_for_entity(entity, sig, confidence)
+                    if strength is None:
+                        last_hold_reason = guard_reason
+                        logger.info(
+                            "[CENTRAL-CONTROL] %s BUY candidate skipped by guard entity=%s conf=%.4f orig_strength=%.4f reason=%s",
+                            ticker,
+                            entity.entity_id,
+                            confidence,
+                            orig_strength,
+                            guard_reason,
+                        )
+                        continue
                     ticker_had_buy = True
-                    strength = _signal_strength(sig)
+                    if abs(float(strength or 0.0) - float(orig_strength or 0.0)) > 1e-9:
+                        logger.info(
+                            "[CENTRAL-CONTROL] %s strength capped entity=%s stage=%s orig=%.4f effective=%.4f",
+                            ticker,
+                            entity.entity_id,
+                            _entity_stage(entity),
+                            orig_strength,
+                            strength,
+                        )
                     cand = BuyCandidate(
                         entity_id=entity.entity_id,
                         ticker=entity.ticker,
-                        confidence=float(entity.confidence or 0.0),
+                        confidence=confidence,
                         strength=strength,
                         price=float(price),
                         signal_score=float(getattr(sig, "score", 0.0) or 0.0),
@@ -420,6 +447,45 @@ class LiveCentralController:
             sig = candidate_signal_by_entity.get(decision.entity_id)
             price = candidate_price_by_entity.get(decision.entity_id, 0.0)
             self._execute_decision(decision, sig, price, execution_reason="auto")
+
+    def _candidate_strength_for_entity(self, entity: EntityRecord, signal_result, confidence: float) -> tuple[Optional[float], float, str]:
+        orig_strength = _signal_strength(signal_result)
+        # The Stage3 safety guard must be completely inert unless Stage3 mixing
+        # is explicitly enabled. This preserves the current Stage2-only paper
+        # behavior when --central-stage3-mix is off.
+        if not bool(getattr(self.config, "stage3_mix_enabled", False)):
+            return orig_strength, orig_strength, ""
+
+        stage = _entity_stage(entity)
+        is_stage3 = stage == "stage3_live_pool"
+        try:
+            setattr(signal_result, "orig_strength", float(orig_strength))
+        except Exception:
+            pass
+
+        if is_stage3:
+            min_confidence = _safe_float(getattr(self.config, "central_stage3_min_confidence", 0.0), 0.0)
+            if float(confidence or 0.0) <= min_confidence:
+                reason = f"stage3 confidence {float(confidence or 0.0):.4f} <= min {min_confidence:.4f}"
+                try:
+                    setattr(signal_result, "effective_strength", 0.0)
+                    setattr(signal_result, "strength_guard", reason)
+                except Exception:
+                    pass
+                return None, orig_strength, reason
+            cap = _safe_float(getattr(self.config, "central_stage3_strength_cap", 3.0), 3.0)
+            guard_name = "stage3_strength_cap"
+        else:
+            cap = _safe_float(getattr(self.config, "central_strength_cap", 4.0), 4.0)
+            guard_name = "central_strength_cap"
+
+        strength = min(orig_strength, cap) if cap > 0.0 else orig_strength
+        try:
+            setattr(signal_result, "effective_strength", float(strength))
+            setattr(signal_result, "strength_guard", f"{guard_name}={cap:.4f}" if cap > 0.0 else "")
+        except Exception:
+            pass
+        return strength, orig_strength, ""
 
     def _evaluate_entity_signal(self, entity: EntityRecord, price: float) -> SignalResult:
         if str((getattr(entity, "tags", {}) or {}).get("stage") or "") != "stage3_live_pool":
@@ -875,6 +941,10 @@ class LiveCentralController:
         if after_attempted > before_attempted:
             return True
         return True
+
+
+def _entity_stage(entity: EntityRecord) -> str:
+    return str((getattr(entity, "tags", {}) or {}).get("stage") or "stage2")
 
 
 def _dedupe_entities_by_id(entities: list[EntityRecord]) -> list[EntityRecord]:

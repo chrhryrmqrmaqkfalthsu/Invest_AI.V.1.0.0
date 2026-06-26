@@ -92,6 +92,7 @@ class Runner:
         order_shares: float = 1.0,
         order_notional: Optional[float] = None,
         universe_config: Optional[LiveUniverseConfig] = None,
+        manual_sell_intent_path=None,
     ):
         self.broker = broker
         self.safety = safety
@@ -102,6 +103,7 @@ class Runner:
         self.universe_config = universe_config.normalized() if universe_config is not None else None
         self.order_shares = float(order_shares)
         self.order_notional = float(order_notional) if order_notional and float(order_notional) > 0 else None
+        self.manual_sell_intent_path = manual_sell_intent_path
         self.stats = RunnerStats(started_at=datetime.now(ZoneInfo("Asia/Seoul")))
         order_mode = f"notional={self.order_notional:g}" if self.order_notional else f"shares={self.order_shares:g}"
         logger.info(
@@ -117,6 +119,13 @@ class Runner:
             pass
         self.buy_reconciler = self._make_buy_reconciler()
         self._tick_locked_tickers = set()
+
+    def _manual_sell_intent_path(self):
+        path = getattr(self, "manual_sell_intent_path", None)
+        if path is not None:
+            return path
+        from engine.live.manual_sell_intent import MANUAL_SELL_INTENT_PATH
+        return MANUAL_SELL_INTENT_PATH
 
     def _make_buy_reconciler(self) -> BuyReconciliationService:
         return BuyReconciliationService(
@@ -335,6 +344,7 @@ class Runner:
             mark_sell_intent_status,
         )
 
+        intent_path = self._manual_sell_intent_path()
         pending_mgr = getattr(self, "pending_order_manager", None)
         if pending_mgr is not None and str(getattr(pending_mgr, "load_error", "") or ""):
             logger.error("[MANUAL-SELL] pending 주문 상태 unavailable → 수동 SELL fail-closed")
@@ -343,20 +353,20 @@ class Runner:
             logger.error("[MANUAL-SELL] positions 상태 unavailable → 수동 SELL fail-closed")
             return
 
-        for intent in load_submitted_manual_sell_intents():
+        for intent in load_submitted_manual_sell_intents(intent_path=intent_path):
             intent_id = str(intent.get("intent_id") or "")
             ticker = str(intent.get("ticker") or "").upper()
             if not intent_id or not ticker:
                 continue
             has_pending_exit = bool(pending_mgr is not None and pending_mgr.has_pending_exit(ticker))
             if self.position_manager.get(ticker) is None and self._broker_holding_shares(ticker) <= SHARE_EPS:
-                mark_sell_intent_status(intent_id, "consumed", note="sell finalized")
+                mark_sell_intent_status(intent_id, "consumed", intent_path=intent_path, note="sell finalized")
                 logger.warning("[MANUAL-SELL] consumed finalized ticker=%s intent=%s", ticker, intent_id)
             elif not has_pending_exit:
-                mark_sell_intent_status(intent_id, "rejected", note="sell order not pending and position still held")
+                mark_sell_intent_status(intent_id, "rejected", intent_path=intent_path, note="sell order not pending and position still held")
                 logger.warning("[MANUAL-SELL] rejected stale submitted ticker=%s intent=%s", ticker, intent_id)
 
-        for intent in load_pending_manual_sell_intents():
+        for intent in load_pending_manual_sell_intents(intent_path=intent_path):
             intent_id = str(intent.get("intent_id") or "")
             ticker = str(intent.get("ticker") or "").upper()
             if not intent_id or not ticker:
@@ -364,22 +374,22 @@ class Runner:
             pos = self.position_manager.get(ticker)
             held_shares = self._broker_holding_shares(ticker)
             if pos is None or held_shares <= SHARE_EPS:
-                mark_sell_intent_status(intent_id, "rejected", note="already exited")
+                mark_sell_intent_status(intent_id, "rejected", intent_path=intent_path, note="already exited")
                 logger.warning("[MANUAL-SELL] rejected already exited ticker=%s intent=%s", ticker, intent_id)
                 continue
             if pending_mgr is not None and pending_mgr.is_ticker_locked(ticker):
                 note = "already exiting" if pending_mgr.has_pending_exit(ticker) else "ticker locked by pending order"
-                mark_sell_intent_status(intent_id, "rejected", note=note)
+                mark_sell_intent_status(intent_id, "rejected", intent_path=intent_path, note=note)
                 logger.warning("[MANUAL-SELL] rejected locked ticker=%s intent=%s note=%s", ticker, intent_id, note)
                 continue
             requested = float(intent.get("shares_requested") or held_shares)
             sell_shares = min(max(requested, 0.0), held_shares)
             if sell_shares <= SHARE_EPS:
-                mark_sell_intent_status(intent_id, "rejected", note="sell shares resolved to zero")
+                mark_sell_intent_status(intent_id, "rejected", intent_path=intent_path, note="sell shares resolved to zero")
                 continue
             price = self.broker.get_current_price(ticker) or float(getattr(pos, "entry_price", 0.0) or 0.0)
             if price <= 0:
-                mark_sell_intent_status(intent_id, "rejected", note="current price unavailable")
+                mark_sell_intent_status(intent_id, "rejected", intent_path=intent_path, note="current price unavailable")
                 continue
             old_notional = self.order_notional
             old_shares = self.order_shares
@@ -394,10 +404,10 @@ class Runner:
                 self.order_shares = old_shares
             if pending_mgr is not None and pending_mgr.has_pending_exit(ticker):
                 order_id = self._latest_pending_exit_order_id(ticker)
-                mark_sell_intent_status(intent_id, "submitted", note="sell submitted", order_id=order_id)
+                mark_sell_intent_status(intent_id, "submitted", intent_path=intent_path, note="sell submitted", order_id=order_id)
                 logger.warning("[MANUAL-SELL] submitted ticker=%s intent=%s order_id=%s", ticker, intent_id, order_id)
             elif self._position_and_holding_missing(ticker):
-                mark_sell_intent_status(intent_id, "consumed", note="sell filled immediately")
+                mark_sell_intent_status(intent_id, "consumed", intent_path=intent_path, note="sell filled immediately")
                 logger.warning("[MANUAL-SELL] consumed immediate ticker=%s intent=%s", ticker, intent_id)
             else:
                 note = "runner blocked or did not attempt order"
@@ -405,7 +415,7 @@ class Runner:
                     note = "runner blocked sell order"
                 elif int(getattr(self.stats, "orders_attempted", 0) or 0) == before_attempted:
                     note = "runner did not attempt sell order"
-                mark_sell_intent_status(intent_id, "rejected", note=note)
+                mark_sell_intent_status(intent_id, "rejected", intent_path=intent_path, note=note)
                 logger.warning("[MANUAL-SELL] rejected ticker=%s intent=%s note=%s", ticker, intent_id, note)
 
     def _process_ticker(self, ticker: str) -> None:

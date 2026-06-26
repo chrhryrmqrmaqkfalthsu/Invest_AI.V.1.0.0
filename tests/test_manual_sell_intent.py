@@ -118,9 +118,9 @@ def make_pm(tmp_path, ticker="AR", shares=10.0):
 def make_runner(tmp_path, monkeypatch, ticker="AR", shares=10.0, pending=True):
     import engine.live.position_manager as pm_module
     import engine.live.manual_sell_intent as sell_module
+    intent_path = tmp_path / "manual_sell_intent.json"
     monkeypatch.setattr(pm_module, "POSITIONS_PATH", tmp_path / "positions.json")
     monkeypatch.setattr(pm_module, "TRADE_LOG_PATH", tmp_path / "trade_log.csv")
-    monkeypatch.setattr(sell_module, "MANUAL_SELL_INTENT_PATH", tmp_path / "manual_sell_intent.json")
     monkeypatch.setattr(sell_module, "POSITIONS_PATH", tmp_path / "positions.json")
     pm = make_pm(tmp_path, ticker, shares)
     pm._save()
@@ -134,9 +134,10 @@ def make_runner(tmp_path, monkeypatch, ticker="AR", shares=10.0, pending=True):
     runner.stats = RunnerStats()
     runner.order_shares = 1.0
     runner.order_notional = 30.0
+    runner.manual_sell_intent_path = intent_path
     runner._tick_locked_tickers = set()
     runner.approval_manager = SimpleNamespace(get_request=lambda _rid: None, _save=lambda: None)
-    return runner, broker, sell_module.MANUAL_SELL_INTENT_PATH
+    return runner, broker, intent_path
 
 
 def write_positions(path, ticker="AR", shares=10.0):
@@ -145,6 +146,14 @@ def write_positions(path, ticker="AR", shares=10.0):
 
 def write_multi_positions(path, rows: dict[str, float]):
     atomic_write_json(path, {ticker: make_position(ticker, shares).to_dict() for ticker, shares in rows.items()})
+
+
+def test_pytest_guard_blocks_live_manual_sell_intent_writes(monkeypatch):
+    import engine.live.manual_sell_intent as sell_module
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "test_guard")
+
+    with pytest.raises(RuntimeError, match="test attempted to write live manual_sell_intent.json"):
+        sell_module.atomic_write_json(sell_module.MANUAL_SELL_INTENT_PATH, {"schema_version": 1})
 
 
 def test_create_manual_sell_intent_for_held_position_is_idempotent(tmp_path):
@@ -273,8 +282,6 @@ def test_pending_sell_intent_consumes_existing_exit_path_and_finalizes(tmp_path,
 
 
 def test_already_exited_manual_sell_intent_is_rejected_without_order(tmp_path, monkeypatch):
-    import engine.live.manual_sell_intent as sell_module
-    monkeypatch.setattr(sell_module, "MANUAL_SELL_INTENT_PATH", tmp_path / "manual_sell_intent.json")
     runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
     # Simulate stale pending intent after the bot already exited and local state was cleaned.
     runner.position_manager.unregister("AR")

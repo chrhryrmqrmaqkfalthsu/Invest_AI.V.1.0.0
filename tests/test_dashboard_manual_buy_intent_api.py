@@ -3,10 +3,21 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 import api_server
 from engine.live.manual_buy_intent import atomic_write_json, candidate_id_for
+
+
+def test_pytest_guard_blocks_live_manual_buy_files(monkeypatch):
+    import engine.live.manual_buy_intent as buy_module
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "test_guard")
+
+    with pytest.raises(RuntimeError, match="test attempted to write live manual_buy_intent.json"):
+        buy_module.atomic_write_json(buy_module.MANUAL_BUY_INTENT_PATH, {"schema_version": 1})
+    with pytest.raises(RuntimeError, match="test attempted to write live central_buy_candidates.json"):
+        buy_module.atomic_write_json(buy_module.CENTRAL_BUY_CANDIDATES_PATH, {"schema_version": 1})
 
 
 def test_dashboard_manual_buy_intent_endpoint_writes_file_without_broker_import(tmp_path, monkeypatch):

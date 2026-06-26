@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
 UTC = ZoneInfo("UTC")
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SYS_DIR = Path("data/_system")
 MANUAL_BUY_INTENT_PATH = SYS_DIR / "manual_buy_intent.json"
 CENTRAL_BUY_CANDIDATES_PATH = SYS_DIR / "central_buy_candidates.json"
@@ -34,6 +35,29 @@ def trade_date_et(now: Optional[datetime] = None) -> str:
     return current.astimezone(ET).date().isoformat()
 
 
+def _live_path(path: Path | str) -> Path:
+    p = Path(path)
+    return p if p.is_absolute() else REPO_ROOT / p
+
+
+def _guard_pytest_live_write(path: Path | str) -> None:
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+    try:
+        resolved = Path(path).resolve()
+        protected = {
+            _live_path(MANUAL_BUY_INTENT_PATH).resolve(): "manual_buy_intent.json",
+            _live_path(CENTRAL_BUY_CANDIDATES_PATH).resolve(): "central_buy_candidates.json",
+        }
+        name = protected.get(resolved)
+        if name:
+            raise RuntimeError(f"test attempted to write live {name}; inject intent_path/candidate_path")
+    except RuntimeError:
+        raise
+    except Exception:
+        return
+
+
 def read_json(path: Path | str, default):
     try:
         p = Path(path)
@@ -47,6 +71,7 @@ def read_json(path: Path | str, default):
 
 
 def atomic_write_json(path: Path | str, data: dict) -> None:
+    _guard_pytest_live_write(path)
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(f".{p.name}.tmp.{os.getpid()}")

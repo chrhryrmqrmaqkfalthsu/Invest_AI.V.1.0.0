@@ -17,6 +17,7 @@ from engine.live.position_manager import POSITIONS_PATH
 
 UTC = ZoneInfo("UTC")
 KST = ZoneInfo("Asia/Seoul")
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SYS_DIR = Path("data/_system")
 MANUAL_SELL_INTENT_PATH = SYS_DIR / "manual_sell_intent.json"
 SHARE_EPS = 1e-6
@@ -38,6 +39,25 @@ def trade_date_kst(now: Optional[datetime] = None) -> str:
     return current.astimezone(KST).date().isoformat()
 
 
+def _live_path(path: Path | str) -> Path:
+    p = Path(path)
+    return p if p.is_absolute() else REPO_ROOT / p
+
+
+def _guard_pytest_live_write(path: Path | str) -> None:
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+    try:
+        if Path(path).resolve() == _live_path(MANUAL_SELL_INTENT_PATH).resolve():
+            raise RuntimeError(
+                "test attempted to write live manual_sell_intent.json; inject intent_path"
+            )
+    except RuntimeError:
+        raise
+    except Exception:
+        return
+
+
 def read_json(path: Path | str, default):
     try:
         p = Path(path)
@@ -51,6 +71,7 @@ def read_json(path: Path | str, default):
 
 
 def atomic_write_json(path: Path | str, data: dict) -> None:
+    _guard_pytest_live_write(path)
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(f".{p.name}.tmp.{os.getpid()}")
@@ -227,7 +248,8 @@ def mark_sell_intent_status(
     note: str = "",
     order_id: str = "",
 ) -> dict:
-    state = load_manual_sell_state(intent_path or MANUAL_SELL_INTENT_PATH)
+    intent_file = intent_path or MANUAL_SELL_INTENT_PATH
+    state = load_manual_sell_state(intent_file)
     row = (state.get("intents") or {}).get(str(intent_id or ""))
     if not isinstance(row, dict):
         return {}
@@ -245,5 +267,5 @@ def mark_sell_intent_status(
     if order_id:
         row["order_id"] = order_id
     state["updated_at"] = now
-    atomic_write_json(intent_path or MANUAL_SELL_INTENT_PATH, state)
+    atomic_write_json(intent_file, state)
     return row

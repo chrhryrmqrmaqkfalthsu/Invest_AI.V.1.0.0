@@ -66,6 +66,7 @@ class FilterConfig:
     min_trade_count: int = 5
     max_drawdown_floor_pct: float = -40.0
     min_profit_factor: float = 1.0
+    min_worst_payoff_ratio: float = 0.0
     rejected_sample_limit: int = 200
     dry_run: bool = False
 
@@ -212,6 +213,8 @@ def row_passes_first_filter(row: Mapping[str, Any], config: FilterConfig) -> tup
         trade_count = _safe_float(metric.get("trade_count"))
         max_dd = _safe_float(metric.get("max_drawdown_pct"))
         profit_factor = _safe_float(metric.get("profit_factor"))
+        win_count = _safe_float(metric.get("win_count"))
+        loss_count = _safe_float(metric.get("loss_count"))
         if expectancy < float(config.min_expectancy_pct):
             reasons.append(f"expectancy_below_floor:{label}")
         if trade_count < float(config.min_trade_count):
@@ -220,6 +223,15 @@ def row_passes_first_filter(row: Mapping[str, Any], config: FilterConfig) -> tup
             reasons.append(f"drawdown_below_floor:{label}")
         if profit_factor < float(config.min_profit_factor):
             reasons.append(f"profit_factor_below_floor:{label}")
+        if float(config.min_worst_payoff_ratio) > 0.0:
+            if loss_count <= 0:
+                payoff_ratio = float("inf")
+            elif win_count <= 0:
+                payoff_ratio = 0.0
+            else:
+                payoff_ratio = profit_factor * loss_count / win_count
+            if payoff_ratio < float(config.min_worst_payoff_ratio):
+                reasons.append(f"payoff_ratio_below_floor:{label}")
     return not reasons, reasons
 
 
@@ -258,6 +270,7 @@ def _serialize_live_pool_row(item: CandidateRow, config: FilterConfig) -> str:
         "max_rank_per_ticker": int(config.max_rank_per_ticker),
         "min_expectancy_pct": float(config.min_expectancy_pct),
         "min_profit_factor": float(config.min_profit_factor),
+        "min_worst_payoff_ratio": float(config.min_worst_payoff_ratio),
         "min_pure_oos_periods": int(config.min_pure_oos_periods),
         "min_trade_count": int(config.min_trade_count),
         "source_line": item.source_line,
@@ -278,6 +291,7 @@ def _filter_config_summary(config: FilterConfig) -> dict[str, Any]:
         "min_trade_count": int(config.min_trade_count),
         "max_drawdown_floor_pct": float(config.max_drawdown_floor_pct),
         "min_profit_factor": float(config.min_profit_factor),
+        "min_worst_payoff_ratio": float(config.min_worst_payoff_ratio),
     }
 
 
@@ -344,6 +358,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--batch-root", default=str(DEFAULT_BATCH_ROOT))
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR))
     parser.add_argument("--output-name", default=DEFAULT_OUTPUT_NAME)
+    parser.add_argument("--summary-name", default=DEFAULT_SUMMARY_NAME)
+    parser.add_argument("--rejected-sample-name", default=DEFAULT_REJECTED_SAMPLE_NAME)
     parser.add_argument("--max-rank-per-ticker", type=int, default=0, help="0 disables rank cutoff")
     parser.add_argument("--max-entities-per-ticker", type=int, default=10, help="0 disables ticker fan-out cap")
     parser.add_argument("--top-per-ticker", type=int, default=None, help="Deprecated alias for --max-entities-per-ticker")
@@ -353,6 +369,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--min-trade-count", type=int, default=5)
     parser.add_argument("--max-drawdown-floor-pct", type=float, default=-40.0)
     parser.add_argument("--min-profit-factor", type=float, default=1.0)
+    parser.add_argument("--min-worst-payoff-ratio", type=float, default=0.0)
     parser.add_argument("--rejected-sample-limit", type=int, default=200)
     parser.add_argument("--allow-ineligible", action="store_true", help="Do not require eligible_stage3_basic=True")
     parser.add_argument("--dry-run", action="store_true")
@@ -367,6 +384,8 @@ def config_from_args(args: argparse.Namespace) -> FilterConfig:
         batch_root=Path(args.batch_root),
         out_dir=Path(args.out_dir),
         output_name=str(args.output_name),
+        rejected_sample_name=str(args.rejected_sample_name),
+        summary_name=str(args.summary_name),
         require_eligible=not bool(args.allow_ineligible),
         max_rank_per_ticker=int(args.max_rank_per_ticker),
         max_entities_per_ticker=max_entities_per_ticker,
@@ -376,6 +395,7 @@ def config_from_args(args: argparse.Namespace) -> FilterConfig:
         min_trade_count=int(args.min_trade_count),
         max_drawdown_floor_pct=float(args.max_drawdown_floor_pct),
         min_profit_factor=float(args.min_profit_factor),
+        min_worst_payoff_ratio=float(args.min_worst_payoff_ratio),
         rejected_sample_limit=int(args.rejected_sample_limit),
         dry_run=bool(args.dry_run),
     )

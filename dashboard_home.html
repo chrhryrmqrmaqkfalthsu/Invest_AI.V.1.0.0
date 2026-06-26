@@ -86,6 +86,8 @@
     padding:7px 0;font-size:12px;font-weight:600;cursor:pointer;margin-top:8px;width:100%;}
   .slot-sell:hover{background:#9a3838;}
   .slot-sell:disabled,.slot-sell.processing{background:#3a2a2a;color:#8b95a5;cursor:not-allowed;}
+  .sell-pnl-pos{color:#7dffb0;font-weight:700;}
+  .sell-pnl-neg{color:#ff9a9a;font-weight:700;}
   .univ-note{font-size:11px;color:#c9a227;background:#2a2410;
     border:1px solid #3a3320;border-radius:6px;padding:6px 10px;margin-bottom:10px;}
   .univ-pos{color:var(--up);}
@@ -194,7 +196,10 @@
   <div class="page active" id="page-home">
     <div class="acct" id="acct"></div>
     <div class="panel" style="margin-bottom:18px;">
-      <h3 style="margin-top:0;">📈 자산 추이</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h3 style="margin:0;">📈 자산 추이</h3>
+        <span id="equity-meta" style="font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;"></span>
+      </div>
       <div id="equity-chart" style="width:100%;height:220px;"></div>
     </div>
     <div id="candidates-panel" class="panel" style="margin-bottom:16px;">
@@ -424,17 +429,17 @@ function checkTradeAlerts(trades){
 async function loadCandidates(){
   const panel = document.getElementById('candidates-panel');
 
-  let hasEmpty = false;
+  let emptyCount = 0;
   try{
     const sr = await fetch(`${API}/api/live/slots`);
     const slots = await sr.json();
-    hasEmpty = Array.isArray(slots) && slots.some(s => s.empty);
+    emptyCount = Array.isArray(slots) ? slots.filter(s => s.empty).length : 8;
   }catch(e){
     // 슬롯 조회 실패 시 후보 패널은 숨기지 않고 기존 후보 조회로 진행
-    hasEmpty = true;
+    emptyCount = 8;
   }
 
-  if(!hasEmpty){
+  if(emptyCount === 0){
     if(panel) panel.style.display = 'none';
     return;
   }
@@ -448,9 +453,24 @@ async function loadCandidates(){
     document.getElementById('cand-list').innerHTML = '<div class="cand-empty">후보 조회 실패</div>';
     return;
   }
-  const cands = Object.values(state.candidates || {}).filter(x=>x && typeof x==='object');
+
+  const HIDE = ['manual_executed', 'auto_executed', 'expired'];
+  let cands = Object.values(state.candidates || {})
+    .filter(x => x && typeof x === 'object')
+    .filter(x => !HIDE.includes(x.status));
+
+  cands.sort((a, b) => {
+    const sa = (a.score != null) ? a.score : (a.confidence != null ? a.confidence : -Infinity);
+    const sb = (b.score != null) ? b.score : (b.confidence != null ? b.confidence : -Infinity);
+    return sb - sa;
+  });
+
+  cands = cands.slice(0, emptyCount);
+
   const meta = document.getElementById('cand-meta');
-  meta.textContent = state.trade_date ? `거래일 ${state.trade_date}` : '';
+  meta.textContent = state.trade_date
+    ? `거래일 ${state.trade_date} · 빈 슬롯 ${emptyCount}개`
+    : `빈 슬롯 ${emptyCount}개`;
   if(cands.length===0){
     document.getElementById('cand-list').innerHTML = '<div class="cand-empty">대기 중인 후보 없음</div>';
     return;
@@ -600,7 +620,7 @@ function closeCandChart(){
   if(_candChart){ _candChart.remove(); _candChart = null; }
 }
 
-let equityChart=null, equitySeries=null;
+let equityChart=null, equitySeries=null, equityStartLine=null;
 function initEquityChart(){
   if(equityChart) return;
   equityChart=LightweightCharts.createChart(document.getElementById('equity-chart'),{
@@ -609,21 +629,82 @@ function initEquityChart(){
     timeScale:{borderColor:'#1c2535',timeVisible:false},
     rightPriceScale:{borderColor:'#1c2535'},
   });
-  equitySeries=equityChart.addAreaSeries({
-    lineColor:'#3b82f6', topColor:'rgba(59,130,246,.35)', bottomColor:'rgba(59,130,246,0)',
-    lineWidth:2,
+  equitySeries=equityChart.addCandlestickSeries({
+    upColor:'#52e09a', downColor:'#e05252',
+    borderVisible:false,
+    wickUpColor:'#52e09a', wickDownColor:'#e05252',
   });
 }
 async function loadEquityCurve(){
   initEquityChart();
-  let data; try{ data=await (await fetch(`${API}/api/live/equity_curve`)).json(); }catch(e){ return; }
-  // time(ISO) → "YYYY-MM-DD" (같은 날 여러개면 마지막만)
+  let data;
+  try{ data=await (await fetch(`${API}/api/live/equity_curve`)).json(); }
+  catch(e){ return; }
+  const pts = Array.isArray(data) ? data : (data.points || data.curve || []);
+  if(!pts.length) return;
+
+  // 일자별 마지막 값 = 그날 종가
   const byDay={};
-  data.forEach(p=>{ byDay[p.time.slice(0,10)] = p.value; });
-  const points=Object.entries(byDay).map(([d,v])=>({time:d, value:v}))
+  pts.forEach(p=>{ byDay[String(p.time || '').slice(0,10)] = Number(p.value || 0); });
+  const days=Object.entries(byDay)
+    .filter(([d,v])=>d && isFinite(v))
+    .map(([d,v])=>({time:d, value:v}))
     .sort((a,b)=>a.time<b.time?-1:1);
-  equitySeries.setData(points);
+  if(!days.length) return;
+
+  // 전일 종가 → 당일 종가로 OHLC 구성
+  const candles = days.map((d, i)=>{
+    const prevClose = i > 0 ? days[i-1].value : d.value;
+    const open = prevClose;
+    const close = d.value;
+    return {
+      time:d.time,
+      open,
+      close,
+      high:Math.max(open, close),
+      low:Math.min(open, close),
+    };
+  });
+
+  equitySeries.setData(candles);
+
+  // 축 스케일 강제: 작은 평가금 변동을 크게 보이도록 전체 OHLC 범위에 여백만 적용
+  let lo = candles[0].low, hi = candles[0].high;
+  candles.forEach(c=>{
+    if(c.low < lo) lo = c.low;
+    if(c.high > hi) hi = c.high;
+  });
+  const scalePad = Math.max((hi - lo) * 0.15, 5);
+  equitySeries.applyOptions({
+    autoscaleInfoProvider: () => ({
+      priceRange: { minValue: lo - scalePad, maxValue: hi + scalePad },
+    }),
+  });
   equityChart.timeScale().fitContent();
+
+  const startV = candles[0].open;
+  const lastV = candles[candles.length-1].close;
+  const retPct = startV ? ((lastV - startV) / startV) * 100 : 0;
+  const retColor = retPct >= 0 ? '#52e09a' : '#e05252';
+  const meta = document.getElementById('equity-meta');
+  if(meta){
+    meta.innerHTML = `$${lastV.toLocaleString(undefined,{maximumFractionDigits:0})} `
+      + `<span style="color:${retColor}">(${retPct>=0?'+':''}${retPct.toFixed(2)}%)</span>`
+      + ` · 시작 $${startV.toLocaleString(undefined,{maximumFractionDigits:0})}`;
+  }
+
+  // 최고/최저 마커 제거 (빈 배열로 기존 마커도 지움)
+  equitySeries.setMarkers([]);
+
+  if(equityStartLine){
+    equitySeries.removePriceLine(equityStartLine);
+    equityStartLine = null;
+  }
+  equityStartLine = equitySeries.createPriceLine({
+    price:startV, color:'#5c6675', lineWidth:1,
+    lineStyle:(LightweightCharts.LineStyle && LightweightCharts.LineStyle.Dashed) || 2,
+    axisLabelVisible:true, title:'시작',
+  });
   equityChart.resize(document.getElementById('equity-chart').clientWidth, 220);
 }
 
@@ -663,22 +744,64 @@ function go(page,btn){
   if(page==='slots') closeDetail();
 }
 
+function fmtSignedUsd(v){
+  const n = Number(v);
+  if(v==null || !isFinite(n)) return '-';
+  const sign = n>=0 ? '+' : '−';
+  return `${sign}$${Math.abs(n).toLocaleString(undefined,{maximumFractionDigits:0})}`;
+}
+function pnlColor(v){
+  const n = Number(v);
+  return (v==null || !isFinite(n)) ? 'var(--dim)' : (n>=0 ? '#52e09a' : '#e05252');
+}
+function etWeekStartUtc(){
+  const now = new Date();
+  const etNow = new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const offsetMs = now.getTime() - etNow.getTime();
+  const et = new Date(etNow);
+  const day = et.getDay();
+  const diff = (day === 0 ? 6 : day - 1);
+  et.setDate(et.getDate() - diff);
+  et.setHours(0,0,0,0);
+  return et.getTime() + offsetMs;
+}
+
 // ===== 계좌 =====
 async function loadAccount(){
-  let a; try{ a=await (await fetch(`${API}/api/live/account`)).json(); }catch(e){ return; }
+  let a;
+  try{ a=await (await fetch(`${API}/api/live/account`)).json(); }
+  catch(e){ return; }
+
+  let weekRealized = 0;
+  try{
+    const th = await (await fetch(`${API}/api/live/trades_history`)).json();
+    const trades = Array.isArray(th) ? th : (th.trades || []);
+    const weekStart = etWeekStartUtc();
+    trades.forEach(t=>{
+      if(!t.exited_at) return;
+      if(new Date(t.exited_at).getTime() >= weekStart) weekRealized += Number(t.pnl_krw || 0);
+    });
+  }catch(e){}
+
+  const totalV = Number(a.total_value || 0);
+  const retPct = Number(a.total_return_pct || 0);
+  const unreal = Number(a.unrealized_pnl || 0);
+  const todayR = Number(a.realized_pnl_today || 0);
+  const realizedTotal = Number(a.realized_pnl_total || 0);
+
   document.getElementById('acct').innerHTML=`
     <div class="acard"><div class="lab">총 평가금</div>
-      <div class="val">${usd(a.total_value)}</div>
-      <div class="sub">현금 ${usd(a.cash)} · 투자 ${usd(a.invested)}</div></div>
-    <div class="acard"><div class="lab">총 수익률</div>
-      <div class="val" style="color:${col(a.total_return_pct)}">${pct(a.total_return_pct)}</div>
-      <div class="sub">첫 스냅샷 대비</div></div>
+      <div class="val">$${totalV.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+      <div class="sub" style="color:${pnlColor(retPct)}">${retPct>=0?'+':''}${retPct.toFixed(2)}%</div></div>
     <div class="acard"><div class="lab">미실현 손익</div>
-      <div class="val" style="color:${col(a.unrealized_pnl)}">${a.unrealized_pnl>=0?'+':''}${usd(a.unrealized_pnl)}</div>
-      <div class="sub">보유 ${a.holdings_count}종목</div></div>
-    <div class="acard"><div class="lab">실현 손익 (누적)</div>
-      <div class="val" style="color:${col(a.realized_pnl_total)}">${a.realized_pnl_total>=0?'+':''}${usd(a.realized_pnl_total)}</div>
-      <div class="sub">오늘 ${usd(a.realized_pnl_today)} · 오늘 주문 ${a.orders_today??'—'}건</div></div>`;
+      <div class="val" style="color:${pnlColor(unreal)}">${fmtSignedUsd(unreal)}</div>
+      <div class="sub">보유 ${a.holdings_count||0}종목</div></div>
+    <div class="acard"><div class="lab">오늘 실현 손익</div>
+      <div class="val" style="color:${pnlColor(todayR)}">${fmtSignedUsd(todayR)}</div>
+      <div class="sub">주문 ${a.orders_today||0}건</div></div>
+    <div class="acard"><div class="lab">이번 주 실현 손익</div>
+      <div class="val" style="color:${pnlColor(weekRealized)}">${fmtSignedUsd(weekRealized)}</div>
+      <div class="sub">누적 ${fmtSignedUsd(realizedTotal)}</div></div>`;
 }
 
 // ===== 슬롯 =====
@@ -724,9 +847,19 @@ function slotCard(s,onclick){
   const sellTicker = String(s.ticker || '').toUpperCase();
   const _si = _sellIntents[sellTicker];
   const _selling = _si && ['pending','submitted'].includes(_si.status);
+
+  let sellLabel = '청산 요청';
+  if(!_selling && s.entry_price != null && s.current_price != null && s.shares != null){
+    const estPnl = (s.current_price - s.entry_price) * s.shares;
+    const sign = estPnl >= 0 ? '+' : '−';
+    const amt = Math.abs(estPnl).toLocaleString(undefined, {maximumFractionDigits: 0});
+    const pnlCls = estPnl >= 0 ? 'sell-pnl-pos' : 'sell-pnl-neg';
+    sellLabel = `청산 (예상 <span class="${pnlCls}">${sign}$${amt}</span>)`;
+  }
+
   const sellBtn = _selling
     ? `<button class="slot-sell processing" disabled>청산 중…</button>`
-    : `<button class="slot-sell" data-sell-ticker="${htmlEsc(sellTicker)}">청산 요청</button>`;
+    : `<button class="slot-sell" data-sell-ticker="${htmlEsc(sellTicker)}">${sellLabel}</button>`;
 
   return `<div class="mslot" onclick="${onclick}('${s.ticker}')">
     <div class="mslot-top"><span class="mslot-tk">${s.ticker}</span>
@@ -775,15 +908,20 @@ async function drawChart(ticker, interval){
     color: c.close>=c.open ? 'rgba(38,208,124,.5)' : 'rgba(255,77,106,.5)'
   })));
   const s=slotData.find(x=>x.ticker===ticker);
-  // 진입 마커 (일봉일 때만 날짜 매칭이 정확)
+  // 진입 마커: 일봉은 YYYY-MM-DD, intraday는 epoch seconds로 캔들 time과 매칭
   series.setMarkers([]);
-  if(s && s.entry_date && !intraday){
-    const entryDay=s.entry_date.slice(0,10);
-    // 진입일 이후 첫 캔들에 마커 (정확히 같은 날 없으면 가장 가까운 이후 날짜)
-    const hit=candles.find(c=>c.time>=entryDay);
-    if(hit){
+  let entryMarkerHit = null;
+  if(s && s.entry_date && Array.isArray(candles) && candles.length){
+    if(!intraday){
+      const entryDay=s.entry_date.slice(0,10);
+      entryMarkerHit = candles.find(c=>c.time>=entryDay) || candles[candles.length-1];
+    }else{
+      const entryEpoch = Math.floor(new Date(s.entry_date).getTime() / 1000);
+      entryMarkerHit = candles.find(c=>Number(c.time)>=entryEpoch) || candles[candles.length-1];
+    }
+    if(entryMarkerHit){
       series.setMarkers([{
-        time:hit.time, position:'belowBar', color:'#3b82f6', shape:'arrowUp',
+        time:entryMarkerHit.time, position:'belowBar', color:'#3b82f6', shape:'arrowUp',
         text:`진입 ${fmt(s.entry_price)}`,
       }]);
     }
@@ -803,7 +941,19 @@ async function drawChart(ticker, interval){
     // 간격별로 보여줄 최근 캔들 개수 (없으면 전체)
     const visibleBars = {'1m':80, '5m':80, '15m':70, '60m':60, '1d':120};
     const n = visibleBars[interval];
-    if(n && candles.length > n){
+    if(entryMarkerHit && intraday){
+      const hitIdx = candles.findIndex(c=>c.time===entryMarkerHit.time);
+      if(hitIdx >= 0){
+        chart.timeScale().setVisibleLogicalRange({
+          from: Math.max(0, hitIdx - 10),
+          to: candles.length + 2,
+        });
+      }else if(n && candles.length > n){
+        chart.timeScale().setVisibleLogicalRange({ from: candles.length - n, to: candles.length + 2 });
+      }else{
+        chart.timeScale().fitContent();
+      }
+    }else if(n && candles.length > n){
       chart.timeScale().setVisibleLogicalRange({ from: candles.length - n, to: candles.length + 2 });
     }else{
       chart.timeScale().fitContent();

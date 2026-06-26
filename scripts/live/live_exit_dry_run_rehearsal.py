@@ -207,7 +207,11 @@ class PatchStack:
             os.environ["EXIT_LIVE_POLICY"] = self.old_exit_policy
 
 
-def _make_runner(artifact_dir: Path) -> tuple[Runner, RehearsalPaperBroker, RehearsalNotifier]:
+def _make_runner(
+    artifact_dir: Path,
+    *,
+    manual_sell_intent_path: Optional[Path] = None,
+) -> tuple[Runner, RehearsalPaperBroker, RehearsalNotifier]:
     _patch_state_paths(artifact_dir)
     policy_path = artifact_dir / "policy.yaml"
     _write_policy(policy_path)
@@ -223,6 +227,7 @@ def _make_runner(artifact_dir: Path) -> tuple[Runner, RehearsalPaperBroker, Rehe
         symbols=[TICKER],
         order_shares=1.0,
         order_notional=ORDER_NOTIONAL,
+        manual_sell_intent_path=manual_sell_intent_path,
     )
     return runner, broker, notifier
 
@@ -305,11 +310,19 @@ def _failure_result(scenario: ExitScenario, scenario_dir: Path, runner: Runner, 
     )
 
 
-def _run_one_scenario(scenario: ExitScenario, scenario_dir: Path) -> ExitScenarioResult:
+def _run_one_scenario(
+    scenario: ExitScenario,
+    scenario_dir: Path,
+    *,
+    manual_sell_intent_path: Optional[Path] = None,
+) -> ExitScenarioResult:
     scenario_dir.mkdir(parents=True, exist_ok=True)
     errors: list[str] = []
     with PatchStack(sell_omen_score=scenario.sell_omen_score):
-        runner, broker, notifier = _make_runner(scenario_dir)
+        runner, broker, notifier = _make_runner(
+            scenario_dir,
+            manual_sell_intent_path=manual_sell_intent_path,
+        )
         errors.extend(_enter_position(runner))
         if errors:
             return _failure_result(scenario, scenario_dir, runner, broker, notifier, errors)
@@ -370,13 +383,22 @@ def _run_one_scenario(scenario: ExitScenario, scenario_dir: Path) -> ExitScenari
         )
 
 
-def run_exit_rehearsal(*, artifact_dir: Optional[Path] = None, scenarios: tuple[ExitScenario, ...] = SCENARIOS) -> ExitRehearsalResult:
+def run_exit_rehearsal(
+    *,
+    artifact_dir: Optional[Path] = None,
+    scenarios: tuple[ExitScenario, ...] = SCENARIOS,
+    manual_sell_intent_path: Optional[Path] = None,
+) -> ExitRehearsalResult:
     if artifact_dir is None:
         artifact_dir = Path(tempfile.mkdtemp(prefix="kingmaker_live_exit_rehearsal_"))
     artifact_dir.mkdir(parents=True, exist_ok=True)
     results: list[ExitScenarioResult] = []
     for scenario in scenarios:
-        result = _run_one_scenario(scenario, artifact_dir / scenario.name)
+        result = _run_one_scenario(
+            scenario,
+            artifact_dir / scenario.name,
+            manual_sell_intent_path=manual_sell_intent_path,
+        )
         results.append(result)
         (artifact_dir / scenario.name / "scenario_result.json").write_text(
             json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",

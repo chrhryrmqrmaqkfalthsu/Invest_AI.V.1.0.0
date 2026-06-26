@@ -368,6 +368,7 @@ def run_rehearsal(
     initial_cash: float = 100_000.0,
     order_notional: float = 30.0,
     artifact_dir: Optional[Path] = None,
+    manual_sell_intent_path: Optional[Path] = None,
 ) -> RehearsalResult:
     ticker = str(ticker).upper().strip()
     if not ticker:
@@ -391,6 +392,7 @@ def run_rehearsal(
         symbols=[ticker],
         order_shares=1.0,
         order_notional=float(order_notional),
+        manual_sell_intent_path=manual_sell_intent_path,
     )
 
     errors: list[str] = []

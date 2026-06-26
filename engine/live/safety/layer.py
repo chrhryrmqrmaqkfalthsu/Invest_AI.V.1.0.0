@@ -16,6 +16,7 @@ BS-1a invariants:
 - KILL_SWITCH/손실잠금/쿨다운/시장시간/whitelist/첫주문승인은
   small_amount_safety.enabled 값과 무관하게 항상 강제한다.
 - enabled=False는 주문당 수량·금액비율·일일 주문 수·당일 매수/전체 노출 소액 한도만 비활성화한다.
+- 일일 손실 kill 제한은 daily_loss_limit_usd와 daily_loss_limit_pct가 모두 0 이하이면 비활성화한다.
 """
 from __future__ import annotations
 
@@ -139,6 +140,11 @@ class SafetyLayer:
         elif parsed.tzinfo is not None and reference.tzinfo is None:
             reference = reference.replace(tzinfo=parsed.tzinfo)
         return parsed
+
+    def _daily_loss_gate_enabled(self) -> bool:
+        usd_limit = float(getattr(self, "daily_loss_limit_usd", 0.0) or 0.0)
+        pct_limit = float(getattr(self, "daily_loss_limit_pct", 0.0) or 0.0)
+        return usd_limit > 0.0 or pct_limit > 0.0
 
     def _account_total_value_notional(self) -> tuple[float, Optional[str]]:
         if self.broker is None:
@@ -349,7 +355,7 @@ class SafetyLayer:
         if KILL_SWITCH_PATH.exists():
             return SafetyDecision(False, "KILL_SWITCH 파일 감지 — 모든 주문 차단", "KILL_SWITCH")
 
-        if st.kill_until:
+        if self._daily_loss_gate_enabled() and st.kill_until:
             try:
                 until = datetime.fromisoformat(st.kill_until)
                 if datetime.now() < until:
@@ -485,11 +491,15 @@ class SafetyLayer:
         else:
             st.consecutive_losses = 0
 
-        loss_today = -st.realized_pnl_today
-        usd_breach = loss_today >= self.daily_loss_limit_usd
-        pct_breach = total_value_usd > 0 and loss_today / total_value_usd * 100 >= self.daily_loss_limit_pct
+        loss_today = max(0.0, -st.realized_pnl_today)
+        usd_limit = float(getattr(self, "daily_loss_limit_usd", 0.0) or 0.0)
+        pct_limit = float(getattr(self, "daily_loss_limit_pct", 0.0) or 0.0)
+        usd_breach = usd_limit > 0.0 and loss_today >= usd_limit
+        pct_breach = total_value_usd > 0 and pct_limit > 0.0 and loss_today / total_value_usd * 100 >= pct_limit
         if usd_breach or pct_breach:
             st.kill_until = datetime.now().replace(hour=23, minute=59, second=59, microsecond=0).isoformat()
+        elif not self._daily_loss_gate_enabled() and st.kill_until:
+            st.kill_until = ""
         state_mod.save(st)
 
     def approve_first_order(self) -> None:

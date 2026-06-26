@@ -19,7 +19,10 @@ def _last_trade(path: Path) -> dict:
 
 
 def test_live_exit_dry_run_rehearsal_all_exit_reasons_realized_pnl_and_mae(tmp_path):
-    result = run_exit_rehearsal(artifact_dir=tmp_path)
+    result = run_exit_rehearsal(
+        artifact_dir=tmp_path,
+        manual_sell_intent_path=tmp_path / "manual_sell_intent.json",
+    )
 
     assert result.ok, result.scenarios
     assert result.scenario_count == 6

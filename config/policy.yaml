@@ -27,11 +27,11 @@ small_amount_safety:
   max_total_invested_krw: 0            # legacy field name; USD notional in US-only mode
   max_orders_per_day: 1000000
   require_first_order_approval: false
-  daily_loss_limit_notional: 50
-  daily_loss_limit_usd: 50
+  daily_loss_limit_notional: 0         # 0 이하는 일일 실현손실 kill 제한 비활성
+  daily_loss_limit_usd: 0              # 0 이하는 일일 실현손실 kill 제한 비활성
 
 risk:
-  daily_loss_limit_pct: 10
+  daily_loss_limit_pct: 0              # 0 이하는 일일 손실률 kill 제한 비활성
   position_limit_pct: 30
   total_exposure_pct: 80
   consecutive_loss_limit: 3

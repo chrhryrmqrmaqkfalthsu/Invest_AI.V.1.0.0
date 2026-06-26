@@ -17,6 +17,7 @@ def test_live_dry_run_rehearsal_buy_fill_position_notification(tmp_path):
         initial_cash=100_000.0,
         order_notional=30.0,
         artifact_dir=tmp_path,
+        manual_sell_intent_path=tmp_path / "manual_sell_intent.json",
     )
 
     assert result.ok, result.errors

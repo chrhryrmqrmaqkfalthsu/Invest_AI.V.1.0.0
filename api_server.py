@@ -431,11 +431,16 @@ class ManualSellIntentRequest(BaseModel):
 
 
 @app.get("/api/live/central_candidates")
-def central_candidates():
-    """central-control semi_auto 대기 후보. 체결/만료 후보는 대시보드 목록에서 숨긴다."""
+def central_candidates(include_blocked: bool = False):
+    """central-control semi_auto 대기 후보. 기본값은 대시보드 표시용으로 blocked/체결/만료 후보를 숨긴다.
+
+    진단용 전체 상태가 필요하면 `/api/live/central_candidates?include_blocked=true`를 사용한다.
+    """
     state = load_candidate_state(CENTRAL_BUY_CANDIDATES_PATH)
     candidates = state.get("candidates") if isinstance(state, dict) else None
     hidden_statuses = {"manual_executed", "auto_executed", "expired"}
+    if not include_blocked:
+        hidden_statuses.add("blocked")
     if isinstance(candidates, dict):
         state = dict(state)
         state["candidates"] = {

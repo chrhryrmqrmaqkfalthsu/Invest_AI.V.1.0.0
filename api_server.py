@@ -432,8 +432,21 @@ class ManualSellIntentRequest(BaseModel):
 
 @app.get("/api/live/central_candidates")
 def central_candidates():
-    """central-control semi_auto 대기 후보. broker를 import하지 않고 파일만 읽는다."""
-    return load_candidate_state(CENTRAL_BUY_CANDIDATES_PATH)
+    """central-control semi_auto 대기 후보. 체결/만료 후보는 대시보드 목록에서 숨긴다."""
+    state = load_candidate_state(CENTRAL_BUY_CANDIDATES_PATH)
+    candidates = state.get("candidates") if isinstance(state, dict) else None
+    hidden_statuses = {"manual_executed", "auto_executed", "expired"}
+    if isinstance(candidates, dict):
+        state = dict(state)
+        state["candidates"] = {
+            cid: row
+            for cid, row in candidates.items()
+            if not (
+                isinstance(row, dict)
+                and str(row.get("status") or "") in hidden_statuses
+            )
+        }
+    return state
 
 
 @app.get("/api/live/manual_buy_intents")

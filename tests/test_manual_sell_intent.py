@@ -9,6 +9,8 @@ from engine.live.manual_sell_intent import (
     atomic_write_json,
     create_manual_sell_intent,
     load_manual_sell_state,
+    load_pending_manual_sell_intents,
+    load_submitted_manual_sell_intents,
 )
 from engine.live.pending_order_manager import PendingOrderManager
 from engine.live.position_manager import PositionEntry, PositionManager
@@ -141,6 +143,10 @@ def write_positions(path, ticker="AR", shares=10.0):
     atomic_write_json(path, {ticker: make_position(ticker, shares).to_dict()})
 
 
+def write_multi_positions(path, rows: dict[str, float]):
+    atomic_write_json(path, {ticker: make_position(ticker, shares).to_dict() for ticker, shares in rows.items()})
+
+
 def test_create_manual_sell_intent_for_held_position_is_idempotent(tmp_path):
     positions = tmp_path / "positions.json"
     intents = tmp_path / "manual_sell_intent.json"
@@ -163,6 +169,85 @@ def test_create_manual_sell_intent_rejects_not_held_and_partial(tmp_path):
         create_manual_sell_intent(ticker="NOPE", positions_path=positions, intent_path=intents)
     with pytest.raises(ValueError, match="partial sell not supported"):
         create_manual_sell_intent(ticker="AR", shares_requested=5.0, positions_path=positions, intent_path=intents)
+
+
+def test_trade_date_rollover_preserves_non_terminal_sell_intents_and_drops_terminal(tmp_path, monkeypatch):
+    import engine.live.manual_sell_intent as sell_module
+    positions = tmp_path / "positions.json"
+    intents = tmp_path / "manual_sell_intent.json"
+    write_multi_positions(positions, {"AR": 10.0, "DDS": 20.0, "FIX": 2.0})
+    atomic_write_json(
+        intents,
+        {
+            "schema_version": 1,
+            "trade_date": "2026-06-25",
+            "intents": {
+                "manual_sell:DDS:pending": {
+                    "intent_id": "manual_sell:DDS:pending",
+                    "ticker": "DDS",
+                    "status": "pending",
+                    "trade_date": "2026-06-25",
+                    "shares_requested": 20.0,
+                },
+                "manual_sell:FIX:submitted": {
+                    "intent_id": "manual_sell:FIX:submitted",
+                    "ticker": "FIX",
+                    "status": "submitted",
+                    "trade_date": "2026-06-25",
+                    "shares_requested": 2.0,
+                },
+                "manual_sell:OLD:consumed": {
+                    "intent_id": "manual_sell:OLD:consumed",
+                    "ticker": "OLD",
+                    "status": "consumed",
+                    "trade_date": "2026-06-25",
+                },
+                "manual_sell:BAD:rejected": {
+                    "intent_id": "manual_sell:BAD:rejected",
+                    "ticker": "BAD",
+                    "status": "rejected",
+                    "trade_date": "2026-06-25",
+                },
+            },
+        },
+    )
+    monkeypatch.setattr(sell_module, "trade_date_kst", lambda now=None: "2026-06-26")
+
+    row = create_manual_sell_intent(ticker="AR", positions_path=positions, intent_path=intents)
+
+    state = load_manual_sell_state(intents)
+    assert state["trade_date"] == "2026-06-26"
+    assert row["ticker"] == "AR"
+    assert row["status"] == "pending"
+    assert "manual_sell:DDS:pending" in state["intents"]
+    assert "manual_sell:FIX:submitted" in state["intents"]
+    assert "manual_sell:OLD:consumed" not in state["intents"]
+    assert "manual_sell:BAD:rejected" not in state["intents"]
+    assert state["intents"]["manual_sell:DDS:pending"]["trade_date"] == "2026-06-25"
+
+    pending = load_pending_manual_sell_intents(intent_path=intents)
+    submitted = load_submitted_manual_sell_intents(intent_path=intents)
+    assert {item["ticker"] for item in pending} == {"DDS", "AR"}
+    assert {item["ticker"] for item in submitted} == {"FIX"}
+
+
+def test_trade_date_rollover_idempotent_existing_pending_persists_new_root_date(tmp_path, monkeypatch):
+    import engine.live.manual_sell_intent as sell_module
+    positions = tmp_path / "positions.json"
+    intents = tmp_path / "manual_sell_intent.json"
+    write_positions(positions, "AR", 10.0)
+    monkeypatch.setattr(sell_module, "trade_date_kst", lambda now=None: "2026-06-25")
+    first = create_manual_sell_intent(ticker="AR", positions_path=positions, intent_path=intents)
+
+    monkeypatch.setattr(sell_module, "trade_date_kst", lambda now=None: "2026-06-26")
+    second = create_manual_sell_intent(ticker="AR", positions_path=positions, intent_path=intents)
+
+    state = load_manual_sell_state(intents)
+    assert first["intent_id"] == second["intent_id"]
+    assert second["trade_date"] == "2026-06-25"
+    assert state["trade_date"] == "2026-06-26"
+    assert list(state["intents"]) == [first["intent_id"]]
+    assert state["intents"][first["intent_id"]]["status"] == "pending"
 
 
 def test_pending_sell_intent_consumes_existing_exit_path_and_finalizes(tmp_path, monkeypatch):

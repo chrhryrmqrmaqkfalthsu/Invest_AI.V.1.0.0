@@ -84,6 +84,27 @@ def _load_positions(positions_path: Path | str | None = None) -> dict:
     return data
 
 
+def _carry_over_non_terminal_intents(state: dict) -> dict:
+    """Keep unprocessed SELL intents across root trade-date rollover.
+
+    Root ``trade_date`` is a dashboard grouping key, not an execution deadline.
+    Dropping non-terminal intents on a KST date rollover can lose a manual exit
+    request that was queued while the US market was closed. Terminal rows are
+    intentionally discarded to avoid re-selling an already finalized exit.
+    """
+    carried: dict[str, dict] = {}
+    intents = state.get("intents") if isinstance(state, dict) else {}
+    if not isinstance(intents, dict):
+        return carried
+    for intent_id, row in intents.items():
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("status") or "") in TERMINAL_STATUSES:
+            continue
+        carried[str(intent_id)] = dict(row)
+    return carried
+
+
 def load_manual_sell_state(path: Path | str | None = None) -> dict:
     data = read_json(path or MANUAL_SELL_INTENT_PATH, {})
     if not isinstance(data, dict):
@@ -152,13 +173,23 @@ def create_manual_sell_intent(
     entry_date = str(position.get("entry_date") or "")
     intent_id = _intent_id_for(ticker_u, entry_date)
     trade_date = trade_date_kst()
-    state = load_manual_sell_state(intent_path or MANUAL_SELL_INTENT_PATH)
+    intent_file = intent_path or MANUAL_SELL_INTENT_PATH
+    state = load_manual_sell_state(intent_file)
+    rolled_over = False
     if state.get("trade_date") != trade_date:
-        state = {"schema_version": 1, "trade_date": trade_date, "intents": {}}
+        state = {
+            "schema_version": 1,
+            "trade_date": trade_date,
+            "intents": _carry_over_non_terminal_intents(state),
+        }
+        rolled_over = True
     intents = state.setdefault("intents", {})
 
     existing = intents.get(intent_id)
     if isinstance(existing, dict) and str(existing.get("status") or "") in IDEMPOTENT_STATUSES:
+        if rolled_over:
+            state["updated_at"] = utc_now_iso()
+            atomic_write_json(intent_file, state)
         out = dict(existing)
         out["intent_id"] = intent_id
         return out
@@ -184,7 +215,7 @@ def create_manual_sell_intent(
     }
     intents[intent_id] = row
     state["updated_at"] = now
-    atomic_write_json(intent_path or MANUAL_SELL_INTENT_PATH, state)
+    atomic_write_json(intent_file, state)
     return row
 
 

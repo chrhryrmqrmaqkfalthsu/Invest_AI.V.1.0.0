@@ -97,8 +97,13 @@
   .cand-modal-box{background:#0f141b;border:1px solid var(--line);border-radius:14px;
     padding:18px;width:min(720px,92vw);box-shadow:0 12px 40px rgba(0,0,0,.55);}
   .cand-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
-  .cm-summary{display:flex;gap:18px;margin-bottom:12px;font-size:13px;color:#b8c1cf;}
+  .cm-summary{display:flex;gap:18px;margin-bottom:12px;font-size:13px;color:#b8c1cf;flex-wrap:wrap;}
   .cm-summary .big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .cm-strategy{width:100%;margin-top:2px;padding-top:10px;border-top:1px solid var(--line);
+    font-size:12px;color:var(--dim);display:flex;flex-wrap:wrap;gap:10px 14px;}
+  .cm-strategy b{color:var(--txt);}
+  .cm-strategy b.univ-pos{color:var(--up);}
+  .cm-strategy b.univ-neg{color:var(--down);}
   .cm-chart{height:340px;width:100%;}
 
   /* 슬롯 상세 */
@@ -301,6 +306,8 @@ const _posCurrent = {};
 let _sellIntents = {};
 const _sellBusy = {};
 let _candChart = null, _candSeries = null;
+const _candData = {};
+let _activeChart = null;  // {type, ticker, interval, signalPrice, fillPrice}
 
 function toast(title, body, type){
   const wrap=document.getElementById('toasts');
@@ -454,7 +461,7 @@ async function loadCandidates(){
     return;
   }
 
-  const HIDE = ['manual_executed', 'auto_executed', 'expired'];
+  const HIDE = ['manual_executed', 'auto_executed', 'expired', 'blocked'];
   let cands = Object.values(state.candidates || {})
     .filter(x => x && typeof x === 'object')
     .filter(x => !HIDE.includes(x.status));
@@ -476,6 +483,11 @@ async function loadCandidates(){
     return;
   }
   await loadPositionEntries();
+  Object.keys(_candData).forEach(k=>delete _candData[k]);
+  cands.forEach(c=>{
+    const tk = String(c.ticker || '').toUpperCase();
+    if(tk) _candData[tk] = c;
+  });
   await Promise.all(cands.map(async c=>{
     if(c.ticker) _candPrice[c.ticker] = await fetchCandPrice(c.ticker);
   }));
@@ -556,6 +568,41 @@ async function requestBuy(candidateId){
     loadCandidates();
   }
 }
+function renderCandStrategySummary(ticker){
+  const cd = _candData[String(ticker || '').toUpperCase()];
+  if(!cd) return '';
+  const sigScore = Number(cd.signal_score || 0);
+  const sigThreshold = Number(cd.signal_threshold || 0);
+  const sigCls = sigScore >= sigThreshold ? 'univ-pos' : 'univ-neg';
+  const strength = Number(cd.effective_strength ?? cd.strength ?? 0);
+  const score = Number(cd.score || 0);
+  const confidence = Number(cd.confidence || 0);
+  const notional = Number(cd.notional || 0);
+  const shares = Number(cd.shares || 0);
+  return `<div class="cm-strategy">
+    <span>신호점수 <b class="${sigCls}">${sigScore.toFixed(2)}</b> / 임계 ${sigThreshold.toFixed(2)}</span>
+    <span>강도 <b>${strength.toFixed(2)}</b></span>
+    <span>점수 <b>${score.toFixed(2)}</b></span>
+    <span>신뢰도 <b>${confidence.toFixed(2)}</b></span>
+    <span>주문예정 <b>$${notional.toLocaleString(undefined,{maximumFractionDigits:0})}</b> (${shares.toFixed(2)}주)</span>
+  </div>`;
+}
+function renderCandSummary(ticker, signal, fill, candles){
+  const rows = Array.isArray(candles) ? candles : [];
+  const last = rows.length ? rows[rows.length-1] : null;
+  const cur = _posCurrent[ticker] ?? (last ? last.close : null);
+  const chg = changePct(signal, cur);
+  const cls = chg!=null && chg>=0 ? 'univ-pos' : 'univ-neg';
+  const chgTxt = chg==null ? '-' : `${chg>=0?'+':''}${chg.toFixed(2)}%`;
+  const fillSummary = fill ? `<div><div class="cand-sub">체결가</div><div class="big cand-fill">$${fill.toFixed(2)}</div></div>` : '';
+  const curTxt = cur != null && isFinite(Number(cur)) ? `$${Number(cur).toFixed(2)}` : '—';
+  document.getElementById('cm-summary').innerHTML = `
+    <div><div class="cand-sub">신호가</div><div class="big">${signal ? '$'+signal.toFixed(2) : '—'}</div></div>
+    ${fillSummary}
+    <div><div class="cand-sub">현재가</div><div class="big">${curTxt}</div></div>
+    <div><div class="cand-sub">신호가 대비</div><div class="big ${cls}">${chgTxt}</div></div>
+    ${renderCandStrategySummary(ticker)}`;
+}
 async function openCandChart(ticker, signalPrice, fillPrice){
   ticker = String(ticker || '').toUpperCase();
   const signal = Number(signalPrice || 0);
@@ -580,7 +627,7 @@ async function openCandChart(ticker, signalPrice, fillPrice){
   });
   let candles=[];
   try{
-    const r = await fetch(`${API}/api/live/candles/${ticker}?interval=15m`);
+    const r = await fetch(`${API}/api/live/candles/${ticker}?interval=1m`);
     candles = await r.json();
   }catch(e){}
   if(!Array.isArray(candles) || !candles.length){
@@ -604,20 +651,14 @@ async function openCandChart(ticker, signalPrice, fillPrice){
   }
   const n = candles.length;
   _candChart.timeScale().setVisibleLogicalRange({from: Math.max(0, n-80), to: n});
-  const cur = _posCurrent[ticker] ?? candles[n-1].close;
-  const chg = changePct(signal, cur);
-  const cls = chg!=null && chg>=0 ? 'univ-pos' : 'univ-neg';
-  const chgTxt = chg==null ? '-' : `${chg>=0?'+':''}${chg.toFixed(2)}%`;
-  const fillSummary = fill ? `<div><div class="cand-sub">체결가</div><div class="big cand-fill">$${fill.toFixed(2)}</div></div>` : '';
-  document.getElementById('cm-summary').innerHTML = `
-    <div><div class="cand-sub">신호가</div><div class="big">${signal ? '$'+signal.toFixed(2) : '—'}</div></div>
-    ${fillSummary}
-    <div><div class="cand-sub">현재가</div><div class="big">$${Number(cur).toFixed(2)}</div></div>
-    <div><div class="cand-sub">신호가 대비</div><div class="big ${cls}">${chgTxt}</div></div>`;
+  renderCandSummary(ticker, signal, fill, candles);
+  _activeChart = {type:'cand', ticker, interval:'1m', signalPrice:signal, fillPrice:fill};
 }
 function closeCandChart(){
+  if(_activeChart && _activeChart.type === 'cand') _activeChart = null;
   document.getElementById('cand-modal').style.display = 'none';
   if(_candChart){ _candChart.remove(); _candChart = null; }
+  _candSeries = null;
 }
 
 let equityChart=null, equitySeries=null, equityStartLine=null;
@@ -959,6 +1000,7 @@ async function drawChart(ticker, interval){
       chart.timeScale().fitContent();
     }
   }
+  _activeChart = {type:'slot', ticker, interval};
 }
 
 const RB_LABELS = {
@@ -1116,6 +1158,7 @@ async function openDetail(ticker){
   document.getElementById('commentary').innerHTML = renderCommentary(s);
 }
 function closeDetail(){
+  if(_activeChart && _activeChart.type === 'slot') _activeChart = null;
   document.getElementById('slot-detail-view').style.display='none';
   document.getElementById('slot-list-view').style.display='block';
 }
@@ -1216,6 +1259,30 @@ function updateClock(){
 setInterval(updateClock, 1000);
 updateClock();
 
+async function refreshActiveChart(){
+  if(!_activeChart) return;
+  const active = {..._activeChart};
+  if(active.type === 'slot'){
+    const detail = document.getElementById('slot-detail-view');
+    const slotsPage = document.getElementById('page-slots');
+    if(!detail || detail.style.display !== 'block' || !slotsPage || !slotsPage.classList.contains('active')) return;
+    await drawChart(active.ticker, active.interval);
+    return;
+  }
+  if(active.type === 'cand'){
+    const modal = document.getElementById('cand-modal');
+    if(!modal || modal.style.display === 'none' || !_candSeries) return;
+    let candles=[];
+    try{
+      const r = await fetch(`${API}/api/live/candles/${active.ticker}?interval=${active.interval || '1m'}`);
+      candles = await r.json();
+    }catch(e){ return; }
+    if(!Array.isArray(candles) || !candles.length) return;
+    _candSeries.setData(candles);
+    renderCandSummary(active.ticker, Number(active.signalPrice || 0), Number(active.fillPrice || 0), candles);
+  }
+}
+
 // ===== 초기 로드 + 주기 갱신 =====
 function refresh(){
   loadAccount(); loadSlots(); loadMarket(); loadNews(); loadEquityCurve(); loadHistory(); loadCandidates();
@@ -1224,6 +1291,7 @@ function refresh(){
 refresh();
 setInterval(refresh, 30000);
 setInterval(loadCandidates, 20000);
+setInterval(refreshActiveChart, 30000);
 setInterval(async()=>{ await loadSellIntents(); renderSlots(); }, 10000);
 </script>
   <div id="cand-modal" class="cand-modal" style="display:none;" onclick="closeCandChart()">

@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 """Build a filtered Stage3 live-pool repository.
 
-The raw Stage3 batch directory is append-only research output.  Live should not
+The raw Stage3 batch directory is append-only research output. Live should not
 scan that whole tree on every startup, and it should not ingest every exit-gene
-combination blindly.  This script performs the first-pass filtering step and
+combination blindly. This script performs the first-pass filtering step and
 writes a compact repository that live central-control can mix with the existing
 Stage2-B pool.
 
-Default policy is intentionally conservative:
+Default policy is a loose safety floor, not a final validation method:
 
 * only rows that passed Stage3 basic eligibility are kept;
-* only rank-1 row per ticker is kept;
-* pure-OOS periods must meet minimum expectancy/trade/drawdown guards.
+* rank is not capped by default, so multiple entities per ticker may be kept;
+* ticker fan-out is capped by ``max_entities_per_ticker`` for manageability;
+* pure-OOS periods must meet minimum expectancy/trade/PF/drawdown guards.
+
+This is still a selection-biased Stage3 intermediate pool. It is intended for
+read-only dry-runs and later holdout/walk-forward filtering, not for enabling
+paper/live capital before the batch is complete and the final validation method
+is frozen.
 
 The output JSONL preserves the original Stage3 catalog row shape so it can be
 loaded by ``engine.central.entity_loader.load_entities_from_catalog`` without a
@@ -47,13 +53,18 @@ class FilterConfig:
     rejected_sample_name: str = DEFAULT_REJECTED_SAMPLE_NAME
     summary_name: str = DEFAULT_SUMMARY_NAME
     require_eligible: bool = True
-    max_rank_per_ticker: int = 1
-    top_per_ticker: int = 1
+    # 0 disables rank cutoff. Keep this configurable for later tightening, but
+    # the default intentionally allows all ranked Stage3 entities through the
+    # first filter if their risk/quality floors pass.
+    max_rank_per_ticker: int = 0
+    # 0 disables ticker fan-out cap. Default keeps the multi-entity benefit while
+    # avoiding 30-50 near-duplicate rulebooks per ticker in live dry-runs.
+    max_entities_per_ticker: int = 10
     max_rows: int = 0
     min_pure_oos_periods: int = 3
     min_expectancy_pct: float = 1.0
-    min_trade_count: int = 3
-    max_drawdown_floor_pct: float = -50.0
+    min_trade_count: int = 5
+    max_drawdown_floor_pct: float = -40.0
     min_profit_factor: float = 1.0
     rejected_sample_limit: int = 200
     dry_run: bool = False
@@ -69,11 +80,15 @@ class BuildResult:
     rejected_sample_path: str
     source_catalog_files: int
     source_rows: int
+    filtered_rows: int
     kept_rows: int
     kept_tickers: int
     rejected_rows: int
+    rejected_after_ticker_cap: int
     reject_reasons: dict[str, int]
-    top_per_ticker: int
+    kept_by_ticker: dict[str, int]
+    filter_config: dict[str, Any]
+    max_entities_per_ticker: int
     max_rank_per_ticker: int
     dry_run: bool
 
@@ -143,6 +158,7 @@ def build_stage3_live_pool(config: FilterConfig) -> BuildResult:
                 )
 
     selected = select_top_rows(passed, config)
+    kept_counts = Counter(item.ticker for item in selected)
     output_path = config.out_dir / config.output_name
     summary_path = config.out_dir / config.summary_name
     rejected_path = config.out_dir / config.rejected_sample_name
@@ -156,11 +172,15 @@ def build_stage3_live_pool(config: FilterConfig) -> BuildResult:
         rejected_sample_path=str(rejected_path),
         source_catalog_files=len({item.source_path for item in rows}),
         source_rows=len(rows),
+        filtered_rows=len(passed),
         kept_rows=len(selected),
-        kept_tickers=len({item.ticker for item in selected}),
+        kept_tickers=len(kept_counts),
         rejected_rows=len(rows) - len(passed),
+        rejected_after_ticker_cap=max(0, len(passed) - len(selected)),
         reject_reasons=dict(sorted(reject_counts.items())),
-        top_per_ticker=int(config.top_per_ticker),
+        kept_by_ticker=dict(sorted(kept_counts.items())),
+        filter_config=_filter_config_summary(config),
+        max_entities_per_ticker=int(config.max_entities_per_ticker),
         max_rank_per_ticker=int(config.max_rank_per_ticker),
         dry_run=bool(config.dry_run),
     )
@@ -209,7 +229,7 @@ def select_top_rows(rows: Sequence[CandidateRow], config: FilterConfig) -> list[
         if item.ticker:
             grouped[item.ticker].append(item)
     selected: list[CandidateRow] = []
-    per_ticker = max(1, int(config.top_per_ticker or 1))
+    per_ticker = int(config.max_entities_per_ticker or 0)
     for ticker in sorted(grouped):
         ranked = sorted(
             grouped[ticker],
@@ -220,7 +240,7 @@ def select_top_rows(rows: Sequence[CandidateRow], config: FilterConfig) -> list[
                 str(item.row.get("rulebook_hash") or ""),
             ),
         )
-        selected.extend(ranked[:per_ticker])
+        selected.extend(ranked if per_ticker <= 0 else ranked[:per_ticker])
     selected.sort(key=lambda item: (item.ticker, item.rank, str(item.row.get("rulebook_hash") or "")))
     if int(config.max_rows or 0) > 0:
         selected = selected[: int(config.max_rows)]
@@ -234,6 +254,7 @@ def _serialize_live_pool_row(item: CandidateRow, config: FilterConfig) -> str:
         "avg_profit_factor": item.avg_profit_factor,
         "created_at": _utc_now(),
         "max_drawdown_floor_pct": float(config.max_drawdown_floor_pct),
+        "max_entities_per_ticker": int(config.max_entities_per_ticker),
         "max_rank_per_ticker": int(config.max_rank_per_ticker),
         "min_expectancy_pct": float(config.min_expectancy_pct),
         "min_profit_factor": float(config.min_profit_factor),
@@ -241,10 +262,23 @@ def _serialize_live_pool_row(item: CandidateRow, config: FilterConfig) -> str:
         "min_trade_count": int(config.min_trade_count),
         "source_line": item.source_line,
         "source_path": item.source_path,
-        "top_per_ticker": int(config.top_per_ticker),
-        "version": "stage3_live_pool_v1",
+        "version": "stage3_live_pool_v2_multi_entity",
     }
     return json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
+
+
+def _filter_config_summary(config: FilterConfig) -> dict[str, Any]:
+    return {
+        "require_eligible": bool(config.require_eligible),
+        "max_rank_per_ticker": int(config.max_rank_per_ticker),
+        "max_entities_per_ticker": int(config.max_entities_per_ticker),
+        "max_rows": int(config.max_rows),
+        "min_pure_oos_periods": int(config.min_pure_oos_periods),
+        "min_expectancy_pct": float(config.min_expectancy_pct),
+        "min_trade_count": int(config.min_trade_count),
+        "max_drawdown_floor_pct": float(config.max_drawdown_floor_pct),
+        "min_profit_factor": float(config.min_profit_factor),
+    }
 
 
 def _pure_oos_metric_rows(row: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -310,13 +344,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--batch-root", default=str(DEFAULT_BATCH_ROOT))
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR))
     parser.add_argument("--output-name", default=DEFAULT_OUTPUT_NAME)
-    parser.add_argument("--max-rank-per-ticker", type=int, default=1)
-    parser.add_argument("--top-per-ticker", type=int, default=1)
+    parser.add_argument("--max-rank-per-ticker", type=int, default=0, help="0 disables rank cutoff")
+    parser.add_argument("--max-entities-per-ticker", type=int, default=10, help="0 disables ticker fan-out cap")
+    parser.add_argument("--top-per-ticker", type=int, default=None, help="Deprecated alias for --max-entities-per-ticker")
     parser.add_argument("--max-rows", type=int, default=0)
     parser.add_argument("--min-pure-oos-periods", type=int, default=3)
     parser.add_argument("--min-expectancy-pct", type=float, default=1.0)
-    parser.add_argument("--min-trade-count", type=int, default=3)
-    parser.add_argument("--max-drawdown-floor-pct", type=float, default=-50.0)
+    parser.add_argument("--min-trade-count", type=int, default=5)
+    parser.add_argument("--max-drawdown-floor-pct", type=float, default=-40.0)
     parser.add_argument("--min-profit-factor", type=float, default=1.0)
     parser.add_argument("--rejected-sample-limit", type=int, default=200)
     parser.add_argument("--allow-ineligible", action="store_true", help="Do not require eligible_stage3_basic=True")
@@ -325,13 +360,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def config_from_args(args: argparse.Namespace) -> FilterConfig:
+    max_entities_per_ticker = int(args.max_entities_per_ticker)
+    if args.top_per_ticker is not None:
+        max_entities_per_ticker = int(args.top_per_ticker)
     return FilterConfig(
         batch_root=Path(args.batch_root),
         out_dir=Path(args.out_dir),
         output_name=str(args.output_name),
         require_eligible=not bool(args.allow_ineligible),
         max_rank_per_ticker=int(args.max_rank_per_ticker),
-        top_per_ticker=int(args.top_per_ticker),
+        max_entities_per_ticker=max_entities_per_ticker,
         max_rows=int(args.max_rows),
         min_pure_oos_periods=int(args.min_pure_oos_periods),
         min_expectancy_pct=float(args.min_expectancy_pct),

@@ -52,7 +52,7 @@ def _candidate(row):
     )
 
 
-def test_row_passes_first_filter_accepts_stage3_basic_rank1():
+def test_row_passes_first_filter_accepts_loose_stage3_basic_row():
     ok, reasons = row_passes_first_filter(_catalog_row(), FilterConfig())
     assert ok is True
     assert reasons == []
@@ -64,28 +64,48 @@ def test_row_passes_first_filter_rejects_weak_pure_oos_period():
     assert any(reason.startswith("expectancy_below_floor") for reason in reasons)
 
 
-def test_select_top_rows_keeps_rank1_per_ticker():
-    cfg = FilterConfig(top_per_ticker=1, max_rank_per_ticker=3)
-    rows = [_candidate(_catalog_row("AAA", rank=2)), _candidate(_catalog_row("AAA", rank=1)), _candidate(_catalog_row("BBB", rank=1))]
+def test_row_passes_first_filter_rejects_mdd_worse_than_default_floor():
+    ok, reasons = row_passes_first_filter(_catalog_row(max_dd=-45.0), FilterConfig())
+    assert ok is False
+    assert any(reason.startswith("drawdown_below_floor") for reason in reasons)
+
+
+def test_row_passes_first_filter_rejects_trade_count_below_default_floor():
+    ok, reasons = row_passes_first_filter(_catalog_row(trade_count=4), FilterConfig())
+    assert ok is False
+    assert any(reason.startswith("trade_count_below_floor") for reason in reasons)
+
+
+def test_select_top_rows_keeps_configured_entities_per_ticker_without_rank_cutoff():
+    cfg = FilterConfig(max_entities_per_ticker=2, max_rank_per_ticker=0)
+    rows = [
+        _candidate(_catalog_row("AAA", rank=3)),
+        _candidate(_catalog_row("AAA", rank=1)),
+        _candidate(_catalog_row("AAA", rank=2)),
+        _candidate(_catalog_row("BBB", rank=1)),
+    ]
     selected = select_top_rows(rows, cfg)
-    assert [(row.ticker, row.rank) for row in selected] == [("AAA", 1), ("BBB", 1)]
+    assert [(row.ticker, row.rank) for row in selected] == [("AAA", 1), ("AAA", 2), ("BBB", 1)]
 
 
-def test_build_stage3_live_pool_writes_filtered_repository(tmp_path):
+def test_build_stage3_live_pool_writes_filtered_repository_with_ticker_cap(tmp_path):
     batch_root = tmp_path / "batch"
     catalog_dir = batch_root / "tickers" / "AAA" / "stage3"
     catalog_dir.mkdir(parents=True)
-    rows = [_catalog_row("AAA", rank=1), _catalog_row("AAA", rank=2)]
+    rows = [_catalog_row("AAA", rank=1), _catalog_row("AAA", rank=2), _catalog_row("AAA", rank=3)]
     (catalog_dir / "stage3_profile_catalog.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
     out_dir = tmp_path / "pool"
-    result = build_stage3_live_pool(FilterConfig(batch_root=batch_root, out_dir=out_dir, max_rank_per_ticker=1, top_per_ticker=1))
-    assert result.kept_rows == 1
+    result = build_stage3_live_pool(FilterConfig(batch_root=batch_root, out_dir=out_dir, max_entities_per_ticker=2, max_rank_per_ticker=0))
+    assert result.filtered_rows == 3
+    assert result.kept_rows == 2
+    assert result.rejected_after_ticker_cap == 1
+    assert result.kept_by_ticker == {"AAA": 2}
     output = out_dir / "stage3_live_pool.jsonl"
     assert output.exists()
-    payload = json.loads(output.read_text(encoding="utf-8").strip())
-    assert payload["ticker"] == "AAA"
-    assert payload["rank"] == 1
-    assert payload["live_pool_filter"]["version"] == "stage3_live_pool_v1"
+    payloads = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert [payload["rank"] for payload in payloads] == [1, 2]
+    assert payloads[0]["live_pool_filter"]["version"] == "stage3_live_pool_v2_multi_entity"
+    assert payloads[0]["live_pool_filter"]["max_entities_per_ticker"] == 2
 
 
 def test_stage3_mix_loader_adds_pool_tickers_outside_promoted_symbols(tmp_path):

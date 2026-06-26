@@ -82,6 +82,10 @@
   .cand-buy:hover{background:#358760;}
   .cand-buy:disabled{background:#2a2f38;color:var(--dim);cursor:not-allowed;}
   .cand-buy.processing{background:#5c5220;color:var(--gold);}
+  .slot-sell{background:#7a2d2d;color:#fff;border:none;border-radius:8px;
+    padding:7px 0;font-size:12px;font-weight:600;cursor:pointer;margin-top:8px;width:100%;}
+  .slot-sell:hover{background:#9a3838;}
+  .slot-sell:disabled,.slot-sell.processing{background:#3a2a2a;color:#8b95a5;cursor:not-allowed;}
   .univ-note{font-size:11px;color:#c9a227;background:#2a2410;
     border:1px solid #3a3320;border-radius:6px;padding:6px 10px;margin-bottom:10px;}
   .univ-pos{color:var(--up);}
@@ -289,6 +293,8 @@ const _candBusy = {};
 const _candPrice = {};
 const _posEntry = {};
 const _posCurrent = {};
+let _sellIntents = {};
+const _sellBusy = {};
 let _candChart = null, _candSeries = null;
 
 function toast(title, body, type){
@@ -330,6 +336,56 @@ async function loadPositionEntries(){
       if(tk && cur!=null) _posCurrent[tk] = Number(cur);
     });
   }catch(e){}
+}
+
+async function loadSellIntents(){
+  try{
+    const r = await fetch(`${API}/api/live/manual_sell_intents`);
+    const d = await r.json();
+    _sellIntents = {};
+    Object.values(d.intents || {}).forEach(it=>{
+      const tk = String(it.ticker || '').toUpperCase();
+      if(tk) _sellIntents[tk] = it;
+    });
+  }catch(e){}
+}
+function renderSlots(){
+  document.getElementById('mini-slots').innerHTML=slotData.map(s=>slotCard(s,'openDetail')).join('');
+  document.getElementById('slots-full').innerHTML=slotData.map(s=>slotCard(s,'openDetail')).join('');
+  document.querySelectorAll('.slot-sell[data-sell-ticker]').forEach(btn=>{
+    btn.onclick=(ev)=>{ ev.stopPropagation(); requestSell(btn.dataset.sellTicker); };
+  });
+}
+async function requestSell(ticker){
+  ticker = String(ticker || '').toUpperCase();
+  if(!ticker || _sellBusy[ticker]) return;
+  if(!confirm(`${ticker} 전량 청산하시겠습니까?\n\n실제 매도 주문이 들어가며 되돌릴 수 없습니다.`)) return;
+  _sellBusy[ticker] = true;
+  document.querySelectorAll(`.slot-sell[data-sell-ticker="${ticker}"]`).forEach(b=>{
+    b.disabled = true; b.textContent = '요청 중…';
+  });
+  try{
+    const r = await fetch(`${API}/api/live/manual_sell_intent`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ticker, shares_requested:null, source:'dashboard'})
+    });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({detail:'요청 실패'}));
+      const msg = err.detail==='not held' ? '이미 청산된 종목입니다'
+                : err.detail==='partial sell not supported' ? '부분 청산은 지원하지 않습니다'
+                : (err.detail || `HTTP ${r.status}`);
+      toast('청산 요청 거부', msg, 'warn');
+    }else{
+      toast('청산 요청됨', `${ticker} · 다음 tick에서 처리됩니다`, 'good');
+    }
+  }catch(e){
+    toast('통신 오류', String(e), 'warn');
+  }finally{
+    _sellBusy[ticker] = false;
+    await loadSellIntents();
+    renderSlots();
+  }
 }
 
 // 슬롯 데이터 받을 때마다 손절/목표 임박 체크
@@ -665,6 +721,13 @@ function slotCard(s,onclick){
     </div>`;
   }
 
+  const sellTicker = String(s.ticker || '').toUpperCase();
+  const _si = _sellIntents[sellTicker];
+  const _selling = _si && ['pending','submitted'].includes(_si.status);
+  const sellBtn = _selling
+    ? `<button class="slot-sell processing" disabled>청산 중…</button>`
+    : `<button class="slot-sell" data-sell-ticker="${htmlEsc(sellTicker)}">청산 요청</button>`;
+
   return `<div class="mslot" onclick="${onclick}('${s.ticker}')">
     <div class="mslot-top"><span class="mslot-tk">${s.ticker}</span>
       <span class="mslot-pnl" style="color:${col(s.pnl_pct)}">${pct(s.pnl_pct)}</span></div>
@@ -673,14 +736,15 @@ function slotCard(s,onclick){
     <div class="mslot-sub" style="margin-top:7px;">
       <span class="tag">${s.exit_strategy||'?'}</span> ${s.direction||''} · 최대 ${s.max_holding_days}일 · 트레일 ${fmtP(trailPct)}
     </div>
+    ${sellBtn}
   </div>`;
 }
 async function loadSlots(){
   try{ slotData=await (await fetch(`${API}/api/live/slots`)).json(); }
   catch(e){ document.getElementById('mini-slots').innerHTML='<div class="loading">API 연결 실패</div>'; return; }
+  await loadSellIntents();
   checkSlotAlerts(slotData);
-  document.getElementById('mini-slots').innerHTML=slotData.map(s=>slotCard(s,'openDetail')).join('');
-  document.getElementById('slots-full').innerHTML=slotData.map(s=>slotCard(s,'openDetail')).join('');
+  renderSlots();
 }
 
 // ===== 슬롯 상세 (차트) =====
@@ -1010,6 +1074,7 @@ function refresh(){
 refresh();
 setInterval(refresh, 30000);
 setInterval(loadCandidates, 20000);
+setInterval(async()=>{ await loadSellIntents(); renderSlots(); }, 10000);
 </script>
   <div id="cand-modal" class="cand-modal" style="display:none;" onclick="closeCandChart()">
     <div class="cand-modal-box" onclick="event.stopPropagation()">

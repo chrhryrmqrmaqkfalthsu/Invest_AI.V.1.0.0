@@ -53,6 +53,8 @@ DEFAULT_ENTITY_CONFIDENCE_PATH = Path("data/_system/central/stage2_b/swap_score_
 DEFAULT_STAGE3_LIVE_POOL_PATH = Path("data/_system/central/stage3_live_pool/stage3_live_pool.jsonl")
 DEFAULT_ORDER_NOTIONAL_SAFETY_BUFFER = 0.003
 MAX_ORDER_NOTIONAL_SAFETY_BUFFER = 0.005
+# SafetyLayer와 동일한 절대 화이트리스트 기준을 사용한다.
+WHITELIST_SYMBOLS_DIR = Path.home() / "kingmaker" / "data" / "symbols"
 ET = ZoneInfo("America/New_York")
 KST = ZoneInfo("Asia/Seoul")
 PERIOD_ORDER = (
@@ -310,6 +312,10 @@ class LiveCentralController:
         except Exception as exc:
             self.runner._handle_error("central_control.tick_market", exc)
 
+    def _is_live_whitelisted_ticker(self, ticker: str) -> bool:
+        ticker_u = normalize_ticker(ticker)
+        return bool(ticker_u) and (WHITELIST_SYMBOLS_DIR / ticker_u).is_dir()
+
     def _process_central_buy_selection(self) -> None:
         if self._state_unavailable_for_new_buys():
             logger.error("[CENTRAL-CONTROL] position/pending state unavailable → 신규 BUY fail-closed")
@@ -320,13 +326,20 @@ class LiveCentralController:
         candidate_price_by_entity: dict[str, float] = {}
         evaluated_symbols = 0
         skipped_reentry_symbols = 0
+        skipped_whitelist_symbols = 0
         trade_date = self._trade_date_et()
         same_day_blocked_tickers = self._same_day_reentry_blocked_tickers(trade_date)
         # Stage2 entities are filtered by the promoted live universe, but Stage3
         # live-pool entities intentionally expand the central BUY evaluation universe.
+        # Live order submission still requires data/symbols/<ticker> to exist, so
+        # filter by the same whitelist criterion here before exposing candidates.
         eligible_symbols = sorted(set(self.entity_by_ticker))
         for ticker in eligible_symbols:
             ticker_u = normalize_ticker(ticker)
+            if not self._is_live_whitelisted_ticker(ticker_u):
+                skipped_whitelist_symbols += 1
+                logger.info("[CENTRAL-CONTROL] %s whitelist 없음 → 신규 BUY 후보 제외", ticker_u)
+                continue
             if ticker_u in same_day_blocked_tickers:
                 skipped_reentry_symbols += 1
                 logger.info("[CENTRAL-CONTROL] %s same-day terminal/exit → 신규 BUY 후보 제외", ticker_u)
@@ -402,13 +415,20 @@ class LiveCentralController:
                 ",".join(sorted(same_day_blocked_tickers)),
                 trade_date,
             )
+        if skipped_whitelist_symbols:
+            logger.info(
+                "[CENTRAL-CONTROL] whitelist filter skipped_symbols=%s dir=%s",
+                skipped_whitelist_symbols,
+                str(WHITELIST_SYMBOLS_DIR),
+            )
 
         if not candidates:
             logger.info(
-                "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=0 open_positions=%s",
+                "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=0 open_positions=%s whitelist_skipped=%s",
                 self.runner.stats.market_ticks,
                 evaluated_symbols,
                 len(self.runner.position_manager.all()),
+                skipped_whitelist_symbols,
             )
             if getattr(self, "buy_mode", "auto") == "semi_auto":
                 publish_candidate_state(
@@ -426,7 +446,7 @@ class LiveCentralController:
         else:
             decisions = _decide_buys_with_selection_metric(candidates, ledger, alloc, self.selection_scores)
         logger.info(
-            "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=%s decisions=%s open_positions=%s ledger_slots=%s max_positions=%s metric=%s confidence_mode=%s buy_mode=%s sizing_buffer=%.4f reentry_blocked=%s",
+            "[CENTRAL-CONTROL] tick=%s evaluated_symbols=%s candidates=%s decisions=%s open_positions=%s ledger_slots=%s max_positions=%s metric=%s confidence_mode=%s buy_mode=%s sizing_buffer=%.4f reentry_blocked=%s whitelist_skipped=%s",
             self.runner.stats.market_ticks,
             evaluated_symbols,
             len(candidates),
@@ -439,6 +459,7 @@ class LiveCentralController:
             getattr(self, "buy_mode", "auto"),
             alloc.order_notional_safety_buffer,
             skipped_reentry_symbols,
+            skipped_whitelist_symbols,
         )
         if getattr(self, "buy_mode", "auto") == "semi_auto":
             self._process_semi_auto_decisions(decisions, candidate_signal_by_entity, candidate_price_by_entity)

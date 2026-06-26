@@ -1071,22 +1071,10 @@ async function drawChart(ticker, interval, opts){
       // 자동 갱신: 사용자가 보던 줌/스크롤 범위를 유지한다.
       chart.timeScale().setVisibleLogicalRange(savedRange);
     }else{
-      // 최초 열기/타임프레임 전환: 기존 초기 범위 설정을 유지한다.
+      // 최초 열기/타임프레임 전환: 진입 마커 위치가 아니라 interval별 최근 n봉 기준으로 범위를 잡는다.
       const visibleBars = {'1m':80, '5m':80, '15m':70, '60m':60, '1d':120};
-      const n = visibleBars[interval];
-      if(entryMarkerHit && intraday){
-        const hitIdx = candles.findIndex(c=>c.time===entryMarkerHit.time);
-        if(hitIdx >= 0){
-          chart.timeScale().setVisibleLogicalRange({
-            from: Math.max(0, hitIdx - 10),
-            to: candles.length + 2,
-          });
-        }else if(n && candles.length > n){
-          chart.timeScale().setVisibleLogicalRange({ from: candles.length - n, to: candles.length + 2 });
-        }else{
-          chart.timeScale().fitContent();
-        }
-      }else if(n && candles.length > n){
+      const n = visibleBars[interval] || 0;
+      if(n && candles.length > n){
         chart.timeScale().setVisibleLogicalRange({ from: candles.length - n, to: candles.length + 2 });
       }else{
         chart.timeScale().fitContent();

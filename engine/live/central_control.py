@@ -40,7 +40,10 @@ from engine.live.manual_buy_intent import (
     trade_date_et,
 )
 from engine.live.position_manager import TRADE_LOG_PATH
-from engine.strategies.demo_rulebook import Signal
+from engine.market.context import get_market_context
+from engine.strategies.demo_rulebook import Signal, SignalResult
+from engine.strategies.evaluator import evaluate_signal
+from engine.strategies.rulebook import Rulebook
 
 logger = logging.getLogger("live_central_control")
 
@@ -152,8 +155,8 @@ class LiveCentralController:
         self._log_confidence_preview()
 
     def _load_entities(self) -> list[EntityRecord]:
-        symbols = {normalize_ticker(t) for t in getattr(self.runner, "symbols", []) or []}
-        if not symbols:
+        base_symbols = {normalize_ticker(t) for t in getattr(self.runner, "symbols", []) or []}
+        if not base_symbols:
             raise RuntimeError("central-control requires a non-empty promoted symbol universe")
         confidence_path = Path(self.config.entity_confidence_path)
         if not confidence_path.exists():
@@ -168,14 +171,14 @@ class LiveCentralController:
         report = load_stage2_survivors_with_report(
             self.config.central_index_path,
             self.config.batch_root,
-            tickers=symbols,
+            tickers=base_symbols,
         )
         entities = apply_confidence_metric(report.entities, "profit_factor")
         stage2_filtered: list[EntityRecord] = []
         for entity in entities:
             if entity.entity_id not in allowed_ids:
                 continue
-            if normalize_ticker(entity.ticker) not in symbols:
+            if normalize_ticker(entity.ticker) not in base_symbols:
                 continue
             if self.confidence_mode == "raw":
                 entity = self._apply_stored_raw_confidence(entity, confidence_rows)
@@ -183,7 +186,7 @@ class LiveCentralController:
                 entity = self._apply_adjusted_confidence(entity)
             stage2_filtered.append(entity)
 
-        stage3_filtered = self._load_stage3_mix_entities(symbols)
+        stage3_filtered = self._load_stage3_mix_entities()
         filtered = _dedupe_entities_by_id([*stage2_filtered, *stage3_filtered])
         logger.warning(
             "[CENTRAL-CONTROL] entity pool loaded stage2=%s stage3_mix=%s total=%s unique_tickers=%s",
@@ -195,11 +198,11 @@ class LiveCentralController:
         if not filtered:
             raise RuntimeError(
                 "central-control promoted ∩ central survivor pool is empty "
-                f"(symbols={len(symbols)}, stage2_loaded={report.loaded}, stage3_mix={len(stage3_filtered)})"
+                f"(base_symbols={len(base_symbols)}, stage2_loaded={report.loaded}, stage3_mix={len(stage3_filtered)})"
             )
         return filtered
 
-    def _load_stage3_mix_entities(self, symbols: set[str]) -> list[EntityRecord]:
+    def _load_stage3_mix_entities(self) -> list[EntityRecord]:
         if not bool(getattr(self.config, "stage3_mix_enabled", False)):
             return []
         path = Path(getattr(self.config, "stage3_live_pool_path", DEFAULT_STAGE3_LIVE_POOL_PATH))
@@ -210,7 +213,7 @@ class LiveCentralController:
         limit = max(0, int(getattr(self.config, "stage3_pool_limit", 0) or 0))
         for entity in entities:
             ticker = normalize_ticker(entity.ticker)
-            if ticker not in symbols:
+            if not ticker:
                 continue
             tags = dict(getattr(entity, "tags", {}) or {})
             tags["stage"] = "stage3_live_pool"
@@ -313,7 +316,9 @@ class LiveCentralController:
         skipped_reentry_symbols = 0
         trade_date = self._trade_date_et()
         same_day_blocked_tickers = self._same_day_reentry_blocked_tickers(trade_date)
-        eligible_symbols = sorted(set(getattr(self.runner, "symbols", []) or []) & set(self.entity_by_ticker))
+        # Stage2 entities are filtered by the promoted live universe, but Stage3
+        # live-pool entities intentionally expand the central BUY evaluation universe.
+        eligible_symbols = sorted(set(self.entity_by_ticker))
         for ticker in eligible_symbols:
             ticker_u = normalize_ticker(ticker)
             if ticker_u in same_day_blocked_tickers:
@@ -329,11 +334,14 @@ class LiveCentralController:
                 continue
             evaluated_symbols += 1
             self.runner._maybe_reconfirm_existing(ticker, float(price))
-            sig = self.runner.rulebook.evaluate(ticker, float(price))
-            if sig.signal == Signal.BUY:
-                self.runner.stats.signals_buy += 1
-                strength = _signal_strength(sig)
-                for entity in self.entity_by_ticker.get(ticker, []):
+            ticker_had_buy = False
+            ticker_had_sell = False
+            last_hold_reason = ""
+            for entity in self.entity_by_ticker.get(ticker, []):
+                sig = self._evaluate_entity_signal(entity, float(price))
+                if sig.signal == Signal.BUY:
+                    ticker_had_buy = True
+                    strength = _signal_strength(sig)
                     cand = BuyCandidate(
                         entity_id=entity.entity_id,
                         ticker=entity.ticker,
@@ -347,14 +355,18 @@ class LiveCentralController:
                     candidates.append(cand)
                     candidate_signal_by_entity[entity.entity_id] = sig
                     candidate_price_by_entity[entity.entity_id] = float(price)
-            elif sig.signal == Signal.SELL:
-                # 중앙통제기는 신규 BUY 선정/배분 전용이다. SELL authority는
-                # PositionManager.check_exits() 경로에만 남겨 기존 포지션을 보호한다.
+                elif sig.signal == Signal.SELL:
+                    ticker_had_sell = True
+                    logger.info("[CENTRAL-CONTROL] %s SELL signal ignored; exits are PositionManager-only entity=%s", ticker, entity.entity_id)
+                else:
+                    last_hold_reason = str(getattr(sig, "reason", "") or "")
+            if ticker_had_buy:
+                self.runner.stats.signals_buy += 1
+            elif ticker_had_sell:
                 self.runner.stats.signals_sell += 1
-                logger.info("[CENTRAL-CONTROL] %s SELL signal ignored; exits are PositionManager-only", ticker)
             else:
                 self.runner.stats.signals_hold += 1
-                logger.debug("[CENTRAL-CONTROL] %s HOLD: %s", ticker, sig.reason)
+                logger.debug("[CENTRAL-CONTROL] %s HOLD: %s", ticker, last_hold_reason)
 
         if skipped_reentry_symbols:
             logger.info(
@@ -408,6 +420,126 @@ class LiveCentralController:
             sig = candidate_signal_by_entity.get(decision.entity_id)
             price = candidate_price_by_entity.get(decision.entity_id, 0.0)
             self._execute_decision(decision, sig, price, execution_reason="auto")
+
+    def _evaluate_entity_signal(self, entity: EntityRecord, price: float) -> SignalResult:
+        if str((getattr(entity, "tags", {}) or {}).get("stage") or "") != "stage3_live_pool":
+            return self.runner.rulebook.evaluate(entity.ticker, float(price))
+        return self._evaluate_stage3_entity_signal(entity, float(price))
+
+    def _evaluate_stage3_entity_signal(self, entity: EntityRecord, price: float) -> SignalResult:
+        ticker = normalize_ticker(entity.ticker)
+        try:
+            rb = Rulebook.from_dict(dict(getattr(entity, "rulebook", {}) or {}))
+            rb.ticker = ticker
+        except Exception as exc:
+            logger.warning("[CENTRAL-CONTROL][STAGE3] %s rulebook 변환 실패 entity=%s: %s", ticker, entity.entity_id, exc)
+            return SignalResult(ticker=ticker, signal=Signal.HOLD, price=price, reason=f"stage3 rulebook invalid: {exc}")
+
+        provider = getattr(self.runner, "rulebook", None)
+        try:
+            df = provider._get_ohlcv(ticker) if provider is not None and hasattr(provider, "_get_ohlcv") else None
+        except Exception as exc:
+            logger.warning("[CENTRAL-CONTROL][STAGE3] %s OHLCV 조회 실패 entity=%s: %s", ticker, entity.entity_id, exc)
+            return SignalResult(ticker=ticker, signal=Signal.HOLD, price=price, reason=f"stage3 OHLCV failed: {exc}")
+        try:
+            if df is not None and "ATR" in df.columns and len(df) > 0 and provider is not None:
+                if hasattr(provider, "_last_atr"):
+                    provider._last_atr[ticker] = float(df["ATR"].iloc[-1])
+                if hasattr(provider, "_rulebook_by_ticker"):
+                    provider._rulebook_by_ticker[ticker] = rb
+        except Exception as exc:
+            logger.warning("[CENTRAL-CONTROL][STAGE3] %s ATR/rulebook 캐시 실패 entity=%s: %s", ticker, entity.entity_id, exc)
+
+        if df is None or len(df) < 60:
+            return SignalResult(ticker=ticker, signal=Signal.HOLD, price=price, reason="Stage3 OHLCV 데이터 부족")
+
+        try:
+            ctx = get_market_context()
+        except Exception as exc:
+            logger.warning("[CENTRAL-CONTROL][STAGE3] MarketContext 로드 실패, 중립 사용: %s", exc)
+            ctx = None
+        if ctx is not None:
+            market_score = float(getattr(ctx, "score", 50.0) or 50.0)
+            sector_strength = getattr(ctx, "sector_strength", {}) or {}
+            sector_score = float(sector_strength.get(str(getattr(rb, "sector_name", "") or ""), 50.0))
+            vix_level = float(getattr(ctx, "vix_level", 18.0) or 18.0)
+            context_timestamp = str(getattr(ctx, "timestamp", "") or "")
+        else:
+            market_score, sector_score, vix_level, context_timestamp = 50.0, 50.0, 18.0, ""
+        try:
+            if provider is not None and hasattr(provider, "_last_market_context"):
+                provider._last_market_context[ticker] = {
+                    "score": market_score,
+                    "market_score": market_score,
+                    "vix_level": vix_level,
+                    "sector_score": sector_score,
+                    "sector_strength": {str(getattr(rb, "sector_name", "") or ""): sector_score},
+                    "timestamp": context_timestamp,
+                }
+        except Exception:
+            pass
+
+        news_normalized = 0.0
+        topic_features = {}
+        try:
+            if provider is not None and hasattr(provider, "_signal_date") and hasattr(provider, "_lookup_lagged_news_context"):
+                signal_date = provider._signal_date(df)
+                news_normalized, topic_features, _news_note = provider._lookup_lagged_news_context(ticker, rb, signal_date)
+                if not isinstance(topic_features, dict):
+                    topic_features = {}
+        except Exception as exc:
+            logger.warning("[CENTRAL-CONTROL][STAGE3] %s 뉴스 context 실패 entity=%s: %s", ticker, entity.entity_id, exc)
+            news_normalized, topic_features = 0.0, {}
+
+        event_flags = None
+        try:
+            active = getattr(ctx, "active_events", {}) or {} if ctx is not None else {}
+            event_flags = {
+                "has_war": int("전쟁" in active),
+                "has_rate_hike": int("금리정책_인상" in active),
+                "has_rate_cut": int("금리정책_인하" in active),
+                "has_geopolitical": int("지정학_긴장" in active),
+                "has_tariff": int("관세" in active),
+                "has_export_ban": int("수출규제" in active),
+                "has_earnings_shock": int("실적쇼크" in active),
+                "has_oil_surge": int("유가급등" in active),
+                "has_banking_crisis": int("은행위기" in active),
+                "has_inflation": int("인플레이션" in active),
+                "has_fed_statement": int("연준발언" in active),
+            }
+        except Exception:
+            event_flags = None
+
+        try:
+            res = evaluate_signal(
+                rb=rb,
+                df=df,
+                market_score=market_score,
+                sector_score=sector_score,
+                vix_level=vix_level,
+                news_sentiment=float(news_normalized or 0.0),
+                event_flags=event_flags,
+                topic_features=topic_features,
+            )
+        except Exception as exc:
+            logger.error("[CENTRAL-CONTROL][STAGE3] %s evaluate_signal 실패 entity=%s: %s", ticker, entity.entity_id, exc)
+            return SignalResult(ticker=ticker, signal=Signal.HOLD, price=price, reason=f"stage3 evaluate 예외: {exc}")
+
+        reason = (
+            f"[stage3 {rb.direction}] score={res.score:.2f}/threshold={res.threshold:.2f} "
+            f"raw={res.raw_score:.2f} mkt_adj×{res.market_adjustment:.2f} entity={entity.entity_id} "
+            f"reasons=[{', '.join(list(res.reasons or [])[:4])}]"
+        )
+        kwargs = {
+            "score": float(res.score),
+            "raw_score": float(res.raw_score),
+            "threshold": float(res.threshold),
+            "market_adjustment": float(res.market_adjustment),
+            "reasons": list(res.reasons or []),
+        }
+        if res.should_buy:
+            return SignalResult(ticker=ticker, signal=Signal.BUY, price=price, reason=reason, **kwargs)
+        return SignalResult(ticker=ticker, signal=Signal.HOLD, price=price, reason=f"미달 {reason}", **kwargs)
 
     def _same_day_reentry_blocked_tickers(self, trade_date: str) -> set[str]:
         """Tickers that must not be re-entered on the same US trading day.

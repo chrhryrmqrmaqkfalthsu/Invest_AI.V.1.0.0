@@ -1,7 +1,10 @@
 import json
-from pathlib import Path
 
-from engine.live.central_control import _adjusted_confidence_from_metrics
+from engine.live.central_control import (
+    LiveCentralControlConfig,
+    LiveCentralController,
+    _adjusted_confidence_from_metrics,
+)
 from scripts.research.build_stage3_live_pool import (
     FilterConfig,
     build_stage3_live_pool,
@@ -83,6 +86,21 @@ def test_build_stage3_live_pool_writes_filtered_repository(tmp_path):
     assert payload["ticker"] == "AAA"
     assert payload["rank"] == 1
     assert payload["live_pool_filter"]["version"] == "stage3_live_pool_v1"
+
+
+def test_stage3_mix_loader_adds_pool_tickers_outside_promoted_symbols(tmp_path):
+    pool = tmp_path / "stage3_live_pool.jsonl"
+    rows = [_catalog_row("AAA", rank=1), _catalog_row("ZZZ", rank=1)]
+    pool.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    ctl = LiveCentralController.__new__(LiveCentralController)
+    ctl.config = LiveCentralControlConfig(stage3_mix_enabled=True, stage3_live_pool_path=pool)
+    ctl.confidence_mode = "adjusted"
+    ctl._apply_adjusted_confidence = LiveCentralController._apply_adjusted_confidence.__get__(ctl, LiveCentralController)
+
+    loaded = ctl._load_stage3_mix_entities()
+
+    assert sorted(entity.ticker for entity in loaded) == ["AAA", "ZZZ"]
+    assert all(entity.tags["stage"] == "stage3_live_pool" for entity in loaded)
 
 
 def test_adjusted_confidence_uses_stage3_labels_when_legacy_labels_missing():

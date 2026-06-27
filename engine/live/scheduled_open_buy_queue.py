@@ -421,7 +421,38 @@ class NextOpenBuyCoordinator:
         live_holdings = [h for h in holdings if float(getattr(h, "shares", 0.0) or 0.0) > 1e-6]
         if live_holdings:
             return False, f"broker_positions_not_empty:{len(live_holdings)}"
+        try:
+            open_orders_getter = getattr(self.controller.runner.broker, "get_open_orders", None)
+            if not callable(open_orders_getter):
+                return False, "broker_open_orders_unavailable"
+            open_orders = list(open_orders_getter() or [])
+        except Exception as exc:
+            return False, f"broker_open_orders_unavailable:{exc}"
+        live_open_orders = [o for o in open_orders if str(getattr(getattr(o, "status", ""), "value", getattr(o, "status", "")) or "").lower() in {"pending", "partial"}]
+        if live_open_orders:
+            return False, f"broker_open_orders_not_empty:{len(live_open_orders)}"
         return True, "flat"
+
+    def _post_order_queue_status(self, decision: BuyDecision) -> tuple[str, str, dict[str, Any] | None]:
+        ticker = normalize_ticker(decision.ticker)
+        expected_hash = str(decision.entity_id or "").split("_", 1)[1] if "_" in str(decision.entity_id or "") else ""
+        try:
+            pos = self.controller.runner.position_manager.get(ticker)
+        except Exception:
+            pos = None
+        if pos is not None:
+            actual_hash = str(getattr(pos, "member_hash", "") or "")
+            if expected_hash and actual_hash and not actual_hash.startswith(expected_hash):
+                return "blocked", f"position_member_hash_mismatch expected={expected_hash} actual={actual_hash[:12]}", None
+            return "executed", "position_registered", {"member_hash": actual_hash}
+        pending_mgr = getattr(self.controller.runner, "pending_order_manager", None)
+        if pending_mgr is not None:
+            try:
+                if pending_mgr.has_pending_buy(ticker):
+                    return "submitted", "pending_buy_waiting_for_fill_reconcile", None
+            except Exception:
+                return "submitted", "order_attempted_pending_state_unreadable", None
+        return "submitted", "order_attempted_awaiting_fill_reconcile", None
 
     def execute_queue(self, *, execution_session: date | None = None) -> dict[str, Any]:
         execution_session = execution_session or current_or_next_session(self.market_clock, self._now_et())
@@ -471,8 +502,17 @@ class NextOpenBuyCoordinator:
                 blocked += 1
                 continue
             if ok:
-                mark_item_status(payload, candidate_id, "executed", fills={"reference_price": reference_price, "executed_at": _utc_now_iso()})
-                executed += 1
+                status, note, fills = self._post_order_queue_status(decision)
+                fill_payload = {"reference_price": reference_price, "order_attempted_at": _utc_now_iso()}
+                if fills:
+                    fill_payload.update(fills)
+                mark_item_status(payload, candidate_id, status, note=note, fills=fill_payload)
+                if status == "executed":
+                    executed += 1
+                elif status == "submitted":
+                    executed += 1
+                else:
+                    blocked += 1
             else:
                 mark_item_status(payload, candidate_id, "blocked", note="runner blocked or did not attempt order")
                 blocked += 1

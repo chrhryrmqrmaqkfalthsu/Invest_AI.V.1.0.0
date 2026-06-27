@@ -89,7 +89,7 @@ class Controller:
             rulebook=RulebookProvider(last_date),
             position_manager=SimpleNamespace(all=lambda: []),
             pending_order_manager=SimpleNamespace(all=lambda: []),
-            broker=SimpleNamespace(get_holdings=lambda: [], get_current_price=lambda ticker: 101.0),
+            broker=SimpleNamespace(get_holdings=lambda: [], get_open_orders=lambda: [], get_current_price=lambda ticker: 101.0),
         )
         self.executed = []
         self.tmp_path = tmp_path
@@ -229,3 +229,22 @@ def test_execute_queue_executes_pending_items_when_flat(tmp_path: Path, monkeypa
     assert controller.executed[0][0].entity_id == "AAA_abc123def456"
     assert controller.executed[0][0].rulebook["stop_loss_atr"] == 1.0
     assert controller.executed[0][2] == "next_open_queue"
+
+
+
+def test_execute_queue_waits_when_broker_open_orders_exist(tmp_path: Path, monkeypatch):
+    _patch_point_in_time_eval(monkeypatch)
+    controller = Controller(tmp_path, last_date=date(2026, 6, 26))
+    controller.runner.broker = SimpleNamespace(
+        get_holdings=lambda: [],
+        get_open_orders=lambda: [SimpleNamespace(status="pending")],
+        get_current_price=lambda ticker: 101.0,
+    )
+    coordinator = NextOpenBuyCoordinator(controller=controller, market_clock=Clock(), queue_path=tmp_path / "queue.json")
+    coordinator.prepare_queue(execution_session=date(2026, 6, 29))
+
+    result = coordinator.execute_queue(execution_session=date(2026, 6, 29))
+
+    assert result["status"] == "waiting_for_clear"
+    assert result["reason"] == "broker_open_orders_not_empty:1"
+    assert controller.executed == []

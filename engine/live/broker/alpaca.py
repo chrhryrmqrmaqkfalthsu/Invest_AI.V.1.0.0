@@ -10,8 +10,8 @@ from typing import Any, List, Optional, Tuple
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockLatestTradeRequest
 from alpaca.trading.client import TradingClient
-from alpaca.trading.enums import OrderSide as AlpacaOrderSide, TimeInForce
-from alpaca.trading.requests import LimitOrderRequest, MarketOrderRequest
+from alpaca.trading.enums import OrderSide as AlpacaOrderSide, QueryOrderStatus, TimeInForce
+from alpaca.trading.requests import GetOrdersRequest, LimitOrderRequest, MarketOrderRequest
 from dotenv import dotenv_values
 
 from .base import Balance, Broker, BrokerError, Holding, Order, OrderSide, OrderStatus, OrderType
@@ -188,6 +188,13 @@ class AlpacaBroker(Broker):
         except Exception as e:
             log.warning(f"Alpaca get_order 실패 {order_id}: {e}")
             return None
+
+    def get_open_orders(self) -> List[Order]:
+        try:
+            rows = self.trading.get_orders(filter=GetOrdersRequest(status=QueryOrderStatus.OPEN))
+            return [self._map(row) for row in rows or []]
+        except Exception as e:
+            raise BrokerError(f"Alpaca get_open_orders 실패: {e}") from e
 
     def get_order_by_client_order_id_result(self, client_order_id: str) -> Tuple[str, Optional[Order]]:
         cid = str(client_order_id or "").strip()

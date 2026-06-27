@@ -72,7 +72,7 @@ class BuyReconciliationService:
         if filled_price <= 0:
             raise RuntimeError(f"{ticker} BUY reconciliation 실패: filled_avg_price 없음")
 
-        metadata = preflight or self.preflight(ticker)
+        metadata = preflight or self.preflight_from_pending_order(order) or self.preflight(ticker)
         purpose_lower = str(purpose or "entry").lower()
         if purpose_lower == "add_buy":
             updated = self.position_manager.add_to_position(
@@ -102,6 +102,39 @@ class BuyReconciliationService:
         if hasattr(self.position_manager, "get") and self.position_manager.get(ticker) is None:
             raise RuntimeError(f"{ticker} BUY 체결 후 PositionEntry 검증 실패")
         return created
+
+    def preflight_from_pending_order(self, order: Order) -> Optional[BuyPreflight]:
+        if self.pending_manager is None:
+            return None
+        getter = getattr(self.pending_manager, "get_record", None)
+        if not callable(getter):
+            return None
+        record = getter(str(getattr(order, "order_id", "") or ""))
+        if record is None:
+            return None
+        return self.preflight_from_metadata(str(getattr(order, "ticker", "") or ""), dict(getattr(record, "metadata", {}) or {}))
+
+    def preflight_from_metadata(self, ticker: str, metadata: dict | None) -> Optional[BuyPreflight]:
+        payload = dict(metadata or {})
+        rb_payload = payload.get("selected_rulebook") or payload.get("rulebook_override") or payload.get("rulebook")
+        if not isinstance(rb_payload, dict) or not rb_payload:
+            return None
+        try:
+            rulebook = Rulebook.from_dict(dict(rb_payload))
+        except Exception as exc:
+            log.error("%s pending rulebook metadata 복원 실패: %s", ticker, exc)
+            return None
+        try:
+            atr = float(payload.get("preflight_atr") or payload.get("atr") or 0.0)
+        except Exception:
+            atr = 0.0
+        if atr <= 0.0:
+            log.error("%s pending rulebook metadata ATR 없음/무효: %s", ticker, atr)
+            return None
+        context = payload.get("entry_market_context")
+        if not isinstance(context, dict):
+            context = None
+        return BuyPreflight(atr=float(atr), rulebook=rulebook, entry_market_context=context)
 
     def track_failure(
         self,

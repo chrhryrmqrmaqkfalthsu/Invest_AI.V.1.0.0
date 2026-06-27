@@ -166,6 +166,14 @@ class Broker(ABC):
         """주문 상태 조회"""
         ...
 
+    def get_open_orders(self) -> List[Order]:
+        """브로커 미체결 주문 전체 조회.
+
+        실브로커 구현체는 반드시 override해야 한다. 기본 구현은 즉시체결형
+        모의 브로커 호환을 위해 빈 목록을 반환한다.
+        """
+        return []
+
     def get_order_by_client_order_id(self, client_order_id: str) -> Optional[Order]:
         """BN-2: client_order_id 기반 복구 조회. 미지원 브로커는 None."""
         return None

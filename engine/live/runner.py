@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
+from engine.core.metadata import compute_member_hash
 from engine.live.approval_manager import ApprovalManager, classify_strength
 from engine.live.broker.base import Broker, OrderStatus, OrderType
 from engine.live.buy_reconciliation import BuyPreflight, BuyReconciliationService
@@ -856,6 +857,38 @@ class Runner:
         except Exception as e:
             logger.error(f"{ticker} _maybe_request_approval 예외: {e}")
 
+    def _buy_preflight_metadata(self, preflight: Optional[BuyPreflight]) -> dict:
+        if preflight is None:
+            return {}
+        rb = getattr(preflight, "rulebook", None)
+        if rb is None:
+            return {}
+        try:
+            rb_dict = rb.to_dict() if hasattr(rb, "to_dict") else dict(rb)
+        except Exception:
+            rb_dict = {}
+        if not isinstance(rb_dict, dict) or not rb_dict:
+            return {}
+        out = {
+            "selected_rulebook": dict(rb_dict),
+            "selected_rulebook_hash": compute_member_hash(dict(rb_dict)),
+            "preflight_atr": float(getattr(preflight, "atr", 0.0) or 0.0),
+        }
+        ctx = getattr(preflight, "entry_market_context", None)
+        if isinstance(ctx, dict):
+            out["entry_market_context"] = dict(ctx)
+        return out
+
+    def _buy_preflight_from_pending_record(self, record) -> Optional[BuyPreflight]:
+        try:
+            return self._get_buy_reconciler().preflight_from_metadata(
+                str(getattr(record, "ticker", "") or ""),
+                dict(getattr(record, "metadata", {}) or {}),
+            )
+        except Exception as exc:
+            logger.error("[PENDING-BUY-PREFLIGHT-RESTORE-ERROR] %s: %s", getattr(record, "order_id", ""), exc)
+            return None
+
     def _notify_trade_entry(self, order, *, signal_result=None, raw_reason: str = "", rulebook=None, position_entry=None) -> None:
         """BUY 체결 후 실제 PositionEntry 값으로 정본 진입 알림을 보낸다."""
         try:
@@ -934,6 +967,7 @@ class Runner:
         if side == "BUY":
             reserved_notional = self.order_notional if self.order_notional and self.order_notional > 0 else order_shares * price
             order_metadata["reserved_notional"] = float(reserved_notional or 0.0)
+            order_metadata.update(self._buy_preflight_metadata(buy_preflight))
 
         try:
             order = self._submit_order_with_intent(
@@ -1046,8 +1080,9 @@ class Runner:
             return
         self.safety.record_fill(order, side, purpose=purpose)
         if side == "buy":
+            pending_preflight = self._buy_preflight_from_pending_record(record)
             try:
-                result = self._get_buy_reconciler().reconcile(order, purpose=purpose)
+                result = self._get_buy_reconciler().reconcile(order, purpose=purpose, preflight=pending_preflight)
             except Exception as reconcile_exc:
                 self._get_buy_reconciler().track_failure(
                     order,
@@ -1068,7 +1103,7 @@ class Runner:
                 self._notify_trade_entry(
                     order,
                     raw_reason=str(metadata.get("reason", "") or ""),
-                    rulebook=None,
+                    rulebook=pending_preflight.rulebook if pending_preflight else None,
                     position_entry=result,
                 )
             logger.info("[BUY-RECONCILED] %s purpose=%s result=%s", order.ticker, purpose, result)

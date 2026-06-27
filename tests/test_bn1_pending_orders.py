@@ -266,3 +266,143 @@ def test_11_paper_like_immediate_filled_regression_no_pending_file(tmp_path):
     assert order.status == OrderStatus.FILLED
     assert pending.track_order(order, purpose="entry") is None
     assert not (tmp_path / "pending.json").exists()
+
+
+
+def test_12_pending_buy_reconcile_uses_stored_selected_rulebook_not_ticker_fallback(monkeypatch, tmp_path):
+    patch_position_paths(monkeypatch, tmp_path)
+    from engine.core.metadata import compute_member_hash
+    from engine.strategies.rulebook import Rulebook
+
+    runner = Runner.__new__(Runner)
+    runner.safety = SimpleNamespace(record_fill=lambda *a, **k: None)
+    runner.notifier = FakeNotifier()
+    runner.broker = FakeBroker(price=100.0, shares=1.0)
+    runner.approval_manager = SimpleNamespace(get_request=lambda rid: None, _save=lambda: None)
+    runner.position_manager = PositionManager()
+
+    selected_rulebook = {
+        "ticker": "AAA",
+        "asset_type": "us_stock",
+        "direction": "long",
+        "version": "v5",
+        "signal_threshold": 1.0,
+        "stop_loss_atr": 6.0,
+        "take_profit_atr": 9.0,
+        "trailing_atr": 2.0,
+        "max_holding_days": 7,
+        "exit_strategy": "fixed",
+        "fitness": 10.0,
+        "win_rate": 60.0,
+        "trade_count": 20,
+    }
+
+    class FallbackProvider:
+        def get_last_atr(self, ticker):
+            raise AssertionError("ticker-scoped preflight fallback must not be called")
+
+        def get_rulebook(self, ticker):
+            raise AssertionError("ticker-scoped rulebook fallback must not be called")
+
+        def get_last_market_context(self, ticker):
+            return None
+
+    runner.rulebook = FallbackProvider()
+    path = tmp_path / "pending.json"
+    runner.pending_order_manager = PendingOrderManager(runner.broker, path=path)
+    runner.buy_reconciler = runner._make_buy_reconciler()
+    record = runner.pending_order_manager.track_order(
+        make_order("B1", side=OrderSide.BUY, status=OrderStatus.PENDING, shares=1.0),
+        purpose="entry",
+        metadata={
+            "selected_rulebook": selected_rulebook,
+            "selected_rulebook_hash": compute_member_hash(selected_rulebook),
+            "preflight_atr": 1.5,
+            "entry_market_context": {"score": 66.0},
+        },
+    )
+    order = make_order("B1", side=OrderSide.BUY, status=OrderStatus.FILLED, filled=1.0, price=100.0)
+
+    runner._finalize_pending_order(record, order)
+
+    pos = runner.position_manager.get("AAA")
+    assert pos is not None
+    assert pos.member_hash == compute_member_hash(Rulebook.from_dict(selected_rulebook))
+    assert pos.rulebook_snapshot["take_profit_atr"] == 9.0
+    assert pos.atr_at_entry == 1.5
+
+
+
+def test_13_try_order_persists_selected_rulebook_metadata_for_pending_buy(monkeypatch, tmp_path):
+    patch_position_paths(monkeypatch, tmp_path)
+    from engine.core.metadata import compute_member_hash
+    from engine.strategies.rulebook import Rulebook
+
+    selected_rulebook = {
+        "ticker": "AAA",
+        "asset_type": "us_stock",
+        "direction": "long",
+        "version": "v5",
+        "signal_threshold": 1.0,
+        "stop_loss_atr": 4.0,
+        "take_profit_atr": 8.0,
+        "trailing_atr": 2.0,
+        "max_holding_days": 6,
+        "exit_strategy": "fixed",
+        "fitness": 10.0,
+        "win_rate": 60.0,
+        "trade_count": 20,
+    }
+    expected_hash = compute_member_hash(Rulebook.from_dict(selected_rulebook))
+
+    class PendingBuyBroker(FakeBroker):
+        @property
+        def mode(self):
+            return "alpaca_paper"
+
+        def place_buy(self, ticker, shares, order_type=OrderType.MARKET, price=0.0, client_order_id=""):
+            self.buy_calls += 1
+            order = Order(
+                f"B{self.buy_calls}", ticker, OrderSide.BUY, order_type,
+                shares, price, OrderStatus.PENDING, 0.0, 0.0,
+                client_order_id=client_order_id,
+            )
+            self.orders[order.order_id] = order
+            return order
+
+    class Provider:
+        def get_last_atr(self, ticker):
+            return 1.7
+
+        def get_rulebook(self, ticker):
+            raise AssertionError("ticker-scoped fallback must not be called when override is supplied")
+
+        def get_last_market_context(self, ticker):
+            return {"score": 61.0}
+
+    runner = Runner.__new__(Runner)
+    runner.stats = SimpleNamespace(orders_attempted=0, orders_blocked=0, orders_filled=0, market_ticks=3)
+    runner.safety = SimpleNamespace(
+        check_order=lambda *a, **k: SimpleNamespace(allowed=True, code="", reason=""),
+        record_order=lambda *a, **k: None,
+    )
+    runner.notifier = FakeNotifier()
+    runner.broker = PendingBuyBroker(price=100.0, shares=0.0)
+    runner.order_notional = 1000.0
+    runner.order_shares = 1.0
+    runner.rulebook = Provider()
+    runner.position_manager = PositionManager()
+    runner.approval_manager = SimpleNamespace(get_request=lambda rid: None, _save=lambda: None)
+    runner.pending_order_manager = PendingOrderManager(runner.broker, path=tmp_path / "pending.json")
+    runner.buy_reconciler = runner._make_buy_reconciler()
+    runner._tick_locked_tickers = set()
+
+    runner._try_order("BUY", "AAA", 100.0, "central_control test", rulebook_override=selected_rulebook)
+
+    records = runner.pending_order_manager.all()
+    assert len(records) == 1
+    meta = records[0].metadata
+    assert meta["selected_rulebook_hash"] == expected_hash
+    assert meta["selected_rulebook"]["take_profit_atr"] == 8.0
+    assert meta["preflight_atr"] == 1.7
+    assert meta["entry_market_context"]["score"] == 61.0

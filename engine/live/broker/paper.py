@@ -379,6 +379,27 @@ class PaperBroker(Broker):
                 )
         return None
 
+    def get_open_orders(self) -> List[Order]:
+        out: List[Order] = []
+        for o in self._state.get("orders", []):
+            try:
+                status = OrderStatus(o.get("status"))
+            except Exception:
+                continue
+            if status not in {OrderStatus.PENDING, OrderStatus.PARTIAL}:
+                continue
+            out.append(Order(
+                order_id=o["order_id"], ticker=o["ticker"],
+                side=OrderSide(o["side"]), order_type=OrderType(o["order_type"]),
+                shares=o["shares"], price=o["price"],
+                status=status, filled_shares=o.get("filled_shares", 0.0),
+                filled_avg_price=o.get("filled_avg_price", 0.0),
+                commission=o.get("commission", 0.0),
+                submitted_at=o.get("submitted_at", ""), filled_at=o.get("filled_at", ""),
+                message=o.get("message", ""),
+            ))
+        return out
+
     # ---------- 유틸 ----------
     def reset(self, initial_cash: float = DEFAULT_INITIAL_CASH) -> None:
         """페이퍼 상태 초기화 (테스트용)"""

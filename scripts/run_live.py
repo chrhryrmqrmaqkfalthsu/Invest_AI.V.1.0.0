@@ -6,6 +6,7 @@ run_live.py - 라이브 트레이딩 봇 엔트리포인트.
     ├─ once         → Runner.startup_check
     ├─ market_hours → Runner.tick_market → holding-news refresh
     ├─ interval     → Runner.tick_offmarket
+    ├─ interval     → next_open pre-open selection / open execution checks
     ├─ cron         → 장마감 일일 보고
     ├─ cron         → 주간 보고
     └─ cron         → 월간 보고
@@ -44,6 +45,10 @@ from engine.live.exit_policy_guard import validate_startup_exit_policy
 from engine.live.market_clock import select_market_clock, validate_broker_market_compatibility
 from engine.live.runner import Runner
 from engine.live.safety.layer import SafetyLayer
+from engine.live.scheduled_open_buy_queue import (
+    DEFAULT_SCHEDULED_OPEN_BUY_QUEUE_PATH,
+    NextOpenBuyCoordinator,
+)
 from engine.live.scheduler import Scheduler
 from engine.live.telegram.dashboard import install_position_dashboard
 from engine.live.telegram.notifier import TelegramNotifier
@@ -257,7 +262,11 @@ def main():
     parser.add_argument("--universe", choices=["promoted", "parameters"], default="promoted")
     parser.add_argument("--promotion-id", default=DEFAULT_LIVE_PROMOTION_ID)
     parser.add_argument("--central-control", choices=["on", "off"], default="off", help="신규 BUY만 중앙통제기 선정/배분으로 전환")
-    parser.add_argument("--buy-mode", choices=["auto", "semi_auto"], default="auto", help="central-control BUY 실행 방식: auto=즉시 실행, semi_auto=후보 대기 후 수동 intent 또는 15:30 ET fallback")
+    parser.add_argument("--buy-timing-mode", choices=["next_open"], default="next_open", help="BUY timing: D-1 종가 선별 후 D일 open queue 집행만 허용")
+    parser.add_argument("--preopen-select-minutes-before-open", type=int, default=10)
+    parser.add_argument("--open-buy-delay-sec", type=int, default=5)
+    parser.add_argument("--scheduled-buy-queue-path", default=str(DEFAULT_SCHEDULED_OPEN_BUY_QUEUE_PATH))
+    parser.add_argument("--buy-mode", choices=["auto", "semi_auto"], default="auto", help="legacy/intraday central BUY mode. next_open에서는 즉시 BUY에 사용하지 않음")
     parser.add_argument("--central-selection-metric", choices=["confidence", "turnover_score"], default="confidence")
     parser.add_argument("--central-confidence-mode", choices=["raw", "adjusted"], default="adjusted", help="central confidence 산식: raw=기존 PF 평균, adjusted=PF cap+min trades neutral guard")
     parser.add_argument("--central-pf-cap", type=float, default=10.0, help="adjusted confidence의 구간별 profit_factor 상한")
@@ -339,6 +348,7 @@ def main():
         universe_config=universe.config,
     )
     install_legacy_buy_guard(runner)
+    next_open_coordinator = None
     if _central_control_enabled(args.central_control):
         broker_mode = str(getattr(broker, "mode", "") or "").lower()
         if broker_mode not in {"paper", "alpaca_paper"}:
@@ -364,9 +374,22 @@ def main():
             central_stage3_min_confidence=float(args.central_stage3_min_confidence),
         )
         central_controller = LiveCentralController(runner, central_config)
-        runner.tick_market = central_controller.tick_market
+        if args.buy_timing_mode == "next_open":
+            next_open_coordinator = NextOpenBuyCoordinator(
+                controller=central_controller,
+                market_clock=clock,
+                queue_path=Path(args.scheduled_buy_queue_path),
+                preopen_select_minutes_before_open=int(args.preopen_select_minutes_before_open),
+                open_buy_delay_sec=int(args.open_buy_delay_sec),
+            )
+            logger.warning(
+                "[NEXT-OPEN] ON: regular-hours central BUY disabled; preopen D-1 close selection → D open queue execution path=%s preopen_min=%s open_delay_sec=%s",
+                args.scheduled_buy_queue_path,
+                args.preopen_select_minutes_before_open,
+                args.open_buy_delay_sec,
+            )
         logger.warning(
-            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s order_notional_safety_buffer=%.4f universe=promoted∩central pool_limit=%s stage3_mix=%s stage3_pool_path=%s stage3_pool_limit=%s strength_cap=%s stage3_strength_cap=%s stage3_min_confidence=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
+            "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s buy_timing_mode=%s order_notional_safety_buffer=%.4f universe=promoted∩central pool_limit=%s stage3_mix=%s stage3_pool_path=%s stage3_pool_limit=%s strength_cap=%s stage3_strength_cap=%s stage3_min_confidence=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",
             args.central_selection_metric,
             args.central_confidence_mode,
             args.central_pf_cap,
@@ -374,6 +397,7 @@ def main():
             args.central_max_positions,
             args.central_position_sizing,
             args.buy_mode,
+            args.buy_timing_mode,
             sizing_buffer,
             args.central_pool_limit,
             args.central_stage3_mix,
@@ -406,6 +430,19 @@ def main():
     scheduler.add_once_job(func=runner.startup_check, delay_sec=2, job_id="startup_check")
     scheduler.add_market_hours_job(func=make_holding_news_tick_market_job(runner), interval_sec=args.market_tick, market=clock, job_id="tick_market")
     scheduler.add_interval_job(func=runner.tick_offmarket, interval_sec=args.offmarket_tick, job_id="tick_offmarket", name="tick_offmarket")
+    if next_open_coordinator is not None:
+        scheduler.add_interval_job(
+            func=next_open_coordinator.prepare_if_due,
+            interval_sec=60,
+            job_id="next_open_prepare_queue",
+            name="next_open_prepare_queue",
+        )
+        scheduler.add_interval_job(
+            func=next_open_coordinator.execute_if_due,
+            interval_sec=max(5, min(60, int(args.market_tick or 60))),
+            job_id="next_open_execute_queue",
+            name="next_open_execute_queue",
+        )
 
     def daily_report_job():
         return send_daily_report_from_runner(runner)

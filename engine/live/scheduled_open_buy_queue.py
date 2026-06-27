@@ -141,6 +141,20 @@ def _close_price(df) -> float:
         return 0.0
 
 
+def _queue_payload_status(*, executed: int, submitted: int, blocked: int) -> str:
+    if blocked > 0:
+        if executed > 0 or submitted > 0:
+            return "partial_or_blocked"
+        return "blocked"
+    if submitted > 0:
+        if executed > 0:
+            return "partial_submitted"
+        return "submitted"
+    if executed > 0:
+        return "executed"
+    return "empty"
+
+
 class _EmptyLedger:
     def open_positions(self):
         return []
@@ -254,7 +268,7 @@ class NextOpenBuyCoordinator:
         payload = load_queue(self.queue_path)
         if any(
             str(row.get("execution_session") or "") == execution_session.isoformat()
-            and str(row.get("status") or "") in {"pending", "executed", "blocked"}
+            and str(row.get("status") or "") in {"pending", "submitted", "executed", "blocked"}
             for row in payload.get("items", []) or []
             if isinstance(row, dict)
         ):
@@ -466,6 +480,7 @@ class NextOpenBuyCoordinator:
             return {"status": "waiting_for_clear", "reason": reason, "pending": len(rows)}
 
         executed = 0
+        submitted = 0
         blocked = 0
         for row in rows:
             candidate_id = str(row.get("candidate_id") or "")
@@ -510,13 +525,20 @@ class NextOpenBuyCoordinator:
                 if status == "executed":
                     executed += 1
                 elif status == "submitted":
-                    executed += 1
+                    submitted += 1
                 else:
                     blocked += 1
             else:
                 mark_item_status(payload, candidate_id, "blocked", note="runner blocked or did not attempt order")
                 blocked += 1
-        payload["status"] = "executed" if blocked == 0 else "partial_or_blocked"
+        payload["status"] = _queue_payload_status(executed=executed, submitted=submitted, blocked=blocked)
         save_queue(payload, self.queue_path)
-        log.warning("[NEXT-OPEN] queue execution complete executed=%s blocked=%s path=%s", executed, blocked, self.queue_path)
-        return {"status": payload["status"], "executed": executed, "blocked": blocked}
+        log.warning(
+            "[NEXT-OPEN] queue execution complete executed=%s submitted=%s blocked=%s status=%s path=%s",
+            executed,
+            submitted,
+            blocked,
+            payload["status"],
+            self.queue_path,
+        )
+        return {"status": payload["status"], "executed": executed, "submitted": submitted, "blocked": blocked}

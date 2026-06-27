@@ -4,3 +4,4 @@
 - 2026-06-28 `8b0c9cb` — feat/next-open-buy-timing: D-1 종가 선별 → D open 집행용 scheduled open buy queue, 거래일 helper, run_live next_open wiring, 큐/타이밍 테스트 추가.
 - 2026-06-28 `af00c08` — feat/next-open-buy-timing: next_open 평가에서 fresh get_market_context 호출을 제거하고 get_market_history + 백테스트 _lookup_signal_context 기반 D-1 point-in-time market/news context로 고정.
 - 2026-06-28 `d6f7b54` — feat/next-open-buy-timing: pending BUY 정산 경로에 선택 entity rulebook/ATR/context를 영속 저장·복원하고 broker open order 가드를 next_open flat guard에 추가.
+- 2026-06-28 `TBD` — feat/next-open-buy-timing: central/next_open pending 정산 metadata 누락·손상 시 ticker fallback을 금지하는 fail-closed와 submitted/executed 큐 상태 정확화, Broker 기본 open-order 조회 fail-closed 적용.

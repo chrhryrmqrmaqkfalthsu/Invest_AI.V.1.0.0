@@ -9,6 +9,7 @@ import pandas as pd
 
 from engine.central.allocation_policy import AllocationParams
 from engine.live import scheduled_open_buy_queue as queue_mod
+from engine.live.broker.base import Balance, Broker, BrokerError, Holding, Order, OrderSide, OrderStatus, OrderType
 from engine.live.scheduled_open_buy_queue import NextOpenBuyCoordinator, load_queue
 
 ET = ZoneInfo("America/New_York")
@@ -87,8 +88,8 @@ class Controller:
         self.selection_scores = {}
         self.runner = SimpleNamespace(
             rulebook=RulebookProvider(last_date),
-            position_manager=SimpleNamespace(all=lambda: []),
-            pending_order_manager=SimpleNamespace(all=lambda: []),
+            position_manager=SimpleNamespace(all=lambda: [], get=lambda ticker: None),
+            pending_order_manager=SimpleNamespace(all=lambda: [], has_pending_buy=lambda ticker: False),
             broker=SimpleNamespace(get_holdings=lambda: [], get_open_orders=lambda: [], get_current_price=lambda ticker: 101.0),
         )
         self.executed = []
@@ -112,6 +113,36 @@ class Controller:
     def _execute_decision(self, decision, signal_result, price, *, execution_reason="auto", manual_intent_id=""):
         self.executed.append((decision, price, execution_reason))
         return True
+
+
+class BrokerWithoutOpenOrders(Broker):
+    @property
+    def mode(self):
+        return "paper"
+
+    def get_balance(self):
+        return Balance(cash_krw=0, total_value_krw=0, invested_krw=0, holdings=[])
+
+    def get_holdings(self):
+        return []
+
+    def get_current_price(self, ticker):
+        return 101.0
+
+    def is_market_open(self, ticker=None):
+        return True
+
+    def place_buy(self, ticker, shares, order_type=OrderType.MARKET, price=0.0, client_order_id=""):
+        return Order("B1", ticker, OrderSide.BUY, order_type, shares, price, OrderStatus.PENDING)
+
+    def place_sell(self, ticker, shares, order_type=OrderType.MARKET, price=0.0, client_order_id=""):
+        return Order("S1", ticker, OrderSide.SELL, order_type, shares, price, OrderStatus.PENDING)
+
+    def cancel_order(self, order_id):
+        return False
+
+    def get_order(self, order_id):
+        return None
 
 
 def _market_history():
@@ -217,19 +248,53 @@ def test_execute_queue_waits_until_positions_holdings_and_pending_are_flat(tmp_p
     assert controller.executed == []
 
 
-def test_execute_queue_executes_pending_items_when_flat(tmp_path: Path, monkeypatch):
+def test_execute_queue_submitted_item_keeps_queue_submitted_not_executed(tmp_path: Path, monkeypatch):
     _patch_point_in_time_eval(monkeypatch)
     controller = Controller(tmp_path, last_date=date(2026, 6, 26))
+    pending = SimpleNamespace(active=False)
+    controller.runner.pending_order_manager = SimpleNamespace(
+        all=lambda: [],
+        has_pending_buy=lambda ticker: pending.active,
+    )
+
+    def submit_only(decision, signal_result, price, *, execution_reason="auto", manual_intent_id=""):
+        pending.active = True
+        controller.executed.append((decision, price, execution_reason))
+        return True
+
+    controller._execute_decision = submit_only
     coordinator = NextOpenBuyCoordinator(controller=controller, market_clock=Clock(), queue_path=tmp_path / "queue.json")
     coordinator.prepare_queue(execution_session=date(2026, 6, 29))
 
     result = coordinator.execute_queue(execution_session=date(2026, 6, 29))
+    payload = load_queue(tmp_path / "queue.json")
 
+    assert result["status"] == "submitted"
+    assert result["executed"] == 0
+    assert result["submitted"] == 1
+    assert result["blocked"] == 0
+    assert payload["status"] == "submitted"
+    assert payload["items"][0]["status"] == "submitted"
+    assert payload["items"][0]["note"] == "pending_buy_waiting_for_fill_reconcile"
+
+
+def test_execute_queue_marks_executed_only_when_position_registered(tmp_path: Path, monkeypatch):
+    _patch_point_in_time_eval(monkeypatch)
+    controller = Controller(tmp_path, last_date=date(2026, 6, 26))
+    position = SimpleNamespace(member_hash="abc123def456")
+    controller.runner.position_manager = SimpleNamespace(all=lambda: [], get=lambda ticker: position)
+    coordinator = NextOpenBuyCoordinator(controller=controller, market_clock=Clock(), queue_path=tmp_path / "queue.json")
+    coordinator.prepare_queue(execution_session=date(2026, 6, 29))
+
+    result = coordinator.execute_queue(execution_session=date(2026, 6, 29))
+    payload = load_queue(tmp_path / "queue.json")
+
+    assert result["status"] == "executed"
     assert result["executed"] == 1
-    assert controller.executed[0][0].entity_id == "AAA_abc123def456"
-    assert controller.executed[0][0].rulebook["stop_loss_atr"] == 1.0
-    assert controller.executed[0][2] == "next_open_queue"
-
+    assert result["submitted"] == 0
+    assert payload["status"] == "executed"
+    assert payload["items"][0]["status"] == "executed"
+    assert payload["items"][0]["fills"]["member_hash"] == "abc123def456"
 
 
 def test_execute_queue_waits_when_broker_open_orders_exist(tmp_path: Path, monkeypatch):
@@ -247,4 +312,18 @@ def test_execute_queue_waits_when_broker_open_orders_exist(tmp_path: Path, monke
 
     assert result["status"] == "waiting_for_clear"
     assert result["reason"] == "broker_open_orders_not_empty:1"
+    assert controller.executed == []
+
+
+def test_execute_queue_waits_when_broker_open_orders_api_is_not_implemented(tmp_path: Path, monkeypatch):
+    _patch_point_in_time_eval(monkeypatch)
+    controller = Controller(tmp_path, last_date=date(2026, 6, 26))
+    controller.runner.broker = BrokerWithoutOpenOrders()
+    coordinator = NextOpenBuyCoordinator(controller=controller, market_clock=Clock(), queue_path=tmp_path / "queue.json")
+    coordinator.prepare_queue(execution_session=date(2026, 6, 29))
+
+    result = coordinator.execute_queue(execution_session=date(2026, 6, 29))
+
+    assert result["status"] == "waiting_for_clear"
+    assert result["reason"].startswith("broker_open_orders_unavailable:")
     assert controller.executed == []

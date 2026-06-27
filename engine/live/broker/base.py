@@ -169,10 +169,11 @@ class Broker(ABC):
     def get_open_orders(self) -> List[Order]:
         """브로커 미체결 주문 전체 조회.
 
-        실브로커 구현체는 반드시 override해야 한다. 기본 구현은 즉시체결형
-        모의 브로커 호환을 위해 빈 목록을 반환한다.
+        override하지 않은 브로커는 미체결 주문을 안전하게 알 수 없으므로
+        빈 목록으로 통과시키지 않고 fail-closed로 멈춘다. 즉시체결형/실브로커는
+        각 구현체에서 명시적으로 override해야 한다.
         """
-        return []
+        raise BrokerError(f"{self.__class__.__name__}.get_open_orders is not implemented")
 
     def get_order_by_client_order_id(self, client_order_id: str) -> Optional[Order]:
         """BN-2: client_order_id 기반 복구 조회. 미지원 브로커는 None."""

@@ -21,6 +21,7 @@ DEFAULT_MAX_RECONCILE_RETRIES = 3
 DEFAULT_EMPTY_HOLDING_CONFIRM_SECONDS = 10
 ZERO_HOLDING_COUNT_KEY = "zero_holding_seen_count"
 ZERO_HOLDING_FIRST_SEEN_KEY = "zero_holding_first_seen_at"
+CENTRAL_REASON_PREFIX = "central_control"
 
 
 @dataclass(frozen=True)
@@ -72,7 +73,15 @@ class BuyReconciliationService:
         if filled_price <= 0:
             raise RuntimeError(f"{ticker} BUY reconciliation 실패: filled_avg_price 없음")
 
-        metadata = preflight or self.preflight_from_pending_order(order) or self.preflight(ticker)
+        pending_metadata = self.pending_metadata_for_order(order)
+        metadata = preflight or self.preflight_from_metadata(ticker, pending_metadata)
+        if metadata is None:
+            if self.requires_selected_rulebook_metadata(order, purpose, pending_metadata):
+                raise RuntimeError(
+                    f"{ticker} BUY reconciliation fail-closed: central/next_open entry selected_rulebook metadata 없음/복원 실패; "
+                    "ticker-scoped rulebook fallback 금지"
+                )
+            metadata = self.preflight(ticker)
         purpose_lower = str(purpose or "entry").lower()
         if purpose_lower == "add_buy":
             updated = self.position_manager.add_to_position(
@@ -103,16 +112,20 @@ class BuyReconciliationService:
             raise RuntimeError(f"{ticker} BUY 체결 후 PositionEntry 검증 실패")
         return created
 
-    def preflight_from_pending_order(self, order: Order) -> Optional[BuyPreflight]:
+    def pending_metadata_for_order(self, order: Order) -> dict:
         if self.pending_manager is None:
-            return None
+            return {}
         getter = getattr(self.pending_manager, "get_record", None)
         if not callable(getter):
-            return None
+            return {}
         record = getter(str(getattr(order, "order_id", "") or ""))
         if record is None:
-            return None
-        return self.preflight_from_metadata(str(getattr(order, "ticker", "") or ""), dict(getattr(record, "metadata", {}) or {}))
+            return {}
+        metadata = getattr(record, "metadata", {}) or {}
+        return dict(metadata) if isinstance(metadata, dict) else {}
+
+    def preflight_from_pending_order(self, order: Order) -> Optional[BuyPreflight]:
+        return self.preflight_from_metadata(str(getattr(order, "ticker", "") or ""), self.pending_metadata_for_order(order))
 
     def preflight_from_metadata(self, ticker: str, metadata: dict | None) -> Optional[BuyPreflight]:
         payload = dict(metadata or {})
@@ -135,6 +148,19 @@ class BuyReconciliationService:
         if not isinstance(context, dict):
             context = None
         return BuyPreflight(atr=float(atr), rulebook=rulebook, entry_market_context=context)
+
+    def requires_selected_rulebook_metadata(self, order: Order, purpose: str, metadata: dict | None = None) -> bool:
+        purpose_lower = str(purpose or "").strip().lower()
+        if purpose_lower not in {"entry", ""}:
+            return False
+        payload = dict(metadata or {})
+        reason = str(payload.get("reason") or "").strip().lower()
+        if reason.startswith(CENTRAL_REASON_PREFIX) or "next_open" in reason:
+            return True
+        if payload.get("entity_id") or payload.get("selected_rulebook_hash"):
+            return True
+        client_id = str(getattr(order, "client_order_id", "") or "").strip().lower()
+        return "central" in client_id or "next_open" in client_id
 
     def track_failure(
         self,

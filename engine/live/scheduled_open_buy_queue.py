@@ -11,7 +11,7 @@ import logging
 from dataclasses import asdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -19,8 +19,17 @@ import pandas as pd
 from engine.central.allocation_policy import BuyCandidate, BuyDecision, decide_buys
 from engine.central.backtester import _decide_buys_with_selection_metric
 from engine.central.models import normalize_ticker
+from engine.learning.backtest import (
+    FEATURE_LAG_DAYS,
+    _lookup_signal_context,
+    _news_zscore_window,
+    _precompute_topic_feature_map,
+)
 from engine.live.trading_day import current_or_next_session, previous_session_date, session_open_dt
-from engine.strategies.demo_rulebook import Signal
+from engine.market.context import get_market_history
+from engine.strategies.demo_rulebook import Signal, SignalResult
+from engine.strategies.evaluator import evaluate_signal
+from engine.strategies.rulebook import Rulebook
 
 log = logging.getLogger("live.scheduled_open_buy_queue")
 
@@ -161,6 +170,80 @@ class NextOpenBuyCoordinator:
         except Exception:
             return datetime.now(ET)
 
+    def _ticker_sentiment_for(self, provider: Any, ticker: str) -> dict | None:
+        if provider is not None and hasattr(provider, "_load_ticker_sentiment"):
+            try:
+                data = provider._load_ticker_sentiment(ticker)
+                return data if isinstance(data, dict) else None
+            except Exception as exc:
+                log.warning("[NEXT-OPEN] %s ticker_sentiment load failed: %s", ticker, exc)
+        return None
+
+    def _evaluate_entity_signal_point_in_time(
+        self,
+        *,
+        entity,
+        df,
+        price: float,
+        provider: Any,
+        market_history_df,
+    ) -> SignalResult:
+        """Evaluate an entity using the same lagged context path as backtests.
+
+        This method deliberately does not call engine.market.context.get_market_context().
+        The signal date is the final guarded D-1 daily bar in ``df``; market,
+        sector, VIX, ticker sentiment, and topic features are looked up through
+        the backtest-safe ``_lookup_signal_context`` helper.
+        """
+        ticker = normalize_ticker(getattr(entity, "ticker", ""))
+        rb = Rulebook.from_dict(dict(getattr(entity, "rulebook", {}) or {}))
+        idx = len(df) - 1
+        ticker_sentiment = self._ticker_sentiment_for(provider, ticker)
+        topic_feature_map = _precompute_topic_feature_map(ticker_sentiment, _news_zscore_window(rb))
+        sector_name = str(getattr(rb, "sector_name", "") or "tech")
+        market_score, sector_score, vix_level, news_sentiment, event_flags, topic_features = _lookup_signal_context(
+            df=df,
+            idx=idx,
+            market_score=50.0,
+            sector_score=50.0,
+            vix_level=18.0,
+            market_history_df=market_history_df,
+            sector_name=sector_name,
+            ticker_sentiment=ticker_sentiment,
+            topic_feature_map=topic_feature_map,
+            use_llm_events=False,
+        )
+        try:
+            res = evaluate_signal(
+                rb=rb,
+                df=df,
+                market_score=market_score,
+                sector_score=sector_score,
+                vix_level=vix_level,
+                news_sentiment=float(news_sentiment or 0.0),
+                event_flags=event_flags,
+                topic_features=topic_features,
+            )
+        except Exception as exc:
+            log.warning("[NEXT-OPEN] %s evaluate_signal failed entity=%s: %s", ticker, getattr(entity, "entity_id", ""), exc)
+            return SignalResult(ticker=ticker, signal=Signal.HOLD, price=price, reason=f"next_open evaluate 예외: {exc}")
+
+        reason = (
+            f"[next_open d-1 lagged {rb.direction}] score={res.score:.2f}/threshold={res.threshold:.2f} "
+            f"raw={res.raw_score:.2f} mkt_adj×{res.market_adjustment:.2f} entity={getattr(entity, 'entity_id', '')} "
+            f"lag_days={FEATURE_LAG_DAYS} reasons=[{', '.join(list(res.reasons or [])[:4])}]"
+        )
+        kwargs = {
+            "score": float(res.score),
+            "raw_score": float(res.raw_score),
+            "threshold": float(res.threshold),
+            "market_adjustment": float(res.market_adjustment),
+            "reasons": list(res.reasons or []),
+        }
+        if res.should_buy:
+            return SignalResult(ticker=ticker, signal=Signal.BUY, price=price, reason=reason, **kwargs)
+        return SignalResult(ticker=ticker, signal=Signal.HOLD, price=price, reason=f"미달 {reason}", **kwargs)
+
     def prepare_if_due(self) -> dict[str, Any]:
         now = self._now_et()
         execution_session = current_or_next_session(self.market_clock, now)
@@ -185,6 +268,7 @@ class NextOpenBuyCoordinator:
         if provider is None or not hasattr(provider, "_get_ohlcv"):
             raise RuntimeError("next-open selection requires runner.rulebook._get_ohlcv")
 
+        market_history_df = get_market_history()
         candidates: list[BuyCandidate] = []
         signal_by_entity: dict[str, Any] = {}
         price_by_entity: dict[str, float] = {}
@@ -217,7 +301,13 @@ class NextOpenBuyCoordinator:
                 continue
             evaluated_symbols += 1
             for entity in self.controller.entity_by_ticker.get(ticker_u, []):
-                sig = self.controller._evaluate_entity_signal(entity, price)
+                sig = self._evaluate_entity_signal_point_in_time(
+                    entity=entity,
+                    df=df,
+                    price=price,
+                    provider=provider,
+                    market_history_df=market_history_df,
+                )
                 if sig.signal != Signal.BUY:
                     continue
                 confidence = float(getattr(entity, "confidence", 0.0) or 0.0)
@@ -283,17 +373,20 @@ class NextOpenBuyCoordinator:
                 "decision_count": len(decisions),
                 "skipped_count": len(skipped),
                 "skipped": skipped[:200],
+                "market_history_source": "engine.market.context.get_market_history",
+                "feature_lag_days": FEATURE_LAG_DAYS,
             },
         }
         save_queue(payload, self.queue_path)
         log.warning(
-            "[NEXT-OPEN] queue prepared execution_session=%s signal_session=%s candidates=%s decisions=%s skipped=%s path=%s",
+            "[NEXT-OPEN] queue prepared execution_session=%s signal_session=%s candidates=%s decisions=%s skipped=%s path=%s lag_days=%s context=get_market_history",
             execution_session,
             signal_session,
             len(candidates),
             len(decisions),
             len(skipped),
             self.queue_path,
+            FEATURE_LAG_DAYS,
         )
         return {"status": payload["status"], "decision_count": len(decisions), "candidate_count": len(candidates), "skipped_count": len(skipped)}
 

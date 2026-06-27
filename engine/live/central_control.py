@@ -509,8 +509,9 @@ class LiveCentralController:
         return strength, orig_strength, ""
 
     def _evaluate_entity_signal(self, entity: EntityRecord, price: float) -> SignalResult:
-        if str((getattr(entity, "tags", {}) or {}).get("stage") or "") != "stage3_live_pool":
-            return self.runner.rulebook.evaluate(entity.ticker, float(price))
+        # Evaluate the exact entity rulebook selected by central control.
+        # Falling back to ticker-scoped parameters.json here can make selection
+        # and execution disagree when one ticker has multiple Stage2 entities.
         return self._evaluate_stage3_entity_signal(entity, float(price))
 
     def _evaluate_stage3_entity_signal(self, entity: EntityRecord, price: float) -> SignalResult:
@@ -532,7 +533,7 @@ class LiveCentralController:
             if df is not None and "ATR" in df.columns and len(df) > 0 and provider is not None:
                 if hasattr(provider, "_last_atr"):
                     provider._last_atr[ticker] = float(df["ATR"].iloc[-1])
-                if hasattr(provider, "_rulebook_by_ticker"):
+                if str((getattr(entity, "tags", {}) or {}).get("stage") or "") == "stage3_live_pool" and hasattr(provider, "_rulebook_by_ticker"):
                     provider._rulebook_by_ticker[ticker] = rb
         except Exception as exc:
             logger.warning("[CENTRAL-CONTROL][STAGE3] %s ATR/rulebook 캐시 실패 entity=%s: %s", ticker, entity.entity_id, exc)

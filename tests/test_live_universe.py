@@ -13,11 +13,34 @@ from engine.live.market_clock import select_market_clock  # noqa: E402
 from engine.live.runner import Runner  # noqa: E402
 from engine.live.universe import (  # noqa: E402
     DEFAULT_LIVE_PROMOTION_ID,
+    LEGACY_STAGE1_PROMOTION_ID,
     LiveUniverseConfig,
     LiveUniverseError,
     load_live_universe,
 )
 from engine.strategies.rulebook import default_rulebook  # noqa: E402
+
+
+LEGACY_STAGE1_TICKERS = (
+    "CAKE",
+    "CRWD",
+    "CW",
+    "EME",
+    "ETR",
+    "HSBC",
+    "ITT",
+    "KT",
+    "LASR",
+    "MPC",
+    "MPLX",
+    "MTB",
+    "NBIX",
+    "WAB",
+    "WELL",
+    "WPM",
+)
+
+CURRENT_STAGE2_SAMPLE_TICKERS = ("AAPL", "GOOGL", "FIX", "ANET")
 
 
 def assert_true(condition: bool, message: str) -> None:
@@ -65,22 +88,32 @@ def test_repository_policy_counts() -> None:
             symbols_dir=symbols_dir,
         )
     )
+    legacy_stage1 = load_live_universe(
+        LiveUniverseConfig(
+            market="US",
+            universe_mode="promoted",
+            promotion_id=LEGACY_STAGE1_PROMOTION_ID,
+            symbols_dir=symbols_dir,
+        )
+    )
     us_parameters = load_live_universe(
         LiveUniverseConfig(market="US", universe_mode="parameters", symbols_dir=symbols_dir)
     )
     krx_parameters = load_live_universe(
         LiveUniverseConfig(market="KRX", universe_mode="parameters", symbols_dir=symbols_dir)
     )
-    assert_true(DEFAULT_LIVE_PROMOTION_ID == "lr8d_stage1_20260609", "default live promotion must be LR8D stage1")
-    assert_true(len(promoted.symbols) == 16, "LR8D stage1 promotion id must select 16 US tickers")
-    assert_true(len(us_parameters.symbols) == 89, "US parameters mode must select 89 tickers")
+    assert_true(DEFAULT_LIVE_PROMOTION_ID == "stage123_stage2_live_20260622", "default live promotion must be dated Stage2 live universe")
+    assert_true(LEGACY_STAGE1_PROMOTION_ID == "lr8d_stage1_20260609", "legacy stage1 id must remain available as a quarantine fence")
+    assert_true(len(promoted.symbols) == 158, "current Stage2 live promotion must select 158 US tickers")
+    assert_true(len(legacy_stage1.symbols) == 16, "legacy LR8D stage1 promotion id must select only the original 16 US tickers")
+    assert_true(len(us_parameters.symbols) == 235, "US parameters mode must select 235 tickers")
     assert_true(len(krx_parameters.symbols) == 4, "KRX parameters mode must select 4 tickers")
-    assert_true("AMD" not in us_parameters.symbols, "parameters-missing AMD must be excluded")
     assert_true("143850" not in krx_parameters.symbols, "parameters-missing 143850 must be excluded")
-    for ticker in ("CAKE", "CRWD", "CW", "EME", "ETR", "HSBC", "ITT", "KT", "LASR", "MPC", "MPLX", "MTB", "NBIX", "WAB", "WELL", "WPM"):
-        assert_true(ticker in promoted.symbols, f"stage1 ticker {ticker} must be promoted")
-    for ticker in ("AAPL", "AMZN", "GOOGL", "NVDA"):
-        assert_true(ticker not in promoted.symbols, f"non-stage1 {ticker} must stay excluded")
+    for ticker in LEGACY_STAGE1_TICKERS:
+        assert_true(ticker in legacy_stage1.symbols, f"stage1 ticker {ticker} must remain quarantined in legacy promotion")
+    for ticker in CURRENT_STAGE2_SAMPLE_TICKERS:
+        assert_true(ticker in promoted.symbols, f"Stage2 materialized ticker {ticker} must be in current live promotion")
+        assert_true(ticker not in legacy_stage1.symbols, f"non-stage1 {ticker} must stay excluded from legacy promotion")
         assert_true(ticker in us_parameters.symbols, f"parameters mode must include {ticker}")
 
 

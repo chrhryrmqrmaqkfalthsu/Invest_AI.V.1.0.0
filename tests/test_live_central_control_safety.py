@@ -182,7 +182,8 @@ def test_central_control_never_emits_sell_order():
     ctl._process_central_buy_selection()
 
     assert runner.orders == []
-    assert runner.stats.signals_sell == 1
+    assert runner.stats.signals_buy == 0
+    assert runner.stats.signals_sell == 0
 
 
 def test_position_manager_load_error_blocks_central_new_buy(tmp_path, monkeypatch):

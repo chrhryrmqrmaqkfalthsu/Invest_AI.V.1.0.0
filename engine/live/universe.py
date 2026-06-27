@@ -15,7 +15,15 @@ from typing import Any, Mapping
 from engine.live.market_clock import market_region_for_ticker
 from engine.strategies.rulebook import Rulebook
 
-DEFAULT_LIVE_PROMOTION_ID = "lr8d_stage1_20260609"
+# ``lr8d_stage1_20260609`` originally meant the strict-K3 16 ticker stage-1
+# paper universe.  Later local Stage2 materialization reused that same id in
+# ignored ``data/symbols`` files, which made the approval boundary ambiguous.
+# Keep the old id as a legacy fence and expose the current live Stage2 universe
+# through an explicit date/run based id.
+LEGACY_STAGE1_PROMOTION_ID = "lr8d_stage1_20260609"
+LEGACY_STAGE1_SOURCE_RUN_ID = "lr8d_abcd_20260608"
+DEFAULT_LIVE_PROMOTION_ID = "stage123_stage2_live_20260622"
+DEFAULT_LIVE_SOURCE_RUN_ID = "stage123_2009_20260616_full"
 DEFAULT_SYMBOLS_DIR = Path("data/symbols")
 VALID_MARKETS = {"US", "KRX"}
 VALID_UNIVERSE_MODES = {"promoted", "parameters"}
@@ -173,6 +181,48 @@ def _validate_parameters(ticker: str, path: Path, payload: Mapping[str, Any]) ->
     return ticker_region, promotion_id
 
 
+def _promotion_mapping(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    promotion = payload.get("promotion")
+    return promotion if isinstance(promotion, Mapping) else {}
+
+
+def _promotion_source_run_id(payload: Mapping[str, Any]) -> str:
+    promotion = _promotion_mapping(payload)
+    selection = promotion.get("selection") if isinstance(promotion.get("selection"), Mapping) else {}
+    selected_member = promotion.get("selected_member") if isinstance(promotion.get("selected_member"), Mapping) else {}
+    for value in (
+        promotion.get("source_run_id"),
+        selection.get("run_id"),
+        selected_member.get("source_run_id"),
+    ):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _promotion_matches(requested_id: str | None, actual_id: str | None, payload: Mapping[str, Any]) -> bool:
+    """Return whether a parameter payload belongs to the requested live fence.
+
+    The current Stage2 live universe is deliberately exposed under a new
+    date/run based id even when local ignored parameters still carry the old
+    stage-1 promotion id.  Conversely, the legacy stage-1 id only admits the
+    original 16 strict-K3 exports and rejects later Stage2 materializations that
+    reused the same id.
+    """
+    requested = str(requested_id or "").strip()
+    actual = str(actual_id or "").strip()
+    source_run_id = _promotion_source_run_id(payload)
+
+    if requested == DEFAULT_LIVE_PROMOTION_ID:
+        return actual == DEFAULT_LIVE_PROMOTION_ID or (
+            actual == LEGACY_STAGE1_PROMOTION_ID and source_run_id == DEFAULT_LIVE_SOURCE_RUN_ID
+        )
+    if requested == LEGACY_STAGE1_PROMOTION_ID:
+        return actual == LEGACY_STAGE1_PROMOTION_ID and source_run_id == LEGACY_STAGE1_SOURCE_RUN_ID
+    return bool(requested) and actual == requested
+
+
 def load_live_universe(config: LiveUniverseConfig) -> LiveUniverseResult:
     """Load a strictly validated single-market live universe.
 
@@ -203,12 +253,13 @@ different market, missing parameters, or a different promotion id are
         if region != config.market:
             excluded.append({"ticker": ticker, "reason": "MARKET_FILTER", "region": region})
             continue
-        if config.universe_mode == "promoted" and promotion_id != config.promotion_id:
+        if config.universe_mode == "promoted" and not _promotion_matches(config.promotion_id, promotion_id, payload):
             excluded.append(
                 {
                     "ticker": ticker,
                     "reason": "PROMOTION_ID_MISMATCH",
                     "promotion_id": promotion_id,
+                    "source_run_id": _promotion_source_run_id(payload),
                 }
             )
             continue

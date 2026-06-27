@@ -59,6 +59,7 @@ class BuyDecision:
     score: float
     confidence: float
     strength: float
+    rulebook: Optional[dict] = None
     purpose: str = "entry"
     target_position_id: str = ""
 
@@ -204,6 +205,7 @@ def decide_buys(buy_candidates: Iterable[BuyCandidate], current_ledger, params: 
                 score=score,
                 confidence=float(cand.confidence or 0.0),
                 strength=float(cand.strength or 0.0),
+                rulebook=dict(cand.rulebook or {}),
                 purpose=purpose,
                 target_position_id=target_position_id,
             )

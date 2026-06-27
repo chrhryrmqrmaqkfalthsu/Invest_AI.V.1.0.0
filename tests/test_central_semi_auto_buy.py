@@ -35,7 +35,7 @@ class Runner:
         self.orders = []
         self.block = block
 
-    def _try_order(self, side, ticker, price, reason, signal_result=None):
+    def _try_order(self, side, ticker, price, reason, signal_result=None, rulebook_override=None):
         self.stats.orders_attempted += 1
         if self.block:
             self.stats.orders_blocked += 1
@@ -48,6 +48,7 @@ class Runner:
                 "reason": reason,
                 "order_notional": self.order_notional,
                 "signal_result": signal_result,
+                "rulebook_override": rulebook_override,
             }
         )
         return None
@@ -73,7 +74,7 @@ def make_controller(tmp_path: Path, *, block: bool = False, now_et: datetime | N
     return ctl, runner, cfg
 
 
-def decision(ticker="AAA", entity_id="AAA_entity", notional=1234.5):
+def decision(ticker="AAA", entity_id="AAA_entity", notional=1234.5, rulebook=None):
     return BuyDecision(
         entity_id=entity_id,
         ticker=ticker,
@@ -82,6 +83,7 @@ def decision(ticker="AAA", entity_id="AAA_entity", notional=1234.5):
         score=2.5,
         confidence=1.5,
         strength=1.0,
+        rulebook=rulebook,
     )
 
 
@@ -105,7 +107,8 @@ def test_semi_auto_publishes_candidates_without_immediate_order(tmp_path):
 
 def test_manual_intent_executes_through_runner_with_central_reason_and_fixed_notional(tmp_path):
     ctl, runner, cfg = make_controller(tmp_path, now_et=datetime(2026, 6, 25, 10, 0, tzinfo=ET))
-    d = decision(notional=2222.0)
+    selected_rulebook = {"ticker": "AAA", "stop_loss_atr": 1.23, "take_profit_atr": 4.56}
+    d = decision(notional=2222.0, rulebook=selected_rulebook)
     ctl._process_semi_auto_decisions([d], {d.entity_id: signal()}, {d.entity_id: 101.0})
     cid = candidate_id_for("2026-06-25", d.entity_id)
     intent = create_manual_buy_intent(candidate_id=cid, candidate_path=cfg.candidate_state_path, intent_path=cfg.manual_intent_path)
@@ -119,6 +122,7 @@ def test_manual_intent_executes_through_runner_with_central_reason_and_fixed_not
     assert order["order_notional"] == 2222.0
     assert "central_control manual_timing" in order["reason"]
     assert intent["intent_id"] in order["reason"]
+    assert order["rulebook_override"] == selected_rulebook
     assert runner.order_notional == 30.0
     intent_state = read_json(cfg.manual_intent_path, {})
     assert intent_state["intents"][intent["intent_id"]]["status"] == "consumed"

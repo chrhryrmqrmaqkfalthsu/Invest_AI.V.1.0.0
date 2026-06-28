@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import gzip, json, re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from engine.live.news_translation import translate_articles_for_dashboard
 
 ROOT = Path(__file__).resolve().parents[2]
-TICKER_NEWS_CACHE_DIR = ROOT / "data" / "_system" / "ticker_news_cache"
-HOLDING_NEWS_CACHE_PATH = ROOT / "data" / "_system" / "holding_news_sentiment_cache.json"
-SYMBOL_DIR = ROOT / "data" / "symbols"
+CACHE = ROOT / "data" / "_system" / "ticker_news_cache"
+SYMS = ROOT / "data" / "symbols"
 SUFFIX = re.compile(r"\b(inc|corp|corporation|class|company|ltd|limited|plc|holdings|holding|common|stock)\b", re.I)
 
 
@@ -63,7 +62,7 @@ def _norm(s: Any):
 
 def _asset_name(t: str):
     try:
-        d = json.load((SYMBOL_DIR / t / "parameters.json").open(encoding="utf-8"))
+        d = json.load((SYMS / t / "parameters.json").open(encoding="utf-8"))
         return str(((d.get("asset_meta") or {}).get("name") or "")).strip()
     except Exception:
         return ""
@@ -95,17 +94,9 @@ def _sent(a: dict, t: str):
     return None
 
 
-def _latest_score_time(t: str):
-    try:
-        d = json.load(HOLDING_NEWS_CACHE_PATH.open(encoding="utf-8"))
-        return str(((d.get("entries") or {}).get(t) or {}).get("latest_article_time_published") or "")
-    except Exception:
-        return ""
-
-
 def _articles(t: str):
     rows = []
-    for p in sorted((TICKER_NEWS_CACHE_DIR / t).glob(f"av_{t}_*.json.gz"), reverse=True)[:8]:
+    for p in sorted((CACHE / t).glob(f"av_{t}_*.json.gz"), reverse=True)[:8]:
         try:
             rows += [x for x in (json.load(gzip.open(p, "rt", encoding="utf-8")).get("feed") or []) if isinstance(x, dict)]
         except Exception: pass
@@ -113,17 +104,20 @@ def _articles(t: str):
 
 
 def articles_for_ticker(ticker: str, *, limit: int = 2, now=None, min_published_at=None, max_detail_lag_days: int = 7):
+    """Return direct ticker/company article snippets for dashboard display.
+
+    These snippets are display-only. They are filtered for direct ticker/company
+    mention so peer articles such as Apple->DELL are excluded. Old direct snippets
+    are still shown as 참고 기사 because the numeric score cache currently does not
+    persist the full fresh AlphaVantage feed.
+    """
     t = str(ticker or "").upper().strip()
-    min_dt = _dt(min_published_at or _latest_score_time(t))
-    floor = min_dt - timedelta(days=max_detail_lag_days) if min_dt else None
     seen, out = set(), []
     for a in _articles(t):
         s = _sent(a, t)
         if not s or not _direct(a, t): continue
         pub_raw = str(a.get("time_published") or "")
         pub_iso = _iso(pub_raw)
-        pub_dt = _dt(pub_iso)
-        if floor and (not pub_dt or pub_dt < floor): continue
         title = _clip(a.get("title"), 180)
         url = str(a.get("url") or "").strip()
         key = url or pub_raw + title.lower()
@@ -132,6 +126,6 @@ def articles_for_ticker(ticker: str, *, limit: int = 2, now=None, min_published_
         sc = _num(s.get("ticker_sentiment_score")) or 0.0
         rel = _num(s.get("relevance_score")); rel = max(0.0, min(1.0, rel if rel is not None else 1.0))
         risk = max(0.0, -sc) * rel
-        out.append({"ticker":t,"title":title,"summary":_summary(a.get("summary")),"url":url,"source":str(a.get("source") or a.get("source_domain") or "").strip(),"published_at":pub_iso,"published_raw":pub_raw,"published_age_hours":_age(pub_iso, now),"sentiment_score":round(sc,6),"sentiment_label":str(s.get("ticker_sentiment_label") or "").strip(),"relevance_score":round(rel,6),"risk_score":round(risk,6),"basis":"latest_direct_with_negative_risk" if risk > 0 else "latest_direct"})
+        out.append({"ticker":t,"title":title,"summary":_summary(a.get("summary")),"url":url,"source":str(a.get("source") or a.get("source_domain") or "").strip(),"published_at":pub_iso,"published_raw":pub_raw,"published_age_hours":_age(pub_iso, now),"sentiment_score":round(sc,6),"sentiment_label":str(s.get("ticker_sentiment_label") or "").strip(),"relevance_score":round(rel,6),"risk_score":round(risk,6),"basis":"display_direct_reference_with_negative_risk" if risk > 0 else "display_direct_reference"})
     out.sort(key=lambda x:(str(x.get("published_at") or ""), float(x.get("risk_score") or 0)), reverse=True)
     return translate_articles_for_dashboard(out[:max(1, int(limit or 1))])

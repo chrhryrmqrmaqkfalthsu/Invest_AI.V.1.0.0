@@ -27,6 +27,7 @@ from engine.live.manual_sell_intent import (
     create_manual_sell_intent,
     load_manual_sell_state,
 )
+from engine.live.news_article_summary import articles_for_ticker as holding_news_articles_for_ticker
 
 BASE_DIR = Path(__file__).resolve().parent
 LOG_DIR = "logs"
@@ -80,6 +81,25 @@ function newsAgeText(hours){
   if(n < 72) return `${n.toFixed(1)}시간 전`;
   return `${(n/24).toFixed(1)}일 전`;
 }
+function renderNewsArticles(articles){
+  const rows = Array.isArray(articles) ? articles.slice(0,2) : [];
+  if(!rows.length) return '<div style="font-size:11px;color:var(--dim);margin-top:6px;">기사 제목/요약 캐시 없음</div>';
+  return `<div style="margin-top:7px;display:flex;flex-direction:column;gap:6px;">${rows.map(a=>{
+    const when = newsAgeText(a.published_age_hours);
+    const sent = a.sentiment_score == null ? '' : `감성 ${Number(a.sentiment_score).toFixed(3)}`;
+    const rel = a.relevance_score == null ? '' : `관련도 ${Number(a.relevance_score).toFixed(2)}`;
+    const risk = a.risk_score == null ? '' : `위험 ${Number(a.risk_score).toFixed(3)}`;
+    const meta = [when || htmlEsc(a.published_at || ''), htmlEsc(a.source || ''), sent, rel, risk].filter(Boolean).join(' · ');
+    const title = htmlEsc(a.title || '제목 없음');
+    const summary = htmlEsc(a.summary || '요약 없음');
+    const href = a.url ? ` href="${htmlEsc(a.url)}" target="_blank" rel="noreferrer"` : '';
+    return `<div style="border-top:1px solid var(--line);padding-top:6px;line-height:1.45;">
+      <div style="font-size:11px;color:var(--dim);">${meta}</div>
+      <a${href} style="color:var(--txt);font-size:12px;font-weight:700;text-decoration:none;">${title}</a>
+      <div style="font-size:11px;color:#8b95a8;margin-top:2px;">${summary}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
 async function loadNews(){
   let n; try{ n=await (await fetch(`${API}/api/live/news`)).json(); }catch(e){ return; }
   const sentiment = n.sentiment || {};
@@ -97,8 +117,8 @@ async function loadNews(){
       latest ? `최신 기사 ${latest}` : '',
       e.source ? `source ${htmlEsc(e.source)}` : ''
     ].filter(Boolean).join(' · ');
-    return `<div class="kv"><span><b>${htmlEsc(e.ticker || '')}</b><br><small style="color:var(--dim)">${sub || '데이터 없음'}</small></span>
-      <span style="color:${rv.color};font-size:17px;font-weight:900">${rv.text}<br><small style="font-size:11px;color:${rv.color}">${rv.label}</small></span></div>`;
+    return `<div class="kv" style="align-items:flex-start;gap:14px;"><span style="flex:1;min-width:0;"><b>${htmlEsc(e.ticker || '')}</b><br><small style="color:var(--dim)">${sub || '데이터 없음'}</small>${renderNewsArticles(e.articles)}</span>
+      <span style="color:${rv.color};font-size:17px;font-weight:900;text-align:right;min-width:64px;">${rv.text}<br><small style="font-size:11px;color:${rv.color}">${rv.label}</small></span></div>`;
   }).join('');
   document.getElementById('news-sentiment').innerHTML=note+(rows||'<div class="loading">보유 종목 뉴스 점수 없음</div>');
 }"""
@@ -358,6 +378,7 @@ def live_news():
     filtered_entries: dict[str, dict] = {}
     for ticker in held_tickers:
         row = raw_entries.get(ticker) if isinstance(raw_entries.get(ticker), dict) else None
+        articles = holding_news_articles_for_ticker(ticker, limit=2, now=now)
         if row is None:
             filtered_entries[ticker] = {
                 "ticker": ticker,
@@ -367,10 +388,15 @@ def live_news():
                 "stale": True,
                 "article_count": 0,
                 "source": "cache_missing",
+                "articles": articles,
             }
             continue
         fetched_age = _age_hours(row.get("fetched_at"), now=now)
-        latest_article_age = _age_hours(row.get("latest_article_time_published"), now=now)
+        cached_articles = row.get("top_articles") if isinstance(row.get("top_articles"), list) else []
+        if cached_articles:
+            articles = cached_articles[:2]
+        latest_article_time = row.get("latest_article_time_published") or (articles[0].get("published_at") if articles else "")
+        latest_article_age = _age_hours(latest_article_time, now=now)
         score = row.get("score")
         filtered_entries[ticker] = {
             **row,
@@ -380,7 +406,9 @@ def live_news():
             "missing": False,
             "stale": fetched_age is None or fetched_age > NEWS_CACHE_STALE_HOURS,
             "fetched_age_hours": fetched_age,
+            "latest_article_time_published": latest_article_time,
             "latest_article_age_hours": latest_article_age,
+            "articles": articles,
         }
     hidden_non_holding = sorted(cache_tickers - held_set)
     return {
@@ -397,6 +425,7 @@ def live_news():
                 "hidden_non_holding_tickers": hidden_non_holding,
                 "held_missing_cache_tickers": [t for t in held_tickers if t not in cache_tickers],
                 "risk_score_basis": "0~1 risk score = max negative AlphaVantage ticker_sentiment_score weighted by relevance; higher means worse news risk",
+                "article_basis": "Shown articles come from cached AlphaVantage ticker news. Ranked by negative ticker sentiment risk, then recency; fallback is newest relevant article.",
                 "risk_thresholds": {"low_lt": NEWS_RISK_LOW, "medium_gte": NEWS_RISK_LOW, "high_gte": NEWS_RISK_HIGH},
                 "refresh_path": "scripts/run_live.py: tick_market -> refresh_holding_news_for_positions",
                 "refresh_default_minutes": 60,

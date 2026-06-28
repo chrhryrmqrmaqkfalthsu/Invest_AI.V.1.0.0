@@ -144,9 +144,9 @@ def test_dashboard_live_news_filters_non_holdings_and_reports_risk_thresholds(tm
         {
           "updated_at": "2026-06-26T19:32:50+00:00",
           "entries": {
-            "AAA": {"ticker":"AAA", "score":0.72, "fetched_at":"2026-06-26T19:30:00+00:00", "article_count":5, "source":"test"},
-            "BBB": {"ticker":"BBB", "score":0.50, "fetched_at":"2026-06-26T19:30:00+00:00", "article_count":4, "source":"test"},
-            "OLD": {"ticker":"OLD", "score":0.90, "fetched_at":"2026-06-26T19:30:00+00:00", "article_count":9, "source":"test"}
+            "AAA": {"ticker":"AAA", "score":0.72, "fetched_at":"2026-06-26T19:30:00+00:00", "article_count":5, "source":"test", "score_logic_version":"direct_asset_v3_recent3d", "max_score_article_age_days":3},
+            "BBB": {"ticker":"BBB", "score":0.50, "fetched_at":"2026-06-26T19:30:00+00:00", "article_count":4, "source":"test", "score_logic_version":"direct_asset_v3_recent3d", "max_score_article_age_days":3},
+            "OLD": {"ticker":"OLD", "score":0.90, "fetched_at":"2026-06-26T19:30:00+00:00", "article_count":9, "source":"test", "score_logic_version":"direct_asset_v3_recent3d", "max_score_article_age_days":3}
           }
         }
         """,
@@ -170,6 +170,32 @@ def test_dashboard_live_news_filters_non_holdings_and_reports_risk_thresholds(tm
     assert meta["held_count"] == 2
     assert meta["hidden_non_holding_count"] == 2
     assert meta["risk_thresholds"] == {"low_lt": 0.3, "medium_gte": 0.3, "high_gte": 0.6}
+
+
+def test_dashboard_live_news_rejects_old_score_logic_cache(tmp_path, monkeypatch):
+    positions_path = tmp_path / "positions.json"
+    news_cache_path = tmp_path / "holding_news_sentiment_cache.json"
+    alerts_path = tmp_path / "news_alert_state.json"
+    positions_path.write_text('{"DDD":{"shares":1,"entry_price":10}}', encoding="utf-8")
+    news_cache_path.write_text(
+        '{"updated_at":"2026-06-26T19:32:50+00:00","entries":{"DDD":{"ticker":"DDD","score":0.95,"fetched_at":"2026-06-26T19:30:00+00:00","article_count":3,"source":"old_logic"}}}',
+        encoding="utf-8",
+    )
+    alerts_path.write_text('{"sell_omen_prealerts": {}}', encoding="utf-8")
+    monkeypatch.setattr(api_server, "POSITIONS_PATH", str(positions_path))
+    monkeypatch.setattr(api_server, "HOLDING_NEWS_CACHE_PATH", str(news_cache_path))
+    monkeypatch.setattr(api_server, "NEWS_ALERT_STATE_PATH", str(alerts_path))
+    client = TestClient(api_server.app)
+
+    res = client.get("/api/live/news")
+
+    assert res.status_code == 200
+    entry = res.json()["sentiment"]["entries"]["DDD"]
+    assert entry["score"] is None
+    assert entry["risk_label"] == "missing"
+    assert entry["score_logic_usable"] is False
+    assert entry["score_unusable_reason"] == "score_logic_version_invalid"
+    assert entry["stale"] is True
 
 
 def test_dashboard_html_is_served_from_single_8001_origin():

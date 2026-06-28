@@ -28,6 +28,7 @@ from engine.live.manual_sell_intent import (
     load_manual_sell_state,
 )
 from engine.live.news_article_summary import articles_for_ticker as holding_news_articles_for_ticker
+from engine.live.holding_news_queue import HOLDING_NEWS_SCORE_LOGIC_VERSION, MAX_SCORE_ARTICLE_AGE_DAYS
 
 BASE_DIR = Path(__file__).resolve().parent
 LOG_DIR = "logs"
@@ -40,6 +41,18 @@ NEWS_ALERT_STATE_PATH = os.path.join(SYS, "news_alert_state.json")
 NEWS_RISK_LOW = 0.30
 NEWS_RISK_HIGH = 0.60
 NEWS_CACHE_STALE_HOURS = 72.0
+
+
+def _holding_news_score_row_usable(row) -> bool:
+    if not isinstance(row, dict):
+        return False
+    if row.get("score_logic_version") != HOLDING_NEWS_SCORE_LOGIC_VERSION:
+        return False
+    try:
+        return int(row.get("max_score_article_age_days") or 0) == MAX_SCORE_ARTICLE_AGE_DAYS
+    except Exception:
+        return False
+
 
 app = FastAPI(title="KINGMAKER Dashboard API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -397,14 +410,17 @@ def live_news():
             articles = cached_articles[:2]
         latest_article_time = row.get("latest_article_time_published") or (articles[0].get("published_at") if articles else "")
         latest_article_age = _age_hours(latest_article_time, now=now)
-        score = row.get("score")
+        score_row_usable = _holding_news_score_row_usable(row)
+        score = row.get("score") if score_row_usable else None
         filtered_entries[ticker] = {
             **row,
             "ticker": ticker,
             "score": score,
             "risk_label": _news_risk_label(score),
             "missing": False,
-            "stale": fetched_age is None or fetched_age > NEWS_CACHE_STALE_HOURS,
+            "stale": (fetched_age is None or fetched_age > NEWS_CACHE_STALE_HOURS or not score_row_usable),
+            "score_logic_usable": score_row_usable,
+            "score_unusable_reason": "" if score_row_usable else "score_logic_version_invalid",
             "fetched_age_hours": fetched_age,
             "latest_article_time_published": latest_article_time,
             "latest_article_age_hours": latest_article_age,

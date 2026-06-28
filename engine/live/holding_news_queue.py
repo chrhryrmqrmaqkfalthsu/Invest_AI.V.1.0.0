@@ -180,9 +180,22 @@ def _asset_aliases(ticker: str) -> set[str]:
     if len(parts) >= 2: out.add(" ".join(parts[:2]))
     return out
 
+def _explicit_short_ticker_mentioned(raw: str, ticker: str) -> bool:
+    t = str(ticker or "").upper().strip()
+    if not t:
+        return False
+    patterns = (
+        rf"\${re.escape(t)}(?![A-Z0-9])",
+        rf"\({re.escape(t)}\)",
+        rf"(?<![A-Z0-9])(?:NYSE|NASDAQ|AMEX|ARCA)[:\s-]*{re.escape(t)}(?![A-Z0-9])",
+    )
+    return any(re.search(pattern, raw.upper()) for pattern in patterns)
+
+
 def _article_directly_mentions_asset(article: dict[str, Any], ticker: str) -> bool:
     t = str(ticker or "").upper().strip(); raw = f"{article.get('title') or ''} {article.get('summary') or ''} {article.get('url') or ''}"
-    if re.search(rf"(?<![A-Z0-9]){re.escape(t)}(?![A-Z0-9])", raw.upper()): return True
+    if len(t) >= 3 and re.search(rf"(?<![A-Z0-9]){re.escape(t)}(?![A-Z0-9])", raw.upper()): return True
+    if len(t) < 3 and _explicit_short_ticker_mentioned(raw, t): return True
     hay = f" {_norm_text(raw)} "; return any(f" {_norm_text(a)} " in hay for a in _asset_aliases(t) if len(_norm_text(a)) >= 4)
 
 def _valid_recent_direct_article_rows(ticker: str, feed: Iterable[dict[str, Any]], *, now: Any = None, max_age_days: int = MAX_SCORE_ARTICLE_AGE_DAYS) -> list[dict[str, Any]]:

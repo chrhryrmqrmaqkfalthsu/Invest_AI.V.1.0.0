@@ -158,6 +158,81 @@
   .pill-warn{background:rgba(255,77,106,.15);color:var(--down);}
   .pill-neutral{background:rgba(95,110,133,.15);color:var(--dim);}
 
+
+  /* 핵심 정보 / 접이식 */
+  details.muted-toggle{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0;overflow:hidden;}
+  details.muted-toggle>summary{list-style:none;cursor:pointer;padding:13px 14px;font-weight:700;color:var(--txt);display:flex;justify-content:space-between;align-items:center;}
+  details.muted-toggle>summary::-webkit-details-marker{display:none;}
+  details.muted-toggle>summary:after{content:'더보기';font-size:11px;color:var(--dim);font-weight:600;}
+  details.muted-toggle[open]>summary:after{content:'접기';}
+  details.muted-toggle .collapse-body{padding:0 14px 14px;}
+
+  /* 뉴스 재배치 */
+  .news-layout{display:grid;grid-template-columns:minmax(0,7fr) minmax(280px,3fr);gap:16px;align-items:start;}
+  .stock-news-main{min-height:320px;}
+  .stock-news-main .panel-head{margin-bottom:12px;}
+  .stock-news-list{display:grid;grid-template-columns:1fr;gap:12px;}
+  .stock-news-card{background:linear-gradient(180deg,#151d2b,#101722);border:1px solid var(--line);border-radius:13px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.16);}
+  .stock-news-card.high{border-color:rgba(255,77,106,.55);}
+  .stock-news-card.medium{border-color:rgba(245,196,81,.45);}
+  .stock-news-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px;}
+  .stock-ticker{font-size:20px;font-weight:900;letter-spacing:.6px;color:#fff;}
+  .stock-risk{font-size:12px;font-weight:800;border-radius:999px;padding:4px 9px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .stock-risk.low{background:rgba(38,208,124,.14);color:var(--up);}
+  .stock-risk.medium{background:rgba(245,196,81,.16);color:var(--gold);}
+  .stock-risk.high{background:rgba(255,77,106,.16);color:var(--down);}
+  .stock-risk.missing{background:rgba(95,110,133,.15);color:var(--dim);}
+  .stock-headline{font-size:16px;font-weight:800;line-height:1.35;margin:4px 0 7px;color:#eaf1ff;}
+  .stock-headline a{color:#eaf1ff;text-decoration:none;}
+  .stock-headline a:hover{color:var(--accent);}
+  .stock-meta{font-size:12px;color:var(--dim);display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  .stock-summary{font-size:13px;line-height:1.55;color:#aebbd0;}
+  .stock-empty-note{font-size:12px;color:var(--dim);margin-top:8px;}
+  .news-side{display:flex;flex-direction:column;gap:12px;}
+  .side-panel{padding:12px;}
+  .market-news-item{padding:9px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.45;}
+  .market-news-item:last-child{border-bottom:none;}
+  .market-news-title{font-weight:700;color:#d9e3f3;}
+  .market-news-meta{font-size:10px;color:var(--dim);margin-top:3px;}
+  .news-score-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;}
+  .news-score-row:last-child{border-bottom:none;}
+  .news-score-tk{font-weight:800;color:#fff;}
+
+  /* 차트 SELLOMEN */
+  .sellomen-strip{margin:2px 0 12px;}
+  .sellomen-box{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:12px;}
+  .sellomen-box.warn{border-color:rgba(245,196,81,.55);box-shadow:0 0 0 1px rgba(245,196,81,.1) inset;}
+  .sellomen-box.danger{border-color:rgba(255,77,106,.65);box-shadow:0 0 0 1px rgba(255,77,106,.12) inset;}
+  .sellomen-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--dim);margin-bottom:9px;}
+  .sellomen-state{font-weight:800;border-radius:999px;padding:3px 8px;font-size:11px;}
+  .sellomen-state.off{background:rgba(95,110,133,.15);color:var(--dim);}
+  .sellomen-state.on{background:rgba(38,208,124,.15);color:var(--up);}
+  .sellomen-state.warn{background:rgba(245,196,81,.16);color:var(--gold);}
+  .sellomen-state.danger{background:rgba(255,77,106,.16);color:var(--down);}
+  .sellomen-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:9px;}
+  .sellomen-metric{background:#0b1019;border:1px solid var(--line);border-radius:8px;padding:9px;}
+  .sellomen-metric .l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;}
+  .sellomen-metric .v{font-size:22px;font-weight:900;margin-top:3px;font-variant-numeric:tabular-nums;}
+  .sellomen-meter{height:9px;background:#202a3a;border-radius:999px;overflow:hidden;}
+  .sellomen-fill{height:100%;background:var(--up);border-radius:999px;transition:width .25s;}
+  .sellomen-fill.warn{background:var(--gold);}
+  .sellomen-fill.danger{background:var(--down);}
+  .sellomen-caption{font-size:11px;color:var(--dim);margin-top:6px;font-variant-numeric:tabular-nums;}
+
+  @media(max-width:980px){
+    .acct{grid-template-columns:1fr 1fr;}
+    .home-grid,.detail-grid,.news-layout{grid-template-columns:1fr;}
+    .news-side{order:2;}
+    .stock-news-main{order:1;}
+  }
+  @media(max-width:640px){
+    .page{padding:12px;}
+    .acct,.mini-slots,.sellomen-metrics{grid-template-columns:1fr;}
+    .topbar{padding:10px;gap:8px;flex-wrap:wrap;}
+    .nav{order:3;width:100%;overflow-x:auto;}
+    #chart{height:360px;}
+  }
+
   /* 뉴스 상세 */
   .news-card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:14px;margin-bottom:10px;}
   .news-card .nt{color:var(--dim);font-size:11px;margin:4px 0;}
@@ -215,15 +290,14 @@
       </div>
       <div id="equity-chart" style="width:100%;height:220px;"></div>
     </div>
-    <div id="candidates-panel" class="panel" style="margin-bottom:16px;">
-      <div class="panel-head">
-        <span>🛒 매수 대기 후보</span>
-        <span id="cand-meta" style="font-size:12px;color:var(--dim);"></span>
+    <details id="candidates-panel" class="muted-toggle" style="margin-bottom:16px;">
+      <summary><span>🛒 매수 대기 후보</span><span id="cand-meta" style="font-size:12px;color:var(--dim);"></span></summary>
+      <div class="collapse-body">
+        <div id="cand-list" class="cand-list">
+          <div class="cand-empty">대기 중인 후보 없음</div>
+        </div>
       </div>
-      <div id="cand-list" class="cand-list">
-        <div class="cand-empty">대기 중인 후보 없음</div>
-      </div>
-    </div>
+    </details>
     <div class="home-grid">
       <div>
         <h3>📦 보유 슬롯 (8)</h3>
@@ -259,6 +333,7 @@
                 <button class="tf" data-tf="1m">1분</button>
               </div>
             </div>
+            <div id="sellomen-strip" class="sellomen-strip"><div class="loading">SELLOMEN 확인 중...</div></div>
             <div id="chart"></div>
           </div>
           <div class="panel" style="margin-top:14px;" id="commentary-panel">
@@ -273,10 +348,22 @@
 
   <!-- 뉴스 상세 -->
   <div class="page" id="page-news">
-    <h3>📰 시장 이벤트 & 종목 뉴스</h3>
-    <div class="detail-grid">
-      <div id="news-events"><div class="loading">로딩...</div></div>
-      <div class="panel"><h3 style="margin-top:0;">보유 종목 뉴스 점수</h3><div id="news-sentiment"></div></div>
+    <h3>📰 개별 종목 뉴스 중심</h3>
+    <div class="news-layout">
+      <section class="panel stock-news-main">
+        <div class="panel-head"><span>📌 보유 종목 뉴스</span><span id="news-stock-meta" style="font-size:12px;color:var(--dim);"></span></div>
+        <div id="stock-news" class="stock-news-list"><div class="loading">로딩...</div></div>
+      </section>
+      <aside class="news-side">
+        <div class="panel side-panel">
+          <h3 style="margin-top:0;">시장 뉴스</h3>
+          <div id="news-events"><div class="loading">로딩...</div></div>
+        </div>
+        <details class="muted-toggle" open>
+          <summary><span>보유 종목 뉴스 점수</span></summary>
+          <div class="collapse-body" id="news-sentiment"><div class="loading">로딩...</div></div>
+        </details>
+      </aside>
     </div>
   </div>
 
@@ -297,7 +384,7 @@ const usd=n=>n==null?'—':'$'+Number(n).toLocaleString('en-US',{maximumFraction
 const pct=n=>n==null?'—':(n>=0?'+':'')+Number(n).toFixed(2)+'%';
 const col=n=>n>=0?'var(--up)':'var(--down)';
 
-let slotData=[], marketData={};
+let slotData=[], marketData={}, _holdingNewsEntries={};
 let _alertState={ near:{}, lastTradeId:null, firstRun:true };
 const CAND_BADGE = {
   pending: {cls:'b-pending', txt:'매수 가능'},
@@ -1207,10 +1294,71 @@ function renderRulebook(s){
   return stats + strat + risk + news + event;
 }
 
+
+function newsRiskClass(score){
+  if(score==null || !isFinite(Number(score))) return 'missing';
+  const s=Number(score);
+  if(s>=0.60) return 'high';
+  if(s>=0.30) return 'medium';
+  return 'low';
+}
+function newsRiskLabel(score){
+  const cls=newsRiskClass(score);
+  return cls==='high'?'높음':cls==='medium'?'주의':cls==='low'?'낮음':'미집계';
+}
+function newsRiskColor(score){
+  const cls=newsRiskClass(score);
+  return cls==='high'?'var(--down)':cls==='medium'?'var(--gold)':cls==='low'?'var(--up)':'var(--dim)';
+}
+function newsRiskView(score){
+  return {cls:newsRiskClass(score), label:newsRiskLabel(score), color:newsRiskColor(score)};
+}
+function articleTime(a){
+  const raw=a && (a.published_at || a.time || a.time_published || a.published_raw || '');
+  if(!raw) return '시간 미상';
+  try{
+    const d=new Date(raw);
+    if(!isNaN(d.getTime())) return d.toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }catch(e){}
+  return String(raw).slice(0,16).replace('T',' ');
+}
+function renderSellOmenBox(s){
+  if(!s || s.empty) return '<div class="sellomen-box"><div class="sellomen-head">SELLOMEN <span class="sellomen-state off">데이터 없음</span></div></div>';
+  const tk=String(s.ticker||'').toUpperCase();
+  const rb=s.rulebook||{};
+  const entry=_holdingNewsEntries[tk]||{};
+  const enabled=!!rb.sell_omen_enabled;
+  const score=entry.score!=null ? Number(entry.score) : null;
+  const threshold=rb.sell_omen_threshold!=null ? Number(rb.sell_omen_threshold) : 1.0;
+  const ratio=(enabled && score!=null && threshold>0) ? score/threshold : null;
+  const pctWidth=ratio==null ? 0 : Math.max(0,Math.min(100,ratio*100));
+  const level=!enabled?'off':(ratio!=null && ratio>=1?'danger':(ratio!=null && ratio>=0.8?'warn':'on'));
+  const stateTxt=!enabled?'비활성':(ratio!=null && ratio>=1?'청산 기준 초과':(ratio!=null && ratio>=0.8?'기준 근접':'감시 중'));
+  const scoreTxt=score==null?'—':score.toFixed(3);
+  const thTxt=enabled?threshold.toFixed(3):'비활성';
+  const ratioTxt=ratio==null?'—':`${Math.round(ratio*100)}%`;
+  return `<div class="sellomen-box ${level==='danger'?'danger':level==='warn'?'warn':''}">
+    <div class="sellomen-head"><span>${htmlEsc(tk)} SELLOMEN 청산 감시</span><span class="sellomen-state ${level}">${stateTxt}</span></div>
+    <div class="sellomen-metrics">
+      <div class="sellomen-metric"><div class="l">현재 SELLOMEN 점수</div><div class="v" style="color:${newsRiskColor(score)}">${scoreTxt}</div></div>
+      <div class="sellomen-metric"><div class="l">청산 도달 점수</div><div class="v" style="color:${enabled?'var(--down)':'var(--dim)'}">${thTxt}</div></div>
+    </div>
+    <div class="sellomen-meter"><div class="sellomen-fill ${level==='danger'?'danger':level==='warn'?'warn':''}" style="width:${pctWidth}%"></div></div>
+    <div class="sellomen-caption">기준 도달률 ${ratioTxt} · 뉴스 위험 ${newsRiskLabel(score)}${entry.stale?' · 캐시 확인 필요':''}</div>
+  </div>`;
+}
+function updateSellOmenStrip(tickerOrSlot){
+  const el=document.getElementById('sellomen-strip');
+  if(!el) return;
+  const s=typeof tickerOrSlot==='object' ? tickerOrSlot : slotData.find(x=>String(x.ticker||'').toUpperCase()===String(tickerOrSlot||'').toUpperCase());
+  el.innerHTML=renderSellOmenBox(s);
+}
+
 function refreshDetailPanel(ticker){
   const tk = String(ticker || '').toUpperCase();
   const s = slotData.find(x=>String(x.ticker || '').toUpperCase()===tk);
   if(!s) return;
+  updateSellOmenStrip(s);
   document.getElementById('detail-title').textContent=`${tk} — 보유 차트`;
   document.getElementById('detail-kv').innerHTML=`
     <div class="kv"><span>현재가</span><span>${fmt(s.current_price)}</span></div>
@@ -1250,6 +1398,66 @@ function closeDetail(){
   document.getElementById('slot-list-view').style.display='block';
 }
 
+
+function renderMarketNewsSide(activeEvents){
+  const act=activeEvents||{};
+  let items=[];
+  Object.entries(act).forEach(([name,d])=>{
+    const impact=d.market_impact||'';
+    const score=d.total_impact_score!=null?`영향도 ${d.total_impact_score}`:'';
+    const arts=Array.isArray(d.articles)?d.articles:[];
+    if(arts.length){
+      arts.slice(0,3).forEach(a=>items.push({name,impact,score,title:a.title||name,url:a.url||'',time:articleTime(a)}));
+    }else{
+      items.push({name,impact,score,title:name,url:'',time:'—'});
+    }
+  });
+  if(!items.length) return '<div class="loading">활성 이벤트 없음</div>';
+  return items.slice(0,12).map(it=>`<div class="market-news-item">
+    <div class="market-news-title">${it.url?`<a href="${htmlEsc(it.url)}" target="_blank">${htmlEsc(it.title)}</a>`:htmlEsc(it.title)}</div>
+    <div class="market-news-meta">${htmlEsc(it.name)} · ${htmlEsc(it.impact)} ${it.score?`· ${htmlEsc(it.score)}`:''} · ${htmlEsc(it.time)}</div>
+  </div>`).join('');
+}
+function renderStockNewsMain(sent){
+  const entries=Object.values(sent||{});
+  let cards=[];
+  entries.forEach(e=>{
+    const ticker=String(e.ticker||'').toUpperCase();
+    const articles=Array.isArray(e.articles)?e.articles:[];
+    if(articles.length){
+      articles.slice(0,2).forEach(a=>cards.push({ticker,entry:e,article:a,risk:Number(a.risk_score ?? e.score ?? 0),published:a.published_at||''}));
+    }else{
+      cards.push({ticker,entry:e,article:null,risk:Number(e.score||0),published:e.latest_article_time_published||''});
+    }
+  });
+  cards.sort((a,b)=>(b.risk-a.risk)||String(b.published).localeCompare(String(a.published))||a.ticker.localeCompare(b.ticker));
+  const meta=document.getElementById('news-stock-meta');
+  if(meta) meta.textContent=`${entries.length}종목 · 위험도순`;
+  if(!cards.length) return '<div class="loading">개별주 뉴스 없음</div>';
+  return cards.slice(0,18).map(c=>{
+    const e=c.entry||{}, a=c.article||{};
+    const score=e.score;
+    const cls=newsRiskClass(score);
+    const title=a.title||a.title_ko||`${c.ticker} 관련 기사 없음`;
+    const url=a.url||'';
+    const source=a.source||e.source||'source';
+    const summary=a.summary||a.summary_ko||a.summary_en||'';
+    const risk=a.risk_score!=null ? Number(a.risk_score).toFixed(3) : (score!=null ? Number(score).toFixed(3) : '—');
+    return `<article class="stock-news-card ${cls}">
+      <div class="stock-news-top"><div class="stock-ticker">${htmlEsc(c.ticker)}</div><div class="stock-risk ${cls}">점수 ${score==null?'—':Number(score).toFixed(3)} · ${newsRiskLabel(score)}</div></div>
+      <div class="stock-headline">${url?`<a href="${htmlEsc(url)}" target="_blank">${htmlEsc(title)}</a>`:htmlEsc(title)}</div>
+      <div class="stock-meta"><span>${htmlEsc(articleTime(a))}</span><span>${htmlEsc(source)}</span><span>기사 위험 ${risk}</span><span>${e.article_count||0}건</span></div>
+      ${summary?`<div class="stock-summary">${htmlEsc(summary)}</div>`:'<div class="stock-empty-note">최근 3일 직접 관련 기사 요약 없음</div>'}
+    </article>`;
+  }).join('');
+}
+function renderNewsScoreList(sent){
+  const rows=Object.values(sent||{}).sort((a,b)=>Number(b.score||0)-Number(a.score||0));
+  if(!rows.length) return '<div class="loading">데이터 없음</div>';
+  return rows.map(e=>`<div class="news-score-row"><span class="news-score-tk">${htmlEsc(e.ticker)}</span>
+    <span style="color:${newsRiskColor(e.score)}">${fmt(e.score,3)} <small style="color:var(--dim)">(${e.article_count||0}건)</small></span></div>`).join('');
+}
+
 // ===== 시장 / 뉴스 =====
 async function loadMarket(){
   try{ marketData=await (await fetch(`${API}/api/live/market`)).json(); }catch(e){ return; }
@@ -1266,25 +1474,19 @@ async function loadMarket(){
   const sec=m.sector_strength||{};
   document.getElementById('home-sectors').innerHTML=Object.entries(sec).map(([k,v])=>
     `<div class="sector"><span>${k}</span><span>${v}</span></div><div class="bar"><div style="width:${v}%"></div></div>`).join('')||'—';
-  // 뉴스 페이지 상세
-  const act=m.active_events||{};
-  let detail='';
-  Object.entries(act).forEach(([name,d])=>{
-    const arts=(d.articles||[]).map(a=>`<div class="nt">· ${a.title||''} ${a.url?`<a href="${a.url}" target="_blank">[링크]</a>`:''}</div>`).join('');
-    const ic=d.market_impact==='악재'?'var(--down)':'var(--up)';
-    detail+=`<div class="news-card"><b style="color:${ic}">${name}</b>
-      <span class="nt">(${d.market_impact||''}, 영향도 ${d.total_impact_score})</span>${arts}</div>`;
-  });
-  document.getElementById('news-events').innerHTML=detail||'<div class="loading">활성 이벤트 없음</div>';
+  // 뉴스 페이지 사이드: 시장 뉴스는 간략 리스트로 축소 표시
+  document.getElementById('news-events').innerHTML=renderMarketNewsSide(m.active_events||{});
 }
 
 async function loadNews(){
   let n; try{ n=await (await fetch(`${API}/api/live/news`)).json(); }catch(e){ return; }
   const sent=(n.sentiment||{}).entries||{};
-  const rows=Object.values(sent).map(e=>
-    `<div class="kv"><span>${e.ticker}</span>
-     <span style="color:${e.score>=0?'var(--up)':'var(--down)'}">${fmt(e.score,3)} <small style="color:var(--dim)">(${e.article_count||0}건)</small></span></div>`).join('');
-  document.getElementById('news-sentiment').innerHTML=rows||'<div class="loading">데이터 없음</div>';
+  _holdingNewsEntries=sent;
+  const stockEl=document.getElementById('stock-news');
+  if(stockEl) stockEl.innerHTML=renderStockNewsMain(sent);
+  const scoreEl=document.getElementById('news-sentiment');
+  if(scoreEl) scoreEl.innerHTML=renderNewsScoreList(sent);
+  if(curTicker) updateSellOmenStrip(curTicker);
 }
 
 document.querySelectorAll('.tf').forEach(btn=>{

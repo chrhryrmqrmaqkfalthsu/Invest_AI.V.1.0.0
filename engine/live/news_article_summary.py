@@ -2,7 +2,9 @@
 
 The live holding-news cache stores the numeric risk score used by sell_omen. This
 module reads the already-downloaded AlphaVantage ticker cache and extracts a
-small, dashboard-safe article summary without making network calls.
+small, dashboard-safe article summary without making network calls. If GPT news
+translation is configured, returned article title/summary are Korean and the
+English originals are preserved in title_en/summary_en.
 """
 from __future__ import annotations
 
@@ -11,6 +13,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+
+from engine.live.news_translation import translate_articles_for_dashboard
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TICKER_NEWS_CACHE_DIR = PROJECT_ROOT / "data" / "_system" / "ticker_news_cache"
@@ -154,4 +158,5 @@ def articles_for_ticker(ticker: str, *, limit: int = 2, now: datetime | None = N
         })
     # 화면 설명용은 최신성 우선. 같은 시각/날짜라면 위험도 높은 기사부터.
     candidates.sort(key=lambda x: (str(x.get("published_at") or ""), float(x.get("risk_score") or 0.0)), reverse=True)
-    return candidates[: max(1, int(limit or 1))]
+    selected = candidates[: max(1, int(limit or 1))]
+    return translate_articles_for_dashboard(selected)

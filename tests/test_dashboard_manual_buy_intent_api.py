@@ -182,3 +182,52 @@ def test_dashboard_html_is_served_from_single_8001_origin():
     assert "const API=window.location.origin;" in html
     assert "function newsRiskView" in html
     assert "http://localhost:8001" not in html
+
+
+def test_news_translation_falls_back_without_key(tmp_path, monkeypatch):
+    from engine.live.news_translation import translate_article_to_ko
+
+    monkeypatch.setenv("NEWS_TRANSLATION_ENABLED", "0")
+    article = {"ticker": "AAA", "title": "AAA shares fall after guidance cut", "summary": "AAA shares declined after management lowered its outlook."}
+
+    out = translate_article_to_ko(article, cache_path=tmp_path / "translation_cache.json")
+
+    assert out["translated"] is False
+    assert out["translation_source"] == "disabled_by_env"
+    assert out["title"] == article["title"]
+    assert out["title_ko"] == article["title"]
+    assert out["summary_en"] == article["summary"]
+
+
+def test_news_translation_uses_gpt_once_then_cache(tmp_path, monkeypatch):
+    from engine.live import news_translation
+
+    cache_path = tmp_path / "translation_cache.json"
+    monkeypatch.setenv("NEWS_TRANSLATION_ENABLED", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    calls = {"n": 0}
+
+    def fake_call(article, *, api_key, model):
+        calls["n"] += 1
+        assert api_key == "test-key"
+        return "AAA 가이던스 하향에 주가 약세", "경영진이 전망을 낮추면서 AAA 주가가 하락했다."
+
+    monkeypatch.setattr(news_translation, "_call_openai_translation", fake_call)
+    article = {
+        "ticker": "AAA",
+        "title": "AAA shares fall after guidance cut",
+        "summary": "AAA shares declined after management lowered its outlook.",
+        "published_at": "2026-06-26T13:00:00+00:00",
+        "url": "https://example.com/a",
+    }
+
+    first = news_translation.translate_article_to_ko(article, cache_path=cache_path, force=True)
+    second = news_translation.translate_article_to_ko(article, cache_path=cache_path, force=True)
+
+    assert calls["n"] == 1
+    assert first["translated"] is True
+    assert second["translated"] is True
+    assert first["title"] == "AAA 가이던스 하향에 주가 약세"
+    assert second["translation_source"].startswith("openai:")
+    assert first["title_en"] == article["title"]
+    assert cache_path.exists()

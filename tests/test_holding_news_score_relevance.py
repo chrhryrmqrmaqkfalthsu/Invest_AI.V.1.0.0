@@ -4,6 +4,7 @@ from engine.live.holding_news_queue import (
     HOLDING_NEWS_SCORE_LOGIC_VERSION,
     MAX_SCORE_ARTICLE_AGE_DAYS,
     _ticker_news_risk_score,
+    _valid_recent_direct_article_rows,
     lookup_holding_news_cache_score,
     save_holding_news_cache_entry,
 )
@@ -29,6 +30,20 @@ def test_holding_news_score_ignores_direct_article_older_than_three_days():
     assert score == 0.10
     assert count == 1
     assert latest == '2026-06-26T14:00:00+00:00'
+
+
+def test_basis_articles_are_sorted_by_risk_before_recency():
+    feed = [
+        {'title':'Dell Technologies fresh bullish update','summary':'Dell demand improved.','time_published':'20260626T150000','ticker_sentiment':[{'ticker':'DELL','relevance_score':'1.0','ticker_sentiment_score':'0.40'}]},
+        {'title':'Dell Technologies older bearish warning','summary':'Dell margin risk increased.','time_published':'20260626T130000','ticker_sentiment':[{'ticker':'DELL','relevance_score':'0.9','ticker_sentiment_score':'-0.50'}]},
+    ]
+    rows = _valid_recent_direct_article_rows('DELL', feed, now='2026-06-26T16:00:00+00:00')
+    assert rows[0]['title'] == 'Dell Technologies older bearish warning'
+    assert rows[0]['risk_score'] == 0.45
+    score, count, latest = _ticker_news_risk_score('DELL', feed, now='2026-06-26T16:00:00+00:00')
+    assert score == 0.45
+    assert count == 2
+    assert latest == '2026-06-26T15:00:00+00:00'
 
 
 def test_lookup_rejects_old_score_logic_cache(tmp_path: Path):

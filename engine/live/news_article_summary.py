@@ -1,162 +1,137 @@
-"""Helpers for showing the article basis behind holding-news risk scores.
-
-The live holding-news cache stores the numeric risk score used by sell_omen. This
-module reads the already-downloaded AlphaVantage ticker cache and extracts a
-small, dashboard-safe article summary without making network calls. If GPT news
-translation is configured, returned article title/summary are Korean and the
-English originals are preserved in title_en/summary_en.
-"""
 from __future__ import annotations
 
-import gzip
-import json
-from datetime import datetime, timezone
+import gzip, json, re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable
-
+from typing import Any
 from engine.live.news_translation import translate_articles_for_dashboard
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-TICKER_NEWS_CACHE_DIR = PROJECT_ROOT / "data" / "_system" / "ticker_news_cache"
+ROOT = Path(__file__).resolve().parents[2]
+TICKER_NEWS_CACHE_DIR = ROOT / "data" / "_system" / "ticker_news_cache"
+HOLDING_NEWS_CACHE_PATH = ROOT / "data" / "_system" / "holding_news_sentiment_cache.json"
+SYMBOL_DIR = ROOT / "data" / "symbols"
+SUFFIX = re.compile(r"\b(inc|corp|corporation|class|company|ltd|limited|plc|holdings|holding|common|stock)\b", re.I)
 
 
-def _float_or_none(value: Any) -> float | None:
+def _dt(v: Any):
+    s = str(v or "").strip()
+    if not s: return None
     try:
-        if value in (None, ""):
-            return None
-        out = float(value)
-        if out != out:
-            return None
-        return out
+        if re.fullmatch(r"\d{8}T\d{6}", s):
+            return datetime.strptime(s, "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
+        x = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return (x if x.tzinfo else x.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
     except Exception:
         return None
 
 
-def _av_time_to_iso(value: Any) -> str:
-    raw = str(value or "").strip()
-    if not raw:
+def _iso(v: Any):
+    x = _dt(v)
+    return x.isoformat(timespec="seconds") if x else str(v or "").strip()
+
+
+def _age(v: Any, now=None):
+    x = _dt(v)
+    return None if not x else max(0.0, round(((now or datetime.now(timezone.utc))-x).total_seconds()/3600, 3))
+
+
+def _clip(v: Any, n: int):
+    s = " ".join(str(v or "").split())
+    return s if len(s) <= n else s[:n-1].rstrip()+"…"
+
+
+def _summary(v: Any):
+    s = " ".join(str(v or "").split())
+    if not s: return ""
+    for m in [". ", "! ", "? "]:
+        i = s.find(m)
+        if 40 <= i <= 220: return _clip(s[:i+1], 220)
+    return _clip(s, 220)
+
+
+def _num(v: Any):
+    try:
+        x = float(v)
+        return None if x != x else x
+    except Exception:
+        return None
+
+
+def _norm(s: Any):
+    return re.sub(r"[^a-z0-9]+", " ", str(s or "").lower()).strip()
+
+
+def _asset_name(t: str):
+    try:
+        d = json.load((SYMBOL_DIR / t / "parameters.json").open(encoding="utf-8"))
+        return str(((d.get("asset_meta") or {}).get("name") or "")).strip()
+    except Exception:
         return ""
-    try:
-        return datetime.strptime(raw, "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc).isoformat(timespec="seconds")
-    except Exception:
-        return raw
 
 
-def _parse_iso(value: Any) -> datetime | None:
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-    try:
-        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except Exception:
-        return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+def _aliases(t: str):
+    out = {t.lower()}
+    name = _asset_name(t)
+    clean = _norm(SUFFIX.sub(" ", name))
+    full = _norm(name)
+    for a in [clean, full]:
+        if len(a) >= 4: out.add(a)
+    parts = [p for p in clean.split() if len(p) >= 4 and p not in {"the", "and"}]
+    if parts: out.add(parts[0])
+    if len(parts) >= 2: out.add(" ".join(parts[:2]))
+    return out
 
 
-def _age_hours(value: Any, *, now: datetime | None = None) -> float | None:
-    dt = _parse_iso(value)
-    if dt is None:
-        return None
-    current = now or datetime.now(timezone.utc)
-    return max(0.0, round((current - dt).total_seconds() / 3600.0, 3))
+def _direct(a: dict, t: str):
+    raw = f"{a.get('title') or ''} {a.get('summary') or ''} {a.get('url') or ''}"
+    if re.search(rf"(?<![A-Z0-9]){re.escape(t)}(?![A-Z0-9])", raw.upper()): return True
+    hay = f" {_norm(raw)} "
+    return any(f" {_norm(x)} " in hay for x in _aliases(t) if len(_norm(x)) >= 4)
 
 
-def _clip(text: Any, limit: int) -> str:
-    value = " ".join(str(text or "").split())
-    if len(value) <= limit:
-        return value
-    return value[: max(0, limit - 1)].rstrip() + "…"
-
-
-def _first_sentence(text: Any, limit: int = 220) -> str:
-    value = " ".join(str(text or "").split())
-    if not value:
-        return ""
-    # AlphaVantage summary is already concise. Keep the first sentence when it is informative,
-    # otherwise fall back to a clipped summary.
-    for marker in [". ", "! ", "? "]:
-        idx = value.find(marker)
-        if 40 <= idx <= limit:
-            return _clip(value[: idx + 1], limit)
-    return _clip(value, limit)
-
-
-def _ticker_sentiment(article: dict[str, Any], ticker: str) -> dict[str, Any] | None:
-    t = str(ticker or "").upper().strip()
-    for item in article.get("ticker_sentiment") or []:
-        if str(item.get("ticker") or "").upper().strip() == t:
-            return item if isinstance(item, dict) else None
+def _sent(a: dict, t: str):
+    for x in a.get("ticker_sentiment") or []:
+        if str(x.get("ticker") or "").upper().strip() == t: return x
     return None
 
 
-def _iter_ticker_cache_articles(ticker: str, *, max_files: int = 8) -> Iterable[dict[str, Any]]:
-    t = str(ticker or "").upper().strip()
-    if not t:
-        return []
-    ticker_dir = TICKER_NEWS_CACHE_DIR / t
-    files = sorted(ticker_dir.glob(f"av_{t}_*.json.gz"), reverse=True)[: max(1, int(max_files))]
-    rows: list[dict[str, Any]] = []
-    for path in files:
+def _latest_score_time(t: str):
+    try:
+        d = json.load(HOLDING_NEWS_CACHE_PATH.open(encoding="utf-8"))
+        return str(((d.get("entries") or {}).get(t) or {}).get("latest_article_time_published") or "")
+    except Exception:
+        return ""
+
+
+def _articles(t: str):
+    rows = []
+    for p in sorted((TICKER_NEWS_CACHE_DIR / t).glob(f"av_{t}_*.json.gz"), reverse=True)[:8]:
         try:
-            with gzip.open(path, "rt", encoding="utf-8") as f:
-                payload = json.load(f)
-        except Exception:
-            continue
-        feed = payload.get("feed") if isinstance(payload, dict) else None
-        if not isinstance(feed, list):
-            continue
-        rows.extend([a for a in feed if isinstance(a, dict)])
+            rows += [x for x in (json.load(gzip.open(p, "rt", encoding="utf-8")).get("feed") or []) if isinstance(x, dict)]
+        except Exception: pass
     return rows
 
 
-def articles_for_ticker(ticker: str, *, limit: int = 2, now: datetime | None = None) -> list[dict[str, Any]]:
-    """Return latest relevant articles for a ticker from local AlphaVantage caches.
-
-    The score cache may be fresher than the monthly raw ticker cache, because the
-    live refresh previously persisted only the numeric score. Until the next cache
-    schema stores full article snippets, this function intentionally prioritizes
-    recency over old high-risk articles so the dashboard does not surface stale
-    headlines next to current holdings.
-    """
+def articles_for_ticker(ticker: str, *, limit: int = 2, now=None, min_published_at=None, max_detail_lag_days: int = 7):
     t = str(ticker or "").upper().strip()
-    if not t:
-        return []
-    seen: set[str] = set()
-    candidates: list[dict[str, Any]] = []
-    for article in _iter_ticker_cache_articles(t):
-        sent = _ticker_sentiment(article, t)
-        if not sent:
-            continue
-        url = str(article.get("url") or "").strip()
-        title = _clip(article.get("title"), 180)
-        published_raw = str(article.get("time_published") or "")
-        key = url or f"{published_raw}|{title.lower()}"
-        if not title or key in seen:
-            continue
+    min_dt = _dt(min_published_at or _latest_score_time(t))
+    floor = min_dt - timedelta(days=max_detail_lag_days) if min_dt else None
+    seen, out = set(), []
+    for a in _articles(t):
+        s = _sent(a, t)
+        if not s or not _direct(a, t): continue
+        pub_raw = str(a.get("time_published") or "")
+        pub_iso = _iso(pub_raw)
+        pub_dt = _dt(pub_iso)
+        if floor and (not pub_dt or pub_dt < floor): continue
+        title = _clip(a.get("title"), 180)
+        url = str(a.get("url") or "").strip()
+        key = url or pub_raw + title.lower()
+        if not title or key in seen: continue
         seen.add(key)
-        score = _float_or_none(sent.get("ticker_sentiment_score")) or 0.0
-        relevance = _float_or_none(sent.get("relevance_score"))
-        rel = max(0.0, min(1.0, relevance if relevance is not None else 1.0))
-        risk = max(0.0, -score) * rel
-        published_at = _av_time_to_iso(published_raw)
-        candidates.append({
-            "ticker": t,
-            "title": title,
-            "summary": _first_sentence(article.get("summary"), 220),
-            "url": url,
-            "source": str(article.get("source") or article.get("source_domain") or "").strip(),
-            "published_at": published_at,
-            "published_raw": published_raw,
-            "published_age_hours": _age_hours(published_at, now=now),
-            "sentiment_score": round(float(score), 6),
-            "sentiment_label": str(sent.get("ticker_sentiment_label") or "").strip(),
-            "relevance_score": round(float(rel), 6),
-            "risk_score": round(float(risk), 6),
-            "basis": "latest_relevant_with_negative_risk" if risk > 0 else "latest_relevant",
-        })
-    # 화면 설명용은 최신성 우선. 같은 시각/날짜라면 위험도 높은 기사부터.
-    candidates.sort(key=lambda x: (str(x.get("published_at") or ""), float(x.get("risk_score") or 0.0)), reverse=True)
-    selected = candidates[: max(1, int(limit or 1))]
-    return translate_articles_for_dashboard(selected)
+        sc = _num(s.get("ticker_sentiment_score")) or 0.0
+        rel = _num(s.get("relevance_score")); rel = max(0.0, min(1.0, rel if rel is not None else 1.0))
+        risk = max(0.0, -sc) * rel
+        out.append({"ticker":t,"title":title,"summary":_summary(a.get("summary")),"url":url,"source":str(a.get("source") or a.get("source_domain") or "").strip(),"published_at":pub_iso,"published_raw":pub_raw,"published_age_hours":_age(pub_iso, now),"sentiment_score":round(sc,6),"sentiment_label":str(s.get("ticker_sentiment_label") or "").strip(),"relevance_score":round(rel,6),"risk_score":round(risk,6),"basis":"latest_direct_with_negative_risk" if risk > 0 else "latest_direct"})
+    out.sort(key=lambda x:(str(x.get("published_at") or ""), float(x.get("risk_score") or 0)), reverse=True)
+    return translate_articles_for_dashboard(out[:max(1, int(limit or 1))])

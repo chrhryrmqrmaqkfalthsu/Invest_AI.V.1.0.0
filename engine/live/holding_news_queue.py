@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from engine.live.news_translation import translate_articles_for_dashboard
+
 log = logging.getLogger("live.holding_news_queue")
 ROOT = Path(__file__).resolve().parents[2]
 HOLDING_NEWS_CACHE_PATH = ROOT / "data" / "_system" / "holding_news_sentiment_cache.json"
@@ -140,11 +142,11 @@ def _score_row_usable(row: Any) -> bool:
     return True
 
 
-def save_holding_news_cache_entry(ticker: str, *, score: float, fetched_at: Any = None, score_date: Optional[str] = None, source: str = "alphavantage_holding_news", article_count: int = 0, latest_article_time_published: str = "", raw_feed_count: int = 0, path: Path = HOLDING_NEWS_CACHE_PATH) -> dict[str, Any]:
+def save_holding_news_cache_entry(ticker: str, *, score: float, fetched_at: Any = None, score_date: Optional[str] = None, source: str = "alphavantage_holding_news", article_count: int = 0, latest_article_time_published: str = "", raw_feed_count: int = 0, top_articles: Optional[list[dict[str, Any]]] = None, path: Path = HOLDING_NEWS_CACHE_PATH) -> dict[str, Any]:
     t = str(ticker or "").upper().strip()
     if not t: raise ValueError("ticker is required")
     dt = _parse_dt(fetched_at or datetime.now(timezone.utc)); date = str(score_date or dt.astimezone(NY).date().isoformat())[:10]
-    row = {"ticker": t, "date": date, "score": max(0.0, min(1.0, float(score or 0.0))), "fetched_at": dt.astimezone(timezone.utc).isoformat(timespec="seconds"), "source": source, "score_logic_version": HOLDING_NEWS_SCORE_LOGIC_VERSION, "max_score_article_age_days": MAX_SCORE_ARTICLE_AGE_DAYS, "article_count": int(article_count or 0), "raw_feed_count": int(raw_feed_count or 0), "latest_article_time_published": str(latest_article_time_published or "")}
+    row = {"ticker": t, "date": date, "score": max(0.0, min(1.0, float(score or 0.0))), "fetched_at": dt.astimezone(timezone.utc).isoformat(timespec="seconds"), "source": source, "score_logic_version": HOLDING_NEWS_SCORE_LOGIC_VERSION, "max_score_article_age_days": MAX_SCORE_ARTICLE_AGE_DAYS, "article_count": int(article_count or 0), "raw_feed_count": int(raw_feed_count or 0), "latest_article_time_published": str(latest_article_time_published or ""), "top_articles": list(top_articles or [])[:2]}
     cache = load_holding_news_cache(path); entries = cache.setdefault("entries", {})
     if not isinstance(entries, dict): entries = {}; cache["entries"] = entries
     entries[t] = row; cache["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds"); _atomic_write_json(Path(path), cache)
@@ -175,6 +177,20 @@ def _av_raw_dt(value: Any) -> Optional[datetime]:
     except Exception: return None
 
 
+def _clip(value: Any, limit: int) -> str:
+    s = " ".join(str(value or "").split())
+    return s if len(s) <= limit else s[:max(0, limit-1)].rstrip() + "…"
+
+
+def _first_sentence(value: Any, limit: int = 220) -> str:
+    s = " ".join(str(value or "").split())
+    if not s: return ""
+    for m in [". ", "! ", "? "]:
+        i = s.find(m)
+        if 40 <= i <= limit: return _clip(s[:i+1], limit)
+    return _clip(s, limit)
+
+
 def _norm_text(v: Any) -> str:
     return re.sub(r"[^a-z0-9]+", " ", str(v or "").lower()).strip()
 
@@ -201,24 +217,28 @@ def _article_directly_mentions_asset(article: dict[str, Any], ticker: str) -> bo
     hay = f" {_norm_text(raw)} "; return any(f" {_norm_text(a)} " in hay for a in _asset_aliases(t) if len(_norm_text(a)) >= 4)
 
 
-def _ticker_news_risk_score(ticker: str, feed: Iterable[dict[str, Any]], *, now: Any = None, max_age_days: int = MAX_SCORE_ARTICLE_AGE_DAYS) -> tuple[float, int, str]:
-    t = str(ticker or "").upper().strip(); risks: list[float] = []; latest_time = ""; article_count = 0
-    current = _parse_dt(now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    max_age_seconds = max(0, int(max_age_days)) * 86400
+def _valid_recent_direct_article_rows(ticker: str, feed: Iterable[dict[str, Any]], *, now: Any = None, max_age_days: int = MAX_SCORE_ARTICLE_AGE_DAYS) -> list[dict[str, Any]]:
+    t = str(ticker or "").upper().strip(); current = _parse_dt(now or datetime.now(timezone.utc)).astimezone(timezone.utc); max_age_seconds = max(0, int(max_age_days)) * 86400
+    rows: list[dict[str, Any]] = []
     for article in feed or []:
         if not isinstance(article, dict) or not _article_directly_mentions_asset(article, t): continue
-        time_published = str(article.get("time_published") or "")
-        published = _av_raw_dt(time_published)
-        if published is None or (current - published).total_seconds() > max_age_seconds or published > current:
-            continue
-        matched = False
+        time_published = str(article.get("time_published") or ""); published = _av_raw_dt(time_published)
+        if published is None or (current - published).total_seconds() > max_age_seconds or published > current: continue
         for item in article.get("ticker_sentiment") or []:
             if str(item.get("ticker") or "").upper().strip() != t: continue
-            matched = True; sentiment = _float_or_none(item.get("ticker_sentiment_score")) or 0.0; relevance = _float_or_none(item.get("relevance_score")); rel = max(0.0, min(1.0, relevance if relevance is not None else 1.0)); risks.append(max(0.0, -sentiment) * rel)
-        if matched:
-            article_count += 1
-            if time_published and (not latest_time or time_published > latest_time): latest_time = time_published
-    return (0.0, article_count, _av_time_to_iso(latest_time)) if not risks else (max(0.0, min(1.0, max(risks))), article_count, _av_time_to_iso(latest_time))
+            sentiment = _float_or_none(item.get("ticker_sentiment_score")) or 0.0; relevance = _float_or_none(item.get("relevance_score")); rel = max(0.0, min(1.0, relevance if relevance is not None else 1.0)); risk = max(0.0, -sentiment) * rel
+            rows.append({"ticker": t, "title": _clip(article.get("title"), 180), "summary": _first_sentence(article.get("summary"), 220), "url": str(article.get("url") or "").strip(), "source": str(article.get("source") or article.get("source_domain") or "").strip(), "published_at": _av_time_to_iso(time_published), "published_raw": time_published, "published_age_hours": round((current-published).total_seconds()/3600, 3), "sentiment_score": round(float(sentiment), 6), "sentiment_label": str(item.get("ticker_sentiment_label") or "").strip(), "relevance_score": round(float(rel), 6), "risk_score": round(float(risk), 6), "basis": "score_recent3d_direct_with_negative_risk" if risk > 0 else "score_recent3d_direct"})
+            break
+    rows.sort(key=lambda x: (str(x.get("published_at") or ""), float(x.get("risk_score") or 0.0)), reverse=True)
+    return rows
+
+
+def _ticker_news_risk_score(ticker: str, feed: Iterable[dict[str, Any]], *, now: Any = None, max_age_days: int = MAX_SCORE_ARTICLE_AGE_DAYS) -> tuple[float, int, str]:
+    rows = _valid_recent_direct_article_rows(ticker, feed, now=now, max_age_days=max_age_days)
+    if not rows: return 0.0, 0, ""
+    risks = [float(r.get("risk_score") or 0.0) for r in rows]
+    latest = max(str(r.get("published_at") or "") for r in rows)
+    return max(0.0, min(1.0, max(risks))), len(rows), latest
 
 
 def fetch_alpha_vantage_ticker_news_score(ticker: str, *, api_key: str, limit: int = 50, session: Any = None, timeout: int = 30) -> dict[str, Any]:
@@ -229,8 +249,10 @@ def fetch_alpha_vantage_ticker_news_score(ticker: str, *, api_key: str, limit: i
     if any(k in data for k in ("Information", "Note", "Error Message")): raise RuntimeError(str(data.get("Information") or data.get("Note") or data.get("Error Message"))[:500])
     feed = data.get("feed") or []
     if not isinstance(feed, list): feed = []
-    score, article_count, latest_article = _ticker_news_risk_score(t, feed, now=datetime.now(timezone.utc))
-    return {"ticker": t, "score": score, "article_count": article_count, "latest_article_time_published": latest_article, "raw_feed_count": len(feed), "score_logic_version": HOLDING_NEWS_SCORE_LOGIC_VERSION, "max_score_article_age_days": MAX_SCORE_ARTICLE_AGE_DAYS}
+    now = datetime.now(timezone.utc)
+    rows = _valid_recent_direct_article_rows(t, feed, now=now)
+    score, article_count, latest_article = _ticker_news_risk_score(t, feed, now=now)
+    return {"ticker": t, "score": score, "article_count": article_count, "latest_article_time_published": latest_article, "raw_feed_count": len(feed), "score_logic_version": HOLDING_NEWS_SCORE_LOGIC_VERSION, "max_score_article_age_days": MAX_SCORE_ARTICLE_AGE_DAYS, "top_articles": translate_articles_for_dashboard(rows[:2])}
 
 
 def _cache_age_days_from_fetched_at(row: Optional[dict[str, Any]], now: Any = None) -> float:
@@ -294,7 +316,7 @@ def refresh_holding_news_for_positions(positions: Iterable[Any], *, broker: Any 
     for ticker in selected_tickers[:DEFAULT_INDIVIDUAL_CALL_BUDGET]:
         try:
             fetched = fetch_alpha_vantage_ticker_news_score(ticker, api_key=key)
-            row = save_holding_news_cache_entry(ticker, score=float(fetched.get("score") or 0.0), fetched_at=asof or datetime.now(timezone.utc), article_count=int(fetched.get("article_count") or 0), latest_article_time_published=str(fetched.get("latest_article_time_published") or ""), raw_feed_count=int(fetched.get("raw_feed_count") or 0), path=cache_path)
+            row = save_holding_news_cache_entry(ticker, score=float(fetched.get("score") or 0.0), fetched_at=asof or datetime.now(timezone.utc), article_count=int(fetched.get("article_count") or 0), latest_article_time_published=str(fetched.get("latest_article_time_published") or ""), raw_feed_count=int(fetched.get("raw_feed_count") or 0), top_articles=fetched.get("top_articles") or [], path=cache_path)
             result["cache_updates"].append(row)
         except Exception as exc:
             result["errors"][ticker] = str(exc)[:300]; log.warning("holding news refresh failed for %s: %s", ticker, exc)

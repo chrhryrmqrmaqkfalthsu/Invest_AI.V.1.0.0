@@ -130,6 +130,16 @@ def load_holding_news_cache(path: Path = HOLDING_NEWS_CACHE_PATH) -> dict[str, A
     return _load_json(Path(path))
 
 
+def _score_row_usable(row: Any) -> bool:
+    if not isinstance(row, dict): return False
+    if row.get("score_logic_version") != HOLDING_NEWS_SCORE_LOGIC_VERSION: return False
+    try:
+        if int(row.get("max_score_article_age_days") or 0) != MAX_SCORE_ARTICLE_AGE_DAYS: return False
+    except Exception:
+        return False
+    return True
+
+
 def save_holding_news_cache_entry(ticker: str, *, score: float, fetched_at: Any = None, score_date: Optional[str] = None, source: str = "alphavantage_holding_news", article_count: int = 0, latest_article_time_published: str = "", raw_feed_count: int = 0, path: Path = HOLDING_NEWS_CACHE_PATH) -> dict[str, Any]:
     t = str(ticker or "").upper().strip()
     if not t: raise ValueError("ticker is required")
@@ -143,7 +153,7 @@ def save_holding_news_cache_entry(ticker: str, *, score: float, fetched_at: Any 
 
 def lookup_holding_news_cache_score(ticker: str, *, path: Path = HOLDING_NEWS_CACHE_PATH) -> Optional[dict[str, Any]]:
     t = str(ticker or "").upper().strip(); cache = load_holding_news_cache(path); entries = cache.get("entries") if isinstance(cache, dict) else None
-    if not t or not isinstance(entries, dict) or not isinstance(entries.get(t), dict): return None
+    if not t or not isinstance(entries, dict) or not _score_row_usable(entries.get(t)): return None
     row = entries[t]
     try: score = float(row.get("score"))
     except Exception: return None
@@ -248,7 +258,8 @@ def build_holding_news_signals(positions: Iterable[Any], *, broker: Any = None, 
         ticker = str(getattr(pos, "ticker", "") or "").upper().strip()
         if not ticker: continue
         cached = entries.get(ticker); s4_row = lookup_live_sell_omen_score(ticker, asof=asof)
-        rows.append(HoldingNewsSignal(ticker, _cache_age_days_from_fetched_at(cached, now=now), _price_risk_from_position(pos, broker=broker), float(cached.get("score") or 0.0) if isinstance(cached, dict) else 0.0, float(s4_row.get("score")) if s4_row else None, str(s4_row.get("date")) if s4_row else None))
+        s3 = float(cached.get("score") or 0.0) if _score_row_usable(cached) else 0.0
+        rows.append(HoldingNewsSignal(ticker, _cache_age_days_from_fetched_at(cached, now=now), _price_risk_from_position(pos, broker=broker), s3, float(s4_row.get("score")) if s4_row else None, str(s4_row.get("date")) if s4_row else None))
     return rows
 
 

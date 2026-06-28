@@ -9,6 +9,7 @@ from engine.live.news_translation import translate_articles_for_dashboard
 ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / "data" / "_system" / "ticker_news_cache"
 SYMS = ROOT / "data" / "symbols"
+MAX_DISPLAY_ARTICLE_AGE_DAYS = 3
 SUFFIX = re.compile(r"\b(inc|corp|corporation|class|company|ltd|limited|plc|holdings|holding|common|stock)\b", re.I)
 
 
@@ -104,19 +105,22 @@ def _articles(t: str):
 
 
 def articles_for_ticker(ticker: str, *, limit: int = 2, now=None, min_published_at=None, max_detail_lag_days: int = 7):
-    """Return direct ticker/company article snippets for dashboard display.
+    """Return direct, recent ticker/company article snippets for dashboard display.
 
-    These snippets are display-only. They are filtered for direct ticker/company
-    mention so peer articles such as Apple->DELL are excluded. Old direct snippets
-    are still shown as 참고 기사 because the numeric score cache currently does not
-    persist the full fresh AlphaVantage feed.
+    Display and numeric score now share the same recency rule: only articles within
+    the last 3 days are shown. This avoids presenting old snippets as if they are
+    explaining the current risk score.
     """
     t = str(ticker or "").upper().strip()
+    current = _dt(now) or datetime.now(timezone.utc)
     seen, out = set(), []
     for a in _articles(t):
         s = _sent(a, t)
         if not s or not _direct(a, t): continue
         pub_raw = str(a.get("time_published") or "")
+        pub_dt = _dt(pub_raw)
+        if pub_dt is None or pub_dt > current or (current - pub_dt).total_seconds() > MAX_DISPLAY_ARTICLE_AGE_DAYS * 86400:
+            continue
         pub_iso = _iso(pub_raw)
         title = _clip(a.get("title"), 180)
         url = str(a.get("url") or "").strip()
@@ -126,6 +130,6 @@ def articles_for_ticker(ticker: str, *, limit: int = 2, now=None, min_published_
         sc = _num(s.get("ticker_sentiment_score")) or 0.0
         rel = _num(s.get("relevance_score")); rel = max(0.0, min(1.0, rel if rel is not None else 1.0))
         risk = max(0.0, -sc) * rel
-        out.append({"ticker":t,"title":title,"summary":_summary(a.get("summary")),"url":url,"source":str(a.get("source") or a.get("source_domain") or "").strip(),"published_at":pub_iso,"published_raw":pub_raw,"published_age_hours":_age(pub_iso, now),"sentiment_score":round(sc,6),"sentiment_label":str(s.get("ticker_sentiment_label") or "").strip(),"relevance_score":round(rel,6),"risk_score":round(risk,6),"basis":"display_direct_reference_with_negative_risk" if risk > 0 else "display_direct_reference"})
+        out.append({"ticker":t,"title":title,"summary":_summary(a.get("summary")),"url":url,"source":str(a.get("source") or a.get("source_domain") or "").strip(),"published_at":pub_iso,"published_raw":pub_raw,"published_age_hours":_age(pub_iso, current),"sentiment_score":round(sc,6),"sentiment_label":str(s.get("ticker_sentiment_label") or "").strip(),"relevance_score":round(rel,6),"risk_score":round(risk,6),"basis":"display_recent3d_direct_with_negative_risk" if risk > 0 else "display_recent3d_direct"})
     out.sort(key=lambda x:(str(x.get("published_at") or ""), float(x.get("risk_score") or 0)), reverse=True)
     return translate_articles_for_dashboard(out[:max(1, int(limit or 1))])

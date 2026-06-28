@@ -5,12 +5,13 @@ import glob
 import json
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yfinance as yf
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from engine.live.manual_buy_intent import (
@@ -32,6 +33,12 @@ LOG_DIR = "logs"
 SYS = os.path.join("data", "_system")
 UNIVERSE_MANIFEST_PATH = os.path.join(SYS, "live_universe_lr8d_stage1_manifest.json")
 DASHBOARD_MAIN_PATH = BASE_DIR / "dashboard_home.html"
+HOLDING_NEWS_CACHE_PATH = os.path.join(SYS, "holding_news_sentiment_cache.json")
+POSITIONS_PATH = os.path.join(SYS, "positions.json")
+NEWS_ALERT_STATE_PATH = os.path.join(SYS, "news_alert_state.json")
+NEWS_RISK_LOW = 0.30
+NEWS_RISK_HIGH = 0.60
+NEWS_CACHE_STALE_HOURS = 72.0
 
 app = FastAPI(title="KINGMAKER Dashboard API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -42,10 +49,62 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # 새 구조: api_server:app 8001이 /dashboard에서 HTML까지 직접 서빙한다.
 # 결과: 로컬 터널은 8001 하나면 충분하다. 8002는 호환/구버전 경로로만 남긴다.
 
-def _dashboard_file_response():
+def _dashboard_html_response():
     if not DASHBOARD_MAIN_PATH.exists():
         raise HTTPException(status_code=500, detail=f"dashboard file missing: {DASHBOARD_MAIN_PATH}")
-    return FileResponse(str(DASHBOARD_MAIN_PATH), media_type="text/html")
+    html = DASHBOARD_MAIN_PATH.read_text(encoding="utf-8")
+    # 같은 8001 origin에서 HTML과 API를 같이 쓰게 만들어 터널/포트 혼선을 제거한다.
+    html = html.replace('const API="http://localhost:8001";', 'const API=window.location.origin;')
+    old_news_js = """async function loadNews(){
+  let n; try{ n=await (await fetch(`${API}/api/live/news`)).json(); }catch(e){ return; }
+  const sent=(n.sentiment||{}).entries||{};
+  const rows=Object.values(sent).map(e=>
+    `<div class=\"kv\"><span>${e.ticker}</span>
+     <span style=\"color:${e.score>=0?'var(--up)':'var(--down)'}\">${fmt(e.score,3)} <small style=\"color:var(--dim)\">(${e.article_count||0}건)</small></span></div>`).join('');
+  document.getElementById('news-sentiment').innerHTML=rows||'<div class=\"loading\">데이터 없음</div>';
+}"""
+    new_news_js = """function newsRiskView(score, missing, stale){
+  if(missing) return {color:'var(--dim)', label:'캐시 없음', text:'—'};
+  const n = Number(score);
+  if(!isFinite(n)) return {color:'var(--dim)', label:'점수 없음', text:'—'};
+  let color='var(--up)', label='낮음';
+  if(n >= 0.60){ color='var(--down)'; label='높음'; }
+  else if(n >= 0.30){ color='var(--gold)'; label='주의'; }
+  if(stale) label += ' · 오래됨';
+  return {color, label, text:n.toFixed(3)};
+}
+function newsAgeText(hours){
+  const n = Number(hours);
+  if(!isFinite(n)) return '';
+  if(n < 1) return `${Math.max(0, Math.round(n*60))}분 전`;
+  if(n < 72) return `${n.toFixed(1)}시간 전`;
+  return `${(n/24).toFixed(1)}일 전`;
+}
+async function loadNews(){
+  let n; try{ n=await (await fetch(`${API}/api/live/news`)).json(); }catch(e){ return; }
+  const sentiment = n.sentiment || {};
+  const meta = sentiment.meta || {};
+  const sent = sentiment.entries || {};
+  const list = Object.values(sent).sort((a,b)=>Number(b.score ?? -1)-Number(a.score ?? -1));
+  const note = `<div class="univ-note">보유 ${meta.held_count??list.length}종목 기준 · 비보유 캐시 ${meta.hidden_non_holding_count??0}개 숨김 · 위험점수 기준: 낮음 &lt;0.30 / 주의 0.30~0.60 / 높음 ≥0.60<br>뉴스 캐시는 run_live 시장시간 tick 후 기본 60분마다 갱신됩니다. 마지막 갱신 ${htmlEsc(meta.cache_updated_at || '확인 불가')}</div>`;
+  const rows=list.map(e=>{
+    const rv = newsRiskView(e.score, e.missing, e.stale);
+    const fetched = newsAgeText(e.fetched_age_hours);
+    const latest = newsAgeText(e.latest_article_age_hours);
+    const sub = [
+      `${Number(e.article_count || 0)}건`,
+      fetched ? `캐시 ${fetched}` : '',
+      latest ? `최신 기사 ${latest}` : '',
+      e.source ? `source ${htmlEsc(e.source)}` : ''
+    ].filter(Boolean).join(' · ');
+    return `<div class="kv"><span><b>${htmlEsc(e.ticker || '')}</b><br><small style="color:var(--dim)">${sub || '데이터 없음'}</small></span>
+      <span style="color:${rv.color};font-size:17px;font-weight:900">${rv.text}<br><small style="font-size:11px;color:${rv.color}">${rv.label}</small></span></div>`;
+  }).join('');
+  document.getElementById('news-sentiment').innerHTML=note+(rows||'<div class="loading">보유 종목 뉴스 점수 없음</div>');
+}"""
+    if old_news_js in html:
+        html = html.replace(old_news_js, new_news_js)
+    return HTMLResponse(content=html, media_type="text/html")
 
 
 @app.get("/", include_in_schema=False)
@@ -55,12 +114,12 @@ def root_dashboard_redirect():
 
 @app.get("/dashboard", include_in_schema=False)
 def dashboard():
-    return _dashboard_file_response()
+    return _dashboard_html_response()
 
 
 @app.get("/dashboard_home.html", include_in_schema=False)
 def dashboard_home_compat():
-    return _dashboard_file_response()
+    return _dashboard_html_response()
 
 
 @app.get("/dashboard_live.html", include_in_schema=False)
@@ -134,6 +193,64 @@ def _read_json(path, default=None):
         return default if default is not None else {}
 
 
+def _file_mtime_iso(path: str) -> str:
+    try:
+        return datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).isoformat(timespec="seconds")
+    except Exception:
+        return ""
+
+
+def _parse_iso(value) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _age_hours(value, *, now: datetime | None = None) -> float | None:
+    dt = _parse_iso(value)
+    if dt is None:
+        return None
+    current = now or datetime.now(timezone.utc)
+    return max(0.0, round((current - dt).total_seconds() / 3600.0, 3))
+
+
+def _position_tickers_from_file() -> list[str]:
+    pos = _read_json(POSITIONS_PATH, {})
+    rows: list[str] = []
+    for ticker, payload in (pos.items() if isinstance(pos, dict) else []):
+        if not isinstance(payload, dict):
+            continue
+        t = str(ticker or "").upper().strip()
+        if not t:
+            continue
+        try:
+            shares = float(payload.get("shares") or 0)
+        except Exception:
+            shares = 0.0
+        if shares > 0:
+            rows.append(t)
+    return sorted(set(rows))
+
+
+def _news_risk_label(score) -> str:
+    try:
+        s = float(score)
+    except Exception:
+        return "missing"
+    if s >= NEWS_RISK_HIGH:
+        return "high"
+    if s >= NEWS_RISK_LOW:
+        return "medium"
+    return "low"
+
+
 # 현재가 캐시 30초. yfinance 독립 조회 — 봇 브로커와 무관.
 _price_cache = {}
 
@@ -167,7 +284,7 @@ def _get_price(ticker):
 
 @app.get("/api/live/positions")
 def live_positions():
-    pos = _read_json(os.path.join(SYS, "positions.json"), {})
+    pos = _read_json(POSITIONS_PATH, {})
     out = []
     for ticker, p in (pos.items() if isinstance(pos, dict) else []):
         if not isinstance(p, dict):
@@ -223,10 +340,71 @@ def live_market():
 
 @app.get("/api/live/news")
 def live_news():
-    """보유 종목 뉴스 점수 + 알림 상태."""
+    """보유 종목 뉴스 점수 + 알림 상태.
+
+    holding_news_sentiment_cache.json은 과거 보유 종목의 캐시도 보존한다.
+    대시보드에는 현재 positions.json에서 shares>0인 종목만 내려준다.
+    점수는 0~1 위험점수이며, holding_news_queue._ticker_news_risk_score()에서
+    AlphaVantage ticker_sentiment의 부정 감성 강도와 relevance로 계산된다.
+    """
+    now = datetime.now(timezone.utc)
+    cache = _read_json(HOLDING_NEWS_CACHE_PATH, {})
+    raw_entries = cache.get("entries") if isinstance(cache, dict) else {}
+    if not isinstance(raw_entries, dict):
+        raw_entries = {}
+    held_tickers = _position_tickers_from_file()
+    held_set = set(held_tickers)
+    cache_tickers = {str(t or "").upper().strip() for t in raw_entries if str(t or "").strip()}
+    filtered_entries: dict[str, dict] = {}
+    for ticker in held_tickers:
+        row = raw_entries.get(ticker) if isinstance(raw_entries.get(ticker), dict) else None
+        if row is None:
+            filtered_entries[ticker] = {
+                "ticker": ticker,
+                "score": None,
+                "risk_label": "missing",
+                "missing": True,
+                "stale": True,
+                "article_count": 0,
+                "source": "cache_missing",
+            }
+            continue
+        fetched_age = _age_hours(row.get("fetched_at"), now=now)
+        latest_article_age = _age_hours(row.get("latest_article_time_published"), now=now)
+        score = row.get("score")
+        filtered_entries[ticker] = {
+            **row,
+            "ticker": ticker,
+            "score": score,
+            "risk_label": _news_risk_label(score),
+            "missing": False,
+            "stale": fetched_age is None or fetched_age > NEWS_CACHE_STALE_HOURS,
+            "fetched_age_hours": fetched_age,
+            "latest_article_age_hours": latest_article_age,
+        }
+    hidden_non_holding = sorted(cache_tickers - held_set)
     return {
-        "sentiment": _read_json(os.path.join(SYS, "holding_news_sentiment_cache.json"), {}),
-        "alerts": _read_json(os.path.join(SYS, "news_alert_state.json"), {}),
+        "sentiment": {
+            "entries": filtered_entries,
+            "meta": {
+                "held_count": len(held_tickers),
+                "held_tickers": held_tickers,
+                "cache_count": len(cache_tickers),
+                "cache_updated_at": cache.get("updated_at") if isinstance(cache, dict) else "",
+                "cache_file_mtime": _file_mtime_iso(HOLDING_NEWS_CACHE_PATH),
+                "positions_file_mtime": _file_mtime_iso(POSITIONS_PATH),
+                "hidden_non_holding_count": len(hidden_non_holding),
+                "hidden_non_holding_tickers": hidden_non_holding,
+                "held_missing_cache_tickers": [t for t in held_tickers if t not in cache_tickers],
+                "risk_score_basis": "0~1 risk score = max negative AlphaVantage ticker_sentiment_score weighted by relevance; higher means worse news risk",
+                "risk_thresholds": {"low_lt": NEWS_RISK_LOW, "medium_gte": NEWS_RISK_LOW, "high_gte": NEWS_RISK_HIGH},
+                "refresh_path": "scripts/run_live.py: tick_market -> refresh_holding_news_for_positions",
+                "refresh_default_minutes": 60,
+                "individual_budget_default": 18,
+                "stale_after_hours": NEWS_CACHE_STALE_HOURS,
+            },
+        },
+        "alerts": _read_json(NEWS_ALERT_STATE_PATH, {}),
     }
 
 

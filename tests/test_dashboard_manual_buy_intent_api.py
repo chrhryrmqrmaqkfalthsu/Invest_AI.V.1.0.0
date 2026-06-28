@@ -129,3 +129,56 @@ def test_dashboard_manual_sell_intent_endpoint_writes_file_without_broker_import
     source = Path(api_server.__file__).read_text(encoding="utf-8")
     forbidden = ["make_broker", "AlpacaBroker", "place_buy", "place_sell"]
     assert all(token not in source for token in forbidden)
+
+
+def test_dashboard_live_news_filters_non_holdings_and_reports_risk_thresholds(tmp_path, monkeypatch):
+    positions_path = tmp_path / "positions.json"
+    news_cache_path = tmp_path / "holding_news_sentiment_cache.json"
+    alerts_path = tmp_path / "news_alert_state.json"
+    positions_path.write_text(
+        '{"AAA":{"shares":2,"entry_price":10},"BBB":{"shares":0,"entry_price":20},"CCC":{"shares":3,"entry_price":30}}',
+        encoding="utf-8",
+    )
+    news_cache_path.write_text(
+        """
+        {
+          "updated_at": "2026-06-26T19:32:50+00:00",
+          "entries": {
+            "AAA": {"ticker":"AAA", "score":0.72, "fetched_at":"2026-06-26T19:30:00+00:00", "article_count":5, "source":"test"},
+            "BBB": {"ticker":"BBB", "score":0.50, "fetched_at":"2026-06-26T19:30:00+00:00", "article_count":4, "source":"test"},
+            "OLD": {"ticker":"OLD", "score":0.90, "fetched_at":"2026-06-26T19:30:00+00:00", "article_count":9, "source":"test"}
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+    alerts_path.write_text('{"sell_omen_prealerts": {}}', encoding="utf-8")
+    monkeypatch.setattr(api_server, "POSITIONS_PATH", str(positions_path))
+    monkeypatch.setattr(api_server, "HOLDING_NEWS_CACHE_PATH", str(news_cache_path))
+    monkeypatch.setattr(api_server, "NEWS_ALERT_STATE_PATH", str(alerts_path))
+    client = TestClient(api_server.app)
+
+    res = client.get("/api/live/news")
+
+    assert res.status_code == 200
+    body = res.json()
+    entries = body["sentiment"]["entries"]
+    meta = body["sentiment"]["meta"]
+    assert sorted(entries) == ["AAA", "CCC"]
+    assert entries["AAA"]["risk_label"] == "high"
+    assert entries["CCC"]["missing"] is True
+    assert meta["held_count"] == 2
+    assert meta["hidden_non_holding_count"] == 2
+    assert meta["risk_thresholds"] == {"low_lt": 0.3, "medium_gte": 0.3, "high_gte": 0.6}
+
+
+def test_dashboard_html_is_served_from_single_8001_origin():
+    client = TestClient(api_server.app)
+
+    res = client.get("/dashboard")
+
+    assert res.status_code == 200
+    html = res.text
+    assert "const API=window.location.origin;" in html
+    assert "function newsRiskView" in html
+    assert "http://localhost:8001" not in html

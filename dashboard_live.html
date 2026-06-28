@@ -3,169 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KINGMAKER — Live</title>
-<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<meta http-equiv="refresh" content="0; url=http://localhost:8001/dashboard">
+<title>KINGMAKER — redirect</title>
 <style>
-  :root{--bg:#0a0e17;--panel:#111722;--panel2:#0d121c;--line:#1c2535;--txt:#c9d4e5;--dim:#5f6e85;
-    --up:#26d07c;--down:#ff4d6a;--accent:#3b82f6;--gold:#f5c451;--purple:#8b5cf6;}
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Malgun Gothic",sans-serif;font-size:13px;}
-  .topbar{display:flex;align-items:center;justify-content:space-between;padding:11px 20px;
-    border-bottom:1px solid var(--line);background:linear-gradient(90deg,#0d121c,#111722);}
-  .logo{font-size:19px;font-weight:800;letter-spacing:2px;}.logo span{color:var(--gold);}
-  .regime{display:flex;gap:18px;align-items:center;font-size:12px;}
-  .regime b{font-size:15px;}
-  .badge{padding:3px 10px;border-radius:6px;font-weight:700;font-size:11px;text-transform:uppercase;}
-  .bull{background:rgba(38,208,124,.15);color:var(--up);}
-  .bear{background:rgba(255,77,106,.15);color:var(--down);}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);
-    animation:pulse 1.5s infinite;display:inline-block;}
-  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
-  .wrap{display:grid;grid-template-columns:340px 1fr 320px;gap:12px;padding:12px 16px;}
-  .col h3{font-size:11px;text-transform:uppercase;letter-spacing:1.3px;color:var(--dim);
-    margin:4px 2px 10px;font-weight:600;}
-  .slot{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:11px 13px;
-    margin-bottom:8px;cursor:pointer;transition:.15s;}
-  .slot:hover{border-color:var(--accent);}
-  .slot.active{border-color:var(--accent);background:#13203a;}
-  .slot.empty{opacity:.4;cursor:default;text-align:center;color:var(--dim);padding:16px;}
-  .slot-top{display:flex;justify-content:space-between;align-items:baseline;}
-  .slot-tk{font-size:15px;font-weight:800;}
-  .slot-pnl{font-weight:700;font-variant-numeric:tabular-nums;}
-  .slot-row{display:flex;justify-content:space-between;color:var(--dim);margin-top:5px;font-size:12px;
-    font-variant-numeric:tabular-nums;}
-  .slot-row span:last-child{color:var(--txt);}
-  .slot-meta{margin-top:6px;font-size:11px;color:var(--dim);}
-  .tag{display:inline-block;padding:1px 7px;border-radius:4px;background:rgba(139,92,246,.15);
-    color:var(--purple);font-weight:600;font-size:10px;margin-right:4px;}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:13px;}
-  #chart{width:100%;height:430px;}
-  .news-item{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
-    margin-bottom:7px;font-size:12px;}
-  .news-item .nt{color:var(--dim);font-size:11px;margin-bottom:3px;}
-  .ev-risk{color:var(--down);}.ev-benefit{color:var(--up);}
-  .sector{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:var(--dim);}
-  .bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden;width:90px;margin-top:6px;}
-  .bar>div{height:100%;background:var(--accent);}
-  .loading{color:var(--dim);padding:16px;text-align:center;}
+  body{background:#0a0e17;color:#c9d4e5;font-family:"Segoe UI","Malgun Gothic",sans-serif;padding:32px;}
+  a{color:#3b82f6;}
 </style>
+<script>
+(function(){
+  const host = window.location.hostname || 'localhost';
+  window.location.replace(`http://${host}:8001/dashboard`);
+})();
+</script>
 </head>
 <body>
-  <div class="topbar">
-    <div class="logo">KING<span>MAKER</span> <span style="font-size:11px;color:var(--dim);font-weight:400;">LIVE</span></div>
-    <div class="regime" id="regime"><span class="dot"></span> 연결 중...</div>
-  </div>
-  <div class="wrap">
-    <div class="col">
-      <h3>📦 보유 슬롯 (8)</h3>
-      <div id="slots"><div class="loading">로딩...</div></div>
-    </div>
-    <div class="col">
-      <div class="panel">
-        <h3 id="chart-title" style="margin-top:0;">차트</h3>
-        <div id="chart"></div>
-      </div>
-    </div>
-    <div class="col">
-      <h3>📰 시장 이벤트</h3>
-      <div id="events"><div class="loading">로딩...</div></div>
-      <h3 style="margin-top:14px;">📊 섹터 강도</h3>
-      <div class="panel" id="sectors"><div class="loading">로딩...</div></div>
-    </div>
-  </div>
-<script>
-const API="http://localhost:8001";
-const fmt=n=>n==null?'—':Number(n).toFixed(2);
-const pct=n=>n==null?'—':(n>=0?'+':'')+Number(n).toFixed(2)+'%';
-
-const chart=LightweightCharts.createChart(document.getElementById('chart'),{
-  layout:{background:{color:'transparent'},textColor:'#5f6e85'},
-  grid:{vertLines:{color:'#1c2535'},horzLines:{color:'#1c2535'}},
-  timeScale:{borderColor:'#1c2535'},rightPriceScale:{borderColor:'#1c2535'},
-});
-const series=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',
-  wickUpColor:'#26d07c',wickDownColor:'#ff4d6a',borderVisible:false});
-let priceLines=[], activeTicker=null, slotData=[];
-
-async function loadSlots(){
-  let slots;
-  try{ slots=await (await fetch(`${API}/api/live/slots`)).json(); }
-  catch(e){ document.getElementById('slots').innerHTML='<div class="loading">API 연결 실패<br>8001 서버 확인</div>'; return; }
-  slotData=slots;
-  document.getElementById('slots').innerHTML=slots.map(s=>{
-    if(s.empty) return `<div class="slot empty">슬롯 ${s.slot} · 비어있음</div>`;
-    const col=s.pnl_pct>=0?'var(--up)':'var(--down)';
-    return `<div class="slot" data-tk="${s.ticker}" onclick="selectSlot('${s.ticker}')">
-      <div class="slot-top">
-        <span class="slot-tk">${s.ticker}</span>
-        <span class="slot-pnl" style="color:${col}">${pct(s.pnl_pct)}</span>
-      </div>
-      <div class="slot-row"><span>현재가</span><span>${fmt(s.current_price)}</span></div>
-      <div class="slot-row"><span>진입</span><span>${fmt(s.entry_price)}</span></div>
-      <div class="slot-row"><span>목표 / 손절</span><span style="color:var(--up)">${fmt(s.target_price)}</span> / <span style="color:var(--down)">${fmt(s.stop_price)}</span></div>
-      <div class="slot-meta"><span class="tag">${s.exit_strategy||'?'}</span>${s.direction||''} · 최대 ${s.max_holding_days}일</div>
-    </div>`;
-  }).join('');
-  // 활성 슬롯 유지 또는 첫 종목 선택
-  const first=slots.find(s=>!s.empty);
-  if(first && !activeTicker) selectSlot(first.ticker);
-  else if(activeTicker) markActive();
-}
-
-function markActive(){
-  document.querySelectorAll('.slot[data-tk]').forEach(el=>
-    el.classList.toggle('active', el.dataset.tk===activeTicker));
-}
-
-async function selectSlot(ticker){
-  activeTicker=ticker; markActive();
-  const s=slotData.find(x=>x.ticker===ticker); if(!s) return;
-  document.getElementById('chart-title').textContent=`${ticker} — 보유 차트`;
-  // 과거 캔들: yfinance 독립 조회 API 사용
-  let candles=[];
-  try{
-    candles=await (await fetch(`${API}/api/live/candles/${ticker}`)).json();
-  }catch(e){}
-  series.setData(candles);
-  // 진입/목표/손절/트레일링/현재가 라인
-  priceLines.forEach(l=>series.removePriceLine(l)); priceLines=[];
-  [['진입',s.entry_price,'#3b82f6'],['목표',s.target_price,'#26d07c'],
-   ['손절',s.stop_price,'#ff4d6a'],['트레일',s.trailing_stop,'#f5c451'],
-   ['현재',s.current_price,'#c9d4e5']].forEach(([t,p,c])=>{
-    if(p==null) return;
-    priceLines.push(series.createPriceLine({price:p,color:c,lineWidth:t==='현재'?2:1,
-      lineStyle:t==='현재'?0:2,axisLabelVisible:true,title:t}));
-  });
-  if(candles.length) chart.timeScale().fitContent();
-}
-
-async function loadMarket(){
-  let m;
-  try{ m=await (await fetch(`${API}/api/live/market`)).json(); }catch(e){ return; }
-  const rb=m.regime==='bull'?'bull':'bear';
-  document.getElementById('regime').innerHTML=
-    `<span class="dot"></span> <span class="badge ${rb}">${m.regime||'?'}</span>
-     점수 <b>${m.score??'?'}</b> · VIX ${m.vix_level??'?'} · S&P ${pct(m.sp500_trend_pct)}`;
-  // 이벤트
-  let html='';
-  (m.risk_events||[]).forEach(e=>html+=`<div class="news-item"><span class="ev-risk">▼ 악재</span> ${e}</div>`);
-  (m.benefit_events||[]).forEach(e=>html+=`<div class="news-item"><span class="ev-benefit">▲ 호재</span> ${e}</div>`);
-  const act=m.active_events||{};
-  Object.entries(act).forEach(([name,d])=>{
-    const arts=(d.articles||[]).slice(0,2).map(a=>`<div class="nt">· ${a.title||''}</div>`).join('');
-    html+=`<div class="news-item"><b>${name}</b> (${d.market_impact||''}, ${d.total_impact_score})${arts}</div>`;
-  });
-  document.getElementById('events').innerHTML=html||'<div class="loading">이벤트 없음</div>';
-  // 섹터
-  const sec=m.sector_strength||{};
-  document.getElementById('sectors').innerHTML=Object.entries(sec).map(([k,v])=>
-    `<div><div class="sector"><span>${k}</span><span>${v}</span></div>
-     <div class="bar"><div style="width:${v}%"></div></div></div>`).join('')||'—';
-}
-
-loadSlots(); loadMarket();
-setInterval(loadSlots, 30000);   // 현재가/손익 30초 갱신
-setInterval(loadMarket, 60000);  // 시장상태 60초 갱신
-</script>
+  <h1>KINGMAKER 대시보드 이동 중</h1>
+  <p>이 구버전 대시보드는 통합 대시보드로 대체되었습니다.</p>
+  <p><a href="http://localhost:8001/dashboard">http://localhost:8001/dashboard</a></p>
 </body>
 </html>

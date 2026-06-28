@@ -1,13 +1,79 @@
-# api_server.py — 대시보드 API. broker 직접 주문 금지, semi-auto는 intent 파일만 기록.
-import json, glob, os
+# api_server.py — KINGMAKER 대시보드 + API.
+# broker 직접 주문 금지. semi-auto 조작은 intent 파일만 기록한다.
+import csv
+import glob
+import json
+import os
+import time
+from pathlib import Path
+
+import yfinance as yf
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
+from engine.live.manual_buy_intent import (
+    CENTRAL_BUY_CANDIDATES_PATH,
+    MANUAL_BUY_INTENT_PATH,
+    create_manual_buy_intent,
+    load_candidate_state,
+    read_json,
+)
+from engine.live.manual_sell_intent import (
+    MANUAL_SELL_INTENT_PATH,
+    POSITIONS_PATH as MANUAL_SELL_POSITIONS_PATH,
+    create_manual_sell_intent,
+    load_manual_sell_state,
+)
+
+BASE_DIR = Path(__file__).resolve().parent
 LOG_DIR = "logs"
-app = FastAPI()
+SYS = os.path.join("data", "_system")
+UNIVERSE_MANIFEST_PATH = os.path.join(SYS, "live_universe_lr8d_stage1_manifest.json")
+DASHBOARD_MAIN_PATH = BASE_DIR / "dashboard_home.html"
+
+app = FastAPI(title="KINGMAKER Dashboard API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+
+# ===== 대시보드 HTML 서빙 =====
+# 기존 구조: python -m http.server 8002가 HTML을 서빙하고, api_server:app 8001이 API를 담당했다.
+# 새 구조: api_server:app 8001이 /dashboard에서 HTML까지 직접 서빙한다.
+# 결과: 로컬 터널은 8001 하나면 충분하다. 8002는 호환/구버전 경로로만 남긴다.
+
+def _dashboard_file_response():
+    if not DASHBOARD_MAIN_PATH.exists():
+        raise HTTPException(status_code=500, detail=f"dashboard file missing: {DASHBOARD_MAIN_PATH}")
+    return FileResponse(str(DASHBOARD_MAIN_PATH), media_type="text/html")
+
+
+@app.get("/", include_in_schema=False)
+def root_dashboard_redirect():
+    return RedirectResponse(url="/dashboard", status_code=302)
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard():
+    return _dashboard_file_response()
+
+
+@app.get("/dashboard_home.html", include_in_schema=False)
+def dashboard_home_compat():
+    return _dashboard_file_response()
+
+
+@app.get("/dashboard_live.html", include_in_schema=False)
+def dashboard_live_deprecated():
+    return RedirectResponse(url="/dashboard", status_code=302)
+
+
+@app.get("/dashboard.html", include_in_schema=False)
+def dashboard_legacy_deprecated():
+    return RedirectResponse(url="/dashboard", status_code=302)
+
+
+# ===== 구버전 shadow dashboard API =====
 def load_ticker(ticker: str):
     path = os.path.join(LOG_DIR, f"exit_shadow_{ticker}.jsonl")
     rows = []
@@ -42,6 +108,7 @@ def load_ticker(ticker: str):
             })
     return rows
 
+
 @app.get("/api/tickers")
 def list_tickers():
     files = glob.glob(os.path.join(LOG_DIR, "exit_shadow_*.jsonl"))
@@ -52,35 +119,13 @@ def list_tickers():
         names.append(name)
     return sorted(names)
 
+
 @app.get("/api/trades/{ticker}")
 def trades(ticker: str):
     return load_ticker(ticker.upper())
 
+
 # ===== 라이브 대시보드 엔드포인트 =====
-import csv
-import glob
-import time
-
-import yfinance as yf
-
-from engine.live.manual_buy_intent import (
-    CENTRAL_BUY_CANDIDATES_PATH,
-    MANUAL_BUY_INTENT_PATH,
-    create_manual_buy_intent,
-    load_candidate_state,
-    read_json,
-)
-from engine.live.manual_sell_intent import (
-    MANUAL_SELL_INTENT_PATH,
-    POSITIONS_PATH as MANUAL_SELL_POSITIONS_PATH,
-    create_manual_sell_intent,
-    load_manual_sell_state,
-)
-
-SYS = os.path.join("data", "_system")
-UNIVERSE_MANIFEST_PATH = os.path.join(SYS, "live_universe_lr8d_stage1_manifest.json")
-
-
 def _read_json(path, default=None):
     try:
         with open(path, encoding="utf-8") as f:
@@ -89,7 +134,7 @@ def _read_json(path, default=None):
         return default if default is not None else {}
 
 
-# 현재가 캐시 (30초). yfinance 독립 조회 — 봇 브로커와 무관.
+# 현재가 캐시 30초. yfinance 독립 조회 — 봇 브로커와 무관.
 _price_cache = {}
 
 
@@ -172,7 +217,7 @@ def live_slots(max_slots: int = 8):
 
 @app.get("/api/live/market")
 def live_market():
-    """시장 상태 / 이벤트 (market_state.json)."""
+    """시장 상태 / 이벤트 market_state.json."""
     return _read_json(os.path.join(SYS, "market_state.json"), {})
 
 
@@ -204,7 +249,7 @@ def live_rulebooks():
 
 @app.get("/api/live/candles/{ticker}")
 def live_candles(ticker: str, interval: str = "1d", period: str = None):
-    """yfinance OHLC. interval=1d/15m/5m/1m 등. 분봉은 시간(초)까지 반환."""
+    """yfinance OHLC. interval=1d/15m/5m/1m 등. 분봉은 시간 초까지 반환."""
     default_period = {
         "1m": "5d", "2m": "5d", "5m": "1mo", "15m": "1mo",
         "30m": "1mo", "60m": "3mo", "1h": "3mo", "1d": "2y",
@@ -252,7 +297,9 @@ def live_account():
             total = float(last.get("total_value") or 0)
             unreal = float(last.get("unrealized_pnl") or 0)
             acct.update({
-                "cash": cash, "invested": invested, "total_value": total,
+                "cash": cash,
+                "invested": invested,
+                "total_value": total,
                 "unrealized_pnl": unreal,
                 "holdings_count": int(float(last.get("holdings_count") or 0)),
                 "orders_today": int(float(last.get("orders_today") or 0)),
@@ -262,14 +309,9 @@ def live_account():
     except Exception:
         pass
 
-    # equity_snapshots.csv는 하루/주기 스냅샷이라 장중 신규 매수를 늦게 반영할 수 있다.
-    # 따라서 현재 positions.json + yfinance 현재가로 보유 투자금/평가금/미실현손익을 우선 보정한다.
     try:
         positions = live_positions()
-        active = [
-            p for p in positions
-            if (p.get("shares") is not None and p.get("entry_price") is not None)
-        ]
+        active = [p for p in positions if (p.get("shares") is not None and p.get("entry_price") is not None)]
         if active:
             rt_invested = 0.0
             rt_market_value = 0.0
@@ -310,8 +352,10 @@ def live_account():
         with open(os.path.join(SYS, "trade_log.csv"), encoding="utf-8") as f:
             tot = 0.0
             for r in csv.DictReader(f):
-                try: tot += float(r.get("pnl_krw") or 0)
-                except Exception: pass
+                try:
+                    tot += float(r.get("pnl_krw") or 0)
+                except Exception:
+                    pass
             acct["realized_pnl_total"] = tot
     except Exception:
         pass
@@ -353,8 +397,10 @@ def trades_history():
         with open(path, encoding="utf-8") as f:
             for r in csv.DictReader(f):
                 def fnum(k):
-                    try: return float(r.get(k) or 0)
-                    except Exception: return None
+                    try:
+                        return float(r.get(k) or 0)
+                    except Exception:
+                        return None
                 rows.append({
                     "exited_at": r.get("exited_at"),
                     "ticker": r.get("ticker"),
@@ -432,9 +478,10 @@ class ManualSellIntentRequest(BaseModel):
 
 @app.get("/api/live/central_candidates")
 def central_candidates(include_blocked: bool = False):
-    """central-control semi_auto 대기 후보. 기본값은 대시보드 표시용으로 blocked/체결/만료 후보를 숨긴다.
+    """central-control semi_auto 대기 후보.
 
-    진단용 전체 상태가 필요하면 `/api/live/central_candidates?include_blocked=true`를 사용한다.
+    기본값은 대시보드 표시용으로 blocked/체결/만료 후보를 숨긴다.
+    진단용 전체 상태가 필요하면 /api/live/central_candidates?include_blocked=true 를 사용한다.
     """
     state = load_candidate_state(CENTRAL_BUY_CANDIDATES_PATH)
     candidates = state.get("candidates") if isinstance(state, dict) else None

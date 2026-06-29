@@ -37,6 +37,7 @@ UNIVERSE_MANIFEST_PATH = os.path.join(SYS, "live_universe_lr8d_stage1_manifest.j
 DASHBOARD_MAIN_PATH = BASE_DIR / "dashboard_home.html"
 HOLDING_NEWS_CACHE_PATH = os.path.join(SYS, "holding_news_sentiment_cache.json")
 POSITIONS_PATH = os.path.join(SYS, "positions.json")
+SCHEDULED_OPEN_BUY_QUEUE_PATH = os.path.join(SYS, "scheduled_open_buy_queue.json")
 NEWS_ALERT_STATE_PATH = os.path.join(SYS, "news_alert_state.json")
 NEWS_RISK_LOW = 0.30
 NEWS_RISK_HIGH = 0.60
@@ -712,13 +713,116 @@ class ManualSellIntentRequest(BaseModel):
     source: str = "dashboard"
 
 
+def _scheduled_open_buy_candidate_state(include_blocked: bool = False) -> dict | None:
+    """next_open draft/final queue를 대시보드 후보 패널 형식으로 변환한다.
+
+    central_buy_candidates.json은 구 semi-auto 후보 파일이고, next_open 자동매수 후보는
+    scheduled_open_buy_queue.json에 저장된다. 대시보드는 하나의 후보 패널만 갖고 있으므로
+    여기에서 next_open 큐를 우선 표시한다. 단, 화면에서 수동 즉시매수 버튼이 켜지지 않도록
+    manual_buy_enabled=False와 전용 status를 내려준다.
+    """
+    queue = _read_json(SCHEDULED_OPEN_BUY_QUEUE_PATH, {})
+    if not isinstance(queue, dict):
+        return None
+    items = queue.get("items")
+    if not isinstance(items, list) or not items:
+        return None
+    candidates: dict[str, dict] = {}
+    for row in items:
+        if not isinstance(row, dict):
+            continue
+        raw_status = str(row.get("status") or queue.get("item_status") or "").strip().lower()
+        if not include_blocked and raw_status in {"executed", "blocked", "expired", "cancelled", "canceled"}:
+            continue
+        decision = row.get("decision") if isinstance(row.get("decision"), dict) else {}
+        ticker = str(row.get("ticker") or decision.get("ticker") or "").upper().strip()
+        entity_id = str(row.get("entity_id") or decision.get("entity_id") or "").strip()
+        if not ticker or not entity_id:
+            continue
+        if raw_status == "draft":
+            display_status = "next_open_draft"
+            action_label = "초안 대기"
+        elif raw_status == "pending":
+            display_status = "next_open_pending"
+            action_label = "자동 예정"
+        elif raw_status == "submitted":
+            display_status = "manual_requested"
+            action_label = "주문 제출"
+        elif raw_status == "executed":
+            display_status = "auto_executed"
+            action_label = "자동 체결"
+        elif raw_status == "blocked":
+            display_status = "blocked"
+            action_label = "차단됨"
+        else:
+            display_status = raw_status or "next_open_draft"
+            action_label = "대기"
+        cid = str(row.get("candidate_id") or f"{queue.get('execution_session')}:{entity_id}")
+        candidates[cid] = {
+            "candidate_id": cid,
+            "ticker": ticker,
+            "entity_id": entity_id,
+            "trade_date": queue.get("execution_session") or row.get("execution_session"),
+            "execution_session": queue.get("execution_session") or row.get("execution_session"),
+            "signal_session": queue.get("signal_session") or row.get("signal_session"),
+            "source": "scheduled_open_buy_queue",
+            "queue_phase": queue.get("queue_phase"),
+            "queue_status": queue.get("status"),
+            "item_status": raw_status,
+            "status": display_status,
+            "manual_buy_enabled": False,
+            "action_label": action_label,
+            "note": row.get("note") or (
+                "next_open draft 후보: final 확정 전까지 수동 즉시매수 비활성"
+                if raw_status == "draft" else
+                "next_open final 후보: 개장 후 자동 실행 대기"
+                if raw_status == "pending" else ""
+            ),
+            "created_at": row.get("created_at") or queue.get("updated_at"),
+            "updated_at": queue.get("updated_at") or row.get("updated_at"),
+            "price": row.get("reference_price"),
+            "reference_price": row.get("reference_price"),
+            "notional": row.get("notional") or decision.get("notional"),
+            "shares": row.get("shares") or decision.get("shares"),
+            "score": decision.get("score"),
+            "confidence": decision.get("confidence"),
+            "strength": decision.get("strength"),
+            "effective_strength": decision.get("strength"),
+            "signal_score": row.get("signal_score"),
+            "signal_threshold": row.get("signal_threshold"),
+            "stage": row.get("stage"),
+            "rulebook_hash": row.get("rulebook_hash"),
+        }
+    if not candidates:
+        return None
+    return {
+        "schema_version": 1,
+        "buy_mode": "next_open",
+        "source": "scheduled_open_buy_queue",
+        "queue_status": queue.get("status"),
+        "queue_phase": queue.get("queue_phase"),
+        "item_status": queue.get("item_status"),
+        "signal_session": queue.get("signal_session"),
+        "trade_date": queue.get("execution_session"),
+        "execution_session": queue.get("execution_session"),
+        "updated_at": queue.get("updated_at"),
+        "diagnostics": queue.get("diagnostics") if isinstance(queue.get("diagnostics"), dict) else {},
+        "manual_buy_enabled": False,
+        "candidates": candidates,
+    }
+
+
 @app.get("/api/live/central_candidates")
 def central_candidates(include_blocked: bool = False):
-    """central-control semi_auto 대기 후보.
+    """대시보드 매수 후보.
 
-    기본값은 대시보드 표시용으로 blocked/체결/만료 후보를 숨긴다.
-    진단용 전체 상태가 필요하면 /api/live/central_candidates?include_blocked=true 를 사용한다.
+    next_open 모드에서는 scheduled_open_buy_queue.json의 draft/final 큐를 우선 표시한다.
+    구 semi-auto 후보가 필요하거나 next_open 큐가 없으면 central_buy_candidates.json을 반환한다.
     """
+    scheduled_state = _scheduled_open_buy_candidate_state(include_blocked=include_blocked)
+    if scheduled_state is not None:
+        return scheduled_state
+
     state = load_candidate_state(CENTRAL_BUY_CANDIDATES_PATH)
     candidates = state.get("candidates") if isinstance(state, dict) else None
     hidden_statuses = {"manual_executed", "auto_executed", "expired"}

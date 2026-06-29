@@ -388,6 +388,8 @@ let slotData=[], marketData={}, _holdingNewsEntries={};
 let _alertState={ near:{}, lastTradeId:null, firstRun:true };
 const CAND_BADGE = {
   pending: {cls:'b-pending', txt:'매수 가능'},
+  next_open_draft: {cls:'b-requested', txt:'초안 대기'},
+  next_open_pending: {cls:'b-pending', txt:'최종 대기'},
   manual_requested: {cls:'b-requested', txt:'처리 중'},
   manual_executed: {cls:'b-executed', txt:'수동 체결'},
   auto_executed: {cls:'b-auto', txt:'자동 체결'},
@@ -570,9 +572,10 @@ async function loadCandidates(){
   cands = cands.slice(0, emptyCount);
 
   const meta = document.getElementById('cand-meta');
+  const phase = state.queue_phase ? `next-open ${state.queue_phase}` : '';
   meta.textContent = state.trade_date
-    ? `거래일 ${state.trade_date} · 빈 슬롯 ${emptyCount}개`
-    : `빈 슬롯 ${emptyCount}개`;
+    ? `${phase ? phase+' · ' : ''}거래일 ${state.trade_date} · 빈 슬롯 ${emptyCount}개`
+    : `${phase ? phase+' · ' : ''}빈 슬롯 ${emptyCount}개`;
   if(cands.length===0){
     document.getElementById('cand-list').innerHTML = '<div class="cand-empty">대기 중인 후보 없음</div>';
     return;
@@ -603,8 +606,9 @@ function candCard(c){
   const b = CAND_BADGE[st] || CAND_BADGE.expired;
   const cid = String(c.candidate_id || '');
   const ticker = String(c.ticker || cid || '').toUpperCase();
-  const canBuy = st === 'pending';
+  const canBuy = st === 'pending' && c.manual_buy_enabled !== false;
   const processing = st === 'manual_requested';
+  const waitingNextOpen = st === 'next_open_draft' || st === 'next_open_pending' || c.manual_buy_enabled === false;
   const filled = st === 'manual_executed' || st === 'auto_executed';
   const signalPrice = Number(c.price || 0);
   const fillPrice = filled ? _posEntry[ticker] : null;
@@ -624,6 +628,9 @@ function candCard(c){
   if(canBuy){
     const busy = _candBusy[cid];
     btn = `<button class="cand-buy${busy?' processing':''}" ${busy?'disabled':''} data-candidate-id="${htmlEsc(cid)}">${busy?'요청 중…':'지금 매수'}</button>`;
+  }else if(waitingNextOpen){
+    const label = htmlEsc(c.action_label || (st === 'next_open_pending' ? '자동 예정' : '초안 대기'));
+    btn = `<button class="cand-buy" disabled>${label}</button>`;
   }else if(processing){
     btn = '<button class="cand-buy processing" disabled>처리 중…</button>';
   }else{

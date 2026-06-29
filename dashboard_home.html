@@ -713,6 +713,7 @@ async function openCandChart(ticker, signalPrice, fillPrice){
   _candChart = LightweightCharts.createChart(el, {
     layout:{background:{color:'#0f141b'}, textColor:'#b8c1cf'},
     grid:{vertLines:{color:'#1a1f28'}, horzLines:{color:'#1a1f28'}},
+    localization:{timeFormatter:formatChartAxisTimeLabel},
     timeScale:{timeVisible:true, secondsVisible:false},
     width: Math.max(el.clientWidth, 300), height: 340,
   });
@@ -1020,6 +1021,7 @@ async function loadSlots(){
 const chart=LightweightCharts.createChart(document.getElementById('chart'),{
   layout:{background:{color:'transparent'},textColor:'#5f6e85'},
   grid:{vertLines:{color:'#1c2535'},horzLines:{color:'#1c2535'}},
+  localization:{timeFormatter:formatChartAxisTimeLabel},
   timeScale:{borderColor:'#1c2535'},rightPriceScale:{borderColor:'#1c2535'},
 });
 const series=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',
@@ -1054,9 +1056,23 @@ function formatChartTimeLabel(time){
   if(typeof time === 'string') return time;
   if(typeof time === 'number'){
     const d = new Date(time * 1000);
-    const date = d.toLocaleDateString('ko-KR', {timeZone:'America/New_York', year:'numeric', month:'2-digit', day:'2-digit'});
-    const clock = d.toLocaleTimeString('ko-KR', {timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false});
-    return `${date} ${clock} ET`;
+    const date = d.toLocaleDateString('ko-KR', {timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit'});
+    const clock = d.toLocaleTimeString('ko-KR', {timeZone:'Asia/Seoul', hour:'2-digit', minute:'2-digit', hour12:false});
+    return `${date} ${clock} KST`;
+  }
+  if(typeof time === 'object' && time.year && time.month && time.day){
+    const mm = String(time.month).padStart(2, '0');
+    const dd = String(time.day).padStart(2, '0');
+    return `${time.year}-${mm}-${dd}`;
+  }
+  return String(time);
+}
+function formatChartAxisTimeLabel(time){
+  if(time == null) return '';
+  if(typeof time === 'string') return time;
+  if(typeof time === 'number'){
+    const d = new Date(time * 1000);
+    return d.toLocaleString('ko-KR', {timeZone:'Asia/Seoul', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false});
   }
   if(typeof time === 'object' && time.year && time.month && time.day){
     const mm = String(time.month).padStart(2, '0');
@@ -1323,19 +1339,20 @@ function articleTime(a){
   return String(raw).slice(0,16).replace('T',' ');
 }
 function renderSellOmenBox(s){
-  if(!s || s.empty) return '<div class="sellomen-box"><div class="sellomen-head">SELLOMEN <span class="sellomen-state off">데이터 없음</span></div></div>';
+  if(!s || s.empty) return '';
   const tk=String(s.ticker||'').toUpperCase();
   const rb=s.rulebook||{};
-  const entry=_holdingNewsEntries[tk]||{};
   const enabled=!!rb.sell_omen_enabled;
+  if(!enabled) return '';
+  const entry=_holdingNewsEntries[tk]||{};
   const score=entry.score!=null ? Number(entry.score) : null;
   const threshold=rb.sell_omen_threshold!=null ? Number(rb.sell_omen_threshold) : 1.0;
   const ratio=(enabled && score!=null && threshold>0) ? score/threshold : null;
   const pctWidth=ratio==null ? 0 : Math.max(0,Math.min(100,ratio*100));
-  const level=!enabled?'off':(ratio!=null && ratio>=1?'danger':(ratio!=null && ratio>=0.8?'warn':'on'));
-  const stateTxt=!enabled?'비활성':(ratio!=null && ratio>=1?'청산 기준 초과':(ratio!=null && ratio>=0.8?'기준 근접':'감시 중'));
+  const level=(ratio!=null && ratio>=1?'danger':(ratio!=null && ratio>=0.8?'warn':'on'));
+  const stateTxt=(ratio!=null && ratio>=1?'청산 기준 초과':(ratio!=null && ratio>=0.8?'기준 근접':'감시 중'));
   const scoreTxt=score==null?'—':score.toFixed(3);
-  const thTxt=enabled?threshold.toFixed(3):'비활성';
+  const thTxt=threshold.toFixed(3);
   const ratioTxt=ratio==null?'—':`${Math.round(ratio*100)}%`;
   return `<div class="sellomen-box ${level==='danger'?'danger':level==='warn'?'warn':''}">
     <div class="sellomen-head"><span>${htmlEsc(tk)} SELLOMEN 청산 감시</span><span class="sellomen-state ${level}">${stateTxt}</span></div>

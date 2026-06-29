@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
+import yfinance as yf
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockLatestTradeRequest
 from alpaca.trading.client import TradingClient
@@ -23,6 +25,7 @@ SHARE_EPS = 1e-6
 CLIENT_LOOKUP_FOUND = "FOUND"
 CLIENT_LOOKUP_NOT_FOUND = "NOT_FOUND"
 CLIENT_LOOKUP_UNKNOWN = "UNKNOWN"
+DISPLAY_PRICE_CACHE_TTL_SEC = 15.0
 
 
 class AlpacaBroker(Broker):
@@ -39,6 +42,7 @@ class AlpacaBroker(Broker):
             raise BrokerError("ALPACA_SECRET_KEY 환경변수/.env 누락")
         self.trading = TradingClient(self.api_key, self.secret_key, paper=self.paper, url_override=self.base_url)
         self.data = StockHistoricalDataClient(self.api_key, self.secret_key)
+        self._display_price_cache: dict[str, tuple[float | None, float, str]] = {}
 
     @property
     def mode(self) -> str:
@@ -112,32 +116,80 @@ class AlpacaBroker(Broker):
         except Exception as e:
             raise BrokerError(f"Alpaca get_balance 실패: {e}") from e
 
-    def _refresh_holding_price(self, symbol: str, qty: float, avg: float, raw_current: float, raw_market_value: float, raw_unrealized: float, raw_unrealized_pct: float) -> Holding:
-        """Return a Holding with latest-trade price overlaid for after-market display.
+    @staticmethod
+    def _positive_price(value: Any) -> float | None:
+        try:
+            if value in (None, ""):
+                return None
+            out = float(value)
+            if out <= 0.0 or out != out:
+                return None
+            return out
+        except Exception:
+            return None
 
-        Alpaca Trading API position.current_price can stay pinned around the
-        regular-session mark while the Market Data latest trade continues to move
-        during after-hours.  Telegram /positions and dashboard holding summaries
-        should show that latest executable print, but order/exit logic still uses
-        get_current_price() directly where needed.
+    def _display_price_yfinance_prepost(self, symbol: str) -> float | None:
+        """Display-only price: yfinance 1m pre/post captures after-hours prints.
+
+        This is not used for order submission.  Alpaca free/IEX latest trade often
+        stops at 15:59 ET, so Telegram/dashboard display prefers this pre/post
+        series when available.
+        """
+        t = str(symbol or "").upper().strip()
+        if not t:
+            return None
+        now = time.time()
+        cached = self._display_price_cache.get(t)
+        if cached and now - cached[1] < DISPLAY_PRICE_CACHE_TTL_SEC:
+            return cached[0]
+        price = None
+        source = "none"
+        try:
+            hist = yf.Ticker(t).history(period="1d", interval="1m", prepost=True)
+            if hist is not None and not hist.empty:
+                close = hist["Close"].dropna()
+                if not close.empty:
+                    price = self._positive_price(close.iloc[-1])
+                    if price is not None:
+                        source = "yfinance_1m_prepost"
+        except Exception as exc:
+            log.debug("%s yfinance pre/post display price failed: %s", t, exc)
+            price = None
+        self._display_price_cache[t] = (price, now, source)
+        return price
+
+    def _refresh_holding_price(self, symbol: str, qty: float, avg: float, raw_current: float, raw_market_value: float, raw_unrealized: float, raw_unrealized_pct: float) -> Holding:
+        """Return a Holding with pre/post display price overlaid.
+
+        Alpaca Trading API position.current_price and Alpaca free/IEX latest trade
+        can stay pinned to the regular-session last print after 16:00 ET.  For
+        Telegram `/positions` and display summaries, prefer yfinance 1m pre/post
+        price, then Alpaca latest trade, then the raw Trading API position price.
+        Order/exit logic still calls get_current_price() directly.
         """
         cur = float(raw_current or avg or 0.0)
         source = "trading_position"
         try:
-            latest = self.get_current_price(symbol)
-            if latest is not None and float(latest) > 0.0:
-                cur = float(latest)
-                source = "latest_trade"
+            prepost = self._display_price_yfinance_prepost(symbol)
+            if prepost is not None and float(prepost) > 0.0:
+                cur = float(prepost)
+                source = "yfinance_1m_prepost"
+            else:
+                latest = self.get_current_price(symbol)
+                if latest is not None and float(latest) > 0.0:
+                    cur = float(latest)
+                    source = "alpaca_latest_trade"
         except Exception as exc:
-            log.debug(f"{symbol} holding latest-trade refresh skipped: {exc}")
+            log.debug(f"{symbol} holding display-price refresh skipped: {exc}")
         if cur > 0.0 and qty > 0.0 and avg > 0.0:
             market_value = qty * cur
             unrealized = (cur - avg) * qty
             unrealized_pct = (cur / avg - 1.0) * 100.0
-            if source == "latest_trade" and abs(cur - float(raw_current or 0.0)) > 1e-9:
+            if source != "trading_position" and abs(cur - float(raw_current or 0.0)) > 1e-9:
                 log.debug(
-                    "%s holding price refreshed for display: trading=%s latest=%s pnl_pct=%+.3f%%",
+                    "%s holding price refreshed for display: source=%s trading=%s display=%s pnl_pct=%+.3f%%",
                     symbol,
+                    source,
                     raw_current,
                     cur,
                     unrealized_pct,

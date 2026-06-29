@@ -3,13 +3,19 @@
 The module is intentionally file-backed and small.  Selection stores the exact
 BuyDecision rulebook into the queue, and open execution passes that rulebook back
 through the existing central-control order path so entity identity is preserved.
+
+Next-open selection has two phases:
+- draft: after the prior session's post-market window closes, candidates are
+  refreshed periodically but are not executable.
+- final: shortly before the regular open, the queue is finalized as pending and
+  becomes executable after the configured open delay once all flat guards pass.
 """
 from __future__ import annotations
 
 import json
 import logging
 from dataclasses import asdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -25,7 +31,7 @@ from engine.learning.backtest import (
     _news_zscore_window,
     _precompute_topic_feature_map,
 )
-from engine.live.trading_day import current_or_next_session, previous_session_date, session_open_dt
+from engine.live.trading_day import current_or_next_session, is_session_day, previous_session_date, session_open_dt
 from engine.market.context import get_market_history
 from engine.strategies.demo_rulebook import Signal, SignalResult
 from engine.strategies.evaluator import evaluate_signal
@@ -35,6 +41,7 @@ log = logging.getLogger("live.scheduled_open_buy_queue")
 
 DEFAULT_SCHEDULED_OPEN_BUY_QUEUE_PATH = Path("data/_system/scheduled_open_buy_queue.json")
 ET = ZoneInfo("America/New_York")
+POSTMARKET_END_ET = time(20, 0)
 
 
 def _utc_now_iso() -> str:
@@ -43,6 +50,12 @@ def _utc_now_iso() -> str:
 
 def _date_text(value: date | str) -> str:
     return value.isoformat() if isinstance(value, date) else str(value)
+
+
+def _as_et(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=ET)
+    return value.astimezone(ET)
 
 
 def load_queue(path: str | Path = DEFAULT_SCHEDULED_OPEN_BUY_QUEUE_PATH) -> dict[str, Any]:
@@ -102,6 +115,7 @@ def decision_to_queue_item(
     signal_score: float,
     signal_threshold: float,
     stage: str = "stage2",
+    status: str = "pending",
 ) -> dict[str, Any]:
     ticker = normalize_ticker(decision.ticker)
     entity_id = str(decision.entity_id or "")
@@ -120,7 +134,7 @@ def decision_to_queue_item(
         "decision": asdict(decision),
         "notional": float(decision.notional or 0.0),
         "shares": float(decision.shares or 0.0),
-        "status": "pending",
+        "status": str(status or "pending"),
         "created_at": _utc_now_iso(),
     }
 
@@ -171,18 +185,72 @@ class NextOpenBuyCoordinator:
         queue_path: str | Path = DEFAULT_SCHEDULED_OPEN_BUY_QUEUE_PATH,
         preopen_select_minutes_before_open: int = 10,
         open_buy_delay_sec: int = 5,
+        postmarket_prepare_enabled: bool = True,
+        postmarket_prepare_delay_min: int = 5,
+        draft_reselect_interval_min: int = 60,
     ) -> None:
         self.controller = controller
         self.market_clock = market_clock
         self.queue_path = Path(queue_path)
         self.preopen_select_minutes_before_open = max(1, int(preopen_select_minutes_before_open or 10))
         self.open_buy_delay_sec = max(0, int(open_buy_delay_sec or 0))
+        self.postmarket_prepare_enabled = bool(postmarket_prepare_enabled)
+        self.postmarket_prepare_delay_min = max(0, int(postmarket_prepare_delay_min or 0))
+        self.draft_reselect_interval_min = max(1, int(draft_reselect_interval_min or 60))
 
     def _now_et(self) -> datetime:
         try:
             return self.controller._now_et()
         except Exception:
             return datetime.now(ET)
+
+    def _next_open_session_after(self, now: datetime) -> date:
+        now_et = _as_et(now)
+        try:
+            nxt = self.market_clock.next_open(now_et) if hasattr(self.market_clock, "next_open") else None
+            if nxt is not None:
+                nxt_et = _as_et(nxt)
+                if nxt_et > now_et:
+                    return nxt_et.date()
+        except Exception:
+            pass
+        cursor = now_et.date()
+        for _ in range(21):
+            if is_session_day(self.market_clock, cursor):
+                opened = session_open_dt(self.market_clock, cursor)
+                if opened > now_et:
+                    return cursor
+            cursor += timedelta(days=1)
+        return current_or_next_session(self.market_clock, now_et)
+
+    def _draft_window_start(self, execution_session: date) -> datetime:
+        signal_session = previous_session_date(self.market_clock, execution_session)
+        postmarket_end = datetime.combine(signal_session, POSTMARKET_END_ET, tzinfo=ET)
+        return postmarket_end + timedelta(minutes=self.postmarket_prepare_delay_min)
+
+    def _rows_for_session(self, payload: dict[str, Any], execution_session: date | str, statuses: set[str]) -> list[dict[str, Any]]:
+        session = _date_text(execution_session)
+        normalized = {str(s or "").lower() for s in statuses}
+        return [
+            row
+            for row in payload.get("items", []) or []
+            if isinstance(row, dict)
+            and str(row.get("execution_session") or "") == session
+            and str(row.get("status") or "").lower() in normalized
+        ]
+
+    def _draft_reselect_due(self, payload: dict[str, Any], now: datetime) -> bool:
+        raw = str(payload.get("updated_at") or payload.get("created_at") or "").strip()
+        if not raw:
+            return True
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=ZoneInfo("UTC"))
+            age_sec = (_as_et(now) - parsed.astimezone(ET)).total_seconds()
+            return age_sec >= self.draft_reselect_interval_min * 60
+        except Exception:
+            return True
 
     def _ticker_sentiment_for(self, provider: Any, ticker: str) -> dict | None:
         if provider is not None and hasattr(provider, "_load_ticker_sentiment"):
@@ -260,23 +328,48 @@ class NextOpenBuyCoordinator:
 
     def prepare_if_due(self) -> dict[str, Any]:
         now = self._now_et()
-        execution_session = current_or_next_session(self.market_clock, now)
+        execution_session = self._next_open_session_after(now)
         opened = session_open_dt(self.market_clock, execution_session)
-        start = opened - timedelta(minutes=self.preopen_select_minutes_before_open)
-        if not (start <= now < opened):
-            return {"status": "not_due", "now": now.isoformat(), "window_start": start.isoformat(), "open": opened.isoformat()}
+        final_start = opened - timedelta(minutes=self.preopen_select_minutes_before_open)
         payload = load_queue(self.queue_path)
-        if any(
-            str(row.get("execution_session") or "") == execution_session.isoformat()
-            and str(row.get("status") or "") in {"pending", "submitted", "executed", "blocked"}
-            for row in payload.get("items", []) or []
-            if isinstance(row, dict)
-        ):
-            return {"status": "already_prepared", "execution_session": execution_session.isoformat()}
-        return self.prepare_queue(execution_session=execution_session)
 
-    def prepare_queue(self, *, execution_session: date | None = None) -> dict[str, Any]:
-        execution_session = execution_session or current_or_next_session(self.market_clock, self._now_et())
+        if final_start <= now < opened:
+            if self._rows_for_session(payload, execution_session, {"submitted", "executed", "blocked"}):
+                return {"status": "already_touched", "execution_session": execution_session.isoformat()}
+            if self._rows_for_session(payload, execution_session, {"pending"}):
+                return {"status": "already_prepared", "execution_session": execution_session.isoformat(), "phase": "final"}
+            return self.prepare_queue(execution_session=execution_session, queue_phase="final", item_status="pending")
+
+        if self.postmarket_prepare_enabled:
+            draft_start = self._draft_window_start(execution_session)
+            if draft_start <= now < final_start:
+                if self._rows_for_session(payload, execution_session, {"pending", "submitted", "executed", "blocked"}):
+                    return {"status": "final_exists", "execution_session": execution_session.isoformat()}
+                if self._rows_for_session(payload, execution_session, {"draft"}) and not self._draft_reselect_due(payload, now):
+                    return {
+                        "status": "draft_not_due",
+                        "execution_session": execution_session.isoformat(),
+                        "next_reselect_min": self.draft_reselect_interval_min,
+                    }
+                return self.prepare_queue(execution_session=execution_session, queue_phase="draft", item_status="draft")
+            return {
+                "status": "not_due",
+                "now": now.isoformat(),
+                "draft_window_start": draft_start.isoformat(),
+                "final_window_start": final_start.isoformat(),
+                "open": opened.isoformat(),
+            }
+
+        return {"status": "not_due", "now": now.isoformat(), "window_start": final_start.isoformat(), "open": opened.isoformat()}
+
+    def prepare_queue(
+        self,
+        *,
+        execution_session: date | None = None,
+        queue_phase: str = "final",
+        item_status: str = "pending",
+    ) -> dict[str, Any]:
+        execution_session = execution_session or self._next_open_session_after(self._now_et())
         signal_session = previous_session_date(self.market_clock, execution_session)
         provider = getattr(self.controller.runner, "rulebook", None)
         if provider is None or not hasattr(provider, "_get_ohlcv"):
@@ -351,9 +444,11 @@ class NextOpenBuyCoordinator:
                     stage_by_entity[entity.entity_id] = "stage2"
 
         alloc = self.controller._allocation_params()
-        # Queue preparation is explicitly for a clean reset/open entry cycle.  The
-        # execution guard below prevents any BUY until local positions, broker
-        # holdings, and pending orders are all flat.
+        # Queue preparation is explicitly for a clean reset/open entry cycle.
+        # Draft/final selection therefore assumes the target open cycle will be
+        # flat and selects up to max_positions.  The execution guard below still
+        # prevents any BUY until local positions, broker holdings, and pending
+        # orders are all flat.
         if self.controller.selection_metric == "confidence":
             decisions = decide_buys(candidates, _EmptyLedger(), alloc)
         else:
@@ -371,17 +466,24 @@ class NextOpenBuyCoordinator:
                     signal_score=float(getattr(sig, "score", 0.0) or 0.0),
                     signal_threshold=float(getattr(sig, "threshold", 0.0) or 0.0),
                     stage=stage_by_entity.get(decision.entity_id, "stage2"),
+                    status=item_status,
                 )
             )
 
+        payload_status = "draft" if str(item_status) == "draft" and items else "draft_empty" if str(item_status) == "draft" else "pending" if items else "empty"
         payload = {
             "schema_version": 1,
-            "status": "pending" if items else "empty",
+            "status": payload_status,
+            "queue_phase": str(queue_phase or "final"),
+            "item_status": str(item_status or "pending"),
             "signal_session": signal_session.isoformat(),
             "execution_session": execution_session.isoformat(),
             "created_at": _utc_now_iso(),
             "items": items,
             "diagnostics": {
+                "queue_phase": str(queue_phase or "final"),
+                "item_status": str(item_status or "pending"),
+                "slot_target": int(getattr(alloc, "max_positions", 0) or 0),
                 "evaluated_symbols": evaluated_symbols,
                 "candidate_count": len(candidates),
                 "decision_count": len(decisions),
@@ -393,16 +495,24 @@ class NextOpenBuyCoordinator:
         }
         save_queue(payload, self.queue_path)
         log.warning(
-            "[NEXT-OPEN] queue prepared execution_session=%s signal_session=%s candidates=%s decisions=%s skipped=%s path=%s lag_days=%s context=get_market_history",
+            "[NEXT-OPEN] queue %s prepared execution_session=%s signal_session=%s candidates=%s decisions=%s skipped=%s path=%s item_status=%s lag_days=%s context=get_market_history",
+            str(queue_phase or "final"),
             execution_session,
             signal_session,
             len(candidates),
             len(decisions),
             len(skipped),
             self.queue_path,
+            str(item_status or "pending"),
             FEATURE_LAG_DAYS,
         )
-        return {"status": payload["status"], "decision_count": len(decisions), "candidate_count": len(candidates), "skipped_count": len(skipped)}
+        return {
+            "status": payload["status"],
+            "phase": str(queue_phase or "final"),
+            "decision_count": len(decisions),
+            "candidate_count": len(candidates),
+            "skipped_count": len(skipped),
+        }
 
     def execute_if_due(self) -> dict[str, Any]:
         now = self._now_et()

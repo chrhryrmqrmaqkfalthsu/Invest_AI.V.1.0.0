@@ -6,7 +6,7 @@ run_live.py - 라이브 트레이딩 봇 엔트리포인트.
     ├─ once         → Runner.startup_check
     ├─ market_hours → Runner.tick_market → holding-news refresh
     ├─ interval     → Runner.tick_offmarket
-    ├─ interval     → next_open pre-open selection / open execution checks
+    ├─ interval     → next_open 장후 draft/프리오픈 final selection / open execution checks
     ├─ cron         → 장마감 일일 보고
     ├─ cron         → 주간 보고
     └─ cron         → 월간 보고
@@ -264,6 +264,9 @@ def main():
     parser.add_argument("--central-control", choices=["on", "off"], default="off", help="신규 BUY만 중앙통제기 선정/배분으로 전환")
     parser.add_argument("--buy-timing-mode", choices=["next_open"], default="next_open", help="BUY timing: D-1 종가 선별 후 D일 open queue 집행만 허용")
     parser.add_argument("--preopen-select-minutes-before-open", type=int, default=10)
+    parser.add_argument("--postmarket-prepare", choices=["on", "off"], default="on", help="next_open 후보 초안을 D-1 애프터마켓 종료 후부터 주기적으로 재선별")
+    parser.add_argument("--postmarket-prepare-delay-min", type=int, default=5, help="D-1 20:00 ET 이후 초안 후보 선별 지연분")
+    parser.add_argument("--candidate-reselect-min", type=int, default=60, help="애프터마켓 이후 draft 후보 재선별 주기")
     parser.add_argument("--open-buy-delay-sec", type=int, default=5)
     parser.add_argument("--scheduled-buy-queue-path", default=str(DEFAULT_SCHEDULED_OPEN_BUY_QUEUE_PATH))
     parser.add_argument("--buy-mode", choices=["auto", "semi_auto"], default="auto", help="legacy/intraday central BUY mode. next_open에서는 즉시 BUY에 사용하지 않음")
@@ -381,12 +384,18 @@ def main():
                 queue_path=Path(args.scheduled_buy_queue_path),
                 preopen_select_minutes_before_open=int(args.preopen_select_minutes_before_open),
                 open_buy_delay_sec=int(args.open_buy_delay_sec),
+                postmarket_prepare_enabled=str(args.postmarket_prepare).lower() == "on",
+                postmarket_prepare_delay_min=int(args.postmarket_prepare_delay_min),
+                draft_reselect_interval_min=int(args.candidate_reselect_min),
             )
             logger.warning(
-                "[NEXT-OPEN] ON: regular-hours central BUY disabled; preopen D-1 close selection → D open queue execution path=%s preopen_min=%s open_delay_sec=%s",
+                "[NEXT-OPEN] ON: regular-hours central BUY disabled; postmarket draft → hourly reselect → preopen final queue path=%s preopen_min=%s open_delay_sec=%s postmarket_prepare=%s postmarket_delay_min=%s draft_reselect_min=%s",
                 args.scheduled_buy_queue_path,
                 args.preopen_select_minutes_before_open,
                 args.open_buy_delay_sec,
+                args.postmarket_prepare,
+                args.postmarket_prepare_delay_min,
+                args.candidate_reselect_min,
             )
         logger.warning(
             "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s buy_timing_mode=%s order_notional_safety_buffer=%.4f universe=promoted∩central pool_limit=%s stage3_mix=%s stage3_pool_path=%s stage3_pool_limit=%s strength_cap=%s stage3_strength_cap=%s stage3_min_confidence=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",

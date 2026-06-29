@@ -382,7 +382,25 @@ const API="http://localhost:8001";
 const fmt=(n,d=2)=>n==null?'—':Number(n).toFixed(d);
 const usd=n=>n==null?'—':'$'+Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
 const pct=n=>n==null?'—':(n>=0?'+':'')+Number(n).toFixed(2)+'%';
+const pct1=n=>n==null||!isFinite(Number(n))?'—':(Number(n)>=0?'+':'')+Number(n).toFixed(1)+'%';
+const pct0=n=>n==null||!isFinite(Number(n))?'—':(Number(n)>=0?'+':'')+Number(n).toFixed(0)+'%';
+const priceUsd=n=>n==null||!isFinite(Number(n))?'—':'$'+Number(n).toFixed(2);
 const col=n=>n>=0?'var(--up)':'var(--down)';
+function newsMetricText(news){
+  if(!news || !news.enabled && news.score == null) return '';
+  const score = news.score == null ? null : Number(news.score);
+  const threshold = news.threshold == null ? null : Number(news.threshold);
+  if(score == null || !isFinite(score)) return '뉴스 확인중';
+  return threshold != null && isFinite(threshold) ? `뉴스 ${score.toFixed(3)}/${threshold.toFixed(3)}` : `뉴스 ${score.toFixed(3)}`;
+}
+function newsMetricClass(news){
+  if(!news) return '';
+  const score = news.score == null ? null : Number(news.score);
+  const threshold = news.threshold == null ? null : Number(news.threshold);
+  if(score == null || !isFinite(score)) return '';
+  if(threshold != null && isFinite(threshold)) return score >= threshold * 0.8 ? 'univ-neg' : 'univ-pos';
+  return score >= 0.3 ? 'univ-neg' : 'univ-pos';
+}
 
 let slotData=[], marketData={}, _holdingNewsEntries={};
 let _alertState={ near:{}, lastTradeId:null, firstRun:true };
@@ -621,19 +639,20 @@ function candCard(c){
   const fillTxt = fillPrice ? `$${Number(fillPrice).toFixed(2)}` : '';
   const fillPart = filled ? `체결가 <span class="cand-fill">${htmlEsc(fillTxt || '확인중')}</span>` : '';
   const notional = Number(c.notional || 0).toLocaleString();
-  const shares = c.shares != null ? `${c.shares}주` : '';
+  const shares = c.shares != null ? `${Number(c.shares).toFixed(2)}주` : '';
   const score = c.score != null ? `점수 ${Number(c.score).toFixed(1)}` : '';
+  const targetRet = c.target_return_pct != null ? `목표 ${pct1(c.target_return_pct)}` : '';
+  const targetPx = c.target_price != null ? `목표가 ${priceUsd(c.target_price)}` : '';
+  const winRate = c.win_rate != null ? `승률 ${Number(c.win_rate).toFixed(1)}%` : '';
+  const expRet = c.expectancy_pct != null ? `기대 ${pct1(c.expectancy_pct)}` : '';
   const news = c.candidate_news || null;
   let newsPart = '';
-  if(news && news.enabled){
-    const ns = news.score == null ? null : Number(news.score);
-    const nt = news.threshold == null ? null : Number(news.threshold);
-    const fresh = !!news.fresh;
-    const nCls = (ns != null && nt != null && ns >= nt * 0.8) ? 'univ-neg' : 'univ-pos';
-    const nTxt = ns == null ? '뉴스 확인중' : `뉴스 ${ns.toFixed(3)}${nt != null ? '/'+nt.toFixed(3) : ''}`;
-    newsPart = ` · <span class="${nCls}">${htmlEsc(nTxt)}${fresh ? '' : ' · 최신확인필요'}</span>`;
+  if(news && (news.enabled || news.score != null)){
+    const nTxt = newsMetricText(news);
+    const nCls = newsMetricClass(news);
+    newsPart = ` · <span class="${nCls}">${htmlEsc(nTxt)}${news.fresh === false ? ' · 최신확인필요' : ''}</span>`;
   }
-  const tail = [notional ? `$${notional}` : '', shares, score].filter(Boolean).join(' · ');
+  const tail = [notional ? `$${notional}` : '', shares, targetRet, targetPx, winRate, expRet, score].filter(Boolean).join(' · ');
   let btn;
   if(canBuy){
     const busy = _candBusy[cid];
@@ -691,8 +710,16 @@ function renderCandStrategySummary(ticker){
   const confidence = Number(cd.confidence || 0);
   const notional = Number(cd.notional || 0);
   const shares = Number(cd.shares || 0);
+  const news = cd.candidate_news || null;
+  const newsTxt = newsMetricText(news);
+  const newsCls = newsMetricClass(news);
   return `<div class="cm-strategy">
     <span>신호점수 <b class="${sigCls}">${sigScore.toFixed(2)}</b> / 임계 ${sigThreshold.toFixed(2)}</span>
+    <span>목표가 <b class="univ-pos">${priceUsd(cd.target_price)}</b></span>
+    <span>목표수익 <b class="univ-pos">${pct1(cd.target_return_pct)}</b></span>
+    <span>학습승률 <b>${cd.win_rate!=null?Number(cd.win_rate).toFixed(1)+'%':'—'}</b></span>
+    <span>기대수익 <b>${pct1(cd.expectancy_pct)}</b></span>
+    ${newsTxt ? `<span>뉴스점수 <b class="${newsCls}">${htmlEsc(newsTxt)}</b></span>` : ''}
     <span>강도 <b>${strength.toFixed(2)}</b></span>
     <span>점수 <b>${score.toFixed(2)}</b></span>
     <span>신뢰도 <b>${confidence.toFixed(2)}</b></span>
@@ -707,11 +734,16 @@ function renderCandSummary(ticker, signal, fill, candles){
   const cls = chg!=null && chg>=0 ? 'univ-pos' : 'univ-neg';
   const chgTxt = chg==null ? '-' : `${chg>=0?'+':''}${chg.toFixed(2)}%`;
   const fillSummary = fill ? `<div><div class="cand-sub">체결가</div><div class="big cand-fill">$${fill.toFixed(2)}</div></div>` : '';
+  const cd = _candData[String(ticker || '').toUpperCase()] || {};
+  const target = cd.target_price == null ? null : Number(cd.target_price);
+  const targetRet = cd.target_return_pct == null ? null : Number(cd.target_return_pct);
   const curTxt = cur != null && isFinite(Number(cur)) ? `$${Number(cur).toFixed(2)}` : '—';
   document.getElementById('cm-summary').innerHTML = `
     <div><div class="cand-sub">신호가</div><div class="big">${signal ? '$'+signal.toFixed(2) : '—'}</div></div>
     ${fillSummary}
     <div><div class="cand-sub">현재가</div><div class="big">${curTxt}</div></div>
+    <div><div class="cand-sub">목표가</div><div class="big univ-pos">${target ? '$'+target.toFixed(2) : '—'}</div></div>
+    <div><div class="cand-sub">목표수익</div><div class="big univ-pos">${pct1(targetRet)}</div></div>
     <div><div class="cand-sub">신호가 대비</div><div class="big ${cls}">${chgTxt}</div></div>
     ${renderCandStrategySummary(ticker)}`;
 }
@@ -760,6 +792,22 @@ async function openCandChart(ticker, signalPrice, fillPrice){
       price: fill, color:'#f5c451', lineWidth:2,
       lineStyle: (LightweightCharts.LineStyle && LightweightCharts.LineStyle.Dashed) || 2,
       axisLabelVisible:true, title:`체결가 ${fill.toFixed(2)}`,
+    });
+  }
+  const cd = _candData[String(ticker || '').toUpperCase()] || {};
+  const target = cd.target_price == null ? null : Number(cd.target_price);
+  if(target && isFinite(target)){
+    _candSeries.createPriceLine({
+      price: target, color:'#26d07c', lineWidth:2,
+      lineStyle: (LightweightCharts.LineStyle && LightweightCharts.LineStyle.Dashed) || 2,
+      axisLabelVisible:true, title:`목표가 ${target.toFixed(2)}`,
+    });
+  }
+  const currentLine = candles.length ? Number(candles[candles.length-1].close) : null;
+  if(currentLine && isFinite(currentLine)){
+    _candSeries.createPriceLine({
+      price: currentLine, color:'#c9d4e5', lineWidth:2,
+      lineStyle: 0, axisLabelVisible:true, title:`현재가 ${currentLine.toFixed(2)}`,
     });
   }
   const n = candles.length;
@@ -982,6 +1030,17 @@ function slotCard(s,onclick){
   const trailPct = s.trailing_stop && s.entry_price
     ? (s.trailing_stop / s.entry_price - 1) * 100
     : null;
+  const winRate = s.rulebook_win_rate ?? (s.entry || {}).win_rate;
+  const expectancy = s.rulebook_expectancy_pct;
+  const news = s.holding_news || null;
+  const newsTxt = newsMetricText(news);
+  const newsCls = newsMetricClass(news);
+  const metricBits = [
+    targetPct != null ? `목표 ${pct1(targetPct)}` : '',
+    winRate != null ? `승률 ${Number(winRate).toFixed(1)}%` : '',
+    expectancy != null ? `기대 ${pct1(expectancy)}` : '',
+    newsTxt ? `<span class="${newsCls}">${htmlEsc(newsTxt)}</span>` : '',
+  ].filter(Boolean).join(' · ');
 
   // 손절(0%) ~ 목표(100%) 사이에서 현재가 위치 계산
   let gauge='';
@@ -1019,6 +1078,7 @@ function slotCard(s,onclick){
     <div class="mslot-top"><span class="mslot-tk">${s.ticker}</span>
       <span class="mslot-pnl" style="color:${col(s.pnl_pct)}">${pct(s.pnl_pct)}</span></div>
     <div class="mslot-sub">현재 ${fmt(s.current_price)} · 진입 ${fmt(s.entry_price)} · 투입 ${investedTxt}</div>
+    ${metricBits ? `<div class="mslot-sub">${metricBits}</div>` : ''}
     ${gauge}
     <div class="mslot-sub" style="margin-top:7px;">
       <span class="tag">${s.exit_strategy||'?'}</span> ${s.direction||''} · 최대 ${s.max_holding_days}일 · 트레일 ${fmtP(trailPct)}
@@ -1399,6 +1459,10 @@ function refreshDetailPanel(ticker){
     <div class="kv"><span>손익률</span><span style="color:${col(s.pnl_pct)}">${pct(s.pnl_pct)}</span></div>
     <div class="kv"><span>진입가</span><span>${fmt(s.entry_price)}</span></div>
     <div class="kv"><span>목표가</span><span style="color:var(--up)">${fmt(s.target_price)}</span></div>
+    <div class="kv"><span>목표수익률</span><span style="color:var(--up)">${pct1(s.target_return_pct)}</span></div>
+    <div class="kv"><span>학습 승률</span><span>${s.rulebook_win_rate!=null?Number(s.rulebook_win_rate).toFixed(1)+'%':'—'}</span></div>
+    <div class="kv"><span>기대 수익률</span><span>${pct1(s.rulebook_expectancy_pct)}</span></div>
+    <div class="kv"><span>뉴스 점수</span><span class="${newsMetricClass(s.holding_news)}">${htmlEsc(newsMetricText(s.holding_news) || '—')}</span></div>
     <div class="kv"><span>손절가</span><span style="color:var(--down)">${fmt(s.stop_price)}</span></div>
     <div class="kv"><span>트레일링</span><span style="color:var(--gold)">${fmt(s.trailing_stop)}</span></div>
     <div class="kv"><span>수량</span><span>${fmt(s.shares,4)}</span></div>
@@ -1629,7 +1693,7 @@ setInterval(async()=>{ await loadSellIntents(); renderSlots(); }, 10000);
       </div>
       <div id="cm-summary" class="cm-summary"></div>
       <div id="cm-chart" class="cm-chart"></div>
-      <div class="univ-note" style="margin:10px 0 0;">참고용 · 진입 신호 아님 · 신호가(파랑)·체결가(노랑) 기준선 대비 현재가 위치</div>
+      <div class="univ-note" style="margin:10px 0 0;">참고용 · 진입 신호 아님 · 신호가(파랑)·목표가(초록)·현재가(흰색) 기준선 표시</div>
     </div>
   </div>
   <div class="toast-wrap" id="toasts"></div>

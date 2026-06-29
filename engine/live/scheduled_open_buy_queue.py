@@ -122,16 +122,19 @@ def decision_to_queue_item(
     signal_threshold: float,
     stage: str = "stage2",
     status: str = "pending",
+    atr_at_signal: float = 0.0,
 ) -> dict[str, Any]:
     ticker = normalize_ticker(decision.ticker)
     entity_id = str(decision.entity_id or "")
+    rb = dict(decision.rulebook or {})
+    target_meta = _candidate_price_targets(rb, float(reference_price or 0.0), float(atr_at_signal or 0.0))
     return {
         "candidate_id": f"{_date_text(execution_session)}:{entity_id}",
         "ticker": ticker,
         "entity_id": entity_id,
         "stage": str(stage or "stage2"),
         "rulebook_hash": entity_id.split("_", 1)[1] if "_" in entity_id else "",
-        "rulebook": dict(decision.rulebook or {}),
+        "rulebook": rb,
         "signal_session": _date_text(signal_session),
         "execution_session": _date_text(execution_session),
         "reference_price": float(reference_price or 0.0),
@@ -140,6 +143,16 @@ def decision_to_queue_item(
         "decision": asdict(decision),
         "notional": float(decision.notional or 0.0),
         "shares": float(decision.shares or 0.0),
+        "atr_at_signal": target_meta.get("atr_at_signal"),
+        "target_price": target_meta.get("target_price"),
+        "target_return_pct": target_meta.get("target_return_pct"),
+        "stop_price": target_meta.get("stop_price"),
+        "stop_return_pct": target_meta.get("stop_return_pct"),
+        "target_basis": target_meta.get("target_basis"),
+        "rulebook_win_rate": rb.get("win_rate"),
+        "rulebook_expectancy_pct": rb.get("expectancy_pct"),
+        "rulebook_avg_return_pct": rb.get("avg_return_pct"),
+        "rulebook_trade_count": rb.get("trade_count"),
         "status": str(status or "pending"),
         "created_at": _utc_now_iso(),
     }
@@ -159,6 +172,54 @@ def _close_price(df) -> float:
         return float(df.iloc[-1].get("Close", df.iloc[-1].get("close", 0.0)) or 0.0)
     except Exception:
         return 0.0
+
+
+def _last_atr(df) -> float:
+    try:
+        row = df.iloc[-1]
+        return float(row.get("ATR", row.get("atr", 0.0)) or 0.0)
+    except Exception:
+        return 0.0
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        out = float(value)
+        return None if out != out else out
+    except Exception:
+        return None
+
+
+def _candidate_price_targets(rulebook: dict[str, Any], reference_price: float, atr: float) -> dict[str, Any]:
+    rb = rulebook if isinstance(rulebook, dict) else {}
+    ref = float(reference_price or 0.0)
+    a = max(0.0, float(atr or 0.0))
+    direction = str(rb.get("direction") or "long").lower()
+    tp_mult = _float_or_none(rb.get("take_profit_atr"))
+    sl_mult = _float_or_none(rb.get("stop_loss_atr"))
+    if tp_mult is None:
+        tp_mult = _float_or_none(rb.get("take_profit_atr_bull"))
+    if sl_mult is None:
+        sl_mult = _float_or_none(rb.get("stop_loss_atr_bear"))
+    target_price = None
+    stop_price = None
+    if ref > 0 and a > 0:
+        if tp_mult is not None:
+            target_price = ref - a * tp_mult if direction == "short" else ref + a * tp_mult
+        if sl_mult is not None:
+            stop_price = ref + a * sl_mult if direction == "short" else ref - a * sl_mult
+    target_return_pct = ((target_price / ref - 1.0) * 100.0) if ref > 0 and target_price else None
+    stop_return_pct = ((stop_price / ref - 1.0) * 100.0) if ref > 0 and stop_price else None
+    return {
+        "atr_at_signal": a if a > 0 else None,
+        "target_price": round(float(target_price), 6) if target_price and target_price > 0 else None,
+        "target_return_pct": round(float(target_return_pct), 6) if target_return_pct is not None else None,
+        "stop_price": round(float(stop_price), 6) if stop_price and stop_price > 0 else None,
+        "stop_return_pct": round(float(stop_return_pct), 6) if stop_return_pct is not None else None,
+        "target_basis": "signal_close_plus_take_profit_atr" if target_price else "unavailable",
+    }
 
 
 def _queue_payload_status(*, executed: int, submitted: int, blocked: int) -> str:
@@ -385,6 +446,7 @@ class NextOpenBuyCoordinator:
         candidates: list[BuyCandidate] = []
         signal_by_entity: dict[str, Any] = {}
         price_by_entity: dict[str, float] = {}
+        atr_by_entity: dict[str, float] = {}
         stage_by_entity: dict[str, str] = {}
         skipped: list[dict[str, Any]] = []
         evaluated_symbols = 0
@@ -412,6 +474,7 @@ class NextOpenBuyCoordinator:
             if price <= 0.0:
                 skipped.append({"ticker": ticker_u, "reason": "invalid_reference_price"})
                 continue
+            atr = _last_atr(df)
             evaluated_symbols += 1
             for entity in self.controller.entity_by_ticker.get(ticker_u, []):
                 sig = self._evaluate_entity_signal_point_in_time(
@@ -442,6 +505,7 @@ class NextOpenBuyCoordinator:
                 )
                 signal_by_entity[entity.entity_id] = sig
                 price_by_entity[entity.entity_id] = price
+                atr_by_entity[entity.entity_id] = atr
                 try:
                     from engine.live.central_control import _entity_stage
 
@@ -528,6 +592,7 @@ class NextOpenBuyCoordinator:
                 signal_threshold=float(getattr(sig, "threshold", 0.0) or 0.0),
                 stage=stage_by_entity.get(decision.entity_id, "stage2"),
                 status=item_status,
+                atr_at_signal=atr_by_entity.get(decision.entity_id, 0.0),
             )
             news_check = candidate_news_by_entity.get(str(decision.entity_id))
             if news_check:

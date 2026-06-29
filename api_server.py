@@ -285,6 +285,43 @@ def _news_risk_label(score) -> str:
     return "low"
 
 
+def _num_or_none(value):
+    try:
+        if value in (None, ""):
+            return None
+        out = float(value)
+        return None if out != out else out
+    except Exception:
+        return None
+
+
+def _return_pct(base, target):
+    b = _num_or_none(base)
+    t = _num_or_none(target)
+    if not b or not t:
+        return None
+    return (t / b - 1.0) * 100.0
+
+
+def _holding_news_row_for_dashboard(ticker: str):
+    cache = _read_json(HOLDING_NEWS_CACHE_PATH, {})
+    entries = cache.get("entries") if isinstance(cache, dict) else {}
+    row = entries.get(str(ticker or "").upper().strip()) if isinstance(entries, dict) else None
+    if not isinstance(row, dict) or not _holding_news_score_row_usable(row):
+        return None
+    score = _num_or_none(row.get("score"))
+    return {
+        "ticker": str(ticker or "").upper().strip(),
+        "score": score,
+        "risk_label": _news_risk_label(score),
+        "fetched_at": row.get("fetched_at", ""),
+        "article_count": int(row.get("article_count") or 0),
+        "latest_article_time_published": row.get("latest_article_time_published", ""),
+        "source": row.get("source", "holding_news_cache"),
+        "top_articles": list(row.get("top_articles") or [])[:2],
+    }
+
+
 # 현재가 캐시 30초. yfinance 독립 조회 — 봇 브로커와 무관.
 _price_cache = {}
 
@@ -335,7 +372,11 @@ def live_positions():
             continue
         cur = _get_price(ticker)
         entry = p.get("entry_price")
+        rb = p.get("rulebook_snapshot", {}) if isinstance(p.get("rulebook_snapshot", {}), dict) else {}
         pnl_pct = ((cur / entry - 1) * 100) if (cur and entry) else None
+        target_return_pct = _return_pct(entry, p.get("target_price"))
+        stop_return_pct = _return_pct(entry, p.get("stop_price"))
+        trailing_return_pct = _return_pct(entry, p.get("trailing_stop"))
         out.append({
             "ticker": ticker,
             "entry_price": entry,
@@ -349,7 +390,15 @@ def live_positions():
             "max_holding_days": p.get("max_holding_days"),
             "entry_date": p.get("entry_date"),
             "pnl_pct": pnl_pct,
-            "rulebook": p.get("rulebook_snapshot", {}),
+            "target_return_pct": target_return_pct,
+            "stop_return_pct": stop_return_pct,
+            "trailing_return_pct": trailing_return_pct,
+            "rulebook_win_rate": p.get("win_rate_at_entry") or rb.get("win_rate"),
+            "rulebook_expectancy_pct": rb.get("expectancy_pct"),
+            "rulebook_avg_return_pct": rb.get("avg_return_pct"),
+            "rulebook_trade_count": rb.get("trade_count"),
+            "holding_news": _holding_news_row_for_dashboard(ticker),
+            "rulebook": rb,
             "entry": {
                 "signal_score": p.get("signal_score_at_entry"),
                 "signal_threshold": p.get("signal_threshold_at_entry"),
@@ -758,6 +807,7 @@ def _scheduled_open_buy_candidate_state(include_blocked: bool = False) -> dict |
             display_status = raw_status or "next_open_draft"
             action_label = "대기"
         cid = str(row.get("candidate_id") or f"{queue.get('execution_session')}:{entity_id}")
+        rb = row.get("rulebook") if isinstance(row.get("rulebook"), dict) else {}
         candidates[cid] = {
             "candidate_id": cid,
             "ticker": ticker,
@@ -782,6 +832,12 @@ def _scheduled_open_buy_candidate_state(include_blocked: bool = False) -> dict |
             "updated_at": queue.get("updated_at") or row.get("updated_at"),
             "price": row.get("reference_price"),
             "reference_price": row.get("reference_price"),
+            "target_price": row.get("target_price"),
+            "target_return_pct": row.get("target_return_pct"),
+            "stop_price": row.get("stop_price"),
+            "stop_return_pct": row.get("stop_return_pct"),
+            "target_basis": row.get("target_basis"),
+            "atr_at_signal": row.get("atr_at_signal"),
             "notional": row.get("notional") or decision.get("notional"),
             "shares": row.get("shares") or decision.get("shares"),
             "score": decision.get("score"),
@@ -792,6 +848,10 @@ def _scheduled_open_buy_candidate_state(include_blocked: bool = False) -> dict |
             "signal_threshold": row.get("signal_threshold"),
             "stage": row.get("stage"),
             "rulebook_hash": row.get("rulebook_hash"),
+            "win_rate": row.get("rulebook_win_rate") or rb.get("win_rate"),
+            "expectancy_pct": row.get("rulebook_expectancy_pct") or rb.get("expectancy_pct"),
+            "avg_return_pct": row.get("rulebook_avg_return_pct") or rb.get("avg_return_pct"),
+            "trade_count": row.get("rulebook_trade_count") or rb.get("trade_count"),
             "candidate_news": row.get("candidate_news") if isinstance(row.get("candidate_news"), dict) else None,
         }
     if not candidates:

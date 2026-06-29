@@ -263,7 +263,12 @@ def test_execute_queue_submitted_item_keeps_queue_submitted_not_executed(tmp_pat
         return True
 
     controller._execute_decision = submit_only
-    coordinator = NextOpenBuyCoordinator(controller=controller, market_clock=Clock(), queue_path=tmp_path / "queue.json")
+    coordinator = NextOpenBuyCoordinator(
+        controller=controller,
+        market_clock=Clock(),
+        queue_path=tmp_path / "queue.json",
+        opening_price_guard_enabled=False,
+    )
     coordinator.prepare_queue(execution_session=date(2026, 6, 29))
 
     result = coordinator.execute_queue(execution_session=date(2026, 6, 29))
@@ -283,7 +288,12 @@ def test_execute_queue_marks_executed_only_when_position_registered(tmp_path: Pa
     controller = Controller(tmp_path, last_date=date(2026, 6, 26))
     position = SimpleNamespace(member_hash="abc123def456")
     controller.runner.position_manager = SimpleNamespace(all=lambda: [], get=lambda ticker: position)
-    coordinator = NextOpenBuyCoordinator(controller=controller, market_clock=Clock(), queue_path=tmp_path / "queue.json")
+    coordinator = NextOpenBuyCoordinator(
+        controller=controller,
+        market_clock=Clock(),
+        queue_path=tmp_path / "queue.json",
+        opening_price_guard_enabled=False,
+    )
     coordinator.prepare_queue(execution_session=date(2026, 6, 29))
 
     result = coordinator.execute_queue(execution_session=date(2026, 6, 29))
@@ -327,3 +337,85 @@ def test_execute_queue_waits_when_broker_open_orders_api_is_not_implemented(tmp_
     assert result["status"] == "waiting_for_clear"
     assert result["reason"].startswith("broker_open_orders_unavailable:")
     assert controller.executed == []
+
+
+def test_execute_if_due_waits_for_opening_price_guard_delay(tmp_path: Path, monkeypatch):
+    _patch_point_in_time_eval(monkeypatch)
+    controller = Controller(tmp_path, last_date=date(2026, 6, 26))
+    controller._now_et = lambda: datetime(2026, 6, 29, 9, 34, 30, tzinfo=ET)
+    coordinator = NextOpenBuyCoordinator(
+        controller=controller,
+        market_clock=Clock(),
+        queue_path=tmp_path / "queue.json",
+        open_buy_delay_sec=5,
+        opening_price_guard_enabled=True,
+        opening_price_guard_wait_min=5,
+    )
+
+    result = coordinator.execute_if_due()
+
+    assert result["status"] == "not_due"
+    assert result["due"].endswith("09:35:00-04:00")
+    assert controller.executed == []
+
+
+def test_execute_queue_blocks_opening_spike_above_previous_close(tmp_path: Path, monkeypatch):
+    _patch_point_in_time_eval(monkeypatch)
+    controller = Controller(tmp_path, last_date=date(2026, 6, 26))
+    controller.runner.broker.get_current_price = lambda ticker: 101.0
+    coordinator = NextOpenBuyCoordinator(
+        controller=controller,
+        market_clock=Clock(),
+        queue_path=tmp_path / "queue.json",
+        opening_price_guard_enabled=True,
+        opening_price_guard_wait_min=5,
+        opening_price_guard_max_premium_pct=0.0,
+    )
+    coordinator.prepare_queue(execution_session=date(2026, 6, 29))
+
+    result = coordinator.execute_queue(execution_session=date(2026, 6, 29))
+    payload = load_queue(tmp_path / "queue.json")
+
+    assert result["status"] == "blocked"
+    assert result["blocked"] == 1
+    assert controller.executed == []
+    item = payload["items"][0]
+    assert item["status"] == "blocked"
+    assert item["note"].startswith("opening_price_guard")
+    assert item["fills"]["reference_price"] == 100.0
+    assert item["fills"]["current_price"] == 101.0
+
+
+def test_execute_queue_allows_price_at_or_below_previous_close(tmp_path: Path, monkeypatch):
+    _patch_point_in_time_eval(monkeypatch)
+    controller = Controller(tmp_path, last_date=date(2026, 6, 26))
+    controller.runner.broker.get_current_price = lambda ticker: 99.5
+    pending = SimpleNamespace(active=False)
+    controller.runner.pending_order_manager = SimpleNamespace(
+        all=lambda: [],
+        has_pending_buy=lambda ticker: pending.active,
+    )
+
+    def submit_only(decision, signal_result, price, *, execution_reason="auto", manual_intent_id=""):
+        pending.active = True
+        controller.executed.append((decision, price, execution_reason))
+        return True
+
+    controller._execute_decision = submit_only
+    coordinator = NextOpenBuyCoordinator(
+        controller=controller,
+        market_clock=Clock(),
+        queue_path=tmp_path / "queue.json",
+        opening_price_guard_enabled=True,
+        opening_price_guard_wait_min=5,
+        opening_price_guard_max_premium_pct=0.0,
+    )
+    coordinator.prepare_queue(execution_session=date(2026, 6, 29))
+
+    result = coordinator.execute_queue(execution_session=date(2026, 6, 29))
+    payload = load_queue(tmp_path / "queue.json")
+
+    assert result["status"] == "submitted"
+    assert result["submitted"] == 1
+    assert controller.executed[0][1] == 99.5
+    assert payload["items"][0]["status"] == "submitted"

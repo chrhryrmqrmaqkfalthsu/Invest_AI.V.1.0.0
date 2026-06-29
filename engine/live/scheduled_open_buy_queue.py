@@ -48,6 +48,9 @@ log = logging.getLogger("live.scheduled_open_buy_queue")
 DEFAULT_SCHEDULED_OPEN_BUY_QUEUE_PATH = Path("data/_system/scheduled_open_buy_queue.json")
 ET = ZoneInfo("America/New_York")
 POSTMARKET_END_ET = time(20, 0)
+DEFAULT_OPENING_PRICE_GUARD_ENABLED = True
+DEFAULT_OPENING_PRICE_GUARD_WAIT_MINUTES = 5
+DEFAULT_OPENING_PRICE_GUARD_MAX_PREMIUM_PCT = 0.0
 
 
 def _utc_now_iso() -> str:
@@ -287,6 +290,9 @@ class NextOpenBuyCoordinator:
         postmarket_prepare_enabled: bool = True,
         postmarket_prepare_delay_min: int = 5,
         draft_reselect_interval_min: int = 60,
+        opening_price_guard_enabled: bool = DEFAULT_OPENING_PRICE_GUARD_ENABLED,
+        opening_price_guard_wait_min: int = DEFAULT_OPENING_PRICE_GUARD_WAIT_MINUTES,
+        opening_price_guard_max_premium_pct: float = DEFAULT_OPENING_PRICE_GUARD_MAX_PREMIUM_PCT,
     ) -> None:
         self.controller = controller
         self.market_clock = market_clock
@@ -296,6 +302,12 @@ class NextOpenBuyCoordinator:
         self.postmarket_prepare_enabled = bool(postmarket_prepare_enabled)
         self.postmarket_prepare_delay_min = max(0, int(postmarket_prepare_delay_min or 0))
         self.draft_reselect_interval_min = max(1, int(draft_reselect_interval_min or 60))
+        self.opening_price_guard_enabled = bool(opening_price_guard_enabled)
+        self.opening_price_guard_wait_min = max(0, int(opening_price_guard_wait_min or 0))
+        try:
+            self.opening_price_guard_max_premium_pct = float(opening_price_guard_max_premium_pct or 0.0)
+        except Exception:
+            self.opening_price_guard_max_premium_pct = DEFAULT_OPENING_PRICE_GUARD_MAX_PREMIUM_PCT
 
     def _now_et(self) -> datetime:
         try:
@@ -659,6 +671,13 @@ class NextOpenBuyCoordinator:
                 "skipped": skipped[:200],
                 "market_history_source": "engine.market.context.get_market_history",
                 "feature_lag_days": FEATURE_LAG_DAYS,
+                "opening_price_guard": {
+                    "enabled": self.opening_price_guard_enabled,
+                    "wait_min": self.opening_price_guard_wait_min,
+                    "max_premium_pct": self.opening_price_guard_max_premium_pct,
+                    "reference": "signal_session_close",
+                    "rule": "execute only when current_price <= reference_price * (1 + max_premium_pct/100)",
+                },
             },
         }
         save_queue(payload, self.queue_path)
@@ -689,9 +708,44 @@ class NextOpenBuyCoordinator:
         execution_session = current_or_next_session(self.market_clock, now)
         opened = session_open_dt(self.market_clock, execution_session)
         due = opened + timedelta(seconds=self.open_buy_delay_sec)
+        if self.opening_price_guard_enabled and self.opening_price_guard_wait_min > 0:
+            due = max(due, opened + timedelta(minutes=self.opening_price_guard_wait_min))
         if now < due:
             return {"status": "not_due", "now": now.isoformat(), "due": due.isoformat()}
         return self.execute_queue(execution_session=execution_session)
+
+    def _opening_price_guard_allows(self, row: dict[str, Any], current_price: float) -> tuple[bool, str, dict[str, Any]]:
+        if not self.opening_price_guard_enabled:
+            return True, "opening_price_guard_disabled", {}
+        ticker = normalize_ticker(row.get("ticker"))
+        try:
+            cur = float(current_price or 0.0)
+        except Exception:
+            cur = 0.0
+        try:
+            reference = float(row.get("reference_price") or 0.0)
+        except Exception:
+            reference = 0.0
+        max_premium_pct = float(self.opening_price_guard_max_premium_pct or 0.0)
+        allowed_price = reference * (1.0 + max_premium_pct / 100.0) if reference > 0.0 else 0.0
+        meta = {
+            "current_price": cur,
+            "reference_price": reference,
+            "allowed_price": allowed_price,
+            "max_premium_pct": max_premium_pct,
+            "checked_at": _utc_now_iso(),
+        }
+        if cur <= 0.0 or reference <= 0.0 or allowed_price <= 0.0:
+            return False, f"opening_price_guard_missing_price ticker={ticker} current={cur:.4f} reference={reference:.4f}", meta
+        if cur <= allowed_price:
+            return True, "opening_price_guard_pass", meta
+        premium_pct = (cur / reference - 1.0) * 100.0
+        meta["premium_pct"] = premium_pct
+        return (
+            False,
+            f"opening_price_guard current={cur:.4f} > prev_close={reference:.4f} premium={premium_pct:.2f}% max={max_premium_pct:.2f}%",
+            meta,
+        )
 
     def _flat_guard(self) -> tuple[bool, str]:
         try:
@@ -772,6 +826,12 @@ class NextOpenBuyCoordinator:
                 reference_price = 0.0
             if reference_price <= 0.0:
                 reference_price = float(row.get("reference_price") or 0.0)
+            guard_ok, guard_note, guard_meta = self._opening_price_guard_allows(row, reference_price)
+            if not guard_ok:
+                mark_item_status(payload, candidate_id, "blocked", note=guard_note, fills=guard_meta)
+                blocked += 1
+                log.warning("[NEXT-OPEN] %s BUY skipped by opening price guard: %s", ticker, guard_note)
+                continue
             try:
                 decision = BuyDecision(
                     entity_id=str(decision_raw.get("entity_id") or row.get("entity_id") or ""),

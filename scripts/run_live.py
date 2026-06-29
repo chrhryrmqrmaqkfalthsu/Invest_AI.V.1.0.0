@@ -46,6 +46,9 @@ from engine.live.market_clock import select_market_clock, validate_broker_market
 from engine.live.runner import Runner
 from engine.live.safety.layer import SafetyLayer
 from engine.live.scheduled_open_buy_queue import (
+    DEFAULT_OPENING_PRICE_GUARD_ENABLED,
+    DEFAULT_OPENING_PRICE_GUARD_MAX_PREMIUM_PCT,
+    DEFAULT_OPENING_PRICE_GUARD_WAIT_MINUTES,
     DEFAULT_SCHEDULED_OPEN_BUY_QUEUE_PATH,
     NextOpenBuyCoordinator,
 )
@@ -268,6 +271,9 @@ def main():
     parser.add_argument("--postmarket-prepare-delay-min", type=int, default=5, help="D-1 20:00 ET 이후 초안 후보 선별 지연분")
     parser.add_argument("--candidate-reselect-min", type=int, default=60, help="애프터마켓 이후 draft 후보 재선별 주기")
     parser.add_argument("--open-buy-delay-sec", type=int, default=5)
+    parser.add_argument("--opening-price-guard", choices=["on", "off"], default="on" if DEFAULT_OPENING_PRICE_GUARD_ENABLED else "off", help="next_open 집행 전 개장 급등 추격매수 방지 가드")
+    parser.add_argument("--opening-price-guard-wait-min", type=int, default=DEFAULT_OPENING_PRICE_GUARD_WAIT_MINUTES, help="개장 후 이 분 수만큼 기다린 뒤 BUY 가격 가드 평가")
+    parser.add_argument("--opening-price-guard-max-premium-pct", type=float, default=DEFAULT_OPENING_PRICE_GUARD_MAX_PREMIUM_PCT, help="현재가가 전일종가 대비 허용되는 최대 프리미엄(0이면 전일종가 이하만 매수)")
     parser.add_argument("--scheduled-buy-queue-path", default=str(DEFAULT_SCHEDULED_OPEN_BUY_QUEUE_PATH))
     parser.add_argument("--buy-mode", choices=["auto", "semi_auto"], default="auto", help="legacy/intraday central BUY mode. next_open에서는 즉시 BUY에 사용하지 않음")
     parser.add_argument("--central-selection-metric", choices=["confidence", "turnover_score"], default="confidence")
@@ -387,15 +393,21 @@ def main():
                 postmarket_prepare_enabled=str(args.postmarket_prepare).lower() == "on",
                 postmarket_prepare_delay_min=int(args.postmarket_prepare_delay_min),
                 draft_reselect_interval_min=int(args.candidate_reselect_min),
+                opening_price_guard_enabled=str(args.opening_price_guard).lower() == "on",
+                opening_price_guard_wait_min=int(args.opening_price_guard_wait_min),
+                opening_price_guard_max_premium_pct=float(args.opening_price_guard_max_premium_pct),
             )
             logger.warning(
-                "[NEXT-OPEN] ON: regular-hours central BUY disabled; postmarket draft → hourly reselect → preopen final queue path=%s preopen_min=%s open_delay_sec=%s postmarket_prepare=%s postmarket_delay_min=%s draft_reselect_min=%s",
+                "[NEXT-OPEN] ON: regular-hours central BUY disabled; postmarket draft → hourly reselect → preopen final queue path=%s preopen_min=%s open_delay_sec=%s postmarket_prepare=%s postmarket_delay_min=%s draft_reselect_min=%s opening_price_guard=%s wait_min=%s max_premium_pct=%s",
                 args.scheduled_buy_queue_path,
                 args.preopen_select_minutes_before_open,
                 args.open_buy_delay_sec,
                 args.postmarket_prepare,
                 args.postmarket_prepare_delay_min,
                 args.candidate_reselect_min,
+                args.opening_price_guard,
+                args.opening_price_guard_wait_min,
+                args.opening_price_guard_max_premium_pct,
             )
         logger.warning(
             "[CENTRAL-CONTROL] ON: metric=%s confidence_mode=%s pf_cap=%s min_trades=%s max_positions=%s sizing=%s buy_mode=%s buy_timing_mode=%s order_notional_safety_buffer=%.4f universe=promoted∩central pool_limit=%s stage3_mix=%s stage3_pool_path=%s stage3_pool_limit=%s strength_cap=%s stage3_strength_cap=%s stage3_min_confidence=%s exits=unchanged existing_positions=unchanged legacy_buy_guard=central_only",

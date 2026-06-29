@@ -70,6 +70,7 @@ def test_dashboard_central_candidates_endpoint_reads_file_only(tmp_path, monkeyp
     candidate_path = tmp_path / "central_buy_candidates.json"
     atomic_write_json(candidate_path, {"schema_version": 1, "trade_date": "2026-06-25", "candidates": {"x": {"ticker": "AAA"}}})
     monkeypatch.setattr(api_server, "CENTRAL_BUY_CANDIDATES_PATH", candidate_path)
+    monkeypatch.setattr(api_server, "SCHEDULED_OPEN_BUY_QUEUE_PATH", str(tmp_path / "missing_scheduled_open_buy_queue.json"))
     client = TestClient(api_server.app)
 
     res = client.get("/api/live/central_candidates")

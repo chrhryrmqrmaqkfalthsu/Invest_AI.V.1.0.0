@@ -623,6 +623,16 @@ function candCard(c){
   const notional = Number(c.notional || 0).toLocaleString();
   const shares = c.shares != null ? `${c.shares}주` : '';
   const score = c.score != null ? `점수 ${Number(c.score).toFixed(1)}` : '';
+  const news = c.candidate_news || null;
+  let newsPart = '';
+  if(news && news.enabled){
+    const ns = news.score == null ? null : Number(news.score);
+    const nt = news.threshold == null ? null : Number(news.threshold);
+    const fresh = !!news.fresh;
+    const nCls = (ns != null && nt != null && ns >= nt * 0.8) ? 'univ-neg' : 'univ-pos';
+    const nTxt = ns == null ? '뉴스 확인중' : `뉴스 ${ns.toFixed(3)}${nt != null ? '/'+nt.toFixed(3) : ''}`;
+    newsPart = ` · <span class="${nCls}">${htmlEsc(nTxt)}${fresh ? '' : ' · 최신확인필요'}</span>`;
+  }
   const tail = [notional ? `$${notional}` : '', shares, score].filter(Boolean).join(' · ');
   let btn;
   if(canBuy){
@@ -639,7 +649,7 @@ function candCard(c){
   return `<div class="cand-card" data-cand-ticker="${htmlEsc(ticker)}" data-signal-price="${signalPrice}" data-fill-price="${fillPrice || ''}">
     <div class="cand-info">
       <span class="cand-tkr">${htmlEsc(ticker || cid)} ${chgBadge}</span>
-      <span class="cand-sub">신호가 ${htmlEsc(sigTxt)} → 현재 ${htmlEsc(curTxt)}${fillPart ? ' · '+fillPart : ''}${tail ? ' · '+htmlEsc(tail) : ''}</span>
+      <span class="cand-sub">신호가 ${htmlEsc(sigTxt)} → 현재 ${htmlEsc(curTxt)}${fillPart ? ' · '+fillPart : ''}${tail ? ' · '+htmlEsc(tail) : ''}${newsPart}</span>
     </div>
     <div class="cand-right">
       <span class="cand-badge ${b.cls}">${b.txt}</span>

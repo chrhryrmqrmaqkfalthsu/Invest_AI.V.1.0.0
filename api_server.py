@@ -792,6 +792,7 @@ def _scheduled_open_buy_candidate_state(include_blocked: bool = False) -> dict |
             "signal_threshold": row.get("signal_threshold"),
             "stage": row.get("stage"),
             "rulebook_hash": row.get("rulebook_hash"),
+            "candidate_news": row.get("candidate_news") if isinstance(row.get("candidate_news"), dict) else None,
         }
     if not candidates:
         return None

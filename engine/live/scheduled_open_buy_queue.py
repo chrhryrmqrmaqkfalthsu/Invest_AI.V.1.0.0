@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import asdict
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -30,6 +31,11 @@ from engine.learning.backtest import (
     _lookup_signal_context,
     _news_zscore_window,
     _precompute_topic_feature_map,
+)
+from engine.live.candidate_news_guard import (
+    DEFAULT_CANDIDATE_NEWS_FETCH_BUDGET,
+    candidate_news_required,
+    check_candidate_news_guard,
 )
 from engine.live.trading_day import current_or_next_session, is_session_day, previous_session_date, session_open_dt
 from engine.market.context import get_market_history
@@ -449,26 +455,84 @@ class NextOpenBuyCoordinator:
         # flat and selects up to max_positions.  The execution guard below still
         # prevents any BUY until local positions, broker holdings, and pending
         # orders are all flat.
-        if self.controller.selection_metric == "confidence":
-            decisions = decide_buys(candidates, _EmptyLedger(), alloc)
-        else:
-            decisions = _decide_buys_with_selection_metric(candidates, _EmptyLedger(), alloc, self.controller.selection_scores)
+        candidate_news_by_entity: dict[str, dict[str, Any]] = {}
+        candidate_news_blocked_entities: set[str] = set()
+        candidate_news_fetches = 0
+        try:
+            candidate_news_budget = max(0, int(os.getenv("CANDIDATE_NEWS_GUARD_BUDGET") or DEFAULT_CANDIDATE_NEWS_FETCH_BUDGET))
+        except Exception:
+            candidate_news_budget = DEFAULT_CANDIDATE_NEWS_FETCH_BUDGET
+
+        def _decide_from(available_candidates: list[BuyCandidate]) -> list[BuyDecision]:
+            if self.controller.selection_metric == "confidence":
+                return decide_buys(available_candidates, _EmptyLedger(), alloc)
+            return _decide_buys_with_selection_metric(available_candidates, _EmptyLedger(), alloc, self.controller.selection_scores)
+
+        # Candidate news guard uses the learned sell_omen switch/threshold.
+        # If a selected candidate is blocked, rerun allocation without that entity
+        # so remaining slots can be backfilled by the next eligible candidate.
+        decisions: list[BuyDecision] = []
+        for _news_pass in range(4):
+            available = [c for c in candidates if c.entity_id not in candidate_news_blocked_entities]
+            raw_decisions = _decide_from(available)
+            allowed_decisions: list[BuyDecision] = []
+            newly_blocked: list[str] = []
+            for decision in raw_decisions:
+                rb = dict(decision.rulebook or {})
+                if candidate_news_required(rb):
+                    allow_fetch = candidate_news_fetches < candidate_news_budget
+                    check = check_candidate_news_guard(
+                        decision.ticker,
+                        rb,
+                        api_key=os.getenv("ALPHA_VANTAGE_KEY"),
+                        allow_fetch=allow_fetch,
+                    )
+                    if check.get("fetched"):
+                        candidate_news_fetches += 1
+                    candidate_news_by_entity[str(decision.entity_id)] = check
+                    if check.get("blocked"):
+                        candidate_news_blocked_entities.add(str(decision.entity_id))
+                        newly_blocked.append(str(decision.entity_id))
+                        skipped.append({
+                            "ticker": normalize_ticker(decision.ticker),
+                            "entity_id": decision.entity_id,
+                            "reason": "candidate_news_guard",
+                            "score": check.get("score"),
+                            "threshold": check.get("threshold"),
+                            "source": check.get("source"),
+                            "article_count": check.get("article_count"),
+                        })
+                        log.warning(
+                            "[NEXT-OPEN] candidate news guard blocked %s entity=%s score=%s threshold=%s source=%s",
+                            normalize_ticker(decision.ticker),
+                            decision.entity_id,
+                            check.get("score"),
+                            check.get("threshold"),
+                            check.get("source"),
+                        )
+                        continue
+                allowed_decisions.append(decision)
+            decisions = allowed_decisions
+            if not newly_blocked:
+                break
 
         items = []
         for decision in decisions:
             sig = signal_by_entity.get(decision.entity_id)
-            items.append(
-                decision_to_queue_item(
-                    decision,
-                    signal_session=signal_session,
-                    execution_session=execution_session,
-                    reference_price=price_by_entity.get(decision.entity_id, 0.0),
-                    signal_score=float(getattr(sig, "score", 0.0) or 0.0),
-                    signal_threshold=float(getattr(sig, "threshold", 0.0) or 0.0),
-                    stage=stage_by_entity.get(decision.entity_id, "stage2"),
-                    status=item_status,
-                )
+            item = decision_to_queue_item(
+                decision,
+                signal_session=signal_session,
+                execution_session=execution_session,
+                reference_price=price_by_entity.get(decision.entity_id, 0.0),
+                signal_score=float(getattr(sig, "score", 0.0) or 0.0),
+                signal_threshold=float(getattr(sig, "threshold", 0.0) or 0.0),
+                stage=stage_by_entity.get(decision.entity_id, "stage2"),
+                status=item_status,
             )
+            news_check = candidate_news_by_entity.get(str(decision.entity_id))
+            if news_check:
+                item["candidate_news"] = news_check
+            items.append(item)
 
         payload_status = "draft" if str(item_status) == "draft" and items else "draft_empty" if str(item_status) == "draft" else "pending" if items else "empty"
         payload = {
@@ -487,6 +551,13 @@ class NextOpenBuyCoordinator:
                 "evaluated_symbols": evaluated_symbols,
                 "candidate_count": len(candidates),
                 "decision_count": len(decisions),
+                "candidate_news_guard": {
+                    "enabled_entities_checked": len(candidate_news_by_entity),
+                    "blocked_count": len(candidate_news_blocked_entities),
+                    "blocked_entities": sorted(candidate_news_blocked_entities),
+                    "fetches": candidate_news_fetches,
+                    "budget": candidate_news_budget,
+                },
                 "skipped_count": len(skipped),
                 "skipped": skipped[:200],
                 "market_history_source": "engine.market.context.get_market_history",
@@ -495,13 +566,15 @@ class NextOpenBuyCoordinator:
         }
         save_queue(payload, self.queue_path)
         log.warning(
-            "[NEXT-OPEN] queue %s prepared execution_session=%s signal_session=%s candidates=%s decisions=%s skipped=%s path=%s item_status=%s lag_days=%s context=get_market_history",
+            "[NEXT-OPEN] queue %s prepared execution_session=%s signal_session=%s candidates=%s decisions=%s skipped=%s candidate_news_checked=%s candidate_news_blocked=%s path=%s item_status=%s lag_days=%s context=get_market_history",
             str(queue_phase or "final"),
             execution_session,
             signal_session,
             len(candidates),
             len(decisions),
             len(skipped),
+            len(candidate_news_by_entity),
+            len(candidate_news_blocked_entities),
             self.queue_path,
             str(item_status or "pending"),
             FEATURE_LAG_DAYS,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LR8D Stage1 통과 종목 다중개체 robust launcher.
+"""LR8D Stage1 통과 종목 다중개체 early-prune robust launcher.
 
 이 파일은 6174개 전체 universe 대신 기존 honest Stage1 필터를 통과한
 2009개 종목만 대상으로 LR8D 다중개체 생성을 실행하는 백그라운드 런처입니다.
@@ -8,10 +8,12 @@
 - 입력 ticker 파일: data/_system/research/honest_stage1_pass_tickers_20260616_final.txt
 - 기존 LR8D A+B+C+D GA 생성 방식은 그대로 사용한다.
 - 기존 LR8D16과 같은 2022 / 2023 / 2024 / 2025H2 4구간 구조를 쓴다.
+- 한 구간이라도 통과 기준을 만족하는 후보가 없으면 그 ticker의 남은 구간은 즉시 스킵한다.
+- 구간 통과 기준은 trade_count >= 5, member_score >= 10, expectancy >= 1%, max_drawdown > -25%이다.
 - 최종 export만 종목당 1개 제한이 아니라, 기준 합격 + entry-date 중복 제거 후
   ticker당 최대 5개 개체를 남기는 방식이다.
-- output은 data/_system/research/lr8d_multientity_stage1pass_20260630/ 아래에 따로 쓴다.
-- 기존 6174 전체 run output과 절대 섞지 않는다.
+- output은 data/_system/research/lr8d_multientity_stage1pass_pruned_20260630/ 아래에 따로 쓴다.
+- 기존 6174 전체 run 또는 기존 stage1pass non-pruned output과 절대 섞지 않는다.
 
 주의:
 - 이 파일은 research artifact만 생성한다.
@@ -20,6 +22,7 @@
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -29,14 +32,20 @@ if str(ROOT) not in sys.path:
 
 from scripts.research import run_lr8d_multientity_6174 as base
 
-RUN_ID = "lr8d_multientity_stage1pass_20260630"
-RUN_PREFIX = "lr8d_stage1pass"
+RUN_ID = "lr8d_multientity_stage1pass_pruned_20260630"
+RUN_PREFIX = "lr8d_stage1pass_pruned"
 TICKER_FILE = Path("data/_system/research/honest_stage1_pass_tickers_20260616_final.txt")
 OUT_DIR = Path(f"data/_system/research/{RUN_ID}")
 
+# Early-prune defaults for this Stage1-pass run.  The common robust runner reads
+# these env values at import time, so set them before importing it.
+os.environ.setdefault("LR8D_MULTI_EARLY_PRUNE", "1")
+os.environ.setdefault("LR8D_MULTI_EARLY_PRUNE_MIN_EXPECTANCY_PCT", "1.0")
+os.environ.setdefault("LR8D_MULTI_EARLY_PRUNE_DD_CUTOFF", "-25.0")
+
 # Patch the reusable LR8D multi-entity module before importing its robust runner.
 # The imported module keeps all LR8D generation logic identical, but these globals
-# redirect input/output to the Stage1-pass universe and a separate artifact folder.
+# redirect input/output to the Stage1-pass universe and a separate pruned artifact folder.
 base.RUN_ID = RUN_ID
 base.RUN_PREFIX = RUN_PREFIX
 base.DEFAULT_TICKER_FILE = TICKER_FILE
@@ -61,6 +70,10 @@ robust.base = base
 robust.runner = base.runner
 robust.FAILURES_PATH = OUT_DIR / f"{RUN_PREFIX}_failures.jsonl"
 robust.PROGRESS_PATH = OUT_DIR / f"{RUN_PREFIX}_progress.json"
+robust.PRUNED_PATH = OUT_DIR / f"{RUN_PREFIX}_pruned_tickers.jsonl"
+robust.EARLY_PRUNE_ENABLED = True
+robust.EARLY_PRUNE_MIN_EXPECTANCY_PCT = 1.0
+robust.EARLY_PRUNE_DD_CUTOFF = -25.0
 
 
 def main() -> int:

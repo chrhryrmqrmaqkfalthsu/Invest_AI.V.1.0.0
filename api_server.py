@@ -741,10 +741,10 @@ def _scheduled_open_buy_candidate_state(include_blocked: bool = False) -> dict |
             continue
         if raw_status == "draft":
             display_status = "next_open_draft"
-            action_label = "초안 대기"
+            action_label = "매수하기"
         elif raw_status == "pending":
             display_status = "next_open_pending"
-            action_label = "자동 예정"
+            action_label = "매수하기"
         elif raw_status == "submitted":
             display_status = "manual_requested"
             action_label = "주문 제출"

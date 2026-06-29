@@ -297,16 +297,26 @@ def _get_price(ticker):
     if hit and now - hit[1] < 30:
         return hit[0]
     price = None
+    # 장전/장후에는 fast_info가 정규장 종가에 머무를 수 있어 1분봉 pre/post close를 우선 사용한다.
     try:
-        data = yf.Ticker(ticker).fast_info
-        raw = data.get("lastPrice") if hasattr(data, "get") else data["lastPrice"]
-        if raw is not None:
-            price = float(raw)
+        hist = yf.Ticker(ticker).history(period="1d", interval="1m", prepost=True)
+        if hist is not None and not hist.empty:
+            close = hist["Close"].dropna()
+            if not close.empty:
+                price = float(close.iloc[-1])
     except Exception:
         price = None
     if price is None:
         try:
-            hist = yf.Ticker(ticker).history(period="2d")
+            data = yf.Ticker(ticker).fast_info
+            raw = data.get("lastPrice") if hasattr(data, "get") else data["lastPrice"]
+            if raw is not None:
+                price = float(raw)
+        except Exception:
+            price = None
+    if price is None:
+        try:
+            hist = yf.Ticker(ticker).history(period="2d", prepost=True)
             if hist is not None and not hist.empty:
                 price = float(hist["Close"].iloc[-1])
         except Exception:
@@ -472,18 +482,21 @@ def live_rulebooks():
 
 @app.get("/api/live/candles/{ticker}")
 def live_candles(ticker: str, interval: str = "1d", period: str = None):
-    """yfinance OHLC. interval=1d/15m/5m/1m 등. 분봉은 시간 초까지 반환."""
+    """yfinance OHLC. interval=1d/15m/5m/1m 등. 분봉은 장전/장후(prepost)를 포함하고 시간 초까지 반환."""
     default_period = {
         "1m": "5d", "2m": "5d", "5m": "1mo", "15m": "1mo",
         "30m": "1mo", "60m": "3mo", "1h": "3mo", "1d": "2y",
     }
     if period is None:
         period = default_period.get(interval, "1mo")
+    intraday = interval not in ("1d", "1wk", "1mo")
     try:
-        df = yf.Ticker(ticker).history(period=period, interval=interval)
+        kwargs = {"period": period, "interval": interval}
+        if intraday:
+            kwargs["prepost"] = True
+        df = yf.Ticker(ticker).history(**kwargs)
     except Exception:
         return []
-    intraday = interval not in ("1d", "1wk", "1mo")
     out = []
     for idx, row in df.iterrows():
         if intraday:

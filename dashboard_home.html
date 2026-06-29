@@ -714,7 +714,7 @@ async function openCandChart(ticker, signalPrice, fillPrice){
     layout:{background:{color:'#0f141b'}, textColor:'#b8c1cf'},
     grid:{vertLines:{color:'#1a1f28'}, horzLines:{color:'#1a1f28'}},
     localization:{timeFormatter:formatChartAxisTimeLabel},
-    timeScale:{timeVisible:true, secondsVisible:false},
+    timeScale:{timeVisible:true, secondsVisible:false, tickMarkFormatter:formatChartAxisTimeLabel},
     width: Math.max(el.clientWidth, 300), height: 340,
   });
   _candSeries = _candChart.addCandlestickSeries({
@@ -763,7 +763,7 @@ function initEquityChart(){
   equityChart=LightweightCharts.createChart(document.getElementById('equity-chart'),{
     layout:{background:{color:'transparent'},textColor:'#5f6e85'},
     grid:{vertLines:{color:'#1c2535'},horzLines:{color:'#1c2535'}},
-    timeScale:{borderColor:'#1c2535',timeVisible:false},
+    timeScale:{borderColor:'#1c2535',timeVisible:false, tickMarkFormatter:formatChartAxisTimeLabel},
     rightPriceScale:{borderColor:'#1c2535'},
   });
   equitySeries=equityChart.addCandlestickSeries({
@@ -1022,7 +1022,7 @@ const chart=LightweightCharts.createChart(document.getElementById('chart'),{
   layout:{background:{color:'transparent'},textColor:'#5f6e85'},
   grid:{vertLines:{color:'#1c2535'},horzLines:{color:'#1c2535'}},
   localization:{timeFormatter:formatChartAxisTimeLabel},
-  timeScale:{borderColor:'#1c2535'},rightPriceScale:{borderColor:'#1c2535'},
+  timeScale:{borderColor:'#1c2535', tickMarkFormatter:formatChartAxisTimeLabel},rightPriceScale:{borderColor:'#1c2535'},
 });
 const series=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',
   wickUpColor:'#26d07c',wickDownColor:'#ff4d6a',borderVisible:false});
@@ -1130,7 +1130,7 @@ async function drawChart(ticker, interval, opts){
 
   curTicker=ticker; curInterval=interval;
   const intraday = !['1d','1wk','1mo'].includes(interval);
-  chart.applyOptions({ timeScale:{ timeVisible:intraday, secondsVisible:false, borderColor:'#1c2535' } });
+  chart.applyOptions({ timeScale:{ timeVisible:intraday, secondsVisible:false, borderColor:'#1c2535', tickMarkFormatter:formatChartAxisTimeLabel } });
   let candles=[];
   try{ candles=await (await fetch(`${API}/api/live/candles/${ticker}?interval=${interval}`)).json(); }catch(e){}
   series.setData(candles);

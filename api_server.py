@@ -29,6 +29,7 @@ from engine.live.manual_sell_intent import (
 )
 from engine.live.news_article_summary import articles_for_ticker as holding_news_articles_for_ticker
 from engine.live.holding_news_queue import HOLDING_NEWS_SCORE_LOGIC_VERSION, MAX_SCORE_ARTICLE_AGE_DAYS
+from engine.live.early_exit_profiles import dashboard_early_exit_profile, holding_days_from_entry
 
 BASE_DIR = Path(__file__).resolve().parent
 LOG_DIR = "logs"
@@ -377,6 +378,14 @@ def live_positions():
         target_return_pct = _return_pct(entry, p.get("target_price"))
         stop_return_pct = _return_pct(entry, p.get("stop_price"))
         trailing_return_pct = _return_pct(entry, p.get("trailing_stop"))
+        holding_days = holding_days_from_entry(p.get("entry_date"))
+        early_exit_profile = dashboard_early_exit_profile(
+            ticker,
+            position=p,
+            current_price=cur,
+            pnl_pct=pnl_pct,
+            holding_days=holding_days,
+        )
         out.append({
             "ticker": ticker,
             "entry_price": entry,
@@ -384,11 +393,15 @@ def live_positions():
             "stop_price": p.get("stop_price"),
             "target_price": p.get("target_price"),
             "trailing_stop": p.get("trailing_stop"),
+            "highest_price": p.get("highest_price"),
+            "lowest_price": p.get("lowest_price"),
             "shares": p.get("shares"),
             "direction": p.get("rulebook_direction"),
             "exit_strategy": p.get("exit_strategy"),
             "max_holding_days": p.get("max_holding_days"),
             "entry_date": p.get("entry_date"),
+            "holding_days": holding_days,
+            "member_hash": p.get("member_hash"),
             "pnl_pct": pnl_pct,
             "target_return_pct": target_return_pct,
             "stop_return_pct": stop_return_pct,
@@ -398,6 +411,7 @@ def live_positions():
             "rulebook_avg_return_pct": rb.get("avg_return_pct"),
             "rulebook_trade_count": rb.get("trade_count"),
             "holding_news": _holding_news_row_for_dashboard(ticker),
+            "early_exit_profile": early_exit_profile,
             "rulebook": rb,
             "entry": {
                 "signal_score": p.get("signal_score_at_entry"),

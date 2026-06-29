@@ -401,6 +401,51 @@ function newsMetricClass(news){
   if(threshold != null && isFinite(threshold)) return score >= threshold * 0.8 ? 'univ-neg' : 'univ-pos';
   return score >= 0.3 ? 'univ-neg' : 'univ-pos';
 }
+function earlyExitMetricValueText(profile){
+  const cur = (profile || {}).current || {};
+  const val = cur.metric_value;
+  if(val == null || !isFinite(Number(val))) return '현재값 —';
+  return `${profile.metric_label || '현재값'} ${Number(val).toFixed(1)}%`;
+}
+function earlyExitStateClass(profile){
+  if(!profile) return '';
+  const ev = profile.evaluation || {};
+  if(ev.triggered) return 'univ-neg';
+  if(profile.validation_status === 'pass') return 'univ-pos';
+  if(profile.validation_status === 'hold') return 'univ-neg';
+  return '';
+}
+function earlyExitSummaryText(profile){
+  if(!profile || !profile.enabled) return '';
+  const ev = profile.evaluation || {};
+  if(ev.triggered) return `정체 ${ev.state_label || '수동 검토'}`;
+  if(!ev.due) return `정체 ${profile.check_day}일차 체크`;
+  return `정체 ${ev.state_label || '통과'}`;
+}
+function earlyExitValidationText(profile){
+  const d = ((profile || {}).validation || {}).delta_daily || {};
+  const vals = [];
+  if(d.all != null) vals.push(`ALL ${pct1(Number(d.all))}/d`);
+  if(d.oos != null) vals.push(`OOS ${pct1(Number(d.oos))}/d`);
+  if(d.stress != null) vals.push(`STRESS ${pct1(Number(d.stress))}/d`);
+  return vals.join(' · ');
+}
+function renderEarlyExitDetailKv(profile){
+  if(!profile || !profile.enabled) return '';
+  const ev = profile.evaluation || {};
+  const cur = profile.current || {};
+  const cls = earlyExitStateClass(profile);
+  const status = profile.validation_status === 'pass' ? '검증통과' : profile.validation_status === 'watch' ? '추가검증' : '보류';
+  const metric = earlyExitMetricValueText(profile);
+  const th = profile.threshold == null ? '—' : `${Number(profile.threshold).toFixed(1)}%`;
+  const days = cur.holding_days == null ? '—' : `${cur.holding_days}일`;
+  const validation = earlyExitValidationText(profile) || '검증값 없음';
+  return `
+    <div class="kv"><span>정체청산 상태</span><span class="${cls}">${htmlEsc(ev.state_label || '—')} · ${htmlEsc(status)}</span></div>
+    <div class="kv"><span>정체청산 기준</span><span>${htmlEsc(profile.rule_label || '—')}</span></div>
+    <div class="kv"><span>정체청산 현재</span><span>${htmlEsc(days)} · ${htmlEsc(metric)} / 기준 ${htmlEsc(th)}</span></div>
+    <div class="kv"><span>정체청산 검증</span><span>${htmlEsc(validation)}</span></div>`;
+}
 
 let slotData=[], marketData={}, _holdingNewsEntries={};
 let _alertState={ near:{}, lastTradeId:null, firstRun:true };
@@ -1035,11 +1080,15 @@ function slotCard(s,onclick){
   const news = s.holding_news || null;
   const newsTxt = newsMetricText(news);
   const newsCls = newsMetricClass(news);
+  const early = s.early_exit_profile || null;
+  const earlyTxt = earlyExitSummaryText(early);
+  const earlyCls = earlyExitStateClass(early);
   const metricBits = [
     targetPct != null ? `목표 ${pct1(targetPct)}` : '',
     winRate != null ? `승률 ${Number(winRate).toFixed(1)}%` : '',
     expectancy != null ? `기대 ${pct1(expectancy)}` : '',
     newsTxt ? `<span class="${newsCls}">${htmlEsc(newsTxt)}</span>` : '',
+    earlyTxt ? `<span class="${earlyCls}">${htmlEsc(earlyTxt)}</span>` : '',
   ].filter(Boolean).join(' · ');
 
   // 손절(0%) ~ 목표(100%) 사이에서 현재가 위치 계산
@@ -1345,6 +1394,15 @@ function renderCommentary(s){
     const near = held>=s.max_holding_days*0.8;
     parts.push(`보유 <b>${held}일</b> / 최대 ${s.max_holding_days}일${near?' <span class="pill pill-warn">기간 임박</span>':''}`);
   }
+  // 정체 조기청산 수동 참고
+  if(s.early_exit_profile && s.early_exit_profile.enabled){
+    const ep = s.early_exit_profile;
+    const ev = ep.evaluation || {};
+    const cls = ev.triggered ? 'pill-warn' : (ep.validation_status === 'pass' ? 'pill-ok' : 'pill-neutral');
+    const val = earlyExitMetricValueText(ep);
+    const validation = earlyExitValidationText(ep);
+    parts.push(`정체청산 참고 <span class="pill ${cls}">${htmlEsc(ev.state_label || ep.confidence_label || '확인')}</span> ${htmlEsc(ep.rule_label || '')} · ${htmlEsc(val)}${validation ? ` · ${htmlEsc(validation)}` : ''}`);
+  }
   // 브레이크이븐
   if(rb.breakeven_enabled && s.pnl_pct!=null && rb.breakeven_trigger_profit_pct!=null){
     const reached=s.pnl_pct>=rb.breakeven_trigger_profit_pct;
@@ -1463,6 +1521,7 @@ function refreshDetailPanel(ticker){
     <div class="kv"><span>학습 승률</span><span>${s.rulebook_win_rate!=null?Number(s.rulebook_win_rate).toFixed(1)+'%':'—'}</span></div>
     <div class="kv"><span>기대 수익률</span><span>${pct1(s.rulebook_expectancy_pct)}</span></div>
     <div class="kv"><span>뉴스 점수</span><span class="${newsMetricClass(s.holding_news)}">${htmlEsc(newsMetricText(s.holding_news) || '—')}</span></div>
+    ${renderEarlyExitDetailKv(s.early_exit_profile)}
     <div class="kv"><span>손절가</span><span style="color:var(--down)">${fmt(s.stop_price)}</span></div>
     <div class="kv"><span>트레일링</span><span style="color:var(--gold)">${fmt(s.trailing_stop)}</span></div>
     <div class="kv"><span>수량</span><span>${fmt(s.shares,4)}</span></div>

@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""LR8D Stage1 통과 종목 다중개체 robust launcher.
+
+이 파일은 6174개 전체 universe 대신 기존 honest Stage1 필터를 통과한
+2009개 종목만 대상으로 LR8D 다중개체 생성을 실행하는 백그라운드 런처입니다.
+
+무엇을 하는 파일인가:
+- 입력 ticker 파일: data/_system/research/honest_stage1_pass_tickers_20260616_final.txt
+- 기존 LR8D A+B+C+D GA 생성 방식은 그대로 사용한다.
+- 기존 LR8D16과 같은 2022 / 2023 / 2024 / 2025H2 4구간 구조를 쓴다.
+- 최종 export만 종목당 1개 제한이 아니라, 기준 합격 + entry-date 중복 제거 후
+  ticker당 최대 5개 개체를 남기는 방식이다.
+- output은 data/_system/research/lr8d_multientity_stage1pass_20260630/ 아래에 따로 쓴다.
+- 기존 6174 전체 run output과 절대 섞지 않는다.
+
+주의:
+- 이 파일은 research artifact만 생성한다.
+- data/symbols/parameters.json을 수정하지 않는다.
+- live runner 또는 broker 주문 상태를 변경하지 않는다.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.research import run_lr8d_multientity_6174 as base
+
+RUN_ID = "lr8d_multientity_stage1pass_20260630"
+RUN_PREFIX = "lr8d_stage1pass"
+TICKER_FILE = Path("data/_system/research/honest_stage1_pass_tickers_20260616_final.txt")
+OUT_DIR = Path(f"data/_system/research/{RUN_ID}")
+
+# Patch the reusable LR8D multi-entity module before importing its robust runner.
+# The imported module keeps all LR8D generation logic identical, but these globals
+# redirect input/output to the Stage1-pass universe and a separate artifact folder.
+base.RUN_ID = RUN_ID
+base.RUN_PREFIX = RUN_PREFIX
+base.DEFAULT_TICKER_FILE = TICKER_FILE
+base.OUT_DIR = OUT_DIR
+base.README_PATH = OUT_DIR / "README.md"
+base.MULTI_ENTITY_PATH = OUT_DIR / f"{RUN_PREFIX}_multi_entity_candidates.jsonl"
+base.MULTI_ENTITY_MANIFEST_PATH = OUT_DIR / f"{RUN_PREFIX}_multi_entity_manifest.json"
+base.MULTI_ENTITY_REPORT_PATH = OUT_DIR / f"{RUN_PREFIX}_MULTI_ENTITY_REPORT.md"
+base.runner.OUT_DIR = OUT_DIR
+base.runner.TIMING_PATH = OUT_DIR / f"{RUN_PREFIX}_timing.txt"
+base.runner.TOPN_PATH = OUT_DIR / f"{RUN_PREFIX}_topn.jsonl"
+base.runner.RULEBOOKS_PATH = OUT_DIR / f"{RUN_PREFIX}_topn_rulebooks.jsonl"
+base.runner.TRADES_PATH = OUT_DIR / f"{RUN_PREFIX}_trades.jsonl"
+base.runner.SURVIVORS_PATH = OUT_DIR / f"{RUN_PREFIX}_ticker_level_survivors.jsonl"
+base.runner.REPORT_PATH = OUT_DIR / f"{RUN_PREFIX}_BASE_TICKER_SURVIVOR_REPORT.md"
+
+from scripts.research import run_lr8d_multientity_6174_robust as robust  # noqa: E402
+
+# Rebind robust artifact paths after the patch above.  JSONL files also include
+# _comment fields explaining what they are, so downstream review is unambiguous.
+robust.base = base
+robust.runner = base.runner
+robust.FAILURES_PATH = OUT_DIR / f"{RUN_PREFIX}_failures.jsonl"
+robust.PROGRESS_PATH = OUT_DIR / f"{RUN_PREFIX}_progress.json"
+
+
+def main() -> int:
+    return robust.main()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

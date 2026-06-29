@@ -236,6 +236,38 @@ def _queue_payload_status(*, executed: int, submitted: int, blocked: int) -> str
     return "empty"
 
 
+def _hydrate_runner_buy_preflight_cache(runner: Any, ticker: str, rulebook: dict[str, Any], atr: Any) -> bool:
+    """Hydrate the live rulebook provider cache before next-open execution.
+
+    The next-open queue is selected on D-1 and stores the exact ATR/rulebook used
+    for the signal.  At D open execution we must pass that ATR back into the
+    existing BUY preflight path; otherwise the fail-closed reconciliation layer
+    rejects the order with "valid ATR missing" because no same-tick signal
+    evaluation happened for this queued order.
+    """
+    ticker_u = normalize_ticker(ticker)
+    provider = getattr(runner, "rulebook", None)
+    if provider is None or not ticker_u:
+        return False
+    hydrated = False
+    try:
+        a = float(atr or 0.0)
+    except Exception:
+        a = 0.0
+    if a > 0.0 and hasattr(provider, "_last_atr"):
+        try:
+            provider._last_atr[ticker_u] = a
+            hydrated = True
+        except Exception as exc:
+            log.warning("[NEXT-OPEN] %s ATR cache hydration failed: %s", ticker_u, exc)
+    if isinstance(rulebook, dict) and rulebook and hasattr(provider, "_rulebook_by_ticker"):
+        try:
+            provider._rulebook_by_ticker[ticker_u] = Rulebook.from_dict(dict(rulebook))
+        except Exception as exc:
+            log.warning("[NEXT-OPEN] %s rulebook cache hydration failed: %s", ticker_u, exc)
+    return hydrated
+
+
 class _EmptyLedger:
     def open_positions(self):
         return []
@@ -753,9 +785,25 @@ class NextOpenBuyCoordinator:
                     purpose=str(decision_raw.get("purpose") or "entry"),
                     target_position_id=str(decision_raw.get("target_position_id") or ""),
                 )
+                hydrated = _hydrate_runner_buy_preflight_cache(
+                    self.controller.runner,
+                    ticker,
+                    dict(row.get("rulebook") or decision.rulebook or {}),
+                    row.get("atr_at_signal"),
+                )
+                if not hydrated:
+                    log.warning("[NEXT-OPEN] %s queued BUY ATR cache not hydrated; preflight may block", ticker)
+                sig = SignalResult(
+                    ticker=ticker,
+                    signal=Signal.BUY,
+                    price=float(reference_price or 0.0),
+                    reason=f"next_open_queue entity={decision.entity_id}",
+                    score=float(row.get("signal_score") or 0.0),
+                    threshold=float(row.get("signal_threshold") or 0.0),
+                )
                 ok = self.controller._execute_decision(
                     decision,
-                    None,
+                    sig,
                     reference_price,
                     execution_reason="next_open_queue",
                 )

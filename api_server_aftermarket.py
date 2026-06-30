@@ -9,20 +9,27 @@
 - 기존 `api_server._get_price()`를 런타임에 교체한다.
 - 가격 조회 순서는 yfinance 1분봉 pre/post → Alpaca Market Data latest trade → yfinance fast_info → yfinance 2일봉 fallback이다.
 - Alpaca free/IEX latest trade가 15:59 ET 정규장 마지막 체결에 머무르는 경우가 있어, 애프터마켓 표시값은 yfinance prepost를 우선한다.
+- 수동청산 버튼은 intent 파일을 쓴 뒤 localhost runner command server를 즉시 wake한다.
 - 목적은 텔레그램 `/positions`와 웹 대시보드의 보유 종목 현재가를 장외/애프터마켓에서도 같은 기준으로 맞추는 것이다.
 
 주의:
-- 이 파일은 broker 주문을 내지 않는다.
+- 이 파일은 broker 주문을 직접 내지 않는다.
+- 수동청산 주문 제출은 항상 live runner 내부 기존 manual SELL 경로에서만 수행된다.
 - live runner, positions.json, parameters.json을 수정하지 않는다.
 - API 서버 실행 시 `uvicorn api_server_aftermarket:app`으로 띄워야 이 패치가 적용된다.
 """
 from __future__ import annotations
 
+import json
 import logging
 import time
+import urllib.error
+import urllib.request
+from pathlib import Path
 from typing import Any
 
 import yfinance as yf
+from fastapi import HTTPException
 
 import api_server as _base
 
@@ -31,6 +38,7 @@ log = logging.getLogger("api_server.aftermarket")
 app = _base.app
 
 _PRICE_CACHE_TTL_SEC = 15.0
+RUNNER_COMMAND_STATE_PATH = Path("data/_system/runner_command_lr8d16.json")
 _price_cache: dict[str, tuple[float | None, float, str]] = {}
 _broker = None
 _broker_init_error_logged = False
@@ -131,8 +139,115 @@ def _get_price_aftermarket(ticker: str):
     return price
 
 
+def _wake_runner_manual_sell(intent_row: dict) -> dict:
+    """Ask live runner to consume a manual sell intent immediately.
+
+    This is intentionally only a wake-up RPC.  api_server still does not import
+    broker credentials or place orders.  If the runner command server is missing
+    or busy, the file-backed intent remains and fast-exit/tick_market consumes it.
+    """
+    state = _base._read_json(str(RUNNER_COMMAND_STATE_PATH), {})
+    if not isinstance(state, dict) or not state.get("url") or not state.get("token"):
+        return {
+            "ok": False,
+            "mode": "intent_fallback",
+            "reason": "runner_command_state_missing",
+            "state_path": str(RUNNER_COMMAND_STATE_PATH),
+        }
+    url = str(state.get("url") or "").rstrip("/") + "/manual_sell/wake"
+    payload = {
+        "ticker": str(intent_row.get("ticker") or "").upper(),
+        "intent_id": str(intent_row.get("intent_id") or ""),
+        "source": "api_server_aftermarket",
+    }
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="POST",
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "X-Kingmaker-Token": str(state.get("token") or ""),
+        },
+    )
+    started = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=8.0) as resp:
+            raw = resp.read().decode("utf-8")
+            body = json.loads(raw) if raw else {}
+            return {
+                "ok": True,
+                "mode": "runner_rpc",
+                "http_status": int(getattr(resp, "status", 0) or 0),
+                "elapsed_ms": round((time.time() - started) * 1000.0, 3),
+                "runner_response": body,
+            }
+    except urllib.error.HTTPError as exc:
+        try:
+            raw = exc.read().decode("utf-8")
+            body = json.loads(raw) if raw else {}
+        except Exception:
+            body = {"error": str(exc)}
+        return {
+            "ok": False,
+            "mode": "intent_fallback",
+            "reason": "runner_rpc_http_error",
+            "http_status": int(getattr(exc, "code", 0) or 0),
+            "elapsed_ms": round((time.time() - started) * 1000.0, 3),
+            "runner_response": body,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "mode": "intent_fallback",
+            "reason": type(exc).__name__,
+            "message": str(exc),
+            "elapsed_ms": round((time.time() - started) * 1000.0, 3),
+        }
+
+
+def manual_sell_intent_immediate(req: _base.ManualSellIntentRequest):
+    """Create manual SELL intent and immediately wake the live runner.
+
+    The wake call does not place orders in the API process.  It simply asks the
+    runner process to consume the just-written intent through its existing safe
+    manual-sell path.  Fallback remains the JSON intent + fast-exit poller.
+    """
+    try:
+        row = _base.create_manual_sell_intent(
+            ticker=req.ticker,
+            shares_requested=req.shares_requested,
+            source=req.source or "dashboard",
+            positions_path=_base.MANUAL_SELL_POSITIONS_PATH,
+            intent_path=_base.MANUAL_SELL_INTENT_PATH,
+        )
+        wake = _wake_runner_manual_sell(row)
+        return {
+            "ok": True,
+            "intent": row,
+            "runner_wake": wake,
+            "execution_mode": "runner_rpc" if wake.get("ok") else "intent_fallback",
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+def _replace_manual_sell_route() -> None:
+    target_path = "/api/live/manual_sell_intent"
+    app.router.routes = [
+        route for route in app.router.routes
+        if not (
+            getattr(route, "path", "") == target_path
+            and "POST" in set(getattr(route, "methods", set()) or set())
+        )
+    ]
+    app.post(target_path)(manual_sell_intent_immediate)
+    log.warning("manual sell route patched: intent + immediate runner wake")
+
+
 # Patch the original route functions' global lookup.  Existing routes call
 # api_server._get_price at execution time, so replacing it here updates
 # /api/live/positions, /api/live/slots, and /api/live/account together.
 _base._get_price = _get_price_aftermarket
 _base._price_cache = _price_cache
+_replace_manual_sell_route()

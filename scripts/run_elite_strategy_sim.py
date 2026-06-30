@@ -26,7 +26,7 @@ log = logging.getLogger("run_elite_strategy_sim")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Kingmaker elite gate strategy simulator")
-    parser.add_argument("--interval", type=int, default=300)
+    parser.add_argument("--interval", type=int, default=60, help="tick 시작 간 목표 간격(초). tick이 더 오래 걸리면 다음 tick을 바로 이어서 실행")
     parser.add_argument("--max-candidates", type=int, default=93)
     parser.add_argument("--notional", type=float, default=5000.0)
     parser.add_argument("--once", action="store_true")
@@ -45,6 +45,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, on_signal)
     log.warning("Elite strategy sim 시작: interval=%ss max_candidates=%s notional=$%s 실제주문=OFF", args.interval, args.max_candidates, args.notional)
     while not stop["value"]:
+        cycle_started = time.time()
         try:
             result = run_strategy_sim_tick(max_candidates=args.max_candidates, notional=args.notional)
             payload = strategy_sim_payload(recent_trade_limit=20)
@@ -57,7 +58,11 @@ def main() -> int:
             log.exception("elite strategy sim tick 실패: %s", exc)
         if args.once:
             break
-        for _ in range(max(1, args.interval)):
+        elapsed = time.time() - cycle_started
+        sleep_for = max(1, int(args.interval - elapsed))
+        if elapsed >= args.interval:
+            log.info("tick elapsed %.1fs >= interval %ss — 다음 tick 바로 재시도", elapsed, args.interval)
+        for _ in range(sleep_for):
             if stop["value"]:
                 break
             time.sleep(1)

@@ -10,6 +10,7 @@ import logging
 import time
 import urllib.error
 import urllib.request
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,23 @@ def _safe_float(value: Any) -> float | None:
         return out
     except Exception:
         return None
+
+
+def _num(value: Any, default: float = 0.0) -> float:
+    """Dashboard 계산 전용 숫자 변환. 손익처럼 음수도 허용한다."""
+    try:
+        if value in (None, ""):
+            return default
+        out = float(value)
+        if out != out:
+            return default
+        return out
+    except Exception:
+        return default
+
+
+def _utc_now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 def _get_alpaca_broker():
@@ -119,6 +137,90 @@ def _get_price_aftermarket(ticker: str):
 
     _price_cache[symbol] = (price, now, source)
     return price
+
+
+def _refresh_strategy_sim_prices(payload: dict[str, Any]) -> dict[str, Any]:
+    """전략 시뮬 화면용 mark-to-market 보정.
+
+    strategy tick은 후보 93개 재평가 때문에 무겁다. 대신 대시보드 GET 때는
+    이미 열린 가상 포지션의 현재가/미실현 손익만 가볍게 다시 계산해서
+    화면 숫자가 tick 완료 전에도 움직이도록 한다. 실제 주문/청산 기록은 하지 않는다.
+    """
+    strategies = payload.get("strategies") or {}
+    total_refreshed = 0
+    refreshed_at = _utc_now()
+    for name, sim in strategies.items():
+        positions = sim.get("open_positions") or []
+        if not isinstance(positions, list):
+            positions = []
+        refreshed = 0
+        errors: list[dict[str, str]] = []
+        for pos in positions:
+            if not isinstance(pos, dict):
+                continue
+            ticker = str(pos.get("ticker") or "").upper().strip()
+            if not ticker:
+                continue
+            price = _get_price_aftermarket(ticker)
+            entry = _safe_float(pos.get("entry_price"))
+            shares = _safe_float(pos.get("shares"))
+            notional = _num(pos.get("notional"), 0.0)
+            if shares is None and entry:
+                shares = notional / entry if notional > 0 else None
+            if price is None or entry is None or shares is None:
+                errors.append({"ticker": ticker, "reason": "price_or_entry_missing"})
+                continue
+            highest = max(_num(pos.get("highest_price"), entry), price)
+            lowest = min(_num(pos.get("lowest_price"), entry), price)
+            pnl_pct = (price / entry - 1.0) * 100.0
+            pnl_usd = shares * (price - entry)
+            pos.update(
+                {
+                    "last_price": price,
+                    "last_seen_at": refreshed_at,
+                    "highest_price": highest,
+                    "lowest_price": lowest,
+                    "max_profit_pct": max(_num(pos.get("max_profit_pct"), 0.0), (highest / entry - 1.0) * 100.0),
+                    "max_loss_pct": min(_num(pos.get("max_loss_pct"), 0.0), (lowest / entry - 1.0) * 100.0),
+                    "unrealized_pnl_pct": pnl_pct,
+                    "unrealized_pnl_usd": pnl_usd,
+                    "price_source": "dashboard_prepost_refresh",
+                }
+            )
+            refreshed += 1
+        total_refreshed += refreshed
+
+        summary = dict(sim.get("summary") or {})
+        open_pnl = sum(_num(p.get("unrealized_pnl_usd"), 0.0) for p in positions if isinstance(p, dict))
+        open_notional = sum(_num(p.get("notional"), 0.0) for p in positions if isinstance(p, dict))
+        realized_pnl = _num(summary.get("realized_pnl_usd"), 0.0)
+        closed_notional = _num(summary.get("closed_notional"), 0.0)
+        total_notional = open_notional + closed_notional
+        total_pnl = open_pnl + realized_pnl
+        summary.update(
+            {
+                "open_count": len(positions),
+                "open_unrealized_usd": open_pnl,
+                "open_notional": open_notional,
+                "total_notional": total_notional,
+                "total_pnl_usd": total_pnl,
+                "open_roi_pct": open_pnl / open_notional * 100.0 if open_notional else 0.0,
+                "total_roi_pct": total_pnl / total_notional * 100.0 if total_notional else 0.0,
+            }
+        )
+        sim["summary"] = summary
+        sim["open_gate_counts"] = dict(Counter(str(p.get("gate") or "UNKNOWN") for p in positions if isinstance(p, dict)))
+        sim["price_refresh"] = {
+            "refreshed_at": refreshed_at,
+            "refreshed": refreshed,
+            "open_count": len(positions),
+            "errors": errors[:8],
+            "ttl_sec": _PRICE_CACHE_TTL_SEC,
+            "note": "GET 응답 시 열린 가상 포지션 가격만 갱신. 신규 진입/청산 판단은 strategy tick에서만 수행.",
+        }
+        log.debug("strategy sim price refresh %s: %s/%s", name, refreshed, len(positions))
+    payload["price_refresh"] = {"refreshed_at": refreshed_at, "refreshed": total_refreshed, "ttl_sec": _PRICE_CACHE_TTL_SEC}
+    return payload
 
 
 def _wake_runner_manual_sell(intent_row: dict) -> dict:
@@ -225,7 +327,8 @@ def elite_shadow_tick(max_candidates: int = 93):
 def elite_strategy_sim_state():
     try:
         from engine.live.elite_strategy_sim import strategy_sim_payload
-        return strategy_sim_payload(recent_trade_limit=300)
+        payload = strategy_sim_payload(recent_trade_limit=300)
+        return _refresh_strategy_sim_prices(payload)
     except Exception as exc:
         log.exception("elite strategy sim state failed")
         raise HTTPException(status_code=500, detail=f"elite strategy sim state failed: {type(exc).__name__}: {exc}")

@@ -1,22 +1,7 @@
 """KINGMAKER dashboard API wrapper with true pre/post-market display prices.
 
-이 파일은 기존 `api_server.py`의 FastAPI 앱을 그대로 재사용하면서,
-대시보드 보유 종목 현재가 함수만 장전/장후 prepost 가격 우선으로 패치하는
-라이브 대시보드 전용 wrapper입니다.
-
-무엇을 하는 파일인가:
-- `/dashboard`, `/api/live/*` 등 기존 api_server 라우트는 그대로 사용한다.
-- 기존 `api_server._get_price()`를 런타임에 교체한다.
-- 가격 조회 순서는 yfinance 1분봉 pre/post → Alpaca Market Data latest trade → yfinance fast_info → yfinance 2일봉 fallback이다.
-- Alpaca free/IEX latest trade가 15:59 ET 정규장 마지막 체결에 머무르는 경우가 있어, 애프터마켓 표시값은 yfinance prepost를 우선한다.
-- 수동청산 버튼은 intent 파일을 쓴 뒤 localhost runner command server를 즉시 wake한다.
-- `/elite-shadow`에서 broker 주문 없는 정예 후보 shadow 성적표와 실시간 가상 ledger를 제공한다.
-
-주의:
-- 이 파일은 broker 주문을 직접 내지 않는다.
-- 수동청산 주문 제출은 항상 live runner 내부 기존 manual SELL 경로에서만 수행된다.
-- elite-shadow는 batch artifact와 shadow ledger를 읽기만 하며 live runner, positions.json, parameters.json을 수정하지 않는다.
-- API 서버 실행 시 `uvicorn api_server_aftermarket:app`으로 띄워야 이 패치가 적용된다.
+기존 api_server 앱을 재사용하면서 장전/장후 가격 표시, 수동청산 runner wake,
+elite shadow/strategy simulation 대시보드 라우트를 추가하는 wrapper입니다.
 """
 from __future__ import annotations
 
@@ -35,13 +20,13 @@ from fastapi.responses import HTMLResponse
 import api_server as _base
 
 log = logging.getLogger("api_server.aftermarket")
-
 app = _base.app
 
 _PRICE_CACHE_TTL_SEC = 15.0
 _ELITE_SHADOW_CACHE_TTL_SEC = 600.0
 RUNNER_COMMAND_STATE_PATH = Path("data/_system/runner_command_lr8d16.json")
 ELITE_SHADOW_PAGE_PATH = Path("elite_shadow.html")
+ELITE_STRATEGY_SIM_PAGE_PATH = Path("elite_strategy_sim.html")
 _price_cache: dict[str, tuple[float | None, float, str]] = {}
 _elite_shadow_cache: dict[str, Any] = {"ts": 0.0, "payload": None}
 _broker = None
@@ -61,13 +46,11 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _get_alpaca_broker():
-    """Create AlpacaBroker lazily so dashboard import never fails hard."""
     global _broker, _broker_init_error_logged
     if _broker is not None:
         return _broker
     try:
         from engine.live.broker.alpaca import AlpacaBroker, DEFAULT_ALPACA_BASE_URL
-
         _broker = AlpacaBroker(base_url=DEFAULT_ALPACA_BASE_URL, paper=True)
         return _broker
     except Exception as exc:
@@ -90,7 +73,6 @@ def _yfinance_prepost_price(symbol: str) -> float | None:
 
 
 def _get_price_aftermarket(ticker: str):
-    """Return latest visible dashboard price, including after-market prints."""
     symbol = str(ticker or "").upper().strip()
     if not symbol:
         return None
@@ -140,69 +122,31 @@ def _get_price_aftermarket(ticker: str):
 
 
 def _wake_runner_manual_sell(intent_row: dict) -> dict:
-    """Ask live runner to consume a manual sell intent immediately."""
     state = _base._read_json(str(RUNNER_COMMAND_STATE_PATH), {})
     if not isinstance(state, dict) or not state.get("url") or not state.get("token"):
-        return {
-            "ok": False,
-            "mode": "intent_fallback",
-            "reason": "runner_command_state_missing",
-            "state_path": str(RUNNER_COMMAND_STATE_PATH),
-        }
+        return {"ok": False, "mode": "intent_fallback", "reason": "runner_command_state_missing", "state_path": str(RUNNER_COMMAND_STATE_PATH)}
     url = str(state.get("url") or "").rstrip("/") + "/manual_sell/wake"
-    payload = {
-        "ticker": str(intent_row.get("ticker") or "").upper(),
-        "intent_id": str(intent_row.get("intent_id") or ""),
-        "source": "api_server_aftermarket",
-    }
+    payload = {"ticker": str(intent_row.get("ticker") or "").upper(), "intent_id": str(intent_row.get("intent_id") or ""), "source": "api_server_aftermarket"}
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=data,
-        method="POST",
-        headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "X-Kingmaker-Token": str(state.get("token") or ""),
-        },
-    )
+    req = urllib.request.Request(url, data=data, method="POST", headers={"Content-Type": "application/json; charset=utf-8", "X-Kingmaker-Token": str(state.get("token") or "")})
     started = time.time()
     try:
         with urllib.request.urlopen(req, timeout=8.0) as resp:
             raw = resp.read().decode("utf-8")
             body = json.loads(raw) if raw else {}
-            return {
-                "ok": True,
-                "mode": "runner_rpc",
-                "http_status": int(getattr(resp, "status", 0) or 0),
-                "elapsed_ms": round((time.time() - started) * 1000.0, 3),
-                "runner_response": body,
-            }
+            return {"ok": True, "mode": "runner_rpc", "http_status": int(getattr(resp, "status", 0) or 0), "elapsed_ms": round((time.time() - started) * 1000.0, 3), "runner_response": body}
     except urllib.error.HTTPError as exc:
         try:
             raw = exc.read().decode("utf-8")
             body = json.loads(raw) if raw else {}
         except Exception:
             body = {"error": str(exc)}
-        return {
-            "ok": False,
-            "mode": "intent_fallback",
-            "reason": "runner_rpc_http_error",
-            "http_status": int(getattr(exc, "code", 0) or 0),
-            "elapsed_ms": round((time.time() - started) * 1000.0, 3),
-            "runner_response": body,
-        }
+        return {"ok": False, "mode": "intent_fallback", "reason": "runner_rpc_http_error", "http_status": int(getattr(exc, "code", 0) or 0), "elapsed_ms": round((time.time() - started) * 1000.0, 3), "runner_response": body}
     except Exception as exc:
-        return {
-            "ok": False,
-            "mode": "intent_fallback",
-            "reason": type(exc).__name__,
-            "message": str(exc),
-            "elapsed_ms": round((time.time() - started) * 1000.0, 3),
-        }
+        return {"ok": False, "mode": "intent_fallback", "reason": type(exc).__name__, "message": str(exc), "elapsed_ms": round((time.time() - started) * 1000.0, 3)}
 
 
 def manual_sell_intent_immediate(req: _base.ManualSellIntentRequest):
-    """Create manual SELL intent and immediately wake the live runner."""
     try:
         row = _base.create_manual_sell_intent(
             ticker=req.ticker,
@@ -212,52 +156,41 @@ def manual_sell_intent_immediate(req: _base.ManualSellIntentRequest):
             intent_path=_base.MANUAL_SELL_INTENT_PATH,
         )
         wake = _wake_runner_manual_sell(row)
-        return {
-            "ok": True,
-            "intent": row,
-            "runner_wake": wake,
-            "execution_mode": "runner_rpc" if wake.get("ok") else "intent_fallback",
-        }
+        return {"ok": True, "intent": row, "runner_wake": wake, "execution_mode": "runner_rpc" if wake.get("ok") else "intent_fallback"}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 def _replace_manual_sell_route() -> None:
     target_path = "/api/live/manual_sell_intent"
-    app.router.routes = [
-        route for route in app.router.routes
-        if not (
-            getattr(route, "path", "") == target_path
-            and "POST" in set(getattr(route, "methods", set()) or set())
-        )
-    ]
+    app.router.routes = [route for route in app.router.routes if not (getattr(route, "path", "") == target_path and "POST" in set(getattr(route, "methods", set()) or set()))]
     app.post(target_path)(manual_sell_intent_immediate)
     log.warning("manual sell route patched: intent + immediate runner wake")
 
 
 @app.get("/elite-shadow", include_in_schema=False)
 def elite_shadow_page():
-    """Serve read-only elite shadow dashboard page."""
     if not ELITE_SHADOW_PAGE_PATH.exists():
         raise HTTPException(status_code=500, detail=f"elite shadow page missing: {ELITE_SHADOW_PAGE_PATH}")
     return HTMLResponse(ELITE_SHADOW_PAGE_PATH.read_text(encoding="utf-8"), media_type="text/html")
 
 
+@app.get("/elite-strategy-sim", include_in_schema=False)
+def elite_strategy_sim_page():
+    if not ELITE_STRATEGY_SIM_PAGE_PATH.exists():
+        raise HTTPException(status_code=500, detail=f"elite strategy sim page missing: {ELITE_STRATEGY_SIM_PAGE_PATH}")
+    return HTMLResponse(ELITE_STRATEGY_SIM_PAGE_PATH.read_text(encoding="utf-8"), media_type="text/html")
+
+
 @app.get("/api/live/elite_shadow")
 def elite_shadow_report(refresh: bool = False):
-    """Return cached FIX-type elite shadow candidate report."""
     now = time.time()
-    if (
-        not refresh
-        and _elite_shadow_cache.get("payload") is not None
-        and now - float(_elite_shadow_cache.get("ts") or 0.0) < _ELITE_SHADOW_CACHE_TTL_SEC
-    ):
+    if not refresh and _elite_shadow_cache.get("payload") is not None and now - float(_elite_shadow_cache.get("ts") or 0.0) < _ELITE_SHADOW_CACHE_TTL_SEC:
         payload = dict(_elite_shadow_cache["payload"])
         payload["cache"] = {"hit": True, "age_seconds": round(now - float(_elite_shadow_cache.get("ts") or 0.0), 3)}
         return payload
     try:
         from engine.live.elite_shadow_report import build_elite_shadow_report
-
         payload = build_elite_shadow_report(stage2_limit=60, stage3_limit=80, include_trades=True)
         payload["cache"] = {"hit": False, "age_seconds": 0.0}
         _elite_shadow_cache["payload"] = payload
@@ -270,10 +203,8 @@ def elite_shadow_report(refresh: bool = False):
 
 @app.get("/api/live/elite_shadow_trader")
 def elite_shadow_trader_state():
-    """Return virtual-only elite shadow open positions and closed trades."""
     try:
         from engine.live.elite_shadow_trader import shadow_dashboard_payload
-
         return shadow_dashboard_payload(recent_trade_limit=300)
     except Exception as exc:
         log.exception("elite shadow trader state failed")
@@ -282,23 +213,34 @@ def elite_shadow_trader_state():
 
 @app.post("/api/live/elite_shadow_tick")
 def elite_shadow_tick(max_candidates: int = 93):
-    """Manually trigger one virtual-only elite shadow tick.
-
-    This never places broker orders. It is only a convenience endpoint for the
-    dashboard/manual smoke tests; the daemon is the normal tracker.
-    """
     try:
         from engine.live.elite_shadow_trader import run_shadow_tick
-
         return run_shadow_tick(max_candidates=int(max_candidates))
     except Exception as exc:
         log.exception("elite shadow manual tick failed")
         raise HTTPException(status_code=500, detail=f"elite shadow tick failed: {type(exc).__name__}: {exc}")
 
 
-# Patch the original route functions' global lookup.  Existing routes call
-# api_server._get_price at execution time, so replacing it here updates
-# /api/live/positions, /api/live/slots, and /api/live/account together.
+@app.get("/api/live/elite_strategy_sim")
+def elite_strategy_sim_state():
+    try:
+        from engine.live.elite_strategy_sim import strategy_sim_payload
+        return strategy_sim_payload(recent_trade_limit=300)
+    except Exception as exc:
+        log.exception("elite strategy sim state failed")
+        raise HTTPException(status_code=500, detail=f"elite strategy sim state failed: {type(exc).__name__}: {exc}")
+
+
+@app.post("/api/live/elite_strategy_sim_tick")
+def elite_strategy_sim_tick(max_candidates: int = 93):
+    try:
+        from engine.live.elite_strategy_sim import run_strategy_sim_tick
+        return run_strategy_sim_tick(max_candidates=int(max_candidates))
+    except Exception as exc:
+        log.exception("elite strategy sim manual tick failed")
+        raise HTTPException(status_code=500, detail=f"elite strategy sim tick failed: {type(exc).__name__}: {exc}")
+
+
 _base._get_price = _get_price_aftermarket
 _base._price_cache = _price_cache
 _replace_manual_sell_route()

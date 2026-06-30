@@ -10,9 +10,9 @@
 </style>
 </head>
 <body>
-<div class="topbar"><div class="logo">KINGMAKER <span>ELITE SHADOW</span></div><div class="nav"><a class="btn" href="/dashboard">기존 대시보드</a><button class="btn" onclick="manualTick()">가상 Tick</button><button class="btn" onclick="load(true)">새로고침</button></div></div>
+<div class="topbar"><div class="logo">KINGMAKER <span>ELITE SHADOW</span></div><div class="nav"><a class="btn" href="/dashboard">기존 대시보드</a><a class="btn" href="/elite-strategy-sim" target="_blank">전략 시뮬</a><button class="btn" onclick="manualTick()">가상 Tick</button><button class="btn" onclick="load(true)">새로고침</button></div></div>
 <div class="page">
-  <div class="note">이 페이지는 broker 주문을 내지 않는 시스템 전용 shadow 분석입니다. 정예 후보 룰북에서 실제 BUY 신호가 뜨면 샀다고 가정하고, 룰북 청산조건이 맞으면 팔았다고 가정해 별도 ledger에 기록합니다. 실제 Alpaca 주문·positions.json·live runner 보유 상태와 완전히 분리됩니다.</div>
+  <div class="note">이 페이지는 broker 주문을 내지 않는 시스템 전용 shadow 분석입니다. 정예 후보 룰북에서 실제 BUY 신호가 뜨면 샀다고 가정하고, 룰북 청산조건이 맞으면 팔았다고 가정해 별도 ledger에 기록합니다. 실제 Alpaca 주문·positions.json·live runner 보유 상태와 완전히 분리됩니다. 상단의 <b>전략 시뮬</b> 버튼은 최종 매수 게이트/눌림 전용 시뮬 창을 엽니다.</div>
 
   <div class="section-title"><h2>🧪 실시간 가상매매 Ledger</h2><span id="live-meta">로딩...</span></div>
   <div class="grid" id="live-summary"><div class="loading">로딩...</div></div>

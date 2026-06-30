@@ -1,10 +1,8 @@
 """Elite pullback outcome forecaster.
 
-무엇을 하는 파일인가:
 - strategy sim의 눌림 후보/가상 보유 포지션을 과거 동일 룰북 거래와 비교한다.
-- 과거 winning MAE / losing MAE / target hit 비율 / 현재 score 유지율 / stop-target 거리로
-  현재 눌림이 더 빠질지, 횡보할지, 다시 목표가 쪽으로 갈지 확률형 판정을 붙인다.
-- 최근 OHLCV 기반 반등 품질 점수를 붙여 단순 rebound_confirmed=True/False보다 세밀하게 본다.
+- 최근 OHLCV 기반 반등 품질 점수를 같이 본다.
+- 과거 기록과 현재 반등 품질이 충돌하면 억지로 BASE로 바꾸지 않고 MIXED_CONFLICT(경합)로 표시한다.
 - 실제 broker 주문, live positions.json, strategy state 파일은 수정하지 않는다.
 """
 from __future__ import annotations
@@ -25,6 +23,7 @@ _candidate_cache: tuple[dict[str, dict[str, Any]], float] | None = None
 _rebound_quality_cache: dict[str, tuple[dict[str, Any], float]] = {}
 
 PULLBACK_GATES = {"BUY_PULLBACK_REENTRY", "WAIT_PULLBACK_CONFIRM"}
+OUTCOME_KEYS = ("REBOUND_TO_TARGET", "BASE_HOLD", "DROP_MORE")
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -56,7 +55,7 @@ def _percentile(values: list[float], q: float) -> float | None:
         return None
     if len(vals) == 1:
         return vals[0]
-    q = max(0.0, min(1.0, float(q)))
+    q = _clamp(q, 0.0, 1.0)
     pos = (len(vals) - 1) * q
     lo = int(math.floor(pos))
     hi = int(math.ceil(pos))
@@ -135,16 +134,14 @@ def _load_rulebook_trades(position: dict[str, Any]) -> tuple[list[dict[str, Any]
             return rows, diag
     rows: list[dict[str, Any]] = []
     for row in _load_jsonl(path) or []:
-        if str(row.get(hash_key) or "") != rulebook_hash:
-            continue
-        rows.append(row)
+        if str(row.get(hash_key) or "") == rulebook_hash:
+            rows.append(row)
     _trade_cache[cache_key] = (rows, now)
     diag.update({"ok": True, "source": "file", "rows": len(rows)})
     return rows, diag
 
 
 def _trade_depth(row: dict[str, Any]) -> float:
-    """과거 거래의 불리한 움직임 깊이(양수 %)를 반환한다."""
     mae = _safe_float(row.get("max_loss_during_hold"), 0.0)
     if mae < 0:
         return abs(mae)
@@ -210,12 +207,6 @@ def _quality_label(score: float) -> str:
 
 
 def _build_rebound_quality(position: dict[str, Any], *, current_price: float) -> dict[str, Any]:
-    """최근 OHLCV로 반등 품질을 0~100점으로 산출한다.
-
-    rebound_confirmed는 True/False 1차 게이트이고, 이 점수는 반등의 질을 본다.
-    구성요소: 저점 회복률, higher close, higher low, 단기 평균 회복, 전일 고점 회복,
-    종가 위치, 거래량 동반 여부.
-    """
     ticker = str(position.get("ticker") or "").upper().strip()
     if not ticker:
         return {"ok": False, "score": None, "label": "NO_TICKER", "reason": "ticker_missing"}
@@ -264,10 +255,8 @@ def _build_rebound_quality(position: dict[str, Any], *, current_price: float) ->
     reclaim_ma5 = bool(current >= ma5)
     above_prev_high = bool(current > h2)
 
-    score = 0.0
-    reasons: list[str] = []
     components: dict[str, float] = {}
-
+    reasons: list[str] = []
     if bounce_from_low_pct >= 4.0:
         components["low_recovery"] = 22.0
         reasons.append(f"최근 5일 저점 대비 {bounce_from_low_pct:.2f}% 회복")
@@ -283,7 +272,6 @@ def _build_rebound_quality(position: dict[str, Any], *, current_price: float) ->
     else:
         components["low_recovery"] = 0.0
         reasons.append(f"저점 회복 약함 {bounce_from_low_pct:.2f}%")
-
     components["higher_close"] = 16.0 if higher_close else 0.0
     if higher_close:
         reasons.append("최근 종가 구조 상승")
@@ -348,7 +336,7 @@ def _build_rebound_quality(position: dict[str, Any], *, current_price: float) ->
             "volume_ratio": volume_ratio,
             "up_day": up_day,
         },
-        "note": "0~100 반등 품질 점수. 60+면 반등 구조 양호, 75+면 강한 반등, 45 미만은 반등 실패/약함으로 해석.",
+        "note": "0~100 반등 품질 점수. 60+면 반등 구조 양호, 75+면 강한 반등, 45 미만은 반등 실패/약함.",
     }
     _rebound_quality_cache[cache_key] = (payload, now)
     return payload
@@ -398,18 +386,26 @@ def _current_pullback_features(position: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_prob(scores: dict[str, float]) -> dict[str, float]:
-    floor = 1.0
-    cleaned = {k: max(floor, float(v)) for k, v in scores.items()}
+    cleaned = {k: max(1.0, float(v)) for k, v in scores.items()}
     total = sum(cleaned.values()) or 1.0
     return {k: round(v / total * 100.0, 2) for k, v in cleaned.items()}
 
 
-def _classify(features: dict[str, Any], stats: dict[str, Any]) -> tuple[str, dict[str, float], list[str]]:
+def _confidence_level(edge: float, top_prob: float) -> str:
+    if edge >= 15.0 and top_prob >= 45.0:
+        return "HIGH"
+    if edge >= 8.0:
+        return "MEDIUM"
+    if edge >= 4.0:
+        return "LOW"
+    return "CONFLICT"
+
+
+def _classify(features: dict[str, Any], stats: dict[str, Any]) -> tuple[str, dict[str, float], list[str], dict[str, Any]]:
     depth = _safe_float(features.get("first_buy_pullback_depth_pct"), 0.0)
     retention = _safe_float(features.get("score_retention"), 0.0)
     rebound = bool(features.get("rebound_confirmed"))
-    rebound_quality_score = features.get("rebound_quality_score")
-    q = _safe_float(rebound_quality_score, -1.0) if rebound_quality_score is not None else -1.0
+    q = _safe_float(features.get("rebound_quality_score"), -1.0) if features.get("rebound_quality_score") is not None else -1.0
     stop_risk = _safe_float(features.get("stop_downside_pct"), 0.0)
     rr = _safe_float(features.get("risk_reward_to_target"), 0.0)
     target_hit_rate = _safe_float(stats.get("target_hit_rate"), 0.0)
@@ -419,99 +415,129 @@ def _classify(features: dict[str, Any], stats: dict[str, Any]) -> tuple[str, dic
     loss_p50 = stats.get("loss_mae_p50")
     loss_p75 = stats.get("loss_mae_p75")
 
-    scores = {"REBOUND_TO_TARGET": 34.0, "BASE_HOLD": 33.0, "DROP_MORE": 33.0}
+    scores = {"REBOUND_TO_TARGET": 30.0, "BASE_HOLD": 25.0, "DROP_MORE": 25.0}
     reasons: list[str] = []
 
     if win_p75 is not None and depth <= float(win_p75):
         scores["REBOUND_TO_TARGET"] += 16
-        scores["BASE_HOLD"] += 8
+        scores["BASE_HOLD"] += 6
         reasons.append(f"현재 눌림 {depth:.2f}%가 과거 수익거래 MAE p75 {float(win_p75):.2f}% 안쪽")
     elif win_p90 is not None and depth <= float(win_p90):
-        scores["BASE_HOLD"] += 15
-        scores["REBOUND_TO_TARGET"] += 5
-        reasons.append(f"현재 눌림 {depth:.2f}%가 과거 수익거래 MAE p90 {float(win_p90):.2f}% 안쪽이나 p75는 초과")
+        scores["BASE_HOLD"] += 12
+        scores["REBOUND_TO_TARGET"] += 4
+        reasons.append(f"현재 눌림 {depth:.2f}%가 과거 수익거래 MAE p90 {float(win_p90):.2f}% 안쪽이나 p75 초과")
     elif win_p90 is not None:
-        scores["DROP_MORE"] += 24
-        reasons.append(f"현재 눌림 {depth:.2f}%가 과거 수익거래 MAE p90 {float(win_p90):.2f}% 초과")
+        scores["DROP_MORE"] += 12
+        if q >= 65.0:
+            scores["BASE_HOLD"] += 5
+            scores["REBOUND_TO_TARGET"] += 3
+            reasons.append(f"과거 MAE p90 {float(win_p90):.2f}% 초과지만 현재 반등 품질 Q{q:.0f}로 충돌")
+        else:
+            reasons.append(f"현재 눌림 {depth:.2f}%가 과거 수익거래 MAE p90 {float(win_p90):.2f}% 초과")
 
     if loss_p50 is not None and depth >= float(loss_p50) and (win_p75 is None or depth > float(win_p75)):
-        scores["DROP_MORE"] += 12
+        scores["DROP_MORE"] += 7
         reasons.append(f"현재 눌림이 손실거래 MAE 중앙값 {float(loss_p50):.2f}% 이상")
     if loss_p75 is not None and depth >= float(loss_p75):
-        scores["DROP_MORE"] += 10
+        scores["DROP_MORE"] += 5
         reasons.append(f"현재 눌림이 손실거래 MAE p75 {float(loss_p75):.2f}% 이상")
 
     if retention >= 0.90:
-        scores["REBOUND_TO_TARGET"] += 16
+        scores["REBOUND_TO_TARGET"] += 12
         reasons.append(f"score/threshold 유지율 {retention*100:.0f}%로 강함")
     elif retention >= 0.75:
-        scores["BASE_HOLD"] += 12
-        scores["REBOUND_TO_TARGET"] += 4
+        scores["BASE_HOLD"] += 8
+        scores["REBOUND_TO_TARGET"] += 3
         reasons.append(f"score/threshold 유지율 {retention*100:.0f}%로 중립 이상")
     else:
-        scores["DROP_MORE"] += 24
+        scores["DROP_MORE"] += 18
         reasons.append(f"score/threshold 유지율 {retention*100:.0f}%로 약함")
 
     if rebound:
-        scores["REBOUND_TO_TARGET"] += 10
+        scores["REBOUND_TO_TARGET"] += 4
         reasons.append("최근 반등 확인 TRUE")
     else:
-        scores["BASE_HOLD"] += 9
+        scores["BASE_HOLD"] += 5
         scores["DROP_MORE"] += 5
         reasons.append("최근 반등 확인 부족")
 
     if q >= 75.0:
         scores["REBOUND_TO_TARGET"] += 16
-        reasons.append(f"반등 품질 {q:.0f}점: 강한 반등")
+        scores["BASE_HOLD"] += 4
+        reasons.append(f"반등 품질 Q{q:.0f}: 강함")
     elif q >= 60.0:
         scores["REBOUND_TO_TARGET"] += 10
-        scores["BASE_HOLD"] += 4
-        reasons.append(f"반등 품질 {q:.0f}점: 양호")
+        scores["BASE_HOLD"] += 5
+        reasons.append(f"반등 품질 Q{q:.0f}: 양호")
     elif q >= 45.0:
-        scores["BASE_HOLD"] += 9
-        scores["REBOUND_TO_TARGET"] += 3
-        reasons.append(f"반등 품질 {q:.0f}점: 약한 반등")
+        scores["BASE_HOLD"] += 10
+        scores["REBOUND_TO_TARGET"] += 2
+        reasons.append(f"반등 품질 Q{q:.0f}: 약함")
     elif q >= 0.0:
-        scores["DROP_MORE"] += 15
-        reasons.append(f"반등 품질 {q:.0f}점: 반등 실패/부족")
+        scores["DROP_MORE"] += 13
+        reasons.append(f"반등 품질 Q{q:.0f}: 실패/부족")
 
     if rr >= 2.0:
-        scores["REBOUND_TO_TARGET"] += 8
+        scores["REBOUND_TO_TARGET"] += 7
         reasons.append(f"목표/손절 기대비 {rr:.2f}로 양호")
     elif rr > 0 and rr < 1.1:
-        scores["DROP_MORE"] += 9
+        scores["DROP_MORE"] += 7
         reasons.append(f"목표/손절 기대비 {rr:.2f}로 약함")
 
     if stop_risk and stop_risk <= 3.0:
-        scores["DROP_MORE"] += 18
+        scores["DROP_MORE"] += 12
         reasons.append(f"stop까지 여유 {stop_risk:.2f}%로 매우 좁음")
     elif stop_risk and stop_risk <= 5.0:
-        scores["DROP_MORE"] += 8
+        scores["DROP_MORE"] += 6
         reasons.append(f"stop까지 여유 {stop_risk:.2f}%로 좁음")
 
     if target_hit_rate >= 45.0:
-        scores["REBOUND_TO_TARGET"] += 10
+        scores["REBOUND_TO_TARGET"] += 8
         reasons.append(f"과거 target 근접/도달률 {target_hit_rate:.1f}%")
     elif target_hit_rate <= 20.0 and stats.get("trade_count", 0) >= 8:
-        scores["BASE_HOLD"] += 6
-        scores["DROP_MORE"] += 5
+        scores["BASE_HOLD"] += 4
+        scores["DROP_MORE"] += 4
         reasons.append(f"과거 target 근접/도달률 {target_hit_rate:.1f}%로 낮음")
 
     if win_rate >= 70.0:
-        scores["REBOUND_TO_TARGET"] += 6
-        scores["BASE_HOLD"] += 4
+        scores["REBOUND_TO_TARGET"] += 5
+        scores["BASE_HOLD"] += 3
         reasons.append(f"과거 룰북 승률 {win_rate:.1f}%")
     elif win_rate < 50.0 and stats.get("trade_count", 0) >= 8:
-        scores["DROP_MORE"] += 8
+        scores["DROP_MORE"] += 5
         reasons.append(f"과거 룰북 승률 {win_rate:.1f}%로 낮음")
 
     probs = _normalize_prob(scores)
-    label = max(probs.items(), key=lambda kv: kv[1])[0]
-    sorted_probs = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)
-    if sorted_probs[0][0] != "BASE_HOLD" and sorted_probs[0][1] - sorted_probs[1][1] < 5.0:
-        label = "BASE_HOLD"
-        reasons.append("상위 예후 확률 차이가 5%p 미만이라 보수적으로 BASE_HOLD 처리")
-    return label, probs, reasons[:9]
+    ranked = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)
+    top_label, top_prob = ranked[0]
+    second_label, second_prob = ranked[1]
+    edge = round(top_prob - second_prob, 2)
+    confidence = _confidence_level(edge, top_prob)
+    label = top_label
+
+    conflict_reasons: list[str] = []
+    if edge < 4.0:
+        conflict_reasons.append(f"상위 예후 경합: {top_label} {top_prob:.1f}% vs {second_label} {second_prob:.1f}%")
+    if top_label == "DROP_MORE" and q >= 75.0 and edge < 10.0:
+        conflict_reasons.append(f"과거는 하락 위험이나 현재 반등 품질 Q{q:.0f}가 강해 경합 처리")
+    if top_label == "REBOUND_TO_TARGET" and 0.0 <= q < 20.0 and edge < 12.0:
+        conflict_reasons.append(f"과거/신호는 반등 우위이나 현재 반등 품질 Q{q:.0f}가 실패권이라 경합 처리")
+    if conflict_reasons:
+        label = "MIXED_CONFLICT"
+        confidence = "CONFLICT"
+        reasons.extend(conflict_reasons)
+
+    diag = {
+        "top_label": top_label,
+        "top_prob": top_prob,
+        "second_label": second_label,
+        "second_prob": second_prob,
+        "edge_pct": edge,
+        "confidence_level": confidence,
+        "raw_scores": {k: round(v, 3) for k, v in scores.items()},
+        "history_weight_note": "과거 MAE/target 기록은 참고값이며, 현재 반등 품질과 충돌하면 MIXED_CONFLICT로 표시한다.",
+    }
+    return label, probs, reasons[:10], diag
 
 
 def build_pullback_forecast_for_position(position: dict[str, Any]) -> dict[str, Any]:
@@ -539,25 +565,28 @@ def build_pullback_forecast_for_position(position: dict[str, Any]) -> dict[str, 
             "trade_source": diag,
             "reason": f"trade_count={stats.get('trade_count', 0)} < 6",
         }
-    label, probs, reasons = _classify(features, stats)
+    label, probs, reasons, decision = _classify(features, stats)
     display_map = {
         "REBOUND_TO_TARGET": "반등목표",
         "BASE_HOLD": "유지/횡보",
         "DROP_MORE": "추가하락",
+        "MIXED_CONFLICT": "경합",
     }
+    confidence_pct = decision.get("top_prob") if label == "MIXED_CONFLICT" else probs.get(label, 0.0)
     return {
         "ok": True,
         "scope": "pullback_gate",
         "label": label,
         "display": display_map.get(label, label),
         "probabilities": probs,
-        "confidence_pct": probs.get(label, 0.0),
+        "confidence_pct": confidence_pct,
+        "decision": decision,
         "features": features,
         "rebound_quality": features.get("rebound_quality"),
         "stats": stats,
         "trade_source": diag,
         "reasons": reasons,
-        "note": "확률은 동일 룰북 과거 거래의 MAE/MFE/target-hit 분포, 현재 신호 유지율, 반등 품질 점수를 비교한 휴리스틱 판정입니다.",
+        "note": "과거 동일 룰북 기록 + 현재 신호 유지율 + 반등 품질을 섞은 휴리스틱. 경합은 예후 간 차이가 작거나 과거/현재 증거가 충돌한다는 뜻.",
     }
 
 
@@ -605,9 +634,10 @@ def attach_pullback_forecasts_to_strategy_payload(payload: dict[str, Any]) -> di
             "rebound_quality_counts": dict(quality_counts),
             "avg_rebound_quality_score": round(sum(quality_scores) / len(quality_scores), 2) if quality_scores else None,
             "labels": {
-                "REBOUND_TO_TARGET": "이 눌림에서 첫 신호 목표가 쪽 재상승 가능성이 가장 높음",
+                "REBOUND_TO_TARGET": "첫 신호 목표가 쪽 재상승 가능성이 가장 높음",
                 "BASE_HOLD": "현재 구간 유지/횡보 가능성이 가장 높음",
                 "DROP_MORE": "눌림 지속 또는 추가 하락 위험이 가장 높음",
+                "MIXED_CONFLICT": "과거 경로와 현재 반등 품질이 충돌하거나 예후 차이가 작음",
                 "INSUFFICIENT_HISTORY": "동일 룰북 과거 거래 수 부족",
                 "STRONG_REBOUND": "반등 품질 강함",
                 "HEALTHY_REBOUND": "반등 품질 양호",

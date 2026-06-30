@@ -10,12 +10,13 @@
 - 가격 조회 순서는 yfinance 1분봉 pre/post → Alpaca Market Data latest trade → yfinance fast_info → yfinance 2일봉 fallback이다.
 - Alpaca free/IEX latest trade가 15:59 ET 정규장 마지막 체결에 머무르는 경우가 있어, 애프터마켓 표시값은 yfinance prepost를 우선한다.
 - 수동청산 버튼은 intent 파일을 쓴 뒤 localhost runner command server를 즉시 wake한다.
+- `/elite-shadow`에서 broker 주문 없는 정예 후보 shadow 성적표를 제공한다.
 - 목적은 텔레그램 `/positions`와 웹 대시보드의 보유 종목 현재가를 장외/애프터마켓에서도 같은 기준으로 맞추는 것이다.
 
 주의:
 - 이 파일은 broker 주문을 직접 내지 않는다.
 - 수동청산 주문 제출은 항상 live runner 내부 기존 manual SELL 경로에서만 수행된다.
-- live runner, positions.json, parameters.json을 수정하지 않는다.
+- elite-shadow는 기존 batch artifact를 읽기만 하며 live runner, positions.json, parameters.json을 수정하지 않는다.
 - API 서버 실행 시 `uvicorn api_server_aftermarket:app`으로 띄워야 이 패치가 적용된다.
 """
 from __future__ import annotations
@@ -30,6 +31,7 @@ from typing import Any
 
 import yfinance as yf
 from fastapi import HTTPException
+from fastapi.responses import HTMLResponse
 
 import api_server as _base
 
@@ -38,8 +40,11 @@ log = logging.getLogger("api_server.aftermarket")
 app = _base.app
 
 _PRICE_CACHE_TTL_SEC = 15.0
+_ELITE_SHADOW_CACHE_TTL_SEC = 600.0
 RUNNER_COMMAND_STATE_PATH = Path("data/_system/runner_command_lr8d16.json")
+ELITE_SHADOW_PAGE_PATH = Path("elite_shadow.html")
 _price_cache: dict[str, tuple[float | None, float, str]] = {}
+_elite_shadow_cache: dict[str, Any] = {"ts": 0.0, "payload": None}
 _broker = None
 _broker_init_error_logged = False
 
@@ -243,6 +248,43 @@ def _replace_manual_sell_route() -> None:
     ]
     app.post(target_path)(manual_sell_intent_immediate)
     log.warning("manual sell route patched: intent + immediate runner wake")
+
+
+@app.get("/elite-shadow", include_in_schema=False)
+def elite_shadow_page():
+    """Serve read-only elite shadow dashboard page."""
+    if not ELITE_SHADOW_PAGE_PATH.exists():
+        raise HTTPException(status_code=500, detail=f"elite shadow page missing: {ELITE_SHADOW_PAGE_PATH}")
+    return HTMLResponse(ELITE_SHADOW_PAGE_PATH.read_text(encoding="utf-8"), media_type="text/html")
+
+
+@app.get("/api/live/elite_shadow")
+def elite_shadow_report(refresh: bool = False):
+    """Return cached FIX-type elite shadow candidate report.
+
+    This endpoint reads historical batch artifacts only.  It does not place
+    broker orders and does not modify live state.
+    """
+    now = time.time()
+    if (
+        not refresh
+        and _elite_shadow_cache.get("payload") is not None
+        and now - float(_elite_shadow_cache.get("ts") or 0.0) < _ELITE_SHADOW_CACHE_TTL_SEC
+    ):
+        payload = dict(_elite_shadow_cache["payload"])
+        payload["cache"] = {"hit": True, "age_seconds": round(now - float(_elite_shadow_cache.get("ts") or 0.0), 3)}
+        return payload
+    try:
+        from engine.live.elite_shadow_report import build_elite_shadow_report
+
+        payload = build_elite_shadow_report(stage2_limit=60, stage3_limit=80, include_trades=True)
+        payload["cache"] = {"hit": False, "age_seconds": 0.0}
+        _elite_shadow_cache["payload"] = payload
+        _elite_shadow_cache["ts"] = now
+        return payload
+    except Exception as exc:
+        log.exception("elite shadow report build failed")
+        raise HTTPException(status_code=500, detail=f"elite shadow build failed: {type(exc).__name__}: {exc}")
 
 
 # Patch the original route functions' global lookup.  Existing routes call

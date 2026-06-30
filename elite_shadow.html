@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KINGMAKER Elite Shadow</title>
+<style>
+:root{--bg:#0a0e17;--panel:#111722;--panel2:#0d121c;--line:#1c2535;--txt:#c9d4e5;--dim:#6f7d92;--up:#26d07c;--down:#ff4d6a;--accent:#3b82f6;--gold:#f5c451;--purple:#8b5cf6;}
+*{box-sizing:border-box;margin:0;padding:0} body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Malgun Gothic",sans-serif;font-size:13px} a{color:var(--accent);text-decoration:none}.topbar{display:flex;justify-content:space-between;align-items:center;padding:13px 22px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#0d121c,#111722)}.logo{font-size:18px;font-weight:900;letter-spacing:1.5px}.logo span{color:var(--gold)}.nav{display:flex;gap:8px;align-items:center}.btn{border:1px solid var(--line);background:var(--panel2);color:var(--txt);border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer}.btn:hover{border-color:var(--accent)}.btn.active{background:var(--accent);border-color:var(--accent);color:#fff}.page{padding:18px 22px}.note{background:#1b1820;border:1px solid #3b3144;color:#d5c4ef;border-radius:10px;padding:12px 14px;line-height:1.55;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}.card .lab{font-size:11px;color:var(--dim);letter-spacing:.7px;text-transform:uppercase}.card .val{font-size:25px;font-weight:900;margin-top:7px;font-variant-numeric:tabular-nums}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 16px}.chip{border:1px solid var(--line);background:var(--panel2);color:var(--dim);padding:7px 11px;border-radius:999px;cursor:pointer;font-weight:700}.chip.active{background:rgba(59,130,246,.18);border-color:var(--accent);color:#dbeafe}.table{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}.row{display:grid;grid-template-columns:58px 82px 74px 92px 82px 82px 82px 82px 92px 82px 92px 1fr;gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.row.head{color:var(--dim);font-size:11px;text-transform:uppercase;font-weight:800;background:#0d121c}.row:not(.head){cursor:pointer}.row:not(.head):hover{background:#131b28}.tk{font-size:15px;font-weight:900;color:#fff}.badge{display:inline-flex;align-items:center;justify-content:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800}.A_core{background:rgba(38,208,124,.16);color:var(--up)}.B_stable{background:rgba(245,196,81,.16);color:var(--gold)}.C_momentum{background:rgba(139,92,246,.16);color:var(--purple)}.watch{background:rgba(95,110,133,.16);color:var(--dim)}.pos{color:var(--up);font-weight:800}.neg{color:var(--down);font-weight:800}.dim{color:var(--dim)}.detail{display:none;background:#0a0f18;border-top:1px solid var(--line);padding:14px 16px}.detail.open{display:block}.detail-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:14px}.subpanel{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto}.subpanel h3{font-size:12px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:9px}.kv{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}.kv:last-child{border-bottom:0}.kv span:first-child{color:var(--dim)}.kv span:last-child{text-align:right;font-weight:800}.trades{max-height:420px;overflow:auto}.trow{display:grid;grid-template-columns:94px 94px 74px 74px 74px 70px 76px 1fr;gap:8px;padding:8px 9px;border-bottom:1px solid var(--line);font-size:12px;align-items:center}.trow.head{position:sticky;top:0;background:#101722;color:var(--dim);font-weight:800;text-transform:uppercase}.loading{padding:30px;text-align:center;color:var(--dim)}@media(max-width:1100px){.grid{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:70px 80px 70px 90px 1fr}.row span:nth-child(n+6):not(:last-child){display:none}.detail-grid{grid-template-columns:1fr}.trow{grid-template-columns:80px 80px 64px 64px 64px 1fr}.trow span:nth-child(6),.trow span:nth-child(7){display:none}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="logo">KINGMAKER <span>ELITE SHADOW</span></div><div class="nav"><a class="btn" href="/dashboard">기존 대시보드</a><button class="btn" onclick="load(true)">새로고침</button></div></div>
+<div class="page">
+  <div class="note">이 페이지는 broker 주문을 내지 않는 시스템 전용 shadow 분석입니다. 기존 batch 산출물에서 FIX형 정예 후보를 고르고, 해당 룰북의 과거 거래별 수익을 재구성해서 보여줍니다. 다음 단계는 이 후보들이 실전 신호 발생 후 +30분/+1시간/+24시간에 실제로 어떻게 움직였는지 누적하는 shadow promotion scoreboard입니다.</div>
+  <div class="grid" id="summary"><div class="loading">로딩...</div></div>
+  <div class="toolbar" id="chips"></div>
+  <div class="table" id="table"><div class="loading">정예 후보 계산 중...</div></div>
+</div>
+<script>
+const API='';
+let DATA=null, FILTER='all';
+const fmt=(n,d=2)=>n==null||!isFinite(Number(n))?'—':Number(n).toFixed(d);
+const pct=n=>n==null||!isFinite(Number(n))?'—':(Number(n)>=0?'+':'')+Number(n).toFixed(2)+'%';
+const cls=n=>Number(n)>=0?'pos':'neg';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function bucketLabel(b){return {A_core:'A 핵심',B_stable:'B 안정',C_momentum:'C 모멘텀',watch:'관찰'}[b]||b}
+function stageLabel(s){return String(s||'').toUpperCase()}
+async function load(refresh){
+  document.getElementById('table').innerHTML='<div class="loading">정예 후보 계산 중...</div>';
+  const url='/api/live/elite_shadow'+(refresh?'?refresh=true':'');
+  const r=await fetch(url);
+  DATA=await r.json();
+  render();
+}
+function renderSummary(){
+  const s=DATA.summary||{};
+  const bc=s.bucket_counts||{}, sc=s.stage_counts||{};
+  const candidates=DATA.candidates||[];
+  const withTrades=candidates.filter(c=>(c.trade_summary||{}).trade_count>0);
+  const avgComp=withTrades.length?withTrades.reduce((a,c)=>a+Number((c.trade_summary||{}).compounded_pct||0),0)/withTrades.length:0;
+  document.getElementById('summary').innerHTML=`
+    <div class="card"><div class="lab">후보 수</div><div class="val">${s.candidate_count||0}</div></div>
+    <div class="card"><div class="lab">Stage2 / Stage3</div><div class="val">${sc.stage2||0} / ${sc.stage3||0}</div></div>
+    <div class="card"><div class="lab">A 핵심</div><div class="val" style="color:var(--up)">${bc.A_core||0}</div></div>
+    <div class="card"><div class="lab">B 안정 / C 모멘텀</div><div class="val">${bc.B_stable||0} / ${bc.C_momentum||0}</div></div>
+    <div class="card"><div class="lab">평균 복리 백테스트</div><div class="val ${cls(avgComp)}">${pct(avgComp)}</div></div>`;
+}
+function renderChips(){
+  const chips=[['all','전체'],['A_core','A 핵심'],['B_stable','B 안정'],['C_momentum','C 모멘텀'],['stage2','Stage2'],['stage3','Stage3']];
+  document.getElementById('chips').innerHTML=chips.map(([id,t])=>`<button class="chip ${FILTER===id?'active':''}" onclick="FILTER='${id}';render()">${t}</button>`).join('');
+}
+function filtered(){
+  let rows=DATA.candidates||[];
+  if(FILTER==='stage2'||FILTER==='stage3') rows=rows.filter(c=>c.stage===FILTER);
+  else if(FILTER!=='all') rows=rows.filter(c=>c.bucket===FILTER);
+  return rows;
+}
+function renderTable(){
+  const rows=filtered();
+  const head=`<div class="row head"><span>#</span><span>종목</span><span>Stage</span><span>Bucket</span><span>점수</span><span>기대값</span><span>승률</span><span>거래수</span><span>복리</span><span>평균</span><span>MDD</span><span>전략</span></div>`;
+  const body=rows.map((c,i)=>{
+    const m=c.metrics||{}, rb=c.rulebook||{}, ts=c.trade_summary||{};
+    return `<div>
+      <div class="row" onclick="toggleDetail('${esc(c.candidate_id)}')">
+        <span>${i+1}</span><span class="tk">${esc(c.ticker)}</span><span>${stageLabel(c.stage)}</span><span><b class="badge ${esc(c.bucket)}">${bucketLabel(c.bucket)}</b></span>
+        <span>${fmt(c.elite_score,1)}</span><span class="pos">${pct(m.oos_expectancy_pct)}</span><span>${fmt(m.oos_win_rate,1)}%</span><span>${ts.trade_count||0}</span>
+        <span class="${cls(ts.compounded_pct)}">${pct(ts.compounded_pct)}</span><span class="${cls(ts.avg_pnl_pct)}">${pct(ts.avg_pnl_pct)}</span>
+        <span class="neg">${pct(m.worst_drawdown_pct)}</span><span>${esc(rb.exit_strategy)} · ${rb.max_holding_days}일 · ${rb.sell_omen_enabled?'SO ON':'SO OFF'}</span>
+      </div>
+      ${detailHtml(c)}
+    </div>`;
+  }).join('');
+  document.getElementById('table').innerHTML=head+(body||'<div class="loading">필터 결과 없음</div>');
+}
+function detailHtml(c){
+  const m=c.metrics||{}, rb=c.rulebook||{}, ts=c.trade_summary||{};
+  const trades=(c.trades||[]).slice().reverse();
+  return `<div class="detail" id="d-${esc(c.candidate_id)}">
+    <div class="detail-grid">
+      <div class="subpanel"><h3>룰북/필터 요약</h3>
+        <div class="kv"><span>Rulebook</span><span>${esc(c.rulebook_hash_short)}</span></div>
+        <div class="kv"><span>Bucket</span><span>${bucketLabel(c.bucket)}</span></div>
+        <div class="kv"><span>Elite score</span><span>${fmt(c.elite_score,2)}</span></div>
+        <div class="kv"><span>OOS 기대/승률</span><span>${pct(m.oos_expectancy_pct)} / ${fmt(m.oos_win_rate,1)}%</span></div>
+        <div class="kv"><span>OOS fitness/trades</span><span>${fmt(m.oos_fitness,1)} / ${m.oos_trade_count}</span></div>
+        <div class="kv"><span>Stress 기대</span><span>${pct(m.stress_expectancy_pct)}</span></div>
+        <div class="kv"><span>Worst DD</span><span class="neg">${pct(m.worst_drawdown_pct)}</span></div>
+        <div class="kv"><span>Exit</span><span>${esc(rb.exit_strategy)} · ${rb.max_holding_days}일</span></div>
+        <div class="kv"><span>Sell omen</span><span>${rb.sell_omen_enabled?'ON':'OFF'}</span></div>
+        <div class="kv"><span>Market adj</span><span>${fmt(rb.market_adjustment_strength,3)}</span></div>
+        <div class="kv"><span>TP/SL/TR ATR</span><span>${fmt(rb.take_profit_atr,2)} / ${fmt(rb.stop_loss_atr,2)} / ${fmt(rb.trailing_atr,2)}</span></div>
+      </div>
+      <div class="subpanel"><h3>거래 통계</h3>
+        <div class="kv"><span>거래수</span><span>${ts.trade_count||0}</span></div>
+        <div class="kv"><span>승/패</span><span>${ts.win_count||0} / ${ts.loss_count||0}</span></div>
+        <div class="kv"><span>승률</span><span>${fmt(ts.win_rate,1)}%</span></div>
+        <div class="kv"><span>평균 손익</span><span class="${cls(ts.avg_pnl_pct)}">${pct(ts.avg_pnl_pct)}</span></div>
+        <div class="kv"><span>단순 합산</span><span class="${cls(ts.sum_pnl_pct)}">${pct(ts.sum_pnl_pct)}</span></div>
+        <div class="kv"><span>복리 누적</span><span class="${cls(ts.compounded_pct)}">${pct(ts.compounded_pct)}</span></div>
+        <div class="kv"><span>평균 MFE/MAE</span><span>${pct(ts.avg_mfe_pct)} / ${pct(ts.avg_mae_pct)}</span></div>
+        <div class="kv"><span>최고/최악 거래</span><span>${pct(ts.best_trade_pct)} / ${pct(ts.worst_trade_pct)}</span></div>
+      </div>
+    </div>
+    <div class="subpanel trades" style="margin-top:14px"><h3>거래별 손익</h3>
+      <div class="trow head"><span>진입</span><span>청산</span><span>진입가</span><span>청산가</span><span>손익</span><span>보유</span><span>MFE/MAE</span><span>사유</span></div>
+      ${trades.map(t=>`<div class="trow"><span>${esc(t.entry_date)}</span><span>${esc(t.exit_date)}</span><span>${fmt(t.entry_price,2)}</span><span>${fmt(t.exit_price,2)}</span><span class="${cls(t.pnl_pct)}">${pct(t.pnl_pct)}</span><span>${t.holding_days}일</span><span>${pct(t.max_profit_during_hold)} / ${pct(t.max_loss_during_hold)}</span><span>${esc(t.exit_reason||'')}</span></div>`).join('')||'<div class="loading">거래 없음</div>'}
+    </div>
+  </div>`;
+}
+function toggleDetail(id){
+  const el=document.getElementById('d-'+id);
+  if(el) el.classList.toggle('open');
+}
+function render(){renderSummary();renderChips();renderTable();}
+load(false).catch(e=>{document.getElementById('table').innerHTML='<div class="loading">로드 실패: '+esc(e)+'</div>'});
+</script>
+</body>
+</html>

@@ -10,13 +10,12 @@
 - 가격 조회 순서는 yfinance 1분봉 pre/post → Alpaca Market Data latest trade → yfinance fast_info → yfinance 2일봉 fallback이다.
 - Alpaca free/IEX latest trade가 15:59 ET 정규장 마지막 체결에 머무르는 경우가 있어, 애프터마켓 표시값은 yfinance prepost를 우선한다.
 - 수동청산 버튼은 intent 파일을 쓴 뒤 localhost runner command server를 즉시 wake한다.
-- `/elite-shadow`에서 broker 주문 없는 정예 후보 shadow 성적표를 제공한다.
-- 목적은 텔레그램 `/positions`와 웹 대시보드의 보유 종목 현재가를 장외/애프터마켓에서도 같은 기준으로 맞추는 것이다.
+- `/elite-shadow`에서 broker 주문 없는 정예 후보 shadow 성적표와 실시간 가상 ledger를 제공한다.
 
 주의:
 - 이 파일은 broker 주문을 직접 내지 않는다.
 - 수동청산 주문 제출은 항상 live runner 내부 기존 manual SELL 경로에서만 수행된다.
-- elite-shadow는 기존 batch artifact를 읽기만 하며 live runner, positions.json, parameters.json을 수정하지 않는다.
+- elite-shadow는 batch artifact와 shadow ledger를 읽기만 하며 live runner, positions.json, parameters.json을 수정하지 않는다.
 - API 서버 실행 시 `uvicorn api_server_aftermarket:app`으로 띄워야 이 패치가 적용된다.
 """
 from __future__ import annotations
@@ -91,11 +90,7 @@ def _yfinance_prepost_price(symbol: str) -> float | None:
 
 
 def _get_price_aftermarket(ticker: str):
-    """Return latest visible dashboard price, including after-market prints.
-
-    yfinance 1m pre/post is intentionally first because Alpaca free/IEX latest
-    trade can remain at the regular-session last print around 15:59 ET.
-    """
+    """Return latest visible dashboard price, including after-market prints."""
     symbol = str(ticker or "").upper().strip()
     if not symbol:
         return None
@@ -145,12 +140,7 @@ def _get_price_aftermarket(ticker: str):
 
 
 def _wake_runner_manual_sell(intent_row: dict) -> dict:
-    """Ask live runner to consume a manual sell intent immediately.
-
-    This is intentionally only a wake-up RPC.  api_server still does not import
-    broker credentials or place orders.  If the runner command server is missing
-    or busy, the file-backed intent remains and fast-exit/tick_market consumes it.
-    """
+    """Ask live runner to consume a manual sell intent immediately."""
     state = _base._read_json(str(RUNNER_COMMAND_STATE_PATH), {})
     if not isinstance(state, dict) or not state.get("url") or not state.get("token"):
         return {
@@ -212,12 +202,7 @@ def _wake_runner_manual_sell(intent_row: dict) -> dict:
 
 
 def manual_sell_intent_immediate(req: _base.ManualSellIntentRequest):
-    """Create manual SELL intent and immediately wake the live runner.
-
-    The wake call does not place orders in the API process.  It simply asks the
-    runner process to consume the just-written intent through its existing safe
-    manual-sell path.  Fallback remains the JSON intent + fast-exit poller.
-    """
+    """Create manual SELL intent and immediately wake the live runner."""
     try:
         row = _base.create_manual_sell_intent(
             ticker=req.ticker,
@@ -260,11 +245,7 @@ def elite_shadow_page():
 
 @app.get("/api/live/elite_shadow")
 def elite_shadow_report(refresh: bool = False):
-    """Return cached FIX-type elite shadow candidate report.
-
-    This endpoint reads historical batch artifacts only.  It does not place
-    broker orders and does not modify live state.
-    """
+    """Return cached FIX-type elite shadow candidate report."""
     now = time.time()
     if (
         not refresh
@@ -285,6 +266,34 @@ def elite_shadow_report(refresh: bool = False):
     except Exception as exc:
         log.exception("elite shadow report build failed")
         raise HTTPException(status_code=500, detail=f"elite shadow build failed: {type(exc).__name__}: {exc}")
+
+
+@app.get("/api/live/elite_shadow_trader")
+def elite_shadow_trader_state():
+    """Return virtual-only elite shadow open positions and closed trades."""
+    try:
+        from engine.live.elite_shadow_trader import shadow_dashboard_payload
+
+        return shadow_dashboard_payload(recent_trade_limit=300)
+    except Exception as exc:
+        log.exception("elite shadow trader state failed")
+        raise HTTPException(status_code=500, detail=f"elite shadow trader state failed: {type(exc).__name__}: {exc}")
+
+
+@app.post("/api/live/elite_shadow_tick")
+def elite_shadow_tick(max_candidates: int = 93):
+    """Manually trigger one virtual-only elite shadow tick.
+
+    This never places broker orders. It is only a convenience endpoint for the
+    dashboard/manual smoke tests; the daemon is the normal tracker.
+    """
+    try:
+        from engine.live.elite_shadow_trader import run_shadow_tick
+
+        return run_shadow_tick(max_candidates=int(max_candidates))
+    except Exception as exc:
+        log.exception("elite shadow manual tick failed")
+        raise HTTPException(status_code=500, detail=f"elite shadow tick failed: {type(exc).__name__}: {exc}")
 
 
 # Patch the original route functions' global lookup.  Existing routes call

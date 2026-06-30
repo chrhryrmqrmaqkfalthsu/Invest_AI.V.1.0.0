@@ -223,6 +223,15 @@ def _refresh_strategy_sim_prices(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _strategy_payload_with_price_and_forecast() -> dict[str, Any]:
+    from engine.live.elite_pullback_forecast import attach_pullback_forecasts_to_strategy_payload
+    from engine.live.elite_strategy_sim import strategy_sim_payload
+
+    payload = strategy_sim_payload(recent_trade_limit=300)
+    payload = _refresh_strategy_sim_prices(payload)
+    return attach_pullback_forecasts_to_strategy_payload(payload)
+
+
 def _wake_runner_manual_sell(intent_row: dict) -> dict:
     state = _base._read_json(str(RUNNER_COMMAND_STATE_PATH), {})
     if not isinstance(state, dict) or not state.get("url") or not state.get("token"):
@@ -326,12 +335,39 @@ def elite_shadow_tick(max_candidates: int = 93):
 @app.get("/api/live/elite_strategy_sim")
 def elite_strategy_sim_state():
     try:
-        from engine.live.elite_strategy_sim import strategy_sim_payload
-        payload = strategy_sim_payload(recent_trade_limit=300)
-        return _refresh_strategy_sim_prices(payload)
+        return _strategy_payload_with_price_and_forecast()
     except Exception as exc:
         log.exception("elite strategy sim state failed")
         raise HTTPException(status_code=500, detail=f"elite strategy sim state failed: {type(exc).__name__}: {exc}")
+
+
+@app.get("/api/live/elite_pullback_forecast")
+def elite_pullback_forecast_state():
+    try:
+        payload = _strategy_payload_with_price_and_forecast()
+        return {
+            "_comment": "Pullback outcome forecast extracted from elite strategy sim payload. Virtual/read-only only.",
+            "pullback_forecast": payload.get("pullback_forecast") or {},
+            "strategies": {
+                name: {
+                    "summary": sim.get("pullback_forecast_summary") or {},
+                    "positions": [
+                        {
+                            "ticker": p.get("ticker"),
+                            "stage": p.get("stage"),
+                            "gate": p.get("gate"),
+                            "forecast": p.get("pullback_forecast"),
+                        }
+                        for p in sim.get("open_positions") or []
+                        if isinstance(p, dict) and (p.get("pullback_forecast") or {}).get("scope") == "pullback_gate"
+                    ],
+                }
+                for name, sim in (payload.get("strategies") or {}).items()
+            },
+        }
+    except Exception as exc:
+        log.exception("elite pullback forecast state failed")
+        raise HTTPException(status_code=500, detail=f"elite pullback forecast failed: {type(exc).__name__}: {exc}")
 
 
 @app.post("/api/live/elite_strategy_sim_tick")

@@ -1,0 +1,466 @@
+"""Elite pullback outcome forecaster.
+
+무엇을 하는 파일인가:
+- strategy sim의 눌림 후보/가상 보유 포지션을 과거 동일 룰북 거래와 비교한다.
+- 과거 winning MAE / losing MAE / target hit 비율 / 현재 score 유지율 / stop-target 거리로
+  현재 눌림이 더 빠질지, 횡보할지, 다시 목표가 쪽으로 갈지 확률형 판정을 붙인다.
+- 실제 broker 주문, live positions.json, strategy state 파일은 수정하지 않는다.
+"""
+from __future__ import annotations
+
+import json
+import math
+import time
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+ROOT = Path("exp_batch_stage123_2009_20260616_full")
+_TRADE_CACHE_TTL_SEC = 900.0
+_CANDIDATE_CACHE_TTL_SEC = 900.0
+_trade_cache: dict[tuple[str, str, str], tuple[list[dict[str, Any]], float]] = {}
+_candidate_cache: tuple[dict[str, dict[str, Any]], float] | None = None
+
+PULLBACK_GATES = {"BUY_PULLBACK_REENTRY", "WAIT_PULLBACK_CONFIRM"}
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value in (None, ""):
+            return default
+        out = float(value)
+        if math.isnan(out):
+            return default
+        return out
+    except Exception:
+        return default
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(float(value))
+    except Exception:
+        return default
+
+
+def _pct(value: Any, default: float = 0.0) -> float:
+    return _safe_float(value, default)
+
+
+def _percentile(values: list[float], q: float) -> float | None:
+    vals = sorted(float(v) for v in values if v is not None and math.isfinite(float(v)))
+    if not vals:
+        return None
+    if len(vals) == 1:
+        return vals[0]
+    q = max(0.0, min(1.0, float(q)))
+    pos = (len(vals) - 1) * q
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return vals[lo]
+    return vals[lo] * (hi - pos) + vals[hi] * (pos - lo)
+
+
+def _load_jsonl(path: Path):
+    if not path.exists():
+        return
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            try:
+                yield json.loads(line)
+            except Exception:
+                continue
+
+
+def _candidate_map() -> dict[str, dict[str, Any]]:
+    global _candidate_cache
+    now = time.time()
+    if _candidate_cache is not None:
+        data, ts = _candidate_cache
+        if now - ts < _CANDIDATE_CACHE_TTL_SEC:
+            return data
+    try:
+        from engine.live.elite_shadow_report import build_elite_shadow_report
+
+        report = build_elite_shadow_report(stage2_limit=60, stage3_limit=80, include_trades=False)
+        data = {str(c.get("candidate_id") or ""): c for c in report.get("candidates") or [] if c.get("candidate_id")}
+    except Exception:
+        data = {}
+    _candidate_cache = (data, now)
+    return data
+
+
+def _trade_source_for(position: dict[str, Any]) -> tuple[Path | None, str, str]:
+    stage = str(position.get("stage") or "").lower()
+    ticker = str(position.get("ticker") or "").upper().strip()
+    rulebook_hash = str(position.get("rulebook_hash") or "")
+    if stage == "stage3" and ticker and rulebook_hash:
+        return ROOT / "tickers" / ticker / "stage3" / "exit_trades.jsonl", "final_rulebook_hash", rulebook_hash
+    candidate_id = str(position.get("candidate_id") or "")
+    candidate = _candidate_map().get(candidate_id) or {}
+    rulebook_hash = rulebook_hash or str(candidate.get("rulebook_hash") or "")
+    if stage == "stage2" and candidate.get("trade_file") and rulebook_hash:
+        return ROOT / str(candidate.get("trade_file")), "rulebook_hash", rulebook_hash
+    return None, "", rulebook_hash
+
+
+def _load_rulebook_trades(position: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    path, hash_key, rulebook_hash = _trade_source_for(position)
+    diag = {
+        "path": str(path) if path else None,
+        "hash_key": hash_key,
+        "rulebook_hash_short": str(rulebook_hash or "")[:12],
+        "ok": False,
+        "reason": None,
+    }
+    if not path or not hash_key or not rulebook_hash:
+        diag["reason"] = "trade_source_missing"
+        return [], diag
+    if not path.exists():
+        diag["reason"] = "trade_file_missing"
+        return [], diag
+    cache_key = (str(path), hash_key, rulebook_hash)
+    now = time.time()
+    cached = _trade_cache.get(cache_key)
+    if cached is not None:
+        rows, ts = cached
+        if now - ts < _TRADE_CACHE_TTL_SEC:
+            diag.update({"ok": True, "source": "cache", "rows": len(rows)})
+            return rows, diag
+    rows: list[dict[str, Any]] = []
+    for row in _load_jsonl(path) or []:
+        if str(row.get(hash_key) or "") != rulebook_hash:
+            continue
+        rows.append(row)
+    _trade_cache[cache_key] = (rows, now)
+    diag.update({"ok": True, "source": "file", "rows": len(rows)})
+    return rows, diag
+
+
+def _trade_depth(row: dict[str, Any]) -> float:
+    """과거 거래의 불리한 움직임 깊이(양수 %)를 반환한다."""
+    mae = _safe_float(row.get("max_loss_during_hold"), 0.0)
+    if mae < 0:
+        return abs(mae)
+    # 일부 trade dump는 max_loss가 0으로 저장된다. entry/stop으로 최소 위험 크기를 보조 추정한다.
+    entry = _safe_float(row.get("entry_price"), 0.0)
+    stop = _safe_float(row.get("stop_price_at_entry"), 0.0)
+    if entry > 0 and stop > 0 and stop < entry:
+        return max(0.0, (entry - stop) / entry * 100.0 * 0.25)
+    return 0.0
+
+
+def _target_hit(row: dict[str, Any]) -> bool:
+    reason = str(row.get("exit_reason") or "").lower()
+    if reason in {"take_profit", "target", "target_hit"}:
+        return True
+    entry = _safe_float(row.get("entry_price"), 0.0)
+    target = _safe_float(row.get("target_price_at_entry"), 0.0)
+    exit_price = _safe_float(row.get("exit_price"), 0.0)
+    mfe = _safe_float(row.get("max_profit_during_hold"), 0.0)
+    if entry > 0 and target > 0:
+        target_pct = (target / entry - 1.0) * 100.0
+        if exit_price >= target * 0.995:
+            return True
+        if target_pct > 0 and mfe >= target_pct * 0.90:
+            return True
+    return False
+
+
+def _summarize_trade_paths(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    usable = [r for r in rows if _safe_float(r.get("entry_price"), 0.0) > 0]
+    wins = [r for r in usable if _safe_float(r.get("pnl_pct"), 0.0) > 0]
+    losses = [r for r in usable if _safe_float(r.get("pnl_pct"), 0.0) <= 0]
+    win_depth = [_trade_depth(r) for r in wins]
+    loss_depth = [_trade_depth(r) for r in losses]
+    all_depth = [_trade_depth(r) for r in usable]
+    target_hits = [r for r in usable if _target_hit(r)]
+    pnl = [_safe_float(r.get("pnl_pct"), 0.0) for r in usable]
+    return {
+        "trade_count": len(usable),
+        "win_count": len(wins),
+        "loss_count": len(losses),
+        "win_rate": len(wins) / len(usable) * 100.0 if usable else 0.0,
+        "avg_pnl_pct": sum(pnl) / len(pnl) if pnl else 0.0,
+        "target_hit_count": len(target_hits),
+        "target_hit_rate": len(target_hits) / len(usable) * 100.0 if usable else 0.0,
+        "win_mae_p50": _percentile(win_depth, 0.50),
+        "win_mae_p75": _percentile(win_depth, 0.75),
+        "win_mae_p90": _percentile(win_depth, 0.90),
+        "loss_mae_p50": _percentile(loss_depth, 0.50),
+        "loss_mae_p75": _percentile(loss_depth, 0.75),
+        "all_mae_p75": _percentile(all_depth, 0.75),
+        "all_mae_p90": _percentile(all_depth, 0.90),
+    }
+
+
+def _current_pullback_features(position: dict[str, Any]) -> dict[str, Any]:
+    history = position.get("signal_history") or {}
+    current_price = _safe_float(position.get("last_price"), _safe_float(position.get("entry_price"), 0.0))
+    entry_price = _safe_float(position.get("entry_price"), 0.0)
+    target_price = _safe_float(position.get("target_price"), 0.0)
+    stop_price = _safe_float(position.get("stop_price"), 0.0)
+    proposed = history.get("proposed_vs_first_buy_pct")
+    if proposed is None:
+        first_buy_price = _safe_float(history.get("first_buy_price"), 0.0)
+        proposed = (current_price / first_buy_price - 1.0) * 100.0 if current_price > 0 and first_buy_price > 0 else 0.0
+    first_buy_pullback_depth = max(0.0, -_safe_float(proposed, 0.0))
+    entry_drawdown_depth = max(0.0, (entry_price / current_price - 1.0) * 100.0) if current_price > 0 else 0.0
+    target_upside_pct = (target_price / current_price - 1.0) * 100.0 if current_price > 0 and target_price > 0 else 0.0
+    stop_downside_pct = (current_price - stop_price) / current_price * 100.0 if current_price > 0 and stop_price > 0 and stop_price < current_price else 0.0
+    risk_reward = target_upside_pct / stop_downside_pct if stop_downside_pct > 0 else 0.0
+    retention = history.get("ratio_retention")
+    if retention is None:
+        retention = _safe_float(position.get("entry_ratio"), 0.0) / max(_safe_float(position.get("entry_ratio"), 0.0), 0.0001)
+    return {
+        "ticker": position.get("ticker"),
+        "gate": position.get("gate"),
+        "current_price": current_price,
+        "entry_price": entry_price,
+        "target_price": target_price,
+        "stop_price": stop_price,
+        "first_buy_date": history.get("first_buy_date"),
+        "first_buy_price": history.get("first_buy_price"),
+        "consecutive_buy_days": _safe_int(history.get("consecutive_buy_days"), 0),
+        "proposed_vs_first_buy_pct": _safe_float(proposed, 0.0),
+        "first_buy_pullback_depth_pct": first_buy_pullback_depth,
+        "entry_drawdown_depth_pct": entry_drawdown_depth,
+        "score_retention": _safe_float(retention, 0.0),
+        "rebound_confirmed": bool(history.get("rebound_confirmed")),
+        "target_upside_pct": target_upside_pct,
+        "stop_downside_pct": stop_downside_pct,
+        "risk_reward_to_target": risk_reward,
+    }
+
+
+def _normalize_prob(scores: dict[str, float]) -> dict[str, float]:
+    floor = 1.0
+    cleaned = {k: max(floor, float(v)) for k, v in scores.items()}
+    total = sum(cleaned.values()) or 1.0
+    return {k: round(v / total * 100.0, 2) for k, v in cleaned.items()}
+
+
+def _classify(features: dict[str, Any], stats: dict[str, Any]) -> tuple[str, dict[str, float], list[str]]:
+    depth = _safe_float(features.get("first_buy_pullback_depth_pct"), 0.0)
+    retention = _safe_float(features.get("score_retention"), 0.0)
+    rebound = bool(features.get("rebound_confirmed"))
+    stop_risk = _safe_float(features.get("stop_downside_pct"), 0.0)
+    rr = _safe_float(features.get("risk_reward_to_target"), 0.0)
+    target_hit_rate = _safe_float(stats.get("target_hit_rate"), 0.0)
+    win_rate = _safe_float(stats.get("win_rate"), 0.0)
+    win_p75 = stats.get("win_mae_p75")
+    win_p90 = stats.get("win_mae_p90")
+    loss_p50 = stats.get("loss_mae_p50")
+    loss_p75 = stats.get("loss_mae_p75")
+
+    scores = {"REBOUND_TO_TARGET": 34.0, "BASE_HOLD": 33.0, "DROP_MORE": 33.0}
+    reasons: list[str] = []
+
+    if win_p75 is not None and depth <= float(win_p75):
+        scores["REBOUND_TO_TARGET"] += 16
+        scores["BASE_HOLD"] += 8
+        reasons.append(f"현재 눌림 {depth:.2f}%가 과거 수익거래 MAE p75 {float(win_p75):.2f}% 안쪽")
+    elif win_p90 is not None and depth <= float(win_p90):
+        scores["BASE_HOLD"] += 15
+        scores["REBOUND_TO_TARGET"] += 5
+        reasons.append(f"현재 눌림 {depth:.2f}%가 과거 수익거래 MAE p90 {float(win_p90):.2f}% 안쪽이나 p75는 초과")
+    elif win_p90 is not None:
+        scores["DROP_MORE"] += 24
+        reasons.append(f"현재 눌림 {depth:.2f}%가 과거 수익거래 MAE p90 {float(win_p90):.2f}% 초과")
+
+    if loss_p50 is not None and depth >= float(loss_p50) and (win_p75 is None or depth > float(win_p75)):
+        scores["DROP_MORE"] += 12
+        reasons.append(f"현재 눌림이 손실거래 MAE 중앙값 {float(loss_p50):.2f}% 이상")
+    if loss_p75 is not None and depth >= float(loss_p75):
+        scores["DROP_MORE"] += 10
+        reasons.append(f"현재 눌림이 손실거래 MAE p75 {float(loss_p75):.2f}% 이상")
+
+    if retention >= 0.90:
+        scores["REBOUND_TO_TARGET"] += 16
+        reasons.append(f"score/threshold 유지율 {retention*100:.0f}%로 강함")
+    elif retention >= 0.75:
+        scores["BASE_HOLD"] += 12
+        scores["REBOUND_TO_TARGET"] += 4
+        reasons.append(f"score/threshold 유지율 {retention*100:.0f}%로 중립 이상")
+    else:
+        scores["DROP_MORE"] += 24
+        reasons.append(f"score/threshold 유지율 {retention*100:.0f}%로 약함")
+
+    if rebound:
+        scores["REBOUND_TO_TARGET"] += 15
+        reasons.append("최근 반등 확인 TRUE")
+    else:
+        scores["BASE_HOLD"] += 9
+        scores["DROP_MORE"] += 5
+        reasons.append("최근 반등 확인 부족")
+
+    if rr >= 2.0:
+        scores["REBOUND_TO_TARGET"] += 8
+        reasons.append(f"목표/손절 기대비 {rr:.2f}로 양호")
+    elif rr > 0 and rr < 1.1:
+        scores["DROP_MORE"] += 9
+        reasons.append(f"목표/손절 기대비 {rr:.2f}로 약함")
+
+    if stop_risk and stop_risk <= 3.0:
+        scores["DROP_MORE"] += 18
+        reasons.append(f"stop까지 여유 {stop_risk:.2f}%로 매우 좁음")
+    elif stop_risk and stop_risk <= 5.0:
+        scores["DROP_MORE"] += 8
+        reasons.append(f"stop까지 여유 {stop_risk:.2f}%로 좁음")
+
+    if target_hit_rate >= 45.0:
+        scores["REBOUND_TO_TARGET"] += 10
+        reasons.append(f"과거 target 근접/도달률 {target_hit_rate:.1f}%")
+    elif target_hit_rate <= 20.0 and stats.get("trade_count", 0) >= 8:
+        scores["BASE_HOLD"] += 6
+        scores["DROP_MORE"] += 5
+        reasons.append(f"과거 target 근접/도달률 {target_hit_rate:.1f}%로 낮음")
+
+    if win_rate >= 70.0:
+        scores["REBOUND_TO_TARGET"] += 6
+        scores["BASE_HOLD"] += 4
+        reasons.append(f"과거 룰북 승률 {win_rate:.1f}%")
+    elif win_rate < 50.0 and stats.get("trade_count", 0) >= 8:
+        scores["DROP_MORE"] += 8
+        reasons.append(f"과거 룰북 승률 {win_rate:.1f}%로 낮음")
+
+    probs = _normalize_prob(scores)
+    label = max(probs.items(), key=lambda kv: kv[1])[0]
+    # 작은 차이로 REBOUND/DROP이 갈릴 때는 박스권으로 보수화한다.
+    sorted_probs = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)
+    if sorted_probs[0][0] != "BASE_HOLD" and sorted_probs[0][1] - sorted_probs[1][1] < 5.0:
+        label = "BASE_HOLD"
+        reasons.append("상위 예후 확률 차이가 5%p 미만이라 보수적으로 BASE_HOLD 처리")
+    return label, probs, reasons[:8]
+
+
+def build_pullback_forecast_for_position(position: dict[str, Any]) -> dict[str, Any]:
+    gate = str(position.get("gate") or "")
+    features = _current_pullback_features(position)
+    if gate not in PULLBACK_GATES:
+        return {
+            "ok": False,
+            "scope": "not_pullback_gate",
+            "label": "NOT_PULLBACK_SCOPE",
+            "display": "—",
+            "features": features,
+            "reason": f"gate={gate} is not a pullback gate",
+        }
+    rows, diag = _load_rulebook_trades(position)
+    stats = _summarize_trade_paths(rows)
+    if stats.get("trade_count", 0) < 6:
+        return {
+            "ok": False,
+            "scope": "pullback_gate",
+            "label": "INSUFFICIENT_HISTORY",
+            "display": "기록부족",
+            "features": features,
+            "stats": stats,
+            "trade_source": diag,
+            "reason": f"trade_count={stats.get('trade_count', 0)} < 6",
+        }
+    label, probs, reasons = _classify(features, stats)
+    display_map = {
+        "REBOUND_TO_TARGET": "반등목표",
+        "BASE_HOLD": "유지/횡보",
+        "DROP_MORE": "추가하락",
+    }
+    return {
+        "ok": True,
+        "scope": "pullback_gate",
+        "label": label,
+        "display": display_map.get(label, label),
+        "probabilities": probs,
+        "confidence_pct": probs.get(label, 0.0),
+        "features": features,
+        "stats": stats,
+        "trade_source": diag,
+        "reasons": reasons,
+        "note": "확률은 동일 룰북 과거 거래의 MAE/MFE/target-hit 분포와 현재 신호 유지율을 비교한 휴리스틱 판정입니다.",
+    }
+
+
+def attach_pullback_forecasts_to_strategy_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    strategies = payload.get("strategies") or {}
+    global_counts: Counter = Counter()
+    global_ok = 0
+    global_scoped = 0
+    for sim in strategies.values():
+        counts: Counter = Counter()
+        scoped = 0
+        ok_count = 0
+        for pos in sim.get("open_positions") or []:
+            if not isinstance(pos, dict):
+                continue
+            forecast = build_pullback_forecast_for_position(pos)
+            pos["pullback_forecast"] = forecast
+            label = str(forecast.get("label") or "UNKNOWN")
+            if forecast.get("scope") == "pullback_gate":
+                scoped += 1
+                global_scoped += 1
+                counts[label] += 1
+                global_counts[label] += 1
+                if forecast.get("ok"):
+                    ok_count += 1
+                    global_ok += 1
+        sim["pullback_forecast_counts"] = dict(counts)
+        sim["pullback_forecast_summary"] = {
+            "scoped_positions": scoped,
+            "ok_count": ok_count,
+            "counts": dict(counts),
+            "labels": {
+                "REBOUND_TO_TARGET": "이 눌림에서 첫 신호 목표가 쪽 재상승 가능성이 가장 높음",
+                "BASE_HOLD": "현재 구간 유지/횡보 가능성이 가장 높음",
+                "DROP_MORE": "눌림 지속 또는 추가 하락 위험이 가장 높음",
+                "INSUFFICIENT_HISTORY": "동일 룰북 과거 거래 수 부족",
+            },
+        }
+    payload["pullback_forecast"] = {
+        "enabled": True,
+        "scoped_positions": global_scoped,
+        "ok_count": global_ok,
+        "counts": dict(global_counts),
+        "environment": check_pullback_forecast_environment(payload),
+    }
+    return payload
+
+
+def check_pullback_forecast_environment(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    checks: dict[str, Any] = {
+        "root_exists": ROOT.exists(),
+        "stage3_tickers_root_exists": (ROOT / "tickers").exists(),
+        "has_strategy_payload": isinstance(payload, dict),
+        "sampled_pullback_positions": 0,
+        "sampled_with_trade_file": 0,
+        "sampled_with_enough_trades": 0,
+        "usable": False,
+        "notes": [],
+    }
+    positions: list[dict[str, Any]] = []
+    if isinstance(payload, dict):
+        for sim in (payload.get("strategies") or {}).values():
+            for pos in sim.get("open_positions") or []:
+                if isinstance(pos, dict) and str(pos.get("gate") or "") in PULLBACK_GATES:
+                    positions.append(pos)
+    checks["sampled_pullback_positions"] = len(positions)
+    for pos in positions[:12]:
+        rows, diag = _load_rulebook_trades(pos)
+        if diag.get("ok"):
+            checks["sampled_with_trade_file"] += 1
+        if len(rows) >= 6:
+            checks["sampled_with_enough_trades"] += 1
+    if not checks["root_exists"]:
+        checks["notes"].append("research root missing")
+    if not checks["stage3_tickers_root_exists"]:
+        checks["notes"].append("stage3 tickers root missing")
+    if not positions:
+        checks["notes"].append("current strategy payload has no pullback positions")
+    if positions and checks["sampled_with_enough_trades"] == 0:
+        checks["notes"].append("pullback positions found but matching trade history is insufficient")
+    checks["usable"] = bool(checks["root_exists"] and checks["stage3_tickers_root_exists"] and (not positions or checks["sampled_with_enough_trades"] > 0))
+    if checks["usable"]:
+        checks["notes"].append("historical trade MAE/MFE/target/stop fields are available for pullback forecasting")
+    return checks

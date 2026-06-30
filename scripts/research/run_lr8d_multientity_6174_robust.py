@@ -16,9 +16,12 @@
 - 이 파일은 research artifact만 생성한다.
 - live parameters 또는 data/symbols/parameters.json을 수정하지 않는다.
 - live trading runner를 시작/중지하지 않는다.
+- shard 실행은 TOPN/RULEBOOKS/TRADES append만 수행하고, 최종 survivor/multi/report는 기본적으로 쓰지 않는다.
+- 모든 shard가 끝난 뒤 같은 명령에 --finalize-only를 붙여 단일 aggregation을 1회 실행한다.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -37,9 +40,29 @@ runner = base.runner
 FAILURES_PATH = base.OUT_DIR / f"{base.RUN_PREFIX}_failures.jsonl"
 PROGRESS_PATH = base.OUT_DIR / f"{base.RUN_PREFIX}_progress.json"
 PRUNED_PATH = base.OUT_DIR / f"{base.RUN_PREFIX}_pruned_tickers.jsonl"
+FINALIZE_LOCK_PATH = base.OUT_DIR / f"{base.RUN_PREFIX}_finalize.lock"
 EARLY_PRUNE_ENABLED = os.environ.get("LR8D_MULTI_EARLY_PRUNE", "0").strip().lower() in {"1", "true", "yes", "on"}
 EARLY_PRUNE_MIN_EXPECTANCY_PCT = float(os.environ.get("LR8D_MULTI_EARLY_PRUNE_MIN_EXPECTANCY_PCT", str(base.MIN_ENTITY_EXPECTANCY_PCT)))
 EARLY_PRUNE_DD_CUTOFF = float(os.environ.get("LR8D_MULTI_EARLY_PRUNE_DD_CUTOFF", str(base.DD_CUTOFF)))
+FINALIZE_ON_SHARD_COMPLETE = os.environ.get("LR8D_MULTI_FINALIZE_ON_SHARD_COMPLETE", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="LR8D multi-entity robust shard/finalize launcher")
+    parser.add_argument("--stop-after-step0", action="store_true")
+    parser.add_argument("--shard-count", type=int, default=1)
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument(
+        "--finalize-only",
+        action="store_true",
+        help="모든 shard 완료 후 survivor/multi/report를 단일 프로세스에서 1회 생성",
+    )
+    parser.add_argument(
+        "--finalize-on-shard-complete",
+        action="store_true",
+        help="호환용 옵션. 기본은 off이며 race 방지를 위해 완료 후 --finalize-only 사용 권장",
+    )
+    return parser.parse_args()
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -112,10 +135,12 @@ def _pruned_row(*, ticker: str, split_label: str, row: Mapping[str, Any] | None,
 def _write_progress(payload: dict[str, Any]) -> None:
     PROGRESS_PATH.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "_comment": "LR8D 6174 다중개체 robust 백그라운드 실행의 최신 진행 상태입니다.",
+        "_comment": "LR8D 다중개체 robust 실행의 shard-local 최신 상태입니다. 여러 shard가 덮어쓸 수 있으므로 전체 aggregate 진행률은 TOPN/PRUNED/FAILURES JSONL 카운트로 계산하세요.",
         **payload,
     }
-    PROGRESS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp = PROGRESS_PATH.with_suffix(PROGRESS_PATH.suffix + f".tmp.{os.getpid()}")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.replace(PROGRESS_PATH)
 
 
 def _touch_outputs() -> None:
@@ -177,19 +202,25 @@ def _best_period_candidate(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _load_existing_rows_for_ticker(ticker: str) -> dict[str, dict[str, Any]]:
+    """Load already-written TOPN rows for a ticker by parsing JSON exactly.
+
+    Do not use a short substring prefilter: TOPN JSONL rows are sorted by key and
+    the ticker field can appear far beyond the first 200 characters.  A substring
+    prefilter caused restart-time early-prune state to be missed.
+    """
     rows: dict[str, dict[str, Any]] = {}
     if not runner.TOPN_PATH.exists():
         return rows
-    prefix = ticker.upper().strip()
+    target = ticker.upper().strip()
     with runner.TOPN_PATH.open("r", encoding="utf-8") as handle:
         for line in handle:
-            if not line.strip() or prefix not in line[:200]:
+            if not line.strip():
                 continue
             try:
                 row = json.loads(line)
             except Exception:
                 continue
-            if str(row.get("ticker") or "").upper().strip() != prefix:
+            if str(row.get("ticker") or "").upper().strip() != target:
                 continue
             label = str(row.get("label") or "")
             if label:
@@ -221,8 +252,101 @@ def _line_count(path: Path) -> int:
     return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
 
 
+def _load_timing() -> dict[str, Any] | None:
+    if runner.TIMING_PATH.exists() and runner.TIMING_PATH.read_text(encoding="utf-8").strip():
+        try:
+            return json.loads(runner.TIMING_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+    return None
+
+
+def _finalize_outputs(all_symbols: tuple[str, ...], timing: dict[str, Any] | None, *, args: argparse.Namespace) -> int:
+    """Write survivor/multi/report once, under a coarse lock.
+
+    This must normally be run after all shards have finished.  It intentionally
+    avoids per-shard concurrent overwrite of survivor/multi/report files.
+    """
+    FINALIZE_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd: int | None = None
+    try:
+        fd = os.open(str(FINALIZE_LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, f"pid={os.getpid()} created_at={runner.utc_now()}\n".encode("utf-8"))
+    except FileExistsError:
+        print(
+            json.dumps(
+                {
+                    "event": "lr8d_multi6174_finalize_skipped_lock_exists",
+                    "run_id": base.RUN_ID,
+                    "lock_path": str(FINALIZE_LOCK_PATH),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+        return 0
+
+    try:
+        base.write_survivors_and_report(all_symbols, timing)
+        _write_progress(
+            {
+                "run_id": base.RUN_ID,
+                "shard_index": int(args.shard_index),
+                "shard_count": int(args.shard_count),
+                "early_prune_enabled": bool(EARLY_PRUNE_ENABLED),
+                "global_completed_period_rows": len(runner.completed_keys(runner.TOPN_PATH)),
+                "global_pruned_ticker_rows": _line_count(PRUNED_PATH),
+                "global_failure_rows": _line_count(FAILURES_PATH),
+                "updated_at": runner.utc_now(),
+                "status": "finalize_done",
+            }
+        )
+        print(
+            json.dumps(
+                {
+                    "event": "lr8d_multi6174_finalize_done",
+                    "run_id": base.RUN_ID,
+                    "output_dir": str(base.OUT_DIR),
+                    "topn_rows": _line_count(runner.TOPN_PATH),
+                    "pruned_rows": _line_count(PRUNED_PATH),
+                    "failure_rows": _line_count(FAILURES_PATH),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+        return 0
+    except Exception as exc:
+        _append_failure(
+            _failure_row(
+                ticker="__REPORT__",
+                split_label="report",
+                stage="write_survivors_and_report",
+                exc=exc,
+                shard_count=args.shard_count,
+                shard_index=args.shard_index,
+            )
+        )
+        print(json.dumps({"event": "lr8d_multi6174_report_failed", "type": type(exc).__name__, "message": str(exc)}, ensure_ascii=False), flush=True)
+        return 1
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+        try:
+            FINALIZE_LOCK_PATH.unlink()
+        except FileNotFoundError:
+            pass
+        except Exception:
+            pass
+
+
 def main() -> int:
-    args = runner.parse_args()
+    args = _parse_args()
     if args.shard_count < 1:
         raise SystemExit("--shard-count must be >= 1")
     if args.shard_index < 0 or args.shard_index >= args.shard_count:
@@ -232,12 +356,10 @@ def main() -> int:
     all_symbols = base._read_ticker_file()
     symbols = all_symbols[args.shard_index :: args.shard_count]
     total_periods = len(all_symbols) * 4
-    timing = None
-    if runner.TIMING_PATH.exists() and runner.TIMING_PATH.read_text(encoding="utf-8").strip():
-        try:
-            timing = json.loads(runner.TIMING_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            timing = None
+    timing = _load_timing()
+
+    if args.finalize_only:
+        return _finalize_outputs(all_symbols, timing, args=args)
 
     print(
         json.dumps(
@@ -251,6 +373,7 @@ def main() -> int:
                 "total_periods": total_periods,
                 "output_dir": str(base.OUT_DIR),
                 "early_prune_enabled": bool(EARLY_PRUNE_ENABLED),
+                "finalize_on_shard_complete": bool(args.finalize_on_shard_complete or FINALIZE_ON_SHARD_COMPLETE),
                 "early_prune_gate": {
                     "min_trades": int(runner.MIN_TRADES),
                     "min_member_score": float(runner.MIN_MEMBER_SCORE),
@@ -387,12 +510,25 @@ def main() -> int:
                 }
             )
 
-    try:
-        base.write_survivors_and_report(all_symbols, timing)
-    except Exception as exc:
-        failed += 1
-        _append_failure(_failure_row(ticker="__REPORT__", split_label="report", stage="write_survivors_and_report", exc=exc, shard_count=args.shard_count, shard_index=args.shard_index))
-        print(json.dumps({"event": "lr8d_multi6174_report_failed", "type": type(exc).__name__, "message": str(exc)}, ensure_ascii=False), flush=True)
+    should_finalize = bool(args.finalize_on_shard_complete or FINALIZE_ON_SHARD_COMPLETE)
+    if should_finalize:
+        finalize_rc = _finalize_outputs(all_symbols, timing, args=args)
+        if finalize_rc != 0:
+            failed += 1
+    else:
+        print(
+            json.dumps(
+                {
+                    "event": "lr8d_multi6174_finalize_skipped",
+                    "run_id": base.RUN_ID,
+                    "reason": "finalize_only_required_after_all_shards",
+                    "hint": "run this script once with --finalize-only after all shard processes finish",
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            flush=True,
+        )
 
     _write_progress(
         {
@@ -409,7 +545,7 @@ def main() -> int:
             "global_failure_rows": _line_count(FAILURES_PATH),
             "elapsed_seconds": round(time.time() - started, 3),
             "updated_at": runner.utc_now(),
-            "status": "shard_done",
+            "status": "shard_done" if should_finalize else "shard_done_no_finalize",
         }
     )
     print(
@@ -424,6 +560,7 @@ def main() -> int:
                 "global_completed_period_rows": len(runner.completed_keys(runner.TOPN_PATH)),
                 "global_pruned_ticker_rows": _line_count(PRUNED_PATH),
                 "output_dir": str(base.OUT_DIR),
+                "finalized": should_finalize,
             },
             ensure_ascii=False,
             sort_keys=True,

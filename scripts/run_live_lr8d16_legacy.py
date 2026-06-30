@@ -8,6 +8,8 @@ This runner is intentionally separate from scripts/run_live.py:
   lr8d_stage1_20260609 promoted universe
 - SELL/exit, pending reconciliation, safety layer, Telegram control, and
   dashboard hooks stay the same as the normal live runner
+- fast-exit tick runs a lightweight exit/manual-sell/pending loop more often
+  than the full BUY signal scan so manual exits finalize quickly
 """
 from __future__ import annotations
 
@@ -80,6 +82,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--order-notional", type=float, default=5000.0, help="개별 ticker legacy BUY 1회 주문금액(USD)")
     parser.add_argument("--order-shares", type=float, default=1.0, help="--order-notional<=0일 때만 쓰는 fallback 수량")
     parser.add_argument("--market-tick", type=int, default=60)
+    parser.add_argument("--fast-exit-tick", type=int, default=10, help="장중 청산/수동매도/pending 정산 전용 빠른 tick 주기(초). 0 이하이면 비활성")
     parser.add_argument("--offmarket-tick", type=int, default=3600)
     parser.add_argument("--summary-hour", type=int, default=6)
     parser.add_argument("--summary-minute", type=int, default=15)
@@ -88,6 +91,52 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--monthly-summary-hour", type=int, default=6)
     parser.add_argument("--monthly-summary-minute", type=int, default=45)
     return parser.parse_args()
+
+
+def make_fast_exit_tick_job(runner: Runner):
+    """Return a lightweight market-hours job for exits only.
+
+    Full tick_market still scans BUY signals every 60s.  This job only handles:
+    - pending order polling/finalization
+    - dashboard/Telegram manual SELL intents
+    - automatic exit checks for already-held positions
+
+    That keeps manual exits and filled-order reconciliation from waiting for the
+    next full BUY-scan tick, without increasing 16-symbol entry-scan load.
+    """
+    state = {"busy": False}
+
+    def fast_exit_tick() -> None:
+        if state["busy"]:
+            logger.debug("[FAST-EXIT] previous tick still running — skip")
+            return
+        state["busy"] = True
+        try:
+            runner._poll_pending_orders(context="fast_exit.pre_manual")
+            runner._process_manual_sell_intents()
+            runner._poll_pending_orders(context="fast_exit.post_manual")
+
+            pending_mgr = getattr(runner, "pending_order_manager", None)
+            if pending_mgr is not None and pending_mgr.all():
+                logger.debug("[FAST-EXIT] pending 주문 존재 → 자동청산 체크 보류")
+                return
+
+            exited = runner.position_manager.check_exits(
+                runner.broker,
+                runner.notifier,
+                pending_manager=pending_mgr,
+            )
+            if exited:
+                for record in exited:
+                    runner._record_realized_pnl_from_trade(record)
+                logger.info("[FAST-EXIT] 자동 청산 %d건 완료", len(exited))
+        except Exception as exc:
+            runner._handle_error("fast_exit_tick", exc)
+        finally:
+            state["busy"] = False
+
+    fast_exit_tick.__name__ = "fast_exit_tick"
+    return fast_exit_tick
 
 
 def main() -> int:
@@ -165,6 +214,17 @@ def main() -> int:
 
     scheduler = Scheduler(default_timezone="Asia/Seoul")
     scheduler.add_once_job(func=runner.startup_check, delay_sec=2, job_id="startup_check")
+    fast_exit_interval = int(args.fast_exit_tick or 0)
+    if fast_exit_interval > 0:
+        scheduler.add_market_hours_job(
+            func=make_fast_exit_tick_job(runner),
+            interval_sec=fast_exit_interval,
+            market=clock,
+            job_id="fast_exit_tick",
+        )
+        logger.warning("[FAST-EXIT] ON: 청산/수동매도/pending 정산 전용 tick every %ss", fast_exit_interval)
+    else:
+        logger.warning("[FAST-EXIT] OFF")
     scheduler.add_market_hours_job(
         func=make_holding_news_tick_market_job(runner),
         interval_sec=int(args.market_tick),

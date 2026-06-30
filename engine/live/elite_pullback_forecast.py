@@ -4,6 +4,7 @@
 - strategy sim의 눌림 후보/가상 보유 포지션을 과거 동일 룰북 거래와 비교한다.
 - 과거 winning MAE / losing MAE / target hit 비율 / 현재 score 유지율 / stop-target 거리로
   현재 눌림이 더 빠질지, 횡보할지, 다시 목표가 쪽으로 갈지 확률형 판정을 붙인다.
+- 최근 OHLCV 기반 반등 품질 점수를 붙여 단순 rebound_confirmed=True/False보다 세밀하게 본다.
 - 실제 broker 주문, live positions.json, strategy state 파일은 수정하지 않는다.
 """
 from __future__ import annotations
@@ -18,8 +19,10 @@ from typing import Any
 ROOT = Path("exp_batch_stage123_2009_20260616_full")
 _TRADE_CACHE_TTL_SEC = 900.0
 _CANDIDATE_CACHE_TTL_SEC = 900.0
+_REBOUND_QUALITY_CACHE_TTL_SEC = 60.0
 _trade_cache: dict[tuple[str, str, str], tuple[list[dict[str, Any]], float]] = {}
 _candidate_cache: tuple[dict[str, dict[str, Any]], float] | None = None
+_rebound_quality_cache: dict[str, tuple[dict[str, Any], float]] = {}
 
 PULLBACK_GATES = {"BUY_PULLBACK_REENTRY", "WAIT_PULLBACK_CONFIRM"}
 
@@ -43,8 +46,8 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _pct(value: Any, default: float = 0.0) -> float:
-    return _safe_float(value, default)
+def _clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, float(value)))
 
 
 def _percentile(values: list[float], q: float) -> float | None:
@@ -145,7 +148,6 @@ def _trade_depth(row: dict[str, Any]) -> float:
     mae = _safe_float(row.get("max_loss_during_hold"), 0.0)
     if mae < 0:
         return abs(mae)
-    # 일부 trade dump는 max_loss가 0으로 저장된다. entry/stop으로 최소 위험 크기를 보조 추정한다.
     entry = _safe_float(row.get("entry_price"), 0.0)
     stop = _safe_float(row.get("stop_price_at_entry"), 0.0)
     if entry > 0 and stop > 0 and stop < entry:
@@ -197,6 +199,161 @@ def _summarize_trade_paths(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _quality_label(score: float) -> str:
+    if score >= 75.0:
+        return "STRONG_REBOUND"
+    if score >= 60.0:
+        return "HEALTHY_REBOUND"
+    if score >= 45.0:
+        return "WEAK_REBOUND"
+    return "FAILED_REBOUND"
+
+
+def _build_rebound_quality(position: dict[str, Any], *, current_price: float) -> dict[str, Any]:
+    """최근 OHLCV로 반등 품질을 0~100점으로 산출한다.
+
+    rebound_confirmed는 True/False 1차 게이트이고, 이 점수는 반등의 질을 본다.
+    구성요소: 저점 회복률, higher close, higher low, 단기 평균 회복, 전일 고점 회복,
+    종가 위치, 거래량 동반 여부.
+    """
+    ticker = str(position.get("ticker") or "").upper().strip()
+    if not ticker:
+        return {"ok": False, "score": None, "label": "NO_TICKER", "reason": "ticker_missing"}
+    cache_key = f"{ticker}:{round(float(current_price or 0.0), 4)}"
+    now = time.time()
+    cached = _rebound_quality_cache.get(cache_key)
+    if cached is not None:
+        payload, ts = cached
+        if now - ts < _REBOUND_QUALITY_CACHE_TTL_SEC:
+            return payload
+    try:
+        from engine.live.elite_shadow_trader import _load_ohlcv
+
+        df = _load_ohlcv(ticker)
+    except Exception as exc:
+        return {"ok": False, "score": None, "label": "OHLCV_ERROR", "reason": f"{type(exc).__name__}: {exc}"}
+    if df is None or len(df) < 8:
+        return {"ok": False, "score": None, "label": "INSUFFICIENT_OHLCV", "reason": "need at least 8 daily rows"}
+
+    tail = df.tail(8)
+    opens = [_safe_float(x, 0.0) for x in tail.get("Open", []).tolist()]
+    highs = [_safe_float(x, 0.0) for x in tail.get("High", []).tolist()]
+    lows = [_safe_float(x, 0.0) for x in tail.get("Low", []).tolist()]
+    closes = [_safe_float(x, 0.0) for x in tail.get("Close", []).tolist()]
+    volumes = [_safe_float(x, 0.0) for x in tail.get("Volume", []).tolist()]
+    if len(closes) < 8 or min(closes[-5:]) <= 0 or min(lows[-5:]) <= 0:
+        return {"ok": False, "score": None, "label": "BAD_OHLCV", "reason": "invalid close/low data"}
+
+    current = current_price if current_price > 0 else closes[-1]
+    c1, c2, c3 = closes[-1], closes[-2], closes[-3]
+    l1, l2, l3 = lows[-1], lows[-2], lows[-3]
+    h1, h2 = highs[-1], highs[-2]
+    o1 = opens[-1] if opens else c1
+    recent_low_5 = min(lows[-5:])
+    prior_low_3 = min(lows[-5:-2])
+    ma3 = sum(closes[-3:]) / 3.0
+    ma5 = sum(closes[-5:]) / 5.0
+    bounce_from_low_pct = (current / recent_low_5 - 1.0) * 100.0 if recent_low_5 > 0 else 0.0
+    close_position = (c1 - l1) / max(h1 - l1, 0.0001) if h1 > 0 and l1 > 0 else 0.0
+    vol_base = [v for v in volumes[-6:-1] if v > 0]
+    volume_ratio = volumes[-1] / (sum(vol_base) / len(vol_base)) if volumes and volumes[-1] > 0 and vol_base else None
+    up_day = c1 >= o1
+    higher_close = bool(c1 > c2 >= c3 or current > c1 >= c2)
+    higher_low = bool(l1 > l2 >= l3 or min(lows[-2:]) > prior_low_3 * 1.005)
+    reclaim_ma3 = bool(current >= ma3)
+    reclaim_ma5 = bool(current >= ma5)
+    above_prev_high = bool(current > h2)
+
+    score = 0.0
+    reasons: list[str] = []
+    components: dict[str, float] = {}
+
+    if bounce_from_low_pct >= 4.0:
+        components["low_recovery"] = 22.0
+        reasons.append(f"최근 5일 저점 대비 {bounce_from_low_pct:.2f}% 회복")
+    elif bounce_from_low_pct >= 3.0:
+        components["low_recovery"] = 18.0
+        reasons.append(f"최근 5일 저점 대비 {bounce_from_low_pct:.2f}% 회복")
+    elif bounce_from_low_pct >= 2.0:
+        components["low_recovery"] = 14.0
+        reasons.append(f"최근 5일 저점 대비 {bounce_from_low_pct:.2f}% 회복")
+    elif bounce_from_low_pct >= 1.0:
+        components["low_recovery"] = 8.0
+        reasons.append(f"최근 5일 저점 대비 {bounce_from_low_pct:.2f}% 회복")
+    else:
+        components["low_recovery"] = 0.0
+        reasons.append(f"저점 회복 약함 {bounce_from_low_pct:.2f}%")
+
+    components["higher_close"] = 16.0 if higher_close else 0.0
+    if higher_close:
+        reasons.append("최근 종가 구조 상승")
+    components["higher_low"] = 14.0 if higher_low else 0.0
+    if higher_low:
+        reasons.append("최근 저점 높이기 확인")
+    components["ma_reclaim"] = (8.0 if reclaim_ma3 else 0.0) + (8.0 if reclaim_ma5 else 0.0)
+    if reclaim_ma3 or reclaim_ma5:
+        reasons.append(f"단기 평균 회복 ma3={reclaim_ma3} ma5={reclaim_ma5}")
+    if close_position >= 0.70:
+        components["close_position"] = 10.0
+        reasons.append(f"당일 범위 상단 마감 위치 {close_position:.2f}")
+    elif close_position >= 0.50:
+        components["close_position"] = 6.0
+        reasons.append(f"당일 범위 중상단 마감 위치 {close_position:.2f}")
+    else:
+        components["close_position"] = 0.0
+    components["prev_high_break"] = 10.0 if above_prev_high else 0.0
+    if above_prev_high:
+        reasons.append("현재가가 전일 고점 돌파")
+    if volume_ratio is not None and up_day and volume_ratio >= 1.20:
+        components["volume_confirm"] = 12.0
+        reasons.append(f"상승일 거래량 동반 {volume_ratio:.2f}x")
+    elif volume_ratio is not None and up_day and volume_ratio >= 0.90:
+        components["volume_confirm"] = 8.0
+        reasons.append(f"상승일 거래량 보통 {volume_ratio:.2f}x")
+    elif up_day:
+        components["volume_confirm"] = 4.0
+        reasons.append("상승일이나 거래량 확인 약함")
+    else:
+        components["volume_confirm"] = 0.0
+
+    score = sum(components.values())
+    penalties: list[str] = []
+    if c1 < c2 < c3:
+        score -= 15.0
+        penalties.append("최근 3일 종가 하락 배열")
+    if current < recent_low_5 * 1.005:
+        score = min(score, 35.0)
+        penalties.append("현재가가 최근 5일 저점 근처")
+    score = round(_clamp(score, 0.0, 100.0), 2)
+    payload = {
+        "ok": True,
+        "score": score,
+        "label": _quality_label(score),
+        "components": components,
+        "reasons": reasons[:8],
+        "penalties": penalties,
+        "metrics": {
+            "current_price": current,
+            "last_close": c1,
+            "recent_low_5": recent_low_5,
+            "bounce_from_low_pct": bounce_from_low_pct,
+            "close_position": close_position,
+            "ma3": ma3,
+            "ma5": ma5,
+            "reclaim_ma3": reclaim_ma3,
+            "reclaim_ma5": reclaim_ma5,
+            "higher_close": higher_close,
+            "higher_low": higher_low,
+            "above_prev_high": above_prev_high,
+            "volume_ratio": volume_ratio,
+            "up_day": up_day,
+        },
+        "note": "0~100 반등 품질 점수. 60+면 반등 구조 양호, 75+면 강한 반등, 45 미만은 반등 실패/약함으로 해석.",
+    }
+    _rebound_quality_cache[cache_key] = (payload, now)
+    return payload
+
+
 def _current_pullback_features(position: dict[str, Any]) -> dict[str, Any]:
     history = position.get("signal_history") or {}
     current_price = _safe_float(position.get("last_price"), _safe_float(position.get("entry_price"), 0.0))
@@ -215,6 +372,7 @@ def _current_pullback_features(position: dict[str, Any]) -> dict[str, Any]:
     retention = history.get("ratio_retention")
     if retention is None:
         retention = _safe_float(position.get("entry_ratio"), 0.0) / max(_safe_float(position.get("entry_ratio"), 0.0), 0.0001)
+    rebound_quality = _build_rebound_quality(position, current_price=current_price)
     return {
         "ticker": position.get("ticker"),
         "gate": position.get("gate"),
@@ -230,6 +388,9 @@ def _current_pullback_features(position: dict[str, Any]) -> dict[str, Any]:
         "entry_drawdown_depth_pct": entry_drawdown_depth,
         "score_retention": _safe_float(retention, 0.0),
         "rebound_confirmed": bool(history.get("rebound_confirmed")),
+        "rebound_quality_score": rebound_quality.get("score"),
+        "rebound_quality_label": rebound_quality.get("label"),
+        "rebound_quality": rebound_quality,
         "target_upside_pct": target_upside_pct,
         "stop_downside_pct": stop_downside_pct,
         "risk_reward_to_target": risk_reward,
@@ -247,6 +408,8 @@ def _classify(features: dict[str, Any], stats: dict[str, Any]) -> tuple[str, dic
     depth = _safe_float(features.get("first_buy_pullback_depth_pct"), 0.0)
     retention = _safe_float(features.get("score_retention"), 0.0)
     rebound = bool(features.get("rebound_confirmed"))
+    rebound_quality_score = features.get("rebound_quality_score")
+    q = _safe_float(rebound_quality_score, -1.0) if rebound_quality_score is not None else -1.0
     stop_risk = _safe_float(features.get("stop_downside_pct"), 0.0)
     rr = _safe_float(features.get("risk_reward_to_target"), 0.0)
     target_hit_rate = _safe_float(stats.get("target_hit_rate"), 0.0)
@@ -290,12 +453,27 @@ def _classify(features: dict[str, Any], stats: dict[str, Any]) -> tuple[str, dic
         reasons.append(f"score/threshold 유지율 {retention*100:.0f}%로 약함")
 
     if rebound:
-        scores["REBOUND_TO_TARGET"] += 15
+        scores["REBOUND_TO_TARGET"] += 10
         reasons.append("최근 반등 확인 TRUE")
     else:
         scores["BASE_HOLD"] += 9
         scores["DROP_MORE"] += 5
         reasons.append("최근 반등 확인 부족")
+
+    if q >= 75.0:
+        scores["REBOUND_TO_TARGET"] += 16
+        reasons.append(f"반등 품질 {q:.0f}점: 강한 반등")
+    elif q >= 60.0:
+        scores["REBOUND_TO_TARGET"] += 10
+        scores["BASE_HOLD"] += 4
+        reasons.append(f"반등 품질 {q:.0f}점: 양호")
+    elif q >= 45.0:
+        scores["BASE_HOLD"] += 9
+        scores["REBOUND_TO_TARGET"] += 3
+        reasons.append(f"반등 품질 {q:.0f}점: 약한 반등")
+    elif q >= 0.0:
+        scores["DROP_MORE"] += 15
+        reasons.append(f"반등 품질 {q:.0f}점: 반등 실패/부족")
 
     if rr >= 2.0:
         scores["REBOUND_TO_TARGET"] += 8
@@ -329,12 +507,11 @@ def _classify(features: dict[str, Any], stats: dict[str, Any]) -> tuple[str, dic
 
     probs = _normalize_prob(scores)
     label = max(probs.items(), key=lambda kv: kv[1])[0]
-    # 작은 차이로 REBOUND/DROP이 갈릴 때는 박스권으로 보수화한다.
     sorted_probs = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)
     if sorted_probs[0][0] != "BASE_HOLD" and sorted_probs[0][1] - sorted_probs[1][1] < 5.0:
         label = "BASE_HOLD"
         reasons.append("상위 예후 확률 차이가 5%p 미만이라 보수적으로 BASE_HOLD 처리")
-    return label, probs, reasons[:8]
+    return label, probs, reasons[:9]
 
 
 def build_pullback_forecast_for_position(position: dict[str, Any]) -> dict[str, Any]:
@@ -376,20 +553,25 @@ def build_pullback_forecast_for_position(position: dict[str, Any]) -> dict[str, 
         "probabilities": probs,
         "confidence_pct": probs.get(label, 0.0),
         "features": features,
+        "rebound_quality": features.get("rebound_quality"),
         "stats": stats,
         "trade_source": diag,
         "reasons": reasons,
-        "note": "확률은 동일 룰북 과거 거래의 MAE/MFE/target-hit 분포와 현재 신호 유지율을 비교한 휴리스틱 판정입니다.",
+        "note": "확률은 동일 룰북 과거 거래의 MAE/MFE/target-hit 분포, 현재 신호 유지율, 반등 품질 점수를 비교한 휴리스틱 판정입니다.",
     }
 
 
 def attach_pullback_forecasts_to_strategy_payload(payload: dict[str, Any]) -> dict[str, Any]:
     strategies = payload.get("strategies") or {}
     global_counts: Counter = Counter()
+    global_quality_counts: Counter = Counter()
+    global_quality_scores: list[float] = []
     global_ok = 0
     global_scoped = 0
     for sim in strategies.values():
         counts: Counter = Counter()
+        quality_counts: Counter = Counter()
+        quality_scores: list[float] = []
         scoped = 0
         ok_count = 0
         for pos in sim.get("open_positions") or []:
@@ -398,11 +580,20 @@ def attach_pullback_forecasts_to_strategy_payload(payload: dict[str, Any]) -> di
             forecast = build_pullback_forecast_for_position(pos)
             pos["pullback_forecast"] = forecast
             label = str(forecast.get("label") or "UNKNOWN")
+            rq = forecast.get("rebound_quality") or (forecast.get("features") or {}).get("rebound_quality") or {}
+            q_label = str(rq.get("label") or "UNKNOWN")
+            q_score = rq.get("score")
             if forecast.get("scope") == "pullback_gate":
                 scoped += 1
                 global_scoped += 1
                 counts[label] += 1
                 global_counts[label] += 1
+                if q_label != "UNKNOWN":
+                    quality_counts[q_label] += 1
+                    global_quality_counts[q_label] += 1
+                if q_score is not None:
+                    quality_scores.append(_safe_float(q_score, 0.0))
+                    global_quality_scores.append(_safe_float(q_score, 0.0))
                 if forecast.get("ok"):
                     ok_count += 1
                     global_ok += 1
@@ -411,11 +602,17 @@ def attach_pullback_forecasts_to_strategy_payload(payload: dict[str, Any]) -> di
             "scoped_positions": scoped,
             "ok_count": ok_count,
             "counts": dict(counts),
+            "rebound_quality_counts": dict(quality_counts),
+            "avg_rebound_quality_score": round(sum(quality_scores) / len(quality_scores), 2) if quality_scores else None,
             "labels": {
                 "REBOUND_TO_TARGET": "이 눌림에서 첫 신호 목표가 쪽 재상승 가능성이 가장 높음",
                 "BASE_HOLD": "현재 구간 유지/횡보 가능성이 가장 높음",
                 "DROP_MORE": "눌림 지속 또는 추가 하락 위험이 가장 높음",
                 "INSUFFICIENT_HISTORY": "동일 룰북 과거 거래 수 부족",
+                "STRONG_REBOUND": "반등 품질 강함",
+                "HEALTHY_REBOUND": "반등 품질 양호",
+                "WEAK_REBOUND": "반등 품질 약함",
+                "FAILED_REBOUND": "반등 실패/부족",
             },
         }
     payload["pullback_forecast"] = {
@@ -423,6 +620,8 @@ def attach_pullback_forecasts_to_strategy_payload(payload: dict[str, Any]) -> di
         "scoped_positions": global_scoped,
         "ok_count": global_ok,
         "counts": dict(global_counts),
+        "rebound_quality_counts": dict(global_quality_counts),
+        "avg_rebound_quality_score": round(sum(global_quality_scores) / len(global_quality_scores), 2) if global_quality_scores else None,
         "environment": check_pullback_forecast_environment(payload),
     }
     return payload

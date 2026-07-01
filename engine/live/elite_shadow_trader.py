@@ -18,6 +18,7 @@ import logging
 import math
 import os
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ import yfinance as yf
 
 from engine.core.feature_lag import DEFAULT_LAG_DAYS, DEFAULT_MAX_AGE_DAYS, lookup_lagged_daily_dict
 from engine.core.indicators import calc_indicators
+from engine.live.elite_shadow_entry_quality import assess_shadow_entry_quality
 from engine.live.elite_shadow_report import ROOT as ELITE_ROOT
 from engine.live.elite_shadow_report import build_elite_shadow_report
 from engine.live.news_alerts import lookup_live_sell_omen_score
@@ -391,18 +393,34 @@ def evaluate_candidate(candidate: dict[str, Any], ctx: Any = None) -> dict[str, 
     )
     atr = _safe_float(df["ATR"].iloc[-1], 0.0) if "ATR" in df.columns else 0.0
     sl_atr, tp_atr, tr_atr = get_dynamic_exit_params(rb, market_score=market_score, vix_level=vix_level)
+    score = float(res.score)
+    threshold = float(res.threshold)
+    ratio = score / max(threshold, 0.0001)
+    reasons = list(res.reasons)
+    components = dict(res.components)
+    entry_quality = assess_shadow_entry_quality(
+        candidate=candidate,
+        df=df,
+        price=price,
+        score=score,
+        threshold=threshold,
+        ratio=ratio,
+        reasons=reasons,
+        components=components,
+    )
     return {
         "ok": True,
         "ticker": ticker,
         "price": price,
         "atr": atr,
         "should_buy": bool(res.should_buy),
-        "score": float(res.score),
+        "score": score,
         "raw_score": float(res.raw_score),
-        "threshold": float(res.threshold),
-        "ratio": float(res.score) / max(float(res.threshold), 0.0001),
-        "reasons": list(res.reasons),
-        "components": dict(res.components),
+        "threshold": threshold,
+        "ratio": ratio,
+        "reasons": reasons,
+        "components": components,
+        "entry_quality": entry_quality,
         "market_score": market_score,
         "sector_score": sector_score,
         "vix_level": vix_level,
@@ -428,6 +446,7 @@ def _open_position(candidate: dict[str, Any], ev: dict[str, Any], state: dict[st
     stop_price = max(0.01, price - sl_atr * atr)
     target_price = price + tp_atr * atr
     trailing_distance = tr_atr * atr
+    quality = ev.get("entry_quality") or {}
     pos = {
         "position_id": f"shadow-{int(time.time())}-{_position_key(candidate).replace(':','-')}",
         "candidate_id": _position_key(candidate),
@@ -444,6 +463,10 @@ def _open_position(candidate: dict[str, Any], ev: dict[str, Any], state: dict[st
         "entry_threshold": ev["threshold"],
         "entry_ratio": ev["ratio"],
         "entry_reasons": ev["reasons"][:8],
+        "entry_quality": quality,
+        "entry_quality_score": quality.get("score"),
+        "entry_quality_label": quality.get("label"),
+        "entry_quality_size_factor": quality.get("size_factor"),
         "atr_at_entry": atr,
         "target_price": target_price,
         "stop_price": stop_price,
@@ -474,7 +497,10 @@ def _open_position(candidate: dict[str, Any], ev: dict[str, Any], state: dict[st
         },
     }
     state["open_positions"][_position_key(candidate)] = pos
-    _event(state, "OPEN", pos["ticker"], f"BUY score={ev['score']:.2f}/{ev['threshold']:.2f} price={price:.2f}", pos)
+    qtxt = ""
+    if quality:
+        qtxt = f" q={quality.get('score')} {quality.get('primary_reason')} size={quality.get('size_factor')}"
+    _event(state, "OPEN", pos["ticker"], f"BUY score={ev['score']:.2f}/{ev['threshold']:.2f} price={price:.2f}{qtxt}", pos)
     return pos
 
 
@@ -510,8 +536,8 @@ def _maybe_close_position(pos_key: str, pos: dict[str, Any], price: float, state
     highest = max(_safe_float(pos.get("highest_price"), entry), price)
     lowest = min(_safe_float(pos.get("lowest_price"), entry), price)
     pnl_pct = (price / entry - 1.0) * 100.0
-    max_profit_pct = max(_safe_float(pos.get("max_profit_pct"), 0.0), (highest / entry - 1.0) * 100.0)
-    max_loss_pct = min(_safe_float(pos.get("max_loss_pct"), 0.0), (lowest / entry - 1.0) * 100.0)
+    max_profit_pct = max(_safe_float(pos.get("max_profit_pct", 0.0)), (highest / entry - 1.0) * 100.0)
+    max_loss_pct = min(_safe_float(pos.get("max_loss_pct", 0.0)), (lowest / entry - 1.0) * 100.0)
     pos.update({
         "highest_price": highest,
         "lowest_price": lowest,
@@ -580,6 +606,9 @@ def _maybe_close_position(pos_key: str, pos: dict[str, Any], price: float, state
         "entry_score": pos.get("entry_score"),
         "entry_threshold": pos.get("entry_threshold"),
         "entry_ratio": pos.get("entry_ratio"),
+        "entry_quality_score": pos.get("entry_quality_score"),
+        "entry_quality_label": pos.get("entry_quality_label"),
+        "entry_quality_primary_reason": (pos.get("entry_quality") or {}).get("primary_reason"),
         "last_sell_omen_score": pos.get("sell_omen_score"),
     }
     append_trade(trade)
@@ -626,6 +655,10 @@ def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIO
     opened = 0
     closed = 0
     evaluated = 0
+    quality_filtered = 0
+    quality_reduced = 0
+    quality_skip_counts: Counter[str] = Counter()
+    quality_skip_samples: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
     try:
         try:
@@ -634,7 +667,6 @@ def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIO
             ctx = None
         report = build_elite_shadow_report(stage2_limit=60, stage3_limit=80, include_trades=False)
         candidates = (report.get("candidates") or [])[:max_candidates]
-        candidate_by_key = {_position_key(c): c for c in candidates}
 
         # 먼저 열린 포지션 청산 조건을 평가한다.
         for pos_key, pos in list((state.get("open_positions") or {}).items()):
@@ -662,7 +694,28 @@ def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIO
                 errors.append({"ticker": ticker, "candidate_id": key, "reason": ev.get("reason")})
                 continue
             if bool(ev.get("should_buy")):
-                _open_position(candidate, ev, state, notional=notional)
+                quality = ev.get("entry_quality") or {}
+                if not bool(quality.get("allow", True)):
+                    reason = str(quality.get("primary_reason") or "quality_filtered")
+                    quality_filtered += 1
+                    quality_skip_counts[reason] += 1
+                    if len(quality_skip_samples) < 20:
+                        quality_skip_samples.append({
+                            "ticker": ticker,
+                            "candidate_id": key,
+                            "reason": reason,
+                            "quality_score": quality.get("score"),
+                            "quality_label": quality.get("label"),
+                            "entry_ratio": ev.get("ratio"),
+                            "entry_reasons": ev.get("reasons", [])[:4],
+                            "metrics": {k: (quality.get("metrics") or {}).get(k) for k in ["ret_1d_pct", "ret_5d_pct", "dist_ma5_pct", "dist_ma20_pct", "bounce_low5_pct", "dist_high5_pct", "volume_ratio20", "event_score", "event_heavy", "overheat", "high_vol", "low_price"]},
+                        })
+                    continue
+                size_factor = max(0.1, min(1.0, _safe_float(quality.get("size_factor"), 1.0)))
+                actual_notional = max(100.0, notional * size_factor)
+                if size_factor < 0.999:
+                    quality_reduced += 1
+                _open_position(candidate, ev, state, notional=actual_notional)
                 opened += 1
                 open_keys.add(key)
                 open_tickers.add(ticker)
@@ -673,6 +726,10 @@ def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIO
             "evaluated": evaluated,
             "opened": opened,
             "closed": closed,
+            "entry_quality_filtered": quality_filtered,
+            "entry_quality_reduced": quality_reduced,
+            "entry_quality_skip_counts": dict(quality_skip_counts),
+            "entry_quality_skip_samples": quality_skip_samples,
             "errors": errors[-20:],
             "candidate_count": len(candidates),
         }

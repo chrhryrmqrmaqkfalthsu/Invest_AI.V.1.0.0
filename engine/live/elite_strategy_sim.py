@@ -2,9 +2,10 @@
 
 무엇을 하는 파일인가:
 - 기존 elite shadow 후보 중 BUY 신호가 뜬 종목을 바로 사지 않고,
-  신호 히스토리 기반 매수 게이트를 적용한 별도 모의 ledger를 운용한다.
+  신호 히스토리 기반 매수 게이트와 entry quality 필터를 적용한 별도 모의 ledger를 운용한다.
 - strategy=final_gate: 최종 판단 로직으로 BUY/WAIT/NO_BUY를 결정한다.
 - strategy=pullback_only: 눌림 재진입으로 확인된 후보만 매수한다.
+- entry_quality: Elite Shadow와 같은 가격 추종성/Q/고변동/이벤트 과다 필터를 통과한 후보만 가상 진입한다.
 - 실제 broker 주문, live runner, positions.json, parameters.json은 절대 수정하지 않는다.
 """
 from __future__ import annotations
@@ -239,6 +240,17 @@ def _strategy_allows(strategy: str, judgment: dict[str, Any]) -> bool:
     return False
 
 
+def _entry_quality_decision(ev: dict[str, Any]) -> tuple[bool, float, str, dict[str, Any]]:
+    quality = ev.get("entry_quality") or {}
+    if not quality:
+        return True, 1.0, "quality_unknown", {}
+    if not bool(quality.get("allow", True)):
+        return False, 1.0, str(quality.get("primary_reason") or "entry_quality_blocked"), quality
+    size_factor = max(0.1, min(1.0, _safe_float(quality.get("size_factor"), 1.0)))
+    reason = str(quality.get("primary_reason") or "passed")
+    return True, size_factor, reason, quality
+
+
 def _open_strategy_position(strategy: str, candidate: dict[str, Any], ev: dict[str, Any], judgment: dict[str, Any], sim: dict[str, Any], *, notional: float) -> dict[str, Any]:
     sim["open_positions"] = dict(sim.get("open_positions") or {})
     pos = _open_position(candidate, ev, sim, notional=notional)
@@ -253,7 +265,9 @@ def _open_strategy_position(strategy: str, candidate: dict[str, Any], ev: dict[s
         "ratio_retention": judgment.get("ratio_retention"),
         "rebound_confirmed": judgment.get("rebound_confirmed"),
     }
-    _event(sim, "OPEN", str(pos.get("ticker") or ""), f"{strategy} {judgment.get('gate')} price={pos.get('entry_price'):.2f}", pos)
+    q = pos.get("entry_quality") or {}
+    qtxt = f" q={q.get('score')} size={q.get('size_factor')}" if q else ""
+    _event(sim, "OPEN", str(pos.get("ticker") or ""), f"{strategy} {judgment.get('gate')} price={pos.get('entry_price'):.2f}{qtxt}", pos)
     return pos
 
 
@@ -264,8 +278,8 @@ def _close_strategy_position(strategy: str, pos_key: str, pos: dict[str, Any], p
     highest = max(_safe_float(pos.get("highest_price"), entry), price)
     lowest = min(_safe_float(pos.get("lowest_price"), entry), price)
     pnl_pct = (price / entry - 1.0) * 100.0
-    max_profit_pct = max(_safe_float(pos.get("max_profit_pct"), 0.0), (highest / entry - 1.0) * 100.0)
-    max_loss_pct = min(_safe_float(pos.get("max_loss_pct"), 0.0), (lowest / entry - 1.0) * 100.0)
+    max_profit_pct = max(_safe_float(pos.get("max_profit_pct", 0.0)), (highest / entry - 1.0) * 100.0)
+    max_loss_pct = min(_safe_float(pos.get("max_loss_pct", 0.0)), (lowest / entry - 1.0) * 100.0)
     pos.update(
         {
             "highest_price": highest,
@@ -335,6 +349,8 @@ def _close_strategy_position(strategy: str, pos_key: str, pos: dict[str, Any], p
         "entry_score": pos.get("entry_score"),
         "entry_threshold": pos.get("entry_threshold"),
         "entry_ratio": pos.get("entry_ratio"),
+        "entry_quality_score": pos.get("entry_quality_score"),
+        "entry_quality_label": pos.get("entry_quality_label"),
         "last_sell_omen_score": pos.get("sell_omen_score"),
     }
     _append_trade(strategy, trade)
@@ -370,12 +386,44 @@ def _summary_for_sim(strategy: str, sim: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _result_bucket() -> dict[str, Any]:
+    return {
+        "opened": 0,
+        "closed": 0,
+        "skipped": Counter(),
+        "evaluated": 0,
+        "entry_quality_filtered": 0,
+        "entry_quality_reduced": 0,
+        "entry_quality_skip_counts": Counter(),
+        "entry_quality_skip_samples": [],
+    }
+
+
+def _add_quality_sample(bucket: dict[str, Any], ticker: str, key: str, reason: str, quality: dict[str, Any], ev: dict[str, Any]) -> None:
+    samples = bucket.setdefault("entry_quality_skip_samples", [])
+    if len(samples) >= 20:
+        return
+    metrics = quality.get("metrics") or {}
+    samples.append(
+        {
+            "ticker": ticker,
+            "candidate_id": key,
+            "reason": reason,
+            "quality_score": quality.get("score"),
+            "quality_label": quality.get("label"),
+            "entry_ratio": ev.get("ratio"),
+            "entry_reasons": ev.get("reasons", [])[:4],
+            "metrics": {k: metrics.get(k) for k in ["ret_1d_pct", "ret_5d_pct", "dist_ma5_pct", "dist_ma20_pct", "bounce_low5_pct", "dist_high5_pct", "volume_ratio20", "event_score", "event_heavy", "overheat", "high_vol", "low_price"]},
+        }
+    )
+
+
 def run_strategy_sim_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIONAL_USD, force: bool = False) -> dict[str, Any]:
     if not force and not _acquire_lock():
         return {"ok": False, "reason": "strategy_sim_tick_already_running", "state": load_strategy_state()}
     started = time.time()
     state = load_strategy_state()
-    results: dict[str, Any] = {name: {"opened": 0, "closed": 0, "skipped": Counter(), "evaluated": 0} for name in STRATEGIES}
+    results: dict[str, Any] = {name: _result_bucket() for name in STRATEGIES}
     try:
         try:
             ctx = get_market_context()
@@ -412,32 +460,59 @@ def run_strategy_sim_tick(*, max_candidates: int = 93, notional: float = DEFAULT
             judgment = judge_buy_gate(candidate, ev=ev, days=12)
             for strategy in STRATEGIES:
                 sim = state["strategies"][strategy]
-                results[strategy]["evaluated"] += 1
+                bucket = results[strategy]
+                bucket["evaluated"] += 1
                 open_positions = sim.get("open_positions") or {}
                 open_tickers = {str(p.get("ticker") or "").upper() for p in open_positions.values()}
                 if key in open_positions or ticker in open_tickers:
-                    results[strategy]["skipped"]["already_open"] += 1
+                    bucket["skipped"]["already_open"] += 1
                     continue
                 if not _strategy_allows(strategy, judgment):
-                    results[strategy]["skipped"][str(judgment.get("gate") or "gate_blocked")] += 1
+                    bucket["skipped"][str(judgment.get("gate") or "gate_blocked")] += 1
                     continue
-                _open_strategy_position(strategy, candidate, ev, judgment, sim, notional=notional)
-                results[strategy]["opened"] += 1
+                quality_ok, size_factor, quality_reason, quality = _entry_quality_decision(ev)
+                if not quality_ok:
+                    bucket["entry_quality_filtered"] += 1
+                    bucket["entry_quality_skip_counts"][quality_reason] += 1
+                    bucket["skipped"][f"entry_quality:{quality_reason}"] += 1
+                    _add_quality_sample(bucket, ticker, key, quality_reason, quality, ev)
+                    continue
+                actual_notional = max(100.0, notional * size_factor)
+                if size_factor < 0.999:
+                    bucket["entry_quality_reduced"] += 1
+                _open_strategy_position(strategy, candidate, ev, judgment, sim, notional=actual_notional)
+                bucket["opened"] += 1
 
         for strategy in STRATEGIES:
             sim = state["strategies"][strategy]
+            bucket = results[strategy]
             sim["summary"] = _summary_for_sim(strategy, sim)
             sim["last_tick"] = {
                 "time": utc_now(),
                 "elapsed_sec": round(time.time() - started, 3),
                 "candidate_count": len(candidates),
-                "opened": results[strategy]["opened"],
-                "closed": results[strategy]["closed"],
-                "evaluated": results[strategy]["evaluated"],
-                "skipped": dict(results[strategy]["skipped"].most_common(20)),
+                "opened": bucket["opened"],
+                "closed": bucket["closed"],
+                "evaluated": bucket["evaluated"],
+                "skipped": dict(bucket["skipped"].most_common(30)),
+                "entry_quality_filtered": bucket["entry_quality_filtered"],
+                "entry_quality_reduced": bucket["entry_quality_reduced"],
+                "entry_quality_skip_counts": dict(bucket["entry_quality_skip_counts"]),
+                "entry_quality_skip_samples": bucket["entry_quality_skip_samples"],
             }
         save_strategy_state(state)
-        return {"ok": True, "elapsed_sec": round(time.time() - started, 3), "results": {k: {**v, "skipped": dict(v["skipped"])} for k, v in results.items()}, "state": state}
+        clean_results = {}
+        for k, v in results.items():
+            clean_results[k] = {
+                "opened": v["opened"],
+                "closed": v["closed"],
+                "evaluated": v["evaluated"],
+                "skipped": dict(v["skipped"]),
+                "entry_quality_filtered": v["entry_quality_filtered"],
+                "entry_quality_reduced": v["entry_quality_reduced"],
+                "entry_quality_skip_counts": dict(v["entry_quality_skip_counts"]),
+            }
+        return {"ok": True, "elapsed_sec": round(time.time() - started, 3), "results": clean_results, "state": state}
     finally:
         if not force:
             _release_lock()

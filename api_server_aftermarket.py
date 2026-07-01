@@ -139,6 +139,52 @@ def _get_price_aftermarket(ticker: str):
     return price
 
 
+def _refresh_positions_mark_to_market(positions: list[Any], *, refreshed_at: str) -> tuple[int, list[dict[str, str]]]:
+    """열린 가상 포지션의 현재가/미실현 손익 필드를 채운다.
+
+    Shadow/Strategy 모두 대시보드 GET 때 화면 표시용 mark-to-market만 수행한다.
+    신규 진입/청산 기록은 각 tick 루프에서만 수행한다.
+    """
+    refreshed = 0
+    errors: list[dict[str, str]] = []
+    for pos in positions:
+        if not isinstance(pos, dict):
+            continue
+        ticker = str(pos.get("ticker") or "").upper().strip()
+        if not ticker:
+            continue
+        price = _get_price_aftermarket(ticker)
+        entry = _safe_float(pos.get("entry_price"))
+        notional = _num(pos.get("notional"), 0.0)
+        shares = _safe_float(pos.get("shares"))
+        if shares is None and entry:
+            shares = notional / entry if notional > 0 else None
+        if price is None:
+            price = _safe_float(pos.get("last_price")) or entry
+        if price is None or entry is None or shares is None:
+            errors.append({"ticker": ticker, "reason": "price_or_entry_missing"})
+            continue
+        highest = max(_num(pos.get("highest_price"), entry), price)
+        lowest = min(_num(pos.get("lowest_price"), entry), price)
+        pnl_pct = (price / entry - 1.0) * 100.0
+        pnl_usd = shares * (price - entry)
+        pos.update(
+            {
+                "last_price": price,
+                "last_seen_at": refreshed_at,
+                "highest_price": highest,
+                "lowest_price": lowest,
+                "max_profit_pct": max(_num(pos.get("max_profit_pct"), 0.0), (highest / entry - 1.0) * 100.0),
+                "max_loss_pct": min(_num(pos.get("max_loss_pct"), 0.0), (lowest / entry - 1.0) * 100.0),
+                "unrealized_pnl_pct": pnl_pct,
+                "unrealized_pnl_usd": pnl_usd,
+                "price_source": "dashboard_prepost_refresh",
+            }
+        )
+        refreshed += 1
+    return refreshed, errors
+
+
 def _refresh_strategy_sim_prices(payload: dict[str, Any]) -> dict[str, Any]:
     """전략 시뮬 화면용 mark-to-market 보정.
 
@@ -153,41 +199,7 @@ def _refresh_strategy_sim_prices(payload: dict[str, Any]) -> dict[str, Any]:
         positions = sim.get("open_positions") or []
         if not isinstance(positions, list):
             positions = []
-        refreshed = 0
-        errors: list[dict[str, str]] = []
-        for pos in positions:
-            if not isinstance(pos, dict):
-                continue
-            ticker = str(pos.get("ticker") or "").upper().strip()
-            if not ticker:
-                continue
-            price = _get_price_aftermarket(ticker)
-            entry = _safe_float(pos.get("entry_price"))
-            shares = _safe_float(pos.get("shares"))
-            notional = _num(pos.get("notional"), 0.0)
-            if shares is None and entry:
-                shares = notional / entry if notional > 0 else None
-            if price is None or entry is None or shares is None:
-                errors.append({"ticker": ticker, "reason": "price_or_entry_missing"})
-                continue
-            highest = max(_num(pos.get("highest_price"), entry), price)
-            lowest = min(_num(pos.get("lowest_price"), entry), price)
-            pnl_pct = (price / entry - 1.0) * 100.0
-            pnl_usd = shares * (price - entry)
-            pos.update(
-                {
-                    "last_price": price,
-                    "last_seen_at": refreshed_at,
-                    "highest_price": highest,
-                    "lowest_price": lowest,
-                    "max_profit_pct": max(_num(pos.get("max_profit_pct"), 0.0), (highest / entry - 1.0) * 100.0),
-                    "max_loss_pct": min(_num(pos.get("max_loss_pct"), 0.0), (lowest / entry - 1.0) * 100.0),
-                    "unrealized_pnl_pct": pnl_pct,
-                    "unrealized_pnl_usd": pnl_usd,
-                    "price_source": "dashboard_prepost_refresh",
-                }
-            )
-            refreshed += 1
+        refreshed, errors = _refresh_positions_mark_to_market(positions, refreshed_at=refreshed_at)
         total_refreshed += refreshed
 
         summary = dict(sim.get("summary") or {})
@@ -220,6 +232,57 @@ def _refresh_strategy_sim_prices(payload: dict[str, Any]) -> dict[str, Any]:
         }
         log.debug("strategy sim price refresh %s: %s/%s", name, refreshed, len(positions))
     payload["price_refresh"] = {"refreshed_at": refreshed_at, "refreshed": total_refreshed, "ttl_sec": _PRICE_CACHE_TTL_SEC}
+    return payload
+
+
+def _refresh_shadow_trader_prices(payload: dict[str, Any]) -> dict[str, Any]:
+    """Elite Shadow 화면용 mark-to-market 보정.
+
+    Shadow tick에서 신규 OPEN 직후에는 unrealized_pnl_pct/usd가 아직 없을 수 있다.
+    대시보드 GET 때 열린 가상 포지션의 현재가와 미실현 손익을 채워 화면 수익률이
+    비지 않도록 한다. 실제 주문/청산/ledger 저장은 하지 않는다.
+    """
+    positions = payload.get("open_positions") or []
+    if not isinstance(positions, list):
+        positions = []
+    refreshed_at = _utc_now()
+    refreshed, errors = _refresh_positions_mark_to_market(positions, refreshed_at=refreshed_at)
+    trades = payload.get("recent_trades") or []
+    open_pnl = sum(_num(p.get("unrealized_pnl_usd"), 0.0) for p in positions if isinstance(p, dict))
+    open_notional = sum(_num(p.get("notional"), 0.0) for p in positions if isinstance(p, dict))
+    realized_pnl = sum(_num(t.get("pnl_usd"), 0.0) for t in trades if isinstance(t, dict))
+    realized_notional = sum(_num(t.get("notional"), 0.0) for t in trades if isinstance(t, dict))
+    pnls = [_num(t.get("pnl_pct"), 0.0) for t in trades if isinstance(t, dict)]
+    wins = [p for p in pnls if p > 0]
+    total_notional = open_notional + realized_notional
+    total_pnl = open_pnl + realized_pnl
+    summary = dict(payload.get("summary") or {})
+    summary.update(
+        {
+            "open_count": len(positions),
+            "closed_count": len(trades),
+            "win_rate": len(wins) / len(pnls) * 100.0 if pnls else 0.0,
+            "avg_pnl_pct": sum(pnls) / len(pnls) if pnls else 0.0,
+            "realized_pnl_usd": realized_pnl,
+            "open_unrealized_usd": open_pnl,
+            "open_unrealized_pct_avg": (sum(_num(p.get("unrealized_pnl_pct"), 0.0) for p in positions if isinstance(p, dict)) / len(positions)) if positions else 0.0,
+            "open_notional": open_notional,
+            "closed_notional": realized_notional,
+            "total_notional": total_notional,
+            "total_pnl_usd": total_pnl,
+            "open_roi_pct": open_pnl / open_notional * 100.0 if open_notional else 0.0,
+            "total_roi_pct": total_pnl / total_notional * 100.0 if total_notional else 0.0,
+        }
+    )
+    payload["summary"] = summary
+    payload["price_refresh"] = {
+        "refreshed_at": refreshed_at,
+        "refreshed": refreshed,
+        "open_count": len(positions),
+        "errors": errors[:8],
+        "ttl_sec": _PRICE_CACHE_TTL_SEC,
+        "note": "GET 응답 시 열린 Shadow 가상 포지션 가격/미실현 손익만 갱신. 신규 진입/청산 판단은 shadow tick에서만 수행.",
+    }
     return payload
 
 
@@ -316,7 +379,7 @@ def elite_shadow_report(refresh: bool = False):
 def elite_shadow_trader_state():
     try:
         from engine.live.elite_shadow_trader import shadow_dashboard_payload
-        return shadow_dashboard_payload(recent_trade_limit=300)
+        return _refresh_shadow_trader_prices(shadow_dashboard_payload(recent_trade_limit=300))
     except Exception as exc:
         log.exception("elite shadow trader state failed")
         raise HTTPException(status_code=500, detail=f"elite shadow trader state failed: {type(exc).__name__}: {exc}")

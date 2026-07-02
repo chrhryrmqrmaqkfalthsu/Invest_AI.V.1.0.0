@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -43,6 +44,7 @@ log = logging.getLogger("elite_shadow_trader")
 STATE_PATH = Path("data/_system/elite_shadow_state.json")
 TRADES_PATH = Path("data/_system/elite_shadow_trades.jsonl")
 LOCK_PATH = Path("data/_system/elite_shadow_tick.lock")
+TRADE_LOCK_PATH = Path("data/_system/elite_shadow_trades.lock")
 DEFAULT_NOTIONAL_USD = 5000.0
 OHLCV_CACHE_TTL_SEC = 600.0
 PRICE_CACHE_TTL_SEC = 30.0
@@ -83,17 +85,11 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
-def load_state() -> dict[str, Any]:
-    if STATE_PATH.exists():
-        try:
-            data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                data.setdefault("open_positions", {})
-                data.setdefault("closed_count", 0)
-                data.setdefault("events", [])
-                return data
-        except Exception:
-            pass
+class ShadowStateCorruptionError(RuntimeError):
+    """Shadow state 파일 손상 시 빈 state로 fail-open 하지 않기 위한 예외."""
+
+
+def _blank_state() -> dict[str, Any]:
     return {
         "_comment": "Elite shadow trader state. This is virtual-only; no broker orders are placed.",
         "version": 1,
@@ -106,6 +102,34 @@ def load_state() -> dict[str, Any]:
     }
 
 
+def _mark_corrupt_state(exc: Exception) -> Path:
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    suffix = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+    corrupt_path = STATE_PATH.with_name(f"{STATE_PATH.name}.corrupt.{suffix}")
+    try:
+        shutil.copy2(STATE_PATH, corrupt_path)
+    except Exception:
+        pass
+    log.critical("Shadow state JSON parse failed; copied corrupt state to %s and aborting tick: %s", corrupt_path, exc)
+    return corrupt_path
+
+
+def load_state() -> dict[str, Any]:
+    if STATE_PATH.exists():
+        try:
+            data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                data.setdefault("open_positions", {})
+                data.setdefault("closed_count", 0)
+                data.setdefault("events", [])
+                return data
+            raise ValueError("state root is not an object")
+        except Exception as exc:
+            corrupt_path = _mark_corrupt_state(exc)
+            raise ShadowStateCorruptionError(f"Shadow state is corrupt; backup={corrupt_path}") from exc
+    return _blank_state()
+
+
 def save_state(state: dict[str, Any]) -> None:
     state["updated_at"] = utc_now()
     events = state.get("events") or []
@@ -114,10 +138,45 @@ def save_state(state: dict[str, Any]) -> None:
     _atomic_write_json(STATE_PATH, state)
 
 
+def _acquire_file_lock(path: Path, ttl_sec: float = 900.0) -> bool:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    if path.exists():
+        try:
+            age = now - path.stat().st_mtime
+            if age > ttl_sec:
+                path.unlink()
+            else:
+                return False
+        except Exception:
+            return False
+    try:
+        fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, f"pid={os.getpid()} ts={utc_now()}\n".encode("utf-8"))
+        os.close(fd)
+        return True
+    except FileExistsError:
+        return False
+
+
+def _release_file_lock(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+
 def append_trade(row: dict[str, Any]) -> None:
-    TRADES_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with TRADES_PATH.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    if not _acquire_file_lock(TRADE_LOCK_PATH, ttl_sec=300.0):
+        raise RuntimeError(f"trade append lock busy: {TRADE_LOCK_PATH}")
+    try:
+        TRADES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with TRADES_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    finally:
+        _release_file_lock(TRADE_LOCK_PATH)
 
 
 def load_recent_trades(limit: int = 200) -> list[dict[str, Any]]:
@@ -134,33 +193,11 @@ def load_recent_trades(limit: int = 200) -> list[dict[str, Any]]:
 
 
 def _acquire_lock(ttl_sec: float = 900.0) -> bool:
-    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
-    now = time.time()
-    if LOCK_PATH.exists():
-        try:
-            age = now - LOCK_PATH.stat().st_mtime
-            if age > ttl_sec:
-                LOCK_PATH.unlink()
-            else:
-                return False
-        except Exception:
-            return False
-    try:
-        fd = os.open(str(LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.write(fd, f"pid={os.getpid()} ts={utc_now()}\n".encode("utf-8"))
-        os.close(fd)
-        return True
-    except FileExistsError:
-        return False
+    return _acquire_file_lock(LOCK_PATH, ttl_sec=ttl_sec)
 
 
 def _release_lock() -> None:
-    try:
-        LOCK_PATH.unlink()
-    except FileNotFoundError:
-        pass
-    except Exception:
-        pass
+    _release_file_lock(LOCK_PATH)
 
 
 def _load_rulebook_for_candidate(candidate: dict[str, Any]) -> dict[str, Any] | None:
@@ -648,10 +685,15 @@ def _summarize_state(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIONAL_USD, force: bool = False) -> dict[str, Any]:
-    if not force and not _acquire_lock():
-        return {"ok": False, "reason": "tick_already_running", "state": load_state()}
+    # force=True도 공통 writer lock은 우회하지 않는다. API 수동 tick과 daemon tick의 lost update를 막기 위함이다.
+    if not _acquire_lock():
+        return {"ok": False, "reason": "shadow_state_lock_busy"}
     started = time.time()
-    state = load_state()
+    try:
+        state = load_state()
+    except ShadowStateCorruptionError as exc:
+        _release_lock()
+        return {"ok": False, "reason": "state_corrupt", "error": str(exc)}
     opened = 0
     closed = 0
     evaluated = 0
@@ -737,8 +779,7 @@ def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIO
         save_state(state)
         return {"ok": True, "opened": opened, "closed": closed, "evaluated": evaluated, "elapsed_sec": round(time.time() - started, 3), "state": state}
     finally:
-        if not force:
-            _release_lock()
+        _release_lock()
 
 
 def shadow_dashboard_payload(*, recent_trade_limit: int = 200) -> dict[str, Any]:

@@ -26,6 +26,9 @@ from engine.live.elite_shadow_trader import (
     _safe_float,
     _safe_int,
     _summarize_state,
+    _acquire_lock,
+    _release_lock,
+    ShadowStateCorruptionError,
     append_trade,
     load_state,
     save_state,
@@ -619,94 +622,103 @@ def _close_by_shadow_exit_omen(
 
 def run_shadow_exit_omen_tick(*, max_positions: int | None = None) -> dict[str, Any]:
     """열린 Elite Shadow 포지션에 전용 청산 오멘을 overlay로 적용한다."""
+    if not _acquire_lock():
+        return {"ok": False, "reason": "shadow_state_lock_busy"}
     started = time.time()
-    state = load_state()
-    open_items = list((state.get("open_positions") or {}).items())
-    if max_positions is not None:
-        open_items = open_items[: max(0, int(max_positions))]
-
-    market_df = _load_ohlcv(MARKET_PROXY)
-    market_price = _latest_price(MARKET_PROXY, market_df) if market_df is not None else None
-    market_intraday_df = _load_intraday(MARKET_PROXY)
-    evaluated = 0
-    closed = 0
-    errors: list[dict[str, Any]] = []
-    close_counts: Counter[str] = Counter()
-    closed_samples: list[dict[str, Any]] = []
-
-    for pos_key, pos in open_items:
-        ticker = str(pos.get("ticker") or "").upper().strip()
-        if not ticker:
-            continue
-        df = _load_ohlcv(ticker)
-        price = _latest_price(ticker, df)
-        if not price:
-            errors.append({"ticker": ticker, "candidate_id": pos_key, "reason": "price_missing"})
-            continue
-        entry = _safe_float(pos.get("entry_price"), 0.0)
-        if entry <= 0.0:
-            errors.append({"ticker": ticker, "candidate_id": pos_key, "reason": "entry_price_missing"})
-            continue
-
-        highest = max(_safe_float(pos.get("highest_price"), entry), price)
-        lowest = min(_safe_float(pos.get("lowest_price"), entry), price)
-        pnl_pct = (price / entry - 1.0) * 100.0
-        max_profit_pct = max(_safe_float(pos.get("max_profit_pct"), 0.0), (highest / entry - 1.0) * 100.0)
-        max_loss_pct = min(_safe_float(pos.get("max_loss_pct"), 0.0), (lowest / entry - 1.0) * 100.0)
-        pos.update({
-            "highest_price": highest,
-            "lowest_price": lowest,
-            "max_profit_pct": max_profit_pct,
-            "max_loss_pct": max_loss_pct,
-            "last_price": price,
-            "last_seen_at": utc_now(),
-            "unrealized_pnl_pct": pnl_pct,
-            "unrealized_pnl_usd": (_safe_float(pos.get("shares")) * (price - entry)),
-            "holding_days": _holding_days(str(pos.get("opened_at") or "")),
-        })
-        if market_price and not _safe_float(pos.get("market_entry_price"), 0.0):
-            pos["market_proxy"] = MARKET_PROXY
-            pos["market_entry_price"] = market_price
-
-        intraday_df = _load_intraday(ticker)
-        omen = evaluate_shadow_exit_omen(
-            pos=pos,
-            df=df,
-            price=price,
-            market_price=market_price,
-            intraday_df=intraday_df,
-            market_intraday_df=market_intraday_df,
-        )
-        pos["shadow_exit_omen"] = omen
-        pos["shadow_exit_omen_score"] = omen.get("score")
-        pos["shadow_exit_omen_reason"] = omen.get("reason")
-        evaluated += 1
-        if bool(omen.get("close")):
-            trade = _close_by_shadow_exit_omen(pos_key=pos_key, pos=pos, price=price, state=state, omen=omen)
-            closed += 1
-            close_counts[str(trade.get("exit_reason") or "shadow_exit_omen")] += 1
-            if len(closed_samples) < 20:
-                closed_samples.append({
-                    "ticker": ticker,
-                    "reason": trade.get("exit_reason"),
-                    "pnl_pct": trade.get("pnl_pct"),
-                    "pnl_usd": trade.get("pnl_usd"),
-                    "max_profit_pct": trade.get("max_profit_pct"),
-                    "max_loss_pct": trade.get("max_loss_pct"),
-                    "omen_score": trade.get("shadow_exit_omen_score"),
-                })
-
-    state["last_shadow_exit_omen_tick"] = {
-        "time": utc_now(),
-        "elapsed_sec": round(time.time() - started, 3),
-        "evaluated": evaluated,
-        "closed": closed,
-        "close_counts": dict(close_counts),
-        "closed_samples": closed_samples,
-        "errors": errors[-20:],
-        "open_count_after": len(state.get("open_positions") or {}),
-        "version": EXIT_OMEN_VERSION,
-    }
-    state["summary"] = _summarize_state(state)
-    save_state(state)
-    return {"ok": True, **state["last_shadow_exit_omen_tick"], "state": state}
+    try:
+        state = load_state()
+    except ShadowStateCorruptionError as exc:
+        _release_lock()
+        return {"ok": False, "reason": "state_corrupt", "error": str(exc)}
+    try:
+        open_items = list((state.get("open_positions") or {}).items())
+        if max_positions is not None:
+            open_items = open_items[: max(0, int(max_positions))]
+    
+        market_df = _load_ohlcv(MARKET_PROXY)
+        market_price = _latest_price(MARKET_PROXY, market_df) if market_df is not None else None
+        market_intraday_df = _load_intraday(MARKET_PROXY)
+        evaluated = 0
+        closed = 0
+        errors: list[dict[str, Any]] = []
+        close_counts: Counter[str] = Counter()
+        closed_samples: list[dict[str, Any]] = []
+    
+        for pos_key, pos in open_items:
+            ticker = str(pos.get("ticker") or "").upper().strip()
+            if not ticker:
+                continue
+            df = _load_ohlcv(ticker)
+            price = _latest_price(ticker, df)
+            if not price:
+                errors.append({"ticker": ticker, "candidate_id": pos_key, "reason": "price_missing"})
+                continue
+            entry = _safe_float(pos.get("entry_price"), 0.0)
+            if entry <= 0.0:
+                errors.append({"ticker": ticker, "candidate_id": pos_key, "reason": "entry_price_missing"})
+                continue
+    
+            highest = max(_safe_float(pos.get("highest_price"), entry), price)
+            lowest = min(_safe_float(pos.get("lowest_price"), entry), price)
+            pnl_pct = (price / entry - 1.0) * 100.0
+            max_profit_pct = max(_safe_float(pos.get("max_profit_pct"), 0.0), (highest / entry - 1.0) * 100.0)
+            max_loss_pct = min(_safe_float(pos.get("max_loss_pct"), 0.0), (lowest / entry - 1.0) * 100.0)
+            pos.update({
+                "highest_price": highest,
+                "lowest_price": lowest,
+                "max_profit_pct": max_profit_pct,
+                "max_loss_pct": max_loss_pct,
+                "last_price": price,
+                "last_seen_at": utc_now(),
+                "unrealized_pnl_pct": pnl_pct,
+                "unrealized_pnl_usd": (_safe_float(pos.get("shares")) * (price - entry)),
+                "holding_days": _holding_days(str(pos.get("opened_at") or "")),
+            })
+            if market_price and not _safe_float(pos.get("market_entry_price"), 0.0):
+                pos["market_proxy"] = MARKET_PROXY
+                pos["market_entry_price"] = market_price
+    
+            intraday_df = _load_intraday(ticker)
+            omen = evaluate_shadow_exit_omen(
+                pos=pos,
+                df=df,
+                price=price,
+                market_price=market_price,
+                intraday_df=intraday_df,
+                market_intraday_df=market_intraday_df,
+            )
+            pos["shadow_exit_omen"] = omen
+            pos["shadow_exit_omen_score"] = omen.get("score")
+            pos["shadow_exit_omen_reason"] = omen.get("reason")
+            evaluated += 1
+            if bool(omen.get("close")):
+                trade = _close_by_shadow_exit_omen(pos_key=pos_key, pos=pos, price=price, state=state, omen=omen)
+                closed += 1
+                close_counts[str(trade.get("exit_reason") or "shadow_exit_omen")] += 1
+                if len(closed_samples) < 20:
+                    closed_samples.append({
+                        "ticker": ticker,
+                        "reason": trade.get("exit_reason"),
+                        "pnl_pct": trade.get("pnl_pct"),
+                        "pnl_usd": trade.get("pnl_usd"),
+                        "max_profit_pct": trade.get("max_profit_pct"),
+                        "max_loss_pct": trade.get("max_loss_pct"),
+                        "omen_score": trade.get("shadow_exit_omen_score"),
+                    })
+    
+        state["last_shadow_exit_omen_tick"] = {
+            "time": utc_now(),
+            "elapsed_sec": round(time.time() - started, 3),
+            "evaluated": evaluated,
+            "closed": closed,
+            "close_counts": dict(close_counts),
+            "closed_samples": closed_samples,
+            "errors": errors[-20:],
+            "open_count_after": len(state.get("open_positions") or {}),
+            "version": EXIT_OMEN_VERSION,
+        }
+        state["summary"] = _summarize_state(state)
+        save_state(state)
+        return {"ok": True, **state["last_shadow_exit_omen_tick"], "state": state}
+    finally:
+        _release_lock()

@@ -15,7 +15,7 @@
   <div class="note">이 페이지는 <b>실제 주문이 아닌 가상 Shadow/Lab 분석 화면</b>입니다. 실제 Alpaca 주문·positions.json·live runner 보유 상태와 분리됩니다. 표가 많아 헷갈리지 않도록 아래처럼 구역을 나눴습니다.</div>
   <div class="legend">
     <div class="item"><b>1. Shadow Ledger</b><span>현재 Elite Shadow 가상 장부의 총손익·보유·청산.</span></div>
-    <div class="item"><b>2. Exit Policy Lab</b><span>같은 진입을 8개 청산 정책으로 복제한 독립 비교.</span></div>
+    <div class="item"><b>2. Exit Policy Lab</b><span>같은 진입을 9개 청산 정책으로 복제한 독립 비교.</span></div>
     <div class="item"><b>3. 몰빵 후보</b><span>현재 Shadow 보유 중 기대값·Q·베이스·현재상태 순위.</span></div>
     <div class="item"><b>4. Shadow 보유/청산</b><span>실제로 Shadow 장부에 열려 있거나 닫힌 가상 거래.</span></div>
     <div class="item"><b>5. 과거 룰북 성적</b><span>정예 후보 룰북의 과거 백테스트/성적표.</span></div>
@@ -33,7 +33,7 @@
     <div class="grid" id="lab-summary"><div class="loading">Exit Policy Lab 로딩...</div></div>
     <div class="table-title"><h3>2-A. 정책별 성과표</h3><p>청산 정책 자체를 비교하는 표. 최소 30개 청산 전까지 랭킹은 LOCK.</p></div>
     <div class="table" id="lab-policy-table"><div class="loading">정책별 성과 대기...</div></div>
-    <div class="table-title"><h3>2-B. 동일 진입 그룹표</h3><p>한 종목 진입 1개가 8개 정책으로 어떻게 나뉘어 추적되는지 보는 표.</p></div>
+    <div class="table-title"><h3>2-B. 동일 진입 그룹표</h3><p>한 종목 진입 1개가 9개 정책으로 어떻게 나뉘어 추적되는지 보는 표.</p></div>
     <div class="table" id="lab-entry-table"><div class="loading">동일 진입 그룹 대기...</div></div>
   </section>
 
@@ -113,7 +113,7 @@ function renderLab(){
   const policies=Object.values(by);
   document.getElementById('lab-policy-table').innerHTML=`<div class="policy-row head"><span>정책</span><span>계열</span><span>Open</span><span>Closed</span><span>잠금</span><span>승률</span><span>평균손익</span><span>MFE회수</span><span>반납폭</span><span>조기청산</span><span>설명</span></div>`+(policies.length?policies.map(p=>`<div class="policy-row"><span><b>${esc(p.name)}</b><br><span class="dim">${esc(p.policy_id)}</span></span><span>${esc(p.family)}</span><span>${p.open_count||0}</span><span>${p.closed_count||0}</span><span class="${p.ranking_locked?'lock':'pos'}">${p.ranking_locked?'LOCK':'OK'}</span><span>${fmt(p.win_rate,1)}%</span><span class="${cls(p.avg_pnl_pct)}">${pct(p.avg_pnl_pct)}</span><span>${p.avg_capture_pct_mfe_ge_2==null?'—':fmt(p.avg_capture_pct_mfe_ge_2,1)+'%'}</span><span>${p.avg_giveback_pct_mfe_ge_2==null?'—':fmt(p.avg_giveback_pct_mfe_ge_2,2)+'%p'}</span><span>${p.premature_30m_2p_rate==null?'추적중':fmt(p.premature_30m_2p_rate,1)+'%'}</span><span class="why">${esc(p.description||'')}</span></div>`).join(''):'<div class="loading">아직 진입이 없어 정책별 비교 대기 중</div>');
   const groups=(s.entry_groups||[]).slice(0,40);
-  document.getElementById('lab-entry-table').innerHTML=`<div class="entrylab-row head"><span>종목</span><span>Stage</span><span>진입가</span><span>열린정책</span><span>닫힌정책</span><span>최고손익</span><span>평균손익</span><span>정책 상태</span></div>`+(groups.length?groups.map(g=>{const states=g.policy_states||[];const maxp=Math.max(...states.map(x=>safeNum(x.max_profit_pct)),0);const avg=states.length?states.reduce((a,x)=>a+safeNum(x.pnl_pct),0)/states.length:0;const sample=states.slice(0,8).map(x=>`${x.policy_id}:${x.status}${x.pnl_pct!=null?' '+pct(x.pnl_pct):''}`).join(' · ');return `<div class="entrylab-row"><span class="tk">${esc(g.ticker)}</span><span>${stageLabel(g.stage)}</span><span>${fmt(g.entry_price)}</span><span>${g.open_policy_count||0}</span><span>${g.closed_policy_count||0}</span><span>${pct(maxp)}</span><span class="${cls(avg)}">${pct(avg)}</span><span class="why">${esc(sample)}</span></div>`;}).join(''):'<div class="loading">아직 Lab 진입 그룹 없음</div>');
+  document.getElementById('lab-entry-table').innerHTML=`<div class="entrylab-row head"><span>종목</span><span>Stage</span><span>진입가</span><span>열린정책</span><span>닫힌정책</span><span>최고손익</span><span>평균손익</span><span>정책 상태</span></div>`+(groups.length?groups.map(g=>{const states=g.policy_states||[];const maxp=Math.max(...states.map(x=>safeNum(x.max_profit_pct)),0);const avg=states.length?states.reduce((a,x)=>a+safeNum(x.pnl_pct),0)/states.length:0;const sample=states.slice(0,9).map(x=>`${x.policy_id}:${x.status}${x.pnl_pct!=null?' '+pct(x.pnl_pct):''}`).join(' · ');return `<div class="entrylab-row"><span class="tk">${esc(g.ticker)}</span><span>${stageLabel(g.stage)}</span><span>${fmt(g.entry_price)}</span><span>${g.open_policy_count||0}</span><span>${g.closed_policy_count||0}</span><span>${pct(maxp)}</span><span class="${cls(avg)}">${pct(avg)}</span><span class="why">${esc(sample)}</span></div>`;}).join(''):'<div class="loading">아직 Lab 진입 그룹 없음</div>');
 }
 function candidateMap(){const map={};for(const c of ((DATA&&DATA.candidates)||[])){if(c.candidate_id)map[c.candidate_id]=c;map[`${c.stage}:${c.ticker}:${c.rulebook_hash_short||''}`]=c;}return map;}
 function rankPosition(p,map){

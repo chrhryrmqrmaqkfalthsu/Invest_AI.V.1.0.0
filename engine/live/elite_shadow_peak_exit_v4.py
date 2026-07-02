@@ -20,6 +20,7 @@ import pandas as pd
 
 from engine.live.elite_shadow_exit_omen import _close_by_shadow_exit_omen, _load_intraday
 from engine.live.elite_shadow_peak_exit import _add, _intraday_peak_snapshot, _num
+from engine.live.regular_hours_gate import regular_hours_snapshot
 from engine.live.elite_shadow_trader import (
     _holding_days,
     _latest_price,
@@ -322,6 +323,27 @@ def run_shadow_peak_exit_tick(*, max_positions: int | None = None) -> dict[str, 
         _release_lock()
         return {"ok": False, "reason": "state_corrupt", "error": str(exc)}
     try:
+        decision_gate = regular_hours_snapshot()
+        if not bool(decision_gate.get("allow_decision")):
+            state["last_shadow_peak_exit_tick"] = {
+                "time": utc_now(),
+                "elapsed_sec": round(time.time() - started, 3),
+                "evaluated": 0,
+                "closed": 0,
+                "close_counts": {},
+                "closed_samples": [],
+                "errors": [],
+                "open_count_after": len(state.get("open_positions") or {}),
+                "version": PEAK_EXIT_VERSION,
+                "regular_hours_only_high_failure": True,
+                "same_day_exit_bias": True,
+                "decision_gate": decision_gate,
+                "skipped_reason": "outside_regular_hours_peak_exit_blocked",
+            }
+            state["summary"] = _summarize_state(state)
+            save_state(state)
+            return {"ok": True, **state["last_shadow_peak_exit_tick"], "state": state}
+
         open_items = list((state.get("open_positions") or {}).items())
         if max_positions is not None:
             open_items = open_items[: max(0, int(max_positions))]
@@ -405,6 +427,7 @@ def run_shadow_peak_exit_tick(*, max_positions: int | None = None) -> dict[str, 
             "version": PEAK_EXIT_VERSION,
             "regular_hours_only_high_failure": True,
             "same_day_exit_bias": True,
+            "decision_gate": decision_gate,
         }
         state["summary"] = _summarize_state(state)
         save_state(state)

@@ -34,6 +34,7 @@ from engine.live.elite_entry_concentration import score_entry_concentration
 from engine.live.elite_shadow_report import ROOT as ELITE_ROOT
 from engine.live.elite_shadow_report import build_elite_shadow_report
 from engine.live.news_alerts import lookup_live_sell_omen_score
+from engine.live.regular_hours_gate import regular_hours_snapshot
 from engine.market.context import get_market_context
 from engine.market.ticker_sentiment import load_csv as load_ticker_sentiment
 from engine.strategies.evaluator import evaluate_signal, get_dynamic_exit_params
@@ -577,6 +578,29 @@ def _sell_omen_hit(pos: dict[str, Any]) -> tuple[bool, float | None, str]:
     return score_f >= threshold, score_f, "live_sell_omen"
 
 
+def _mark_position_to_market(pos: dict[str, Any], price: float) -> None:
+    """정규장 밖에서 청산 decision 없이 가격/손익만 갱신한다."""
+    entry = _safe_float(pos.get("entry_price"), 0.0)
+    if entry <= 0.0 or price <= 0.0:
+        return
+    highest = max(_safe_float(pos.get("highest_price"), entry), price)
+    lowest = min(_safe_float(pos.get("lowest_price"), entry), price)
+    pnl_pct = (price / entry - 1.0) * 100.0
+    max_profit_pct = max(_safe_float(pos.get("max_profit_pct", 0.0)), (highest / entry - 1.0) * 100.0)
+    max_loss_pct = min(_safe_float(pos.get("max_loss_pct", 0.0)), (lowest / entry - 1.0) * 100.0)
+    pos.update({
+        "highest_price": highest,
+        "lowest_price": lowest,
+        "max_profit_pct": max_profit_pct,
+        "max_loss_pct": max_loss_pct,
+        "last_price": price,
+        "last_seen_at": utc_now(),
+        "unrealized_pnl_pct": pnl_pct,
+        "unrealized_pnl_usd": (_safe_float(pos.get("shares")) * (price - entry)),
+        "holding_days": _holding_days(str(pos.get("opened_at") or "")),
+    })
+
+
 def _maybe_close_position(pos_key: str, pos: dict[str, Any], price: float, state: dict[str, Any]) -> dict[str, Any] | None:
     entry = _safe_float(pos.get("entry_price"), 0.0)
     if entry <= 0.0 or price <= 0.0:
@@ -727,8 +751,10 @@ def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIO
             ctx = None
         report = build_elite_shadow_report(stage2_limit=60, stage3_limit=80, include_trades=False)
         candidates = (report.get("candidates") or [])[:max_candidates]
+        decision_gate = regular_hours_snapshot()
+        allow_decisions = bool(decision_gate.get("allow_decision"))
 
-        # 먼저 열린 포지션 청산 조건을 평가한다.
+        # 먼저 열린 포지션을 갱신한다. 정규장 밖에서는 청산 decision 없이 mark-to-market만 한다.
         for pos_key, pos in list((state.get("open_positions") or {}).items()):
             ticker = str(pos.get("ticker") or "").upper()
             df = _load_ohlcv(ticker)
@@ -736,9 +762,32 @@ def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIO
             if not price:
                 errors.append({"ticker": ticker, "candidate_id": pos_key, "reason": "open_price_missing"})
                 continue
-            trade = _maybe_close_position(pos_key, pos, price, state)
-            if trade is not None:
-                closed += 1
+            if allow_decisions:
+                trade = _maybe_close_position(pos_key, pos, price, state)
+                if trade is not None:
+                    closed += 1
+            else:
+                _mark_position_to_market(pos, price)
+
+        if not allow_decisions:
+            state["last_tick"] = {
+                "time": utc_now(),
+                "elapsed_sec": round(time.time() - started, 3),
+                "evaluated": 0,
+                "opened": 0,
+                "closed": closed,
+                "entry_quality_filtered": 0,
+                "entry_quality_reduced": 0,
+                "entry_quality_skip_counts": {},
+                "entry_quality_skip_samples": [],
+                "errors": errors[-20:],
+                "candidate_count": len(candidates),
+                "decision_gate": decision_gate,
+                "skipped_reason": "outside_regular_hours_entry_exit_blocked",
+            }
+            state["summary"] = _summarize_state(state)
+            save_state(state)
+            return {"ok": True, "opened": 0, "closed": closed, "evaluated": 0, "elapsed_sec": round(time.time() - started, 3), "decision_gate": decision_gate, "state": state}
 
         # 후보별 BUY 신호를 평가해 새 shadow position을 연다.
         # 몰빵 후보 순위는 진입 이후 현재 손익으로 바뀌면 안 되므로,
@@ -818,6 +867,7 @@ def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIO
             "entry_quality_skip_samples": quality_skip_samples,
             "errors": errors[-20:],
             "candidate_count": len(candidates),
+            "decision_gate": decision_gate,
         }
         state["summary"] = _summarize_state(state)
         save_state(state)

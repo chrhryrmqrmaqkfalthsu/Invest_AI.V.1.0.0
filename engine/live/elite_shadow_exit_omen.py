@@ -18,6 +18,7 @@ import pandas as pd
 import yfinance as yf
 
 from engine.live.elite_shadow_entry_quality import assess_shadow_entry_quality
+from engine.live.regular_hours_gate import regular_hours_snapshot
 from engine.live.elite_shadow_trader import (
     _event,
     _holding_days,
@@ -631,6 +632,25 @@ def run_shadow_exit_omen_tick(*, max_positions: int | None = None) -> dict[str, 
         _release_lock()
         return {"ok": False, "reason": "state_corrupt", "error": str(exc)}
     try:
+        decision_gate = regular_hours_snapshot()
+        if not bool(decision_gate.get("allow_decision")):
+            state["last_shadow_exit_omen_tick"] = {
+                "time": utc_now(),
+                "elapsed_sec": round(time.time() - started, 3),
+                "evaluated": 0,
+                "closed": 0,
+                "close_counts": {},
+                "closed_samples": [],
+                "errors": [],
+                "open_count_after": len(state.get("open_positions") or {}),
+                "version": EXIT_OMEN_VERSION,
+                "decision_gate": decision_gate,
+                "skipped_reason": "outside_regular_hours_exit_omen_blocked",
+            }
+            state["summary"] = _summarize_state(state)
+            save_state(state)
+            return {"ok": True, **state["last_shadow_exit_omen_tick"], "state": state}
+
         open_items = list((state.get("open_positions") or {}).items())
         if max_positions is not None:
             open_items = open_items[: max(0, int(max_positions))]
@@ -716,6 +736,7 @@ def run_shadow_exit_omen_tick(*, max_positions: int | None = None) -> dict[str, 
             "errors": errors[-20:],
             "open_count_after": len(state.get("open_positions") or {}),
             "version": EXIT_OMEN_VERSION,
+            "decision_gate": decision_gate,
         }
         state["summary"] = _summarize_state(state)
         save_state(state)

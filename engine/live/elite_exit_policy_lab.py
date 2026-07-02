@@ -24,6 +24,7 @@ import pandas as pd
 
 from engine.live.elite_shadow_exit_omen import _load_intraday, evaluate_shadow_exit_omen
 from engine.live.elite_shadow_peak_exit_v4 import evaluate_peak_exhaustion
+from engine.live.regular_hours_gate import regular_hours_snapshot
 from engine.live.elite_shadow_trader import (
     _holding_days,
     _latest_price,
@@ -815,6 +816,13 @@ def run_exit_policy_lab_tick(*, force: bool = False) -> dict[str, Any]:
     errors: list[dict[str, Any]] = []
     close_counts: Counter[str] = Counter()
     try:
+        decision_gate = regular_hours_snapshot()
+        if not bool(decision_gate.get("allow_decision")):
+            state["summary"] = _summarize_lab(state)
+            state["last_tick"] = {"time": utc_now(), "elapsed_sec": round(time.time() - started, 3), "evaluated": 0, "closed": 0, "close_counts": {}, "errors": [], "sync": {"skipped": True, "reason": "outside_regular_hours_lab_sync_blocked"}, "post_exit_tracking": {"skipped": True, "reason": "outside_regular_hours_lab_tracking_blocked"}, "open_policy_positions": len(state.get("open_positions") or {}), "closed_policy_positions": len(state.get("closed_positions") or []), "decision_gate": decision_gate, "skipped_reason": "outside_regular_hours_exit_policy_lab_blocked"}
+            save_lab_state(state)
+            return {"ok": True, **state["last_tick"], "state": state}
+
         shadow_state = load_shadow_state()
         sync = _sync_new_entries_from_shadow(state, shadow_state)
         post = _update_post_exit_tracking(state)
@@ -846,7 +854,7 @@ def run_exit_policy_lab_tick(*, force: bool = False) -> dict[str, Any]:
                     closed += 1
                     close_counts[str(trade.get("policy_id") or "unknown")] += 1
         state["summary"] = _summarize_lab(state)
-        state["last_tick"] = {"time": utc_now(), "elapsed_sec": round(time.time() - started, 3), "evaluated": evaluated, "closed": closed, "close_counts": dict(close_counts), "errors": errors[-20:], "sync": sync, "post_exit_tracking": post, "open_policy_positions": len(state.get("open_positions") or {}), "closed_policy_positions": len(state.get("closed_positions") or [])}
+        state["last_tick"] = {"time": utc_now(), "elapsed_sec": round(time.time() - started, 3), "evaluated": evaluated, "closed": closed, "close_counts": dict(close_counts), "errors": errors[-20:], "sync": sync, "post_exit_tracking": post, "open_policy_positions": len(state.get("open_positions") or {}), "closed_policy_positions": len(state.get("closed_positions") or []), "decision_gate": decision_gate}
         save_lab_state(state)
         return {"ok": True, **state["last_tick"], "state": state}
     finally:

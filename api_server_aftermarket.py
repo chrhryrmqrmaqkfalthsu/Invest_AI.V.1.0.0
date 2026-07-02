@@ -69,6 +69,7 @@ def _get_alpaca_broker():
         return _broker
     try:
         from engine.live.broker.alpaca import AlpacaBroker, DEFAULT_ALPACA_BASE_URL
+
         _broker = AlpacaBroker(base_url=DEFAULT_ALPACA_BASE_URL, paper=True)
         return _broker
     except Exception as exc:
@@ -365,6 +366,7 @@ def elite_shadow_report(refresh: bool = False):
         return payload
     try:
         from engine.live.elite_shadow_report import build_elite_shadow_report
+
         payload = build_elite_shadow_report(stage2_limit=60, stage3_limit=80, include_trades=True)
         payload["cache"] = {"hit": False, "age_seconds": 0.0}
         _elite_shadow_cache["payload"] = payload
@@ -379,17 +381,45 @@ def elite_shadow_report(refresh: bool = False):
 def elite_shadow_trader_state():
     try:
         from engine.live.elite_shadow_trader import shadow_dashboard_payload
+
         return _refresh_shadow_trader_prices(shadow_dashboard_payload(recent_trade_limit=300))
     except Exception as exc:
         log.exception("elite shadow trader state failed")
         raise HTTPException(status_code=500, detail=f"elite shadow trader state failed: {type(exc).__name__}: {exc}")
 
 
+@app.get("/api/live/elite_exit_policy_lab")
+def elite_exit_policy_lab_state():
+    try:
+        from engine.live.elite_exit_policy_lab import exit_policy_lab_payload
+
+        return exit_policy_lab_payload(recent_trade_limit=300)
+    except Exception as exc:
+        log.exception("elite exit policy lab state failed")
+        raise HTTPException(status_code=500, detail=f"elite exit policy lab state failed: {type(exc).__name__}: {exc}")
+
+
+@app.post("/api/live/elite_exit_policy_lab_tick")
+def elite_exit_policy_lab_tick():
+    try:
+        from engine.live.elite_exit_policy_lab import run_exit_policy_lab_tick
+
+        return run_exit_policy_lab_tick(force=True)
+    except Exception as exc:
+        log.exception("elite exit policy lab manual tick failed")
+        raise HTTPException(status_code=500, detail=f"elite exit policy lab tick failed: {type(exc).__name__}: {exc}")
+
+
 @app.post("/api/live/elite_shadow_tick")
 def elite_shadow_tick(max_candidates: int = 93):
     try:
+        from engine.live.elite_exit_policy_lab import run_exit_policy_lab_tick
         from engine.live.elite_shadow_trader import run_shadow_tick
-        return run_shadow_tick(max_candidates=int(max_candidates))
+
+        result = run_shadow_tick(max_candidates=int(max_candidates))
+        lab = run_exit_policy_lab_tick(force=True)
+        result["exit_policy_lab"] = {k: lab.get(k) for k in ["ok", "evaluated", "closed", "open_policy_positions", "closed_policy_positions", "sync", "close_counts"]}
+        return result
     except Exception as exc:
         log.exception("elite shadow manual tick failed")
         raise HTTPException(status_code=500, detail=f"elite shadow tick failed: {type(exc).__name__}: {exc}")
@@ -437,6 +467,7 @@ def elite_pullback_forecast_state():
 def elite_strategy_sim_tick(max_candidates: int = 93):
     try:
         from engine.live.elite_strategy_sim import run_strategy_sim_tick
+
         return run_strategy_sim_tick(max_candidates=int(max_candidates))
     except Exception as exc:
         log.exception("elite strategy sim manual tick failed")

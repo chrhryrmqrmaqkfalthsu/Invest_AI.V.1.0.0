@@ -5,11 +5,14 @@
 - broker 주문 없이 정예 후보 룰북을 주기적으로 평가한다.
 - BUY 신호가 뜨면 가상으로 매수했다고 기록한다.
 - 룰북 청산조건이 맞으면 가상으로 매도했다고 거래내역을 남긴다.
+- Exit Policy Lab이 동일 진입을 여러 청산 정책에 복제해 독립 비교한다.
 - Elite Shadow 전용 청산 오멘을 추가 overlay로 적용해 수익반납/추세붕괴 전조를 가상 청산한다.
 - Peak Exhaustion v3.1로 수익권 포지션의 고점권 소진 신호를 감지해 더 이른 익절을 시도한다.
 - output:
   - data/_system/elite_shadow_state.json
   - data/_system/elite_shadow_trades.jsonl
+  - data/_system/elite_exit_policy_lab_state.json
+  - data/_system/elite_exit_policy_lab_trades.jsonl
 
 주의:
 - 실제 Alpaca/KIS 주문은 절대 제출하지 않는다.
@@ -28,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from engine.live.elite_exit_policy_lab import run_exit_policy_lab_tick
 from engine.live.elite_shadow_exit_omen import run_shadow_exit_omen_tick
 from engine.live.elite_shadow_peak_exit_v4 import run_shadow_peak_exit_tick
 from engine.live.elite_shadow_trader import run_shadow_tick, shadow_dashboard_payload
@@ -57,7 +61,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, on_signal)
 
     log.warning(
-        "Elite shadow trader 시작: interval=%ss max_candidates=%s notional=$%s 실제주문=OFF shadow_exit_omen=ON peak_exit_v3_1=ON",
+        "Elite shadow trader 시작: interval=%ss max_candidates=%s notional=$%s 실제주문=OFF exit_policy_lab=ON shadow_exit_omen=ON peak_exit_v3_1=ON",
         args.interval,
         args.max_candidates,
         args.notional,
@@ -65,13 +69,16 @@ def main() -> int:
     while not stop["value"]:
         try:
             result = run_shadow_tick(max_candidates=int(args.max_candidates), notional=float(args.notional))
+            # Lab은 active Shadow 청산 overlay 전에 실행한다.
+            # 이렇게 해야 새 진입이 v2/v3.1에서 바로 닫히더라도 동일 진입을 정책별로 먼저 복제할 수 있다.
+            lab_result = run_exit_policy_lab_tick()
             omen_result = run_shadow_exit_omen_tick()
             peak_result = run_shadow_peak_exit_tick()
             payload = shadow_dashboard_payload(recent_trade_limit=20)
             summary = payload.get("summary") or {}
             closed_total_tick = int(result.get("closed") or 0) + int(omen_result.get("closed") or 0) + int(peak_result.get("closed") or 0)
             log.info(
-                "tick ok=%s evaluated=%s opened=%s closed=%s rulebook_closed=%s shadow_omen_closed=%s peak_closed=%s open=%s closed_total=%s pnl=$%.2f unreal=$%.2f elapsed=%s omen=%s peak=%s",
+                "tick ok=%s evaluated=%s opened=%s closed=%s rulebook_closed=%s shadow_omen_closed=%s peak_closed=%s lab_closed=%s lab_open=%s open=%s closed_total=%s pnl=$%.2f unreal=$%.2f elapsed=%s omen=%s peak=%s lab=%s",
                 result.get("ok"),
                 result.get("evaluated"),
                 result.get("opened"),
@@ -79,6 +86,8 @@ def main() -> int:
                 result.get("closed"),
                 omen_result.get("closed"),
                 peak_result.get("closed"),
+                lab_result.get("closed"),
+                lab_result.get("open_policy_positions"),
                 summary.get("open_count"),
                 summary.get("closed_count"),
                 float(summary.get("total_pnl_usd") or 0.0),
@@ -86,6 +95,7 @@ def main() -> int:
                 result.get("elapsed_sec"),
                 omen_result.get("close_counts"),
                 peak_result.get("close_counts"),
+                lab_result.get("close_counts"),
             )
         except Exception as exc:
             log.exception("elite shadow tick 실패: %s", exc)

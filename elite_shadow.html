@@ -6,16 +6,23 @@
 <title>KINGMAKER Elite Shadow</title>
 <style>
 :root{--bg:#0a0e17;--panel:#111722;--panel2:#0d121c;--line:#1c2535;--txt:#c9d4e5;--dim:#6f7d92;--up:#26d07c;--down:#ff4d6a;--accent:#3b82f6;--gold:#f5c451;--purple:#8b5cf6;}
-*{box-sizing:border-box;margin:0;padding:0} body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Malgun Gothic",sans-serif;font-size:13px} a{color:var(--accent);text-decoration:none}.topbar{display:flex;justify-content:space-between;align-items:center;padding:13px 22px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#0d121c,#111722)}.logo{font-size:18px;font-weight:900;letter-spacing:1.5px}.logo span{color:var(--gold)}.nav{display:flex;gap:8px;align-items:center}.btn{border:1px solid var(--line);background:var(--panel2);color:var(--txt);border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer}.btn:hover{border-color:var(--accent)}.page{padding:18px 22px}.note{background:#1b1820;border:1px solid #3b3144;color:#d5c4ef;border-radius:10px;padding:12px 14px;line-height:1.55;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}.card .lab{font-size:11px;color:var(--dim);letter-spacing:.7px;text-transform:uppercase}.card .val{font-size:24px;font-weight:900;margin-top:7px;font-variant-numeric:tabular-nums}.card .sub{font-size:11px;color:var(--dim);margin-top:4px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 16px}.chip{border:1px solid var(--line);background:var(--panel2);color:var(--dim);padding:7px 11px;border-radius:999px;cursor:pointer;font-weight:700}.chip.active{background:rgba(59,130,246,.18);border-color:var(--accent);color:#dbeafe}.section-title{display:flex;justify-content:space-between;align-items:center;margin:22px 0 10px}.section-title h2{font-size:15px;letter-spacing:.6px}.section-title span{color:var(--dim);font-size:12px}.table{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:16px}.row{display:grid;grid-template-columns:58px 82px 74px 92px 82px 82px 82px 82px 92px 82px 92px 1fr;gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.row.head{color:var(--dim);font-size:11px;text-transform:uppercase;font-weight:800;background:#0d121c}.row:not(.head){cursor:pointer}.row:not(.head):hover{background:#131b28}.rank-row{display:grid;grid-template-columns:46px 82px 78px 90px 92px 96px 96px 96px 96px 104px 1fr;gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.rank-row.head{color:var(--dim);font-size:11px;text-transform:uppercase;font-weight:800;background:#0d121c}.rank-row:not(.head):hover{background:#131b28}.rank-row.pick1{background:linear-gradient(90deg,rgba(245,196,81,.15),rgba(17,23,34,.35))}.rank-row.pick2{background:linear-gradient(90deg,rgba(59,130,246,.12),rgba(17,23,34,.25))}.scorepill{display:inline-flex;justify-content:center;align-items:center;min-width:56px;padding:5px 8px;border-radius:999px;font-size:13px;font-weight:900;background:rgba(59,130,246,.16);color:#dbeafe;border:1px solid rgba(59,130,246,.35)}.scorepill.good{background:rgba(38,208,124,.15);color:var(--up);border-color:rgba(38,208,124,.35)}.scorepill.warn{background:rgba(245,196,81,.14);color:var(--gold);border-color:rgba(245,196,81,.35)}.scorepill.bad{background:rgba(255,77,106,.12);color:var(--down);border-color:rgba(255,77,106,.35)}.action{font-weight:900}.action.top{color:var(--gold)}.action.ok{color:var(--up)}.action.watch2{color:#93c5fd}.action.no{color:var(--down)}.why{font-size:11px;color:var(--dim);line-height:1.4}.live-row{display:grid;grid-template-columns:82px 72px 88px 86px 82px 82px 82px 78px 78px 78px 78px 1fr;gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.trade-row{display:grid;grid-template-columns:82px 72px 88px 86px 82px 82px 82px 82px 78px 1fr;gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.live-row.head,.trade-row.head{color:var(--dim);font-size:11px;text-transform:uppercase;font-weight:800;background:#0d121c}.tk{font-size:15px;font-weight:900;color:#fff}.badge{display:inline-flex;align-items:center;justify-content:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800}.A_core{background:rgba(38,208,124,.16);color:var(--up)}.B_stable{background:rgba(245,196,81,.16);color:var(--gold)}.C_momentum{background:rgba(139,92,246,.16);color:var(--purple)}.watch{background:rgba(95,110,133,.16);color:var(--dim)}.pos{color:var(--up);font-weight:800}.neg{color:var(--down);font-weight:800}.dim{color:var(--dim)}.detail{display:none;background:#0a0f18;border-top:1px solid var(--line);padding:14px 16px}.detail.open{display:block}.detail-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:14px}.subpanel{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto}.subpanel h3{font-size:12px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:9px}.kv{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}.kv:last-child{border-bottom:0}.kv span:first-child{color:var(--dim)}.kv span:last-child{text-align:right;font-weight:800}.trades{max-height:420px;overflow:auto}.trow{display:grid;grid-template-columns:94px 94px 74px 74px 74px 70px 76px 1fr;gap:8px;padding:8px 9px;border-bottom:1px solid var(--line);font-size:12px;align-items:center}.trow.head{position:sticky;top:0;background:#101722;color:var(--dim);font-weight:800;text-transform:uppercase}.loading{padding:30px;text-align:center;color:var(--dim)}@media(max-width:1200px){.grid{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:70px 80px 70px 90px 1fr}.row span:nth-child(n+6):not(:last-child){display:none}.rank-row{grid-template-columns:42px 72px 72px 82px 82px 1fr}.rank-row span:nth-child(n+7):not(:last-child){display:none}.live-row,.trade-row{grid-template-columns:78px 78px 78px 86px 86px 1fr}.live-row span:nth-child(n+7):not(:last-child),.trade-row span:nth-child(n+7):not(:last-child){display:none}.detail-grid{grid-template-columns:1fr}.trow{grid-template-columns:80px 80px 64px 64px 64px 1fr}.trow span:nth-child(6),.trow span:nth-child(7){display:none}}
+*{box-sizing:border-box;margin:0;padding:0} body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Malgun Gothic",sans-serif;font-size:13px} a{color:var(--accent);text-decoration:none}.topbar{display:flex;justify-content:space-between;align-items:center;padding:13px 22px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#0d121c,#111722)}.logo{font-size:18px;font-weight:900;letter-spacing:1.5px}.logo span{color:var(--gold)}.nav{display:flex;gap:8px;align-items:center}.btn{border:1px solid var(--line);background:var(--panel2);color:var(--txt);border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer}.btn:hover{border-color:var(--accent)}.page{padding:18px 22px}.note{background:#1b1820;border:1px solid #3b3144;color:#d5c4ef;border-radius:10px;padding:12px 14px;line-height:1.55;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}.card .lab{font-size:11px;color:var(--dim);letter-spacing:.7px;text-transform:uppercase}.card .val{font-size:24px;font-weight:900;margin-top:7px;font-variant-numeric:tabular-nums}.card .sub{font-size:11px;color:var(--dim);margin-top:4px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 16px}.chip{border:1px solid var(--line);background:var(--panel2);color:var(--dim);padding:7px 11px;border-radius:999px;cursor:pointer;font-weight:700}.chip.active{background:rgba(59,130,246,.18);border-color:var(--accent);color:#dbeafe}.section-title{display:flex;justify-content:space-between;align-items:center;margin:22px 0 10px}.section-title h2{font-size:15px;letter-spacing:.6px}.section-title span{color:var(--dim);font-size:12px}.table{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:16px}.row{display:grid;grid-template-columns:58px 82px 74px 92px 82px 82px 82px 82px 92px 82px 92px 1fr;gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.row.head{color:var(--dim);font-size:11px;text-transform:uppercase;font-weight:800;background:#0d121c}.row:not(.head){cursor:pointer}.row:not(.head):hover{background:#131b28}.rank-row{display:grid;grid-template-columns:46px 82px 78px 90px 92px 96px 96px 96px 96px 104px 1fr;gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.rank-row.head{color:var(--dim);font-size:11px;text-transform:uppercase;font-weight:800;background:#0d121c}.rank-row:not(.head):hover{background:#131b28}.rank-row.pick1{background:linear-gradient(90deg,rgba(245,196,81,.15),rgba(17,23,34,.35))}.rank-row.pick2{background:linear-gradient(90deg,rgba(59,130,246,.12),rgba(17,23,34,.25))}.policy-row{display:grid;grid-template-columns:160px 104px 72px 72px 88px 82px 98px 98px 112px 112px 1fr;gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.policy-row.head{color:var(--dim);font-size:11px;text-transform:uppercase;font-weight:800;background:#0d121c}.entrylab-row{display:grid;grid-template-columns:92px 74px 92px 90px 90px 90px 90px 1fr;gap:8px;align-items:center;padding:10px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.entrylab-row.head{color:var(--dim);font-size:11px;text-transform:uppercase;font-weight:800;background:#0d121c}.lab-warning{background:rgba(245,196,81,.08);border:1px solid rgba(245,196,81,.28);border-radius:10px;color:#f8e0a0;padding:10px 12px;line-height:1.45;margin-bottom:10px}.lock{color:var(--gold);font-weight:900}.scorepill{display:inline-flex;justify-content:center;align-items:center;min-width:56px;padding:5px 8px;border-radius:999px;font-size:13px;font-weight:900;background:rgba(59,130,246,.16);color:#dbeafe;border:1px solid rgba(59,130,246,.35)}.scorepill.good{background:rgba(38,208,124,.15);color:var(--up);border-color:rgba(38,208,124,.35)}.scorepill.warn{background:rgba(245,196,81,.14);color:var(--gold);border-color:rgba(245,196,81,.35)}.scorepill.bad{background:rgba(255,77,106,.12);color:var(--down);border-color:rgba(255,77,106,.35)}.action{font-weight:900}.action.top{color:var(--gold)}.action.ok{color:var(--up)}.action.watch2{color:#93c5fd}.action.no{color:var(--down)}.why{font-size:11px;color:var(--dim);line-height:1.4}.live-row{display:grid;grid-template-columns:82px 72px 88px 86px 82px 82px 82px 78px 78px 78px 78px 1fr;gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.trade-row{display:grid;grid-template-columns:82px 72px 88px 86px 82px 82px 82px 82px 78px 1fr;gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.live-row.head,.trade-row.head{color:var(--dim);font-size:11px;text-transform:uppercase;font-weight:800;background:#0d121c}.tk{font-size:15px;font-weight:900;color:#fff}.badge{display:inline-flex;align-items:center;justify-content:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800}.A_core{background:rgba(38,208,124,.16);color:var(--up)}.B_stable{background:rgba(245,196,81,.16);color:var(--gold)}.C_momentum{background:rgba(139,92,246,.16);color:var(--purple)}.watch{background:rgba(95,110,133,.16);color:var(--dim)}.pos{color:var(--up);font-weight:800}.neg{color:var(--down);font-weight:800}.dim{color:var(--dim)}.detail{display:none;background:#0a0f18;border-top:1px solid var(--line);padding:14px 16px}.detail.open{display:block}.detail-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:14px}.subpanel{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto}.subpanel h3{font-size:12px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:9px}.kv{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}.kv:last-child{border-bottom:0}.kv span:first-child{color:var(--dim)}.kv span:last-child{text-align:right;font-weight:800}.trades{max-height:420px;overflow:auto}.trow{display:grid;grid-template-columns:94px 94px 74px 74px 74px 70px 76px 1fr;gap:8px;padding:8px 9px;border-bottom:1px solid var(--line);font-size:12px;align-items:center}.trow.head{position:sticky;top:0;background:#101722;color:var(--dim);font-weight:800;text-transform:uppercase}.loading{padding:30px;text-align:center;color:var(--dim)}@media(max-width:1200px){.grid{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:70px 80px 70px 90px 1fr}.row span:nth-child(n+6):not(:last-child){display:none}.rank-row{grid-template-columns:42px 72px 72px 82px 82px 1fr}.rank-row span:nth-child(n+7):not(:last-child){display:none}.policy-row{grid-template-columns:140px 88px 70px 70px 82px 1fr}.policy-row span:nth-child(n+7):not(:last-child){display:none}.entrylab-row{grid-template-columns:82px 72px 82px 80px 1fr}.entrylab-row span:nth-child(n+6):not(:last-child){display:none}.live-row,.trade-row{grid-template-columns:78px 78px 78px 86px 86px 1fr}.live-row span:nth-child(n+7):not(:last-child),.trade-row span:nth-child(n+7):not(:last-child){display:none}.detail-grid{grid-template-columns:1fr}.trow{grid-template-columns:80px 80px 64px 64px 64px 1fr}.trow span:nth-child(6),.trow span:nth-child(7){display:none}}
 </style>
 </head>
 <body>
 <div class="topbar"><div class="logo">KINGMAKER <span>ELITE SHADOW</span></div><div class="nav"><a class="btn" href="/dashboard">기존 대시보드</a><a class="btn" href="/elite-strategy-sim" target="_blank">전략 시뮬</a><button class="btn" onclick="manualTick()">가상 Tick</button><button class="btn" onclick="load(true)">새로고침</button></div></div>
 <div class="page">
-  <div class="note">이 페이지는 broker 주문을 내지 않는 시스템 전용 shadow 분석입니다. 정예 후보 룰북에서 실제 BUY 신호가 뜨면 샀다고 가정하고, 룰북 청산조건이 맞으면 팔았다고 가정해 별도 ledger에 기록합니다. 실제 Alpaca 주문·positions.json·live runner 보유 상태와 완전히 분리됩니다. <b>몰빵 후보 랭킹</b>은 현재 Shadow 보유 종목을 진입 당시 기대값·적중률·Q·진입 전 베이스·현재 분봉 상태까지 합산해 정렬합니다.</div>
+  <div class="note">이 페이지는 broker 주문을 내지 않는 시스템 전용 shadow 분석입니다. 정예 후보 룰북에서 실제 BUY 신호가 뜨면 샀다고 가정하고, 룰북 청산조건이 맞으면 팔았다고 가정해 별도 ledger에 기록합니다. 실제 Alpaca 주문·positions.json·live runner 보유 상태와 완전히 분리됩니다. <b>Exit Policy Lab</b>은 같은 Shadow 진입을 여러 청산 정책에 똑같이 복제해 독립 비교합니다. 진입이 같지 않으면 비교하지 않습니다.</div>
 
   <div class="section-title"><h2>🧪 실시간 가상매매 Ledger</h2><span id="live-meta">로딩...</span></div>
   <div class="grid" id="live-summary"><div class="loading">로딩...</div></div>
+
+  <div class="section-title"><h2>🧬 Exit Policy Lab — 청산 독립 비교</h2><span id="lab-meta">동일 진입 복제 대기...</span></div>
+  <div class="lab-warning">비교 원칙: 같은 <b>source_position_id / opened_at / entry_price / shares / notional</b>을 가진 진입만 정책별로 복제합니다. Lab 도입 전에 이미 열려 있던 보유는 경로 데이터가 없으므로 clean 비교에서 제외됩니다. 정책별 최소 30개 청산 전까지 우열 랭킹은 잠금 처리합니다.</div>
+  <div class="grid" id="lab-summary"><div class="loading">Exit Policy Lab 로딩...</div></div>
+  <div class="table" id="lab-policy-table"><div class="loading">정책별 성과 대기...</div></div>
+  <div class="table" id="lab-entry-table"><div class="loading">동일 진입 그룹 대기...</div></div>
+
   <div class="section-title"><h2>🎯 몰빵 후보 랭킹</h2><span id="rank-meta">진입 품질 + 현재 상태 기준</span></div>
   <div class="table" id="rank-table"><div class="loading">랭킹 계산 중...</div></div>
   <div class="table" id="open-table"><div class="loading">가상 보유 조회 중...</div></div>
@@ -27,7 +34,7 @@
   <div class="table" id="table"><div class="loading">정예 후보 계산 중...</div></div>
 </div>
 <script>
-let DATA=null, LEDGER=null, FILTER='all';
+let DATA=null, LEDGER=null, LAB=null, FILTER='all';
 const fmt=(n,d=2)=>n==null||!isFinite(Number(n))?'—':Number(n).toFixed(d);
 const pct=n=>n==null||!isFinite(Number(n))?'—':(Number(n)>=0?'+':'')+Number(n).toFixed(2)+'%';
 const usd=n=>n==null||!isFinite(Number(n))?'—':(Number(n)>=0?'+':'-')+'$'+Math.abs(Number(n)).toLocaleString(undefined,{maximumFractionDigits:2});
@@ -52,11 +59,12 @@ async function manualTick(){
   document.getElementById('live-meta').textContent='가상 tick 실행 중...';
   const r=await fetch('/api/live/elite_shadow_tick?max_candidates=93',{method:'POST'});
   await r.json().catch(()=>null);
-  await loadLedger();
+  await Promise.all([loadLedger(), loadLab()]);
 }
-async function load(refresh){document.getElementById('table').innerHTML='<div class="loading">정예 후보 계산 중...</div>'; await Promise.all([loadReport(refresh), loadLedger()]);}
+async function load(refresh){document.getElementById('table').innerHTML='<div class="loading">정예 후보 계산 중...</div>'; await Promise.all([loadReport(refresh), loadLedger(), loadLab()]);}
 async function loadReport(refresh){const r=await fetch('/api/live/elite_shadow'+(refresh?'?refresh=true':'')); DATA=await r.json(); renderReport(); renderConcentrationRank();}
 async function loadLedger(){const r=await fetch('/api/live/elite_shadow_trader'); LEDGER=await r.json(); renderLedger(); renderConcentrationRank();}
+async function loadLab(){const r=await fetch('/api/live/elite_exit_policy_lab'); LAB=await r.json(); renderLab();}
 function renderLedger(){
   const s=(LEDGER&&LEDGER.summary)||{};
   const lt=(LEDGER&&LEDGER.last_tick)||{};
@@ -74,6 +82,30 @@ function renderLedger(){
   const trades=(LEDGER&&LEDGER.recent_trades)||[];
   document.getElementById('closed-table').innerHTML=`<div class="trade-row head"><span>종목</span><span>Stage</span><span>Bucket</span><span>투자금</span><span>진입</span><span>청산</span><span>손익률</span><span>손익$</span><span>보유</span><span>사유</span></div>`+
     (trades.length?trades.map(t=>`<div class="trade-row"><span class="tk">${esc(t.ticker)}</span><span>${stageLabel(t.stage)}</span><span><b class="badge ${esc(t.bucket)}">${bucketLabel(t.bucket)}</b></span><span>${usd(t.notional)}</span><span>${fmt(t.entry_price)}</span><span>${fmt(t.exit_price)}</span><span class="${cls(t.pnl_pct)}">${pct(t.pnl_pct)}</span><span class="${cls(t.pnl_usd)}">${usd(t.pnl_usd)}</span><span>${t.holding_days||0}일</span><span>${esc(t.exit_reason)}</span></div>`).join(''):'<div class="loading">가상 청산 거래 없음</div>');
+}
+function renderLab(){
+  const el=document.getElementById('lab-summary');
+  if(!LAB){el.innerHTML='<div class="loading">Exit Policy Lab 로딩...</div>';return;}
+  const s=LAB.summary||{}, lt=LAB.last_tick||{}, by=s.by_policy||{};
+  document.getElementById('lab-meta').textContent=lt.time?`마지막 Lab tick ${lt.time} · 정책포지션 ${s.open_policy_positions||0}개 · 청산 ${s.closed_policy_positions||0}개`:'Lab 초기화 대기';
+  el.innerHTML=`
+    <div class="card"><div class="lab">동일 진입 그룹</div><div class="val">${s.source_entry_count||0}</div><div class="sub">기존 보유 제외 ${s.ignored_existing_count||0}</div></div>
+    <div class="card"><div class="lab">열린 정책 포지션</div><div class="val">${s.open_policy_positions||0}</div><div class="sub">정책 ${s.policy_count||0}개 병렬</div></div>
+    <div class="card"><div class="lab">닫힌 정책 포지션</div><div class="val">${s.closed_policy_positions||0}</div><div class="sub">정책별 최소 ${s.min_closed_for_ranking||30}개 전 랭킹 잠금</div></div>
+    <div class="card"><div class="lab">랭킹 상태</div><div class="val ${s.ranking_locked?'lock':'pos'}">${s.ranking_locked?'LOCK':'OPEN'}</div><div class="sub">표본 부족 시 우열 미판정</div></div>
+    <div class="card"><div class="lab">공정성</div><div class="val">SAME</div><div class="sub">진입가·수량·시각 동일 복제</div></div>`;
+  const policies=Object.values(by);
+  document.getElementById('lab-policy-table').innerHTML=`<div class="policy-row head"><span>정책</span><span>계열</span><span>Open</span><span>Closed</span><span>잠금</span><span>승률</span><span>평균손익</span><span>MFE회수</span><span>반납폭</span><span>조기청산</span><span>설명</span></div>`+
+    (policies.length?policies.map(p=>`<div class="policy-row"><span><b>${esc(p.name)}</b><br><span class="dim">${esc(p.policy_id)}</span></span><span>${esc(p.family)}</span><span>${p.open_count||0}</span><span>${p.closed_count||0}</span><span class="${p.ranking_locked?'lock':'pos'}">${p.ranking_locked?'LOCK':'OK'}</span><span>${fmt(p.win_rate,1)}%</span><span class="${cls(p.avg_pnl_pct)}">${pct(p.avg_pnl_pct)}</span><span>${p.avg_capture_pct_mfe_ge_2==null?'—':fmt(p.avg_capture_pct_mfe_ge_2,1)+'%'}</span><span>${p.avg_giveback_pct_mfe_ge_2==null?'—':fmt(p.avg_giveback_pct_mfe_ge_2,2)+'%p'}</span><span>${p.premature_30m_2p_rate==null?'추적중':fmt(p.premature_30m_2p_rate,1)+'%'}</span><span class="why">${esc(p.description||'')}</span></div>`).join(''):'<div class="loading">아직 clean 진입이 없어 정책별 비교 대기 중</div>');
+  const groups=(s.entry_groups||[]).slice(0,30);
+  document.getElementById('lab-entry-table').innerHTML=`<div class="entrylab-row head"><span>종목</span><span>Stage</span><span>진입가</span><span>열린정책</span><span>닫힌정책</span><span>최고손익</span><span>평균손익</span><span>정책 상태</span></div>`+
+    (groups.length?groups.map(g=>{
+      const states=g.policy_states||[];
+      const maxp=Math.max(...states.map(x=>safeNum(x.max_profit_pct)),0);
+      const avg=states.length?states.reduce((a,x)=>a+safeNum(x.pnl_pct),0)/states.length:0;
+      const sample=states.slice(0,8).map(x=>`${x.policy_id}:${x.status}${x.pnl_pct!=null?' '+pct(x.pnl_pct):''}`).join(' · ');
+      return `<div class="entrylab-row"><span class="tk">${esc(g.ticker)}</span><span>${stageLabel(g.stage)}</span><span>${fmt(g.entry_price)}</span><span>${g.open_policy_count||0}</span><span>${g.closed_policy_count||0}</span><span>${pct(maxp)}</span><span class="${cls(avg)}">${pct(avg)}</span><span class="why">${esc(sample)}</span></div>`;
+    }).join(''):'<div class="loading">아직 Lab clean 진입 그룹 없음. 다음 신규 Shadow 진입부터 표시됩니다.</div>');
 }
 function candidateMap(){
   const map={};
@@ -99,9 +131,7 @@ function rankPosition(p,map){
   expected += clamp(trades/25*3,0,3);
   expected += clamp(avgMfe/12*4,0,4);
   expected -= clamp((worstDD-12)*0.65,0,5);
-  if(oosExp>=8 && oosWin>=75) why.push(`기대 ${fmt(oosExp,1)} / 적중 ${fmt(oosWin,0)}%`);
-  else why.push(`기대 ${fmt(oosExp,1)} / 적중 ${fmt(oosWin,0)}%`);
-
+  why.push(`기대 ${fmt(oosExp,1)} / 적중 ${fmt(oosWin,0)}%`);
   reliability += clamp(q*0.22,0,22);
   if(String(p.entry_quality_label||'').includes('STRONG')) reliability+=5;
   else if(String(p.entry_quality_label||'').includes('HEALTHY')) reliability+=1;
@@ -110,7 +140,6 @@ function rankPosition(p,map){
   reliability += ({A_core:4,B_stable:3,C_momentum:2,watch:0}[p.bucket]||0);
   if(safeNum(p.entry_quality_size_factor)<0.75) reliability-=3;
   if(q>=90) why.push(`Q${fmt(q,0)} 강함`); else if(q<60) why.push(`Q${fmt(q,0)} 약함`);
-
   if(ret5>=-2 && ret5<=7) base+=5; else if(ret5>12) {base-=6; why.push('5일 과열');} else if(ret5<-5) base-=4;
   if(ret3>=-1 && ret3<=5) base+=3;
   if(distMa5>=0 && distMa5<=5) base+=3; else if(distMa5<-2) base-=5; else if(distMa5>8) base-=3;
@@ -121,7 +150,6 @@ function rankPosition(p,map){
   if(em.event_heavy) base-=3;
   if(em.high_vol||em.low_price) base-=3;
   if(base>=14) why.push('베이스 양호'); else if(base<8) why.push('베이스 불안');
-
   if(pnl>0) current+=clamp(pnl*1.8,0,5); else if(pnl<-0.5) current-=clamp(Math.abs(pnl)*4,0,8);
   if(maxProfit>=2 && giveback>=0.4) {current-=clamp(giveback*12,4,10); why.push(`반납 ${fmt(giveback*100,0)}%`);}
   current-=clamp(omenScore*0.18,0,12);
@@ -132,7 +160,6 @@ function rankPosition(p,map){
   else if(safeNum(intra.relative_ret_30m_pct)<-0.8) current-=3;
   if(String(p.shadow_exit_omen_reason||'')!=='hold') current-=10;
   if(current>=14) why.push('현재구조 양호'); else if(current<8) why.push('현재구조 약함');
-
   expected=clamp(expected,0,30); reliability=clamp(reliability,0,30); base=clamp(base,0,20); current=clamp(current,0,20);
   const score=clamp(expected+reliability+base+current,0,100);
   let action='제외/분산만', ac='no';
@@ -184,7 +211,7 @@ function detailHtml(c){
 }
 function toggleDetail(id){const el=document.getElementById('d-'+id); if(el) el.classList.toggle('open');}
 load(false).catch(e=>{document.getElementById('table').innerHTML='<div class="loading">로드 실패: '+esc(e)+'</div>'});
-setInterval(loadLedger,30000);
+setInterval(()=>{loadLedger();loadLab();},30000);
 </script>
 </body>
 </html>

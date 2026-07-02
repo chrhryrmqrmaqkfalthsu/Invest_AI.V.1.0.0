@@ -50,6 +50,13 @@ def _positive_or_none(value: Any) -> float | None:
     return v if v > 0.0 else None
 
 
+def _pct_or_none(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    v = _num(value, 0.0)
+    return v if v != 0.0 else None
+
+
 def _ticker(value: Any) -> str:
     return str(value or "").upper().strip()
 
@@ -107,11 +114,60 @@ def _held_position(ticker: str, positions: dict[str, Any]) -> dict[str, Any] | N
     return row
 
 
+def _resolve_exit_prices(
+    *,
+    entry_price: float,
+    take_profit_price: float | None,
+    stop_loss_price: float | None,
+    take_profit_pct: float | None,
+    stop_loss_pct: float | None,
+) -> tuple[float | None, float | None, float | None, float | None, str, str]:
+    tp = _positive_or_none(take_profit_price)
+    sl = _positive_or_none(stop_loss_price)
+    tp_pct_raw = _pct_or_none(take_profit_pct)
+    sl_pct_raw = _pct_or_none(stop_loss_pct)
+    tp_basis = "price" if tp is not None else ""
+    sl_basis = "price" if sl is not None else ""
+
+    if tp is None and tp_pct_raw is not None:
+        if tp_pct_raw <= 0:
+            raise ValueError("take_profit_pct must be positive")
+        if entry_price <= 0:
+            raise ValueError("entry_price unavailable for take_profit_pct")
+        tp = entry_price * (1.0 + tp_pct_raw / 100.0)
+        tp_basis = "pct"
+
+    if sl is None and sl_pct_raw is not None:
+        sl_pct_abs = abs(sl_pct_raw)
+        if sl_pct_abs <= 0:
+            raise ValueError("stop_loss_pct must be non-zero")
+        if entry_price <= 0:
+            raise ValueError("entry_price unavailable for stop_loss_pct")
+        sl = entry_price * (1.0 - sl_pct_abs / 100.0)
+        sl_basis = "pct"
+
+    if tp is None and sl is None:
+        raise ValueError("take_profit_price/take_profit_pct or stop_loss_price/stop_loss_pct required")
+    if entry_price > 0:
+        if tp is not None and tp <= entry_price:
+            raise ValueError("take_profit must be above entry_price")
+        if sl is not None and sl >= entry_price:
+            raise ValueError("stop_loss must be below entry_price")
+    if tp is not None and sl is not None and tp <= sl:
+        raise ValueError("take_profit must be greater than stop_loss")
+
+    tp_pct = ((tp / entry_price - 1.0) * 100.0) if tp is not None and entry_price > 0 else None
+    sl_pct = ((1.0 - sl / entry_price) * 100.0) if sl is not None and entry_price > 0 else None
+    return tp, sl, tp_pct, sl_pct, tp_basis or "price", sl_basis or "price"
+
+
 def upsert_chart_exit_plan(
     *,
     ticker: str,
     take_profit_price: float | None = None,
     stop_loss_price: float | None = None,
+    take_profit_pct: float | None = None,
+    stop_loss_pct: float | None = None,
     enabled: bool = True,
     source: str = "dashboard_chart",
     plan_path: Path | str | None = None,
@@ -125,12 +181,14 @@ def upsert_chart_exit_plan(
     if position is None:
         raise ValueError("not held")
 
-    tp = _positive_or_none(take_profit_price)
-    sl = _positive_or_none(stop_loss_price)
-    if tp is None and sl is None:
-        raise ValueError("take_profit_price or stop_loss_price required")
-    if tp is not None and sl is not None and tp <= sl:
-        raise ValueError("take_profit_price must be greater than stop_loss_price")
+    entry_price = _num(position.get("entry_price"), 0.0)
+    tp, sl, tp_pct, sl_pct, tp_basis, sl_basis = _resolve_exit_prices(
+        entry_price=entry_price,
+        take_profit_price=take_profit_price,
+        stop_loss_price=stop_loss_price,
+        take_profit_pct=take_profit_pct,
+        stop_loss_pct=stop_loss_pct,
+    )
 
     now = utc_now()
     state = load_chart_exit_state(plan_path)
@@ -141,10 +199,14 @@ def upsert_chart_exit_plan(
         "ticker": ticker_u,
         "enabled": bool(enabled),
         "status": "active" if enabled else "disabled",
-        "take_profit_price": tp,
-        "stop_loss_price": sl,
+        "take_profit_price": round(tp, 6) if tp is not None else None,
+        "stop_loss_price": round(sl, 6) if sl is not None else None,
+        "take_profit_pct": round(tp_pct, 6) if tp_pct is not None else None,
+        "stop_loss_pct": round(sl_pct, 6) if sl_pct is not None else None,
+        "take_profit_basis": tp_basis if tp is not None else "",
+        "stop_loss_basis": sl_basis if sl is not None else "",
         "source": source or "dashboard_chart",
-        "entry_price": _num(position.get("entry_price"), 0.0),
+        "entry_price": entry_price,
         "shares_at_plan": _num(position.get("shares"), 0.0),
         "position_entry_date": str(position.get("entry_date") or ""),
         "created_at": old.get("created_at") or now,
@@ -276,6 +338,10 @@ def evaluate_chart_exit_plans(
                     "trigger_price": price_f,
                     "take_profit_price": plan.get("take_profit_price"),
                     "stop_loss_price": plan.get("stop_loss_price"),
+                    "take_profit_pct": plan.get("take_profit_pct"),
+                    "stop_loss_pct": plan.get("stop_loss_pct"),
+                    "take_profit_basis": plan.get("take_profit_basis"),
+                    "stop_loss_basis": plan.get("stop_loss_basis"),
                 },
             )
         except TypeError:

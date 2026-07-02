@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
-from engine.live.chart_exit_plan import evaluate_chart_exit_plans, load_chart_exit_state, upsert_chart_exit_plan
+import pytest
+
+from engine.live.chart_exit_plan import evaluate_chart_exit_plans, upsert_chart_exit_plan
 from engine.live.manual_sell_intent import load_manual_sell_state
 
 
@@ -43,6 +45,39 @@ def test_upsert_chart_exit_plan_requires_held_position(tmp_path):
     assert row["status"] == "active"
     assert row["take_profit_price"] == 110
     assert row["stop_loss_price"] == 95
+    assert row["take_profit_pct"] == 10
+    assert row["stop_loss_pct"] == 5
+    assert row["take_profit_basis"] == "price"
+    assert row["stop_loss_basis"] == "price"
+
+
+def test_upsert_chart_exit_plan_accepts_percent_inputs(tmp_path):
+    pos = tmp_path / "positions.json"
+    plan = tmp_path / "plans.json"
+    _positions(pos)
+    row = upsert_chart_exit_plan(
+        ticker="ABC",
+        take_profit_pct=12.5,
+        stop_loss_pct=4,
+        positions_path=pos,
+        plan_path=plan,
+    )
+    assert row["take_profit_price"] == 112.5
+    assert row["stop_loss_price"] == 96
+    assert row["take_profit_pct"] == 12.5
+    assert row["stop_loss_pct"] == 4
+    assert row["take_profit_basis"] == "pct"
+    assert row["stop_loss_basis"] == "pct"
+
+
+def test_take_profit_must_be_above_entry_and_stop_below_entry(tmp_path):
+    pos = tmp_path / "positions.json"
+    plan = tmp_path / "plans.json"
+    _positions(pos)
+    with pytest.raises(ValueError, match="take_profit"):
+        upsert_chart_exit_plan(ticker="ABC", take_profit_price=99, positions_path=pos, plan_path=plan)
+    with pytest.raises(ValueError, match="stop_loss"):
+        upsert_chart_exit_plan(ticker="ABC", stop_loss_price=101, positions_path=pos, plan_path=plan)
 
 
 def test_chart_exit_plan_skips_outside_regular_hours(tmp_path, monkeypatch):
@@ -87,6 +122,7 @@ def test_chart_exit_plan_triggers_take_profit_intent_regular_hours(tmp_path, mon
     assert rows[0]["source"] == "chart_exit_plan"
     assert rows[0]["reason"] == "chart_take_profit"
     assert rows[0]["metadata"]["trigger_kind"] == "take_profit"
+    assert rows[0]["metadata"]["take_profit_pct"] == 10
 
 
 def test_chart_exit_plan_triggers_stop_loss_intent_regular_hours(tmp_path, monkeypatch):
@@ -105,3 +141,4 @@ def test_chart_exit_plan_triggers_stop_loss_intent_regular_hours(tmp_path, monke
     assert len(result["triggered"]) == 1
     row = list(load_manual_sell_state(intent)["intents"].values())[0]
     assert row["reason"] == "chart_stop_loss"
+    assert row["metadata"]["stop_loss_pct"] == 5

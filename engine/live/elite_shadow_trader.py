@@ -30,6 +30,7 @@ import yfinance as yf
 from engine.core.feature_lag import DEFAULT_LAG_DAYS, DEFAULT_MAX_AGE_DAYS, lookup_lagged_daily_dict
 from engine.core.indicators import calc_indicators
 from engine.live.elite_shadow_entry_quality import assess_shadow_entry_quality
+from engine.live.elite_entry_concentration import score_entry_concentration
 from engine.live.elite_shadow_report import ROOT as ELITE_ROOT
 from engine.live.elite_shadow_report import build_elite_shadow_report
 from engine.live.news_alerts import lookup_live_sell_omen_score
@@ -484,6 +485,7 @@ def _open_position(candidate: dict[str, Any], ev: dict[str, Any], state: dict[st
     target_price = price + tp_atr * atr
     trailing_distance = tr_atr * atr
     quality = ev.get("entry_quality") or {}
+    concentration = ev.get("entry_concentration") or score_entry_concentration(candidate, quality)
     pos = {
         "position_id": f"shadow-{int(time.time())}-{_position_key(candidate).replace(':','-')}",
         "candidate_id": _position_key(candidate),
@@ -504,6 +506,15 @@ def _open_position(candidate: dict[str, Any], ev: dict[str, Any], state: dict[st
         "entry_quality_score": quality.get("score"),
         "entry_quality_label": quality.get("label"),
         "entry_quality_size_factor": quality.get("size_factor"),
+        "entry_concentration": concentration,
+        "entry_concentration_score": concentration.get("score"),
+        "entry_concentration_action": concentration.get("action"),
+        "entry_concentration_allowed": concentration.get("allowed"),
+        "entry_concentration_rank_at_entry": concentration.get("rank_at_entry"),
+        "entry_concentration_rank_total": concentration.get("rank_total"),
+        "entry_concentration_ranked_at": concentration.get("ranked_at"),
+        "entry_concentration_blocks": concentration.get("blocks"),
+        "entry_concentration_caps": concentration.get("caps"),
         "atr_at_entry": atr,
         "target_price": target_price,
         "stop_price": stop_price,
@@ -646,6 +657,13 @@ def _maybe_close_position(pos_key: str, pos: dict[str, Any], price: float, state
         "entry_quality_score": pos.get("entry_quality_score"),
         "entry_quality_label": pos.get("entry_quality_label"),
         "entry_quality_primary_reason": (pos.get("entry_quality") or {}).get("primary_reason"),
+        "entry_concentration_score": pos.get("entry_concentration_score"),
+        "entry_concentration_action": pos.get("entry_concentration_action"),
+        "entry_concentration_allowed": pos.get("entry_concentration_allowed"),
+        "entry_concentration_rank_at_entry": pos.get("entry_concentration_rank_at_entry"),
+        "entry_concentration_rank_total": pos.get("entry_concentration_rank_total"),
+        "entry_concentration_blocks": pos.get("entry_concentration_blocks"),
+        "entry_concentration_caps": pos.get("entry_concentration_caps"),
         "last_sell_omen_score": pos.get("sell_omen_score"),
     }
     append_trade(trade)
@@ -723,8 +741,11 @@ def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIO
                 closed += 1
 
         # 후보별 BUY 신호를 평가해 새 shadow position을 연다.
+        # 몰빵 후보 순위는 진입 이후 현재 손익으로 바뀌면 안 되므로,
+        # 이 tick에서 실제로 진입 가능한 후보들을 먼저 모두 모은 뒤 진입 시점 rank를 고정 저장한다.
         open_keys = set((state.get("open_positions") or {}).keys())
         open_tickers = {str(p.get("ticker") or "").upper() for p in (state.get("open_positions") or {}).values()}
+        buy_entries: list[dict[str, Any]] = []
         for candidate in candidates:
             key = _position_key(candidate)
             ticker = str(candidate.get("ticker") or "").upper()
@@ -754,13 +775,36 @@ def run_shadow_tick(*, max_candidates: int = 93, notional: float = DEFAULT_NOTIO
                         })
                     continue
                 size_factor = max(0.1, min(1.0, _safe_float(quality.get("size_factor"), 1.0)))
-                actual_notional = max(100.0, notional * size_factor)
-                if size_factor < 0.999:
-                    quality_reduced += 1
-                _open_position(candidate, ev, state, notional=actual_notional)
-                opened += 1
-                open_keys.add(key)
-                open_tickers.add(ticker)
+                concentration = score_entry_concentration(candidate, quality)
+                buy_entries.append({
+                    "candidate": candidate,
+                    "ev": ev,
+                    "key": key,
+                    "ticker": ticker,
+                    "size_factor": size_factor,
+                    "concentration": concentration,
+                })
+
+        ranked_entries = sorted(buy_entries, key=lambda row: _safe_float((row.get("concentration") or {}).get("score"), 0.0), reverse=True)
+        rank_total = len(ranked_entries)
+        ranked_at = utc_now()
+        for idx, row in enumerate(ranked_entries, 1):
+            concentration = dict(row.get("concentration") or {})
+            concentration["rank_at_entry"] = idx
+            concentration["rank_total"] = rank_total
+            concentration["ranked_at"] = ranked_at
+            row["concentration"] = concentration
+            row["ev"]["entry_concentration"] = concentration
+
+        for row in buy_entries:
+            size_factor = _safe_float(row.get("size_factor"), 1.0)
+            actual_notional = max(100.0, notional * size_factor)
+            if size_factor < 0.999:
+                quality_reduced += 1
+            _open_position(row["candidate"], row["ev"], state, notional=actual_notional)
+            opened += 1
+            open_keys.add(str(row.get("key") or ""))
+            open_tickers.add(str(row.get("ticker") or ""))
 
         state["last_tick"] = {
             "time": utc_now(),

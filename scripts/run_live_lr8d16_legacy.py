@@ -163,6 +163,7 @@ def run_manual_sell_wake_cycle(runner: Runner, *, context: str) -> dict:
         before_pending = _pending_snapshot(runner)
         before_positions = _active_positions(runner)
         runner._poll_pending_orders(context=f"{context}.pre_manual")
+        runner._process_chart_exit_plans()
         runner._process_manual_sell_intents()
         runner._poll_pending_orders(context=f"{context}.post_manual")
         after_pending = _pending_snapshot(runner)

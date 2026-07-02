@@ -170,6 +170,9 @@ def create_manual_sell_intent(
     source: str = "dashboard",
     positions_path: Path | str | None = None,
     intent_path: Path | str | None = None,
+    reason: str = "manual_exit",
+    note: str = "",
+    metadata: Optional[dict] = None,
 ) -> dict:
     ticker_u = _normalize_ticker(ticker)
     if not ticker_u:
@@ -231,8 +234,9 @@ def create_manual_sell_intent(
         "submitted_at": "",
         "consumed_at": "",
         "rejected_at": "",
-        "reason": "manual_exit",
-        "note": "",
+        "reason": str(reason or "manual_exit"),
+        "note": str(note or ""),
+        "metadata": metadata if isinstance(metadata, dict) else {},
     }
     intents[intent_id] = row
     state["updated_at"] = now

@@ -298,6 +298,10 @@ class Runner:
         except Exception as e:
             self._handle_error("position_manager.check_exits", e)
         try:
+            self._process_chart_exit_plans()
+        except Exception as e:
+            self._handle_error("_process_chart_exit_plans", e)
+        try:
             self._process_manual_sell_intents()
         except Exception as e:
             self._handle_error("_process_manual_sell_intents", e)
@@ -354,6 +358,38 @@ class Runner:
         ]
         rows.sort(key=lambda r: str(getattr(r, "updated_at", "") or getattr(r, "created_at", "")), reverse=True)
         return str(getattr(rows[0], "order_id", "") or "") if rows else ""
+
+    def _process_chart_exit_plans(self) -> None:
+        """Evaluate dashboard chart TP/SL plans and create SELL intents on hits.
+
+        Actual broker orders are still placed only by _process_manual_sell_intents
+        through the existing Runner order path. The evaluator itself is
+        regular-hours gated and fail-closed outside US regular hours.
+        """
+        try:
+            from engine.live.chart_exit_plan import evaluate_chart_exit_plans
+        except Exception as exc:
+            logger.error("[CHART-EXIT] evaluator import failed: %s", exc)
+            return
+
+        def _lookup(ticker: str) -> float | None:
+            return self.broker.get_current_price(ticker)
+
+        result = evaluate_chart_exit_plans(
+            price_lookup=_lookup,
+            intent_path=self._manual_sell_intent_path(),
+            source="chart_exit_plan",
+        )
+        if result.get("skipped"):
+            logger.debug("[CHART-EXIT] skip: %s", result.get("reason"))
+            return
+        triggered = result.get("triggered") or []
+        if triggered:
+            logger.warning(
+                "[CHART-EXIT] triggered %d plan(s): %s",
+                len(triggered),
+                ", ".join(str(x.get("ticker") or "?") for x in triggered if isinstance(x, dict)),
+            )
 
     def _process_manual_sell_intents(self) -> None:
         from engine.live.manual_sell_intent import (
@@ -436,7 +472,8 @@ class Runner:
             try:
                 self.order_notional = None
                 self.order_shares = sell_shares
-                self._try_order("SELL", ticker, float(price), "manual_exit", signal_result=None)
+                exit_reason = str(intent.get("reason") or "manual_exit")
+                self._try_order("SELL", ticker, float(price), exit_reason, signal_result=None)
             finally:
                 self.order_notional = old_notional
                 self.order_shares = old_shares

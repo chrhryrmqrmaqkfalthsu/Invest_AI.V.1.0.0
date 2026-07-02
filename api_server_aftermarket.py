@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
 
 import api_server as _base
+from engine.live.chart_exit_dashboard_ui import install_chart_exit_routes
 
 log = logging.getLogger("api_server.aftermarket")
 app = _base.app
@@ -477,3 +478,4 @@ def elite_strategy_sim_tick(max_candidates: int = 93):
 _base._get_price = _get_price_aftermarket
 _base._price_cache = _price_cache
 _replace_manual_sell_route()
+install_chart_exit_routes(app, _base, price_lookup=_get_price_aftermarket, wake_runner=_wake_runner_manual_sell)

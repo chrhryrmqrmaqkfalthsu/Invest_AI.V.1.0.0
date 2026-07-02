@@ -3,6 +3,7 @@
 목적:
 - 개별 룰북의 stop/take/trailing과 별도로, Elite Shadow 가상 포지션에만 적용되는
   수익잠금·수익반납·추세붕괴·매도압력 전조를 점수화한다.
+- v2는 장중 1분봉 기반 VWAP/EMA/고점갱신 실패/상대약세/하락 거래량까지 함께 본다.
 - 실제 broker 주문에는 관여하지 않는다. data/_system/elite_shadow_state.json 과
   data/_system/elite_shadow_trades.jsonl 의 가상 장부만 갱신한다.
 """
@@ -14,6 +15,7 @@ from collections import Counter
 from typing import Any
 
 import pandas as pd
+import yfinance as yf
 
 from engine.live.elite_shadow_entry_quality import assess_shadow_entry_quality
 from engine.live.elite_shadow_trader import (
@@ -30,8 +32,11 @@ from engine.live.elite_shadow_trader import (
     utc_now,
 )
 
-EXIT_OMEN_VERSION = "shadow_exit_omen_v1"
+EXIT_OMEN_VERSION = "shadow_exit_omen_v2"
 MARKET_PROXY = "QQQ"
+INTRADAY_CACHE_TTL_SEC = 60.0
+
+_intraday_cache: dict[tuple[str, str, str], tuple[pd.DataFrame, float]] = {}
 
 
 def _num(value: Any, default: float = 0.0) -> float:
@@ -55,6 +60,42 @@ def _last_list(df: pd.DataFrame, col: str) -> list[float]:
         return [_num(x, 0.0) for x in df[col].dropna().tolist()]
     except Exception:
         return []
+
+
+def _load_intraday(ticker: str, *, period: str = "1d", interval: str = "1m") -> pd.DataFrame | None:
+    """청산 오멘 전용 장중 데이터 로더.
+
+    yfinance 1분봉은 종종 빈 값/지연 값이 생기므로, 실패해도 청산 로직 전체를 막지 않고
+    daily/live price 기반 v1 신호만 계속 사용한다.
+    """
+    ticker = str(ticker or "").upper().strip()
+    if not ticker:
+        return None
+    key = (ticker, period, interval)
+    now = time.time()
+    cached = _intraday_cache.get(key)
+    if cached is not None:
+        df, ts = cached
+        if now - ts < INTRADAY_CACHE_TTL_SEC:
+            return df
+    try:
+        df = yf.Ticker(ticker).history(period=period, interval=interval, prepost=True, auto_adjust=False)
+    except Exception:
+        return None
+    if df is None or df.empty or len(df) < 15:
+        return None
+    try:
+        df = df.copy()
+        for col in ["Open", "High", "Low", "Close", "Volume"]:
+            if col not in df.columns:
+                return None
+        df = df.dropna(subset=["Open", "High", "Low", "Close"])
+        if df.empty or len(df) < 15:
+            return None
+    except Exception:
+        return None
+    _intraday_cache[key] = (df, now)
+    return df
 
 
 def _technical_snapshot(df: pd.DataFrame | None, price: float) -> dict[str, Any]:
@@ -114,6 +155,105 @@ def _technical_snapshot(df: pd.DataFrame | None, price: float) -> dict[str, Any]
     }
 
 
+def _intraday_snapshot(df: pd.DataFrame | None, price: float, *, market_df: pd.DataFrame | None = None) -> dict[str, Any]:
+    if df is None or df.empty or len(df) < 15:
+        return {"ok": False, "reason": "intraday_missing"}
+    try:
+        work = df.copy().dropna(subset=["Open", "High", "Low", "Close"])
+        if work.empty or len(work) < 15:
+            return {"ok": False, "reason": "intraday_window_insufficient"}
+        close = work["Close"].astype(float)
+        high = work["High"].astype(float)
+        low = work["Low"].astype(float)
+        open_ = work["Open"].astype(float)
+        volume = work["Volume"].fillna(0).astype(float) if "Volume" in work.columns else pd.Series([0.0] * len(work), index=work.index)
+        current = price if price > 0 else float(close.iloc[-1])
+        typical = (high + low + close) / 3.0
+        vol_sum = float(volume.sum())
+        vwap = float((typical * volume).sum() / vol_sum) if vol_sum > 0 else float(close.expanding().mean().iloc[-1])
+        ema9 = float(close.ewm(span=9, adjust=False).mean().iloc[-1])
+        ema20 = float(close.ewm(span=20, adjust=False).mean().iloc[-1])
+        day_high = float(max(high.max(), current))
+        day_low = float(min(low.min(), current))
+        high_idx = high.idxmax()
+        try:
+            high_pos = int(work.index.get_loc(high_idx))
+            bars_since_high = max(0, len(work) - high_pos - 1)
+        except Exception:
+            bars_since_high = None
+        high_giveback_pct = _pct(current, day_high) if day_high > 0 else None
+        day_range_position = (current - day_low) / max(day_high - day_low, 0.0001)
+        ret_15m = _pct(current, float(close.iloc[-16])) if len(close) > 16 else None
+        ret_30m = _pct(current, float(close.iloc[-31])) if len(close) > 31 else None
+        ret_60m = _pct(current, float(close.iloc[-61])) if len(close) > 61 else None
+
+        recent_high = float(high.tail(10).max()) if len(high) >= 10 else float(high.max())
+        prior_high = float(high.iloc[-20:-10].max()) if len(high) >= 20 else recent_high
+        recent_low = float(low.tail(10).min()) if len(low) >= 10 else float(low.min())
+        prior_low = float(low.iloc[-20:-10].min()) if len(low) >= 20 else recent_low
+        lower_high_recent = bool(recent_high < prior_high * 0.998) if prior_high > 0 else False
+        lower_low_recent = bool(recent_low < prior_low * 0.998) if prior_low > 0 else False
+
+        tail = work.tail(30).copy()
+        up_vol = tail.loc[tail["Close"] >= tail["Open"], "Volume"].fillna(0).astype(float)
+        down_vol = tail.loc[tail["Close"] < tail["Open"], "Volume"].fillna(0).astype(float)
+        up_avg = float(up_vol.mean()) if len(up_vol) else 0.0
+        down_avg = float(down_vol.mean()) if len(down_vol) else 0.0
+        red_bar_ratio = float((tail["Close"] < tail["Open"]).sum() / len(tail)) if len(tail) else 0.0
+        down_volume_dominant = bool(down_avg > 0 and down_avg >= max(up_avg, 1.0) * 1.25 and red_bar_ratio >= 0.45)
+
+        market_ret_30m = None
+        relative_ret_30m = None
+        if market_df is not None and not market_df.empty and len(market_df) > 31:
+            try:
+                mclose = market_df["Close"].dropna().astype(float)
+                if len(mclose) > 31:
+                    mcur = float(mclose.iloc[-1])
+                    market_ret_30m = _pct(mcur, float(mclose.iloc[-31]))
+                    if market_ret_30m is not None and ret_30m is not None:
+                        relative_ret_30m = ret_30m - market_ret_30m
+            except Exception:
+                market_ret_30m = None
+                relative_ret_30m = None
+
+        return {
+            "ok": True,
+            "price": current,
+            "vwap": vwap,
+            "ema9": ema9,
+            "ema20": ema20,
+            "below_vwap": current < vwap,
+            "below_ema9": current < ema9,
+            "below_ema20": current < ema20,
+            "ema9_below_ema20": ema9 < ema20,
+            "dist_vwap_pct": _pct(current, vwap),
+            "dist_ema9_pct": _pct(current, ema9),
+            "dist_ema20_pct": _pct(current, ema20),
+            "intraday_high": day_high,
+            "intraday_low": day_low,
+            "intraday_high_giveback_pct": high_giveback_pct,
+            "intraday_range_position": max(0.0, min(1.0, day_range_position)),
+            "bars_since_intraday_high": bars_since_high,
+            "ret_15m_pct": ret_15m,
+            "ret_30m_pct": ret_30m,
+            "ret_60m_pct": ret_60m,
+            "lower_high_recent": lower_high_recent,
+            "lower_low_recent": lower_low_recent,
+            "recent_high_10m": recent_high,
+            "prior_high_10m": prior_high,
+            "recent_low_10m": recent_low,
+            "prior_low_10m": prior_low,
+            "up_volume_avg_30m": up_avg,
+            "down_volume_avg_30m": down_avg,
+            "down_volume_dominant": down_volume_dominant,
+            "red_bar_ratio_30m": red_bar_ratio,
+            "market_ret_30m_pct": market_ret_30m,
+            "relative_ret_30m_pct": relative_ret_30m,
+        }
+    except Exception as exc:
+        return {"ok": False, "reason": f"intraday_error:{type(exc).__name__}"}
+
+
 def _current_quality(pos: dict[str, Any], df: pd.DataFrame | None, price: float) -> dict[str, Any]:
     if df is None or df.empty:
         return {"score": None, "label": "QUALITY_UNKNOWN", "primary_reason": "ohlcv_missing", "metrics": {}}
@@ -156,6 +296,8 @@ def evaluate_shadow_exit_omen(
     df: pd.DataFrame | None,
     price: float,
     market_price: float | None = None,
+    intraday_df: pd.DataFrame | None = None,
+    market_intraday_df: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """열린 Shadow 포지션의 전용 청산 오멘을 계산한다.
 
@@ -181,10 +323,10 @@ def evaluate_shadow_exit_omen(
     giveback_ratio = giveback_pct / max(max_profit_pct, 0.0001) if max_profit_pct > 0.0 else 0.0
     label = _entry_label(pos)
     is_healthy = "HEALTHY" in label
-    is_strong = "STRONG" in label
     entry_q = _num(pos.get("entry_quality_score"), -1.0)
 
     metrics = _technical_snapshot(df, price)
+    intraday = _intraday_snapshot(intraday_df, price, market_df=market_intraday_df)
     quality = _current_quality(pos, df, price)
     current_q = quality.get("score")
     current_q_f = _num(current_q, -1.0) if current_q is not None else -1.0
@@ -234,6 +376,43 @@ def evaluate_shadow_exit_omen(
         elif close_pos <= 0.25 and max_profit_pct >= 3.0:
             score += _add_score(parts, 8.0, "candle_lower_range", close_position=round(close_pos, 3))
 
+    if intraday.get("ok"):
+        high_gb = _num(intraday.get("intraday_high_giveback_pct"), 0.0)
+        ret15 = _num(intraday.get("ret_15m_pct"), 0.0)
+        ret30 = _num(intraday.get("ret_30m_pct"), 0.0)
+        rel30 = _num(intraday.get("relative_ret_30m_pct"), 0.0)
+        red_ratio = _num(intraday.get("red_bar_ratio_30m"), 0.0)
+        if intraday.get("below_vwap") and (max_profit_pct >= 1.0 or pnl_pct < 0.0):
+            score += _add_score(parts, 12.0, "intraday_below_vwap", dist_vwap_pct=round(_num(intraday.get("dist_vwap_pct"), 0.0), 3))
+        if intraday.get("below_ema9") and (max_profit_pct >= 1.0 or pnl_pct < 0.0):
+            score += _add_score(parts, 8.0, "intraday_below_ema9", dist_ema9_pct=round(_num(intraday.get("dist_ema9_pct"), 0.0), 3))
+        if intraday.get("below_ema20") and (max_profit_pct >= 1.0 or pnl_pct < 0.0):
+            score += _add_score(parts, 10.0, "intraday_below_ema20", dist_ema20_pct=round(_num(intraday.get("dist_ema20_pct"), 0.0), 3))
+        if intraday.get("ema9_below_ema20") and max_profit_pct >= 1.5:
+            score += _add_score(parts, 10.0, "intraday_ema9_below_ema20")
+        if high_gb <= -3.0 and max_profit_pct >= 2.0:
+            score += _add_score(parts, 20.0, "intraday_peak_giveback_large", intraday_high_giveback_pct=round(high_gb, 3))
+        elif high_gb <= -1.5 and max_profit_pct >= 2.0:
+            score += _add_score(parts, 12.0, "intraday_peak_giveback", intraday_high_giveback_pct=round(high_gb, 3))
+        if ret30 <= -2.0:
+            score += _add_score(parts, 14.0, "intraday_30m_drop_large", ret_30m_pct=round(ret30, 3))
+        elif ret30 <= -1.0:
+            score += _add_score(parts, 8.0, "intraday_30m_drop", ret_30m_pct=round(ret30, 3))
+        elif ret15 <= -1.0:
+            score += _add_score(parts, 6.0, "intraday_15m_drop", ret_15m_pct=round(ret15, 3))
+        if intraday.get("lower_high_recent") and max_profit_pct >= 2.0:
+            score += _add_score(parts, 10.0, "intraday_lower_high")
+        if intraday.get("lower_low_recent") and (max_profit_pct >= 1.5 or pnl_pct < 0.0):
+            score += _add_score(parts, 12.0, "intraday_lower_low")
+        if intraday.get("down_volume_dominant"):
+            score += _add_score(parts, 10.0, "intraday_down_volume_dominant", red_bar_ratio_30m=round(red_ratio, 3))
+        if red_ratio >= 0.65 and (max_profit_pct >= 1.5 or pnl_pct < 0.0):
+            score += _add_score(parts, 8.0, "intraday_red_bar_cluster", red_bar_ratio_30m=round(red_ratio, 3))
+        if rel30 <= -1.5:
+            score += _add_score(parts, 14.0, "intraday_market_relative_weakness_large", relative_ret_30m_pct=round(rel30, 3))
+        elif rel30 <= -0.8:
+            score += _add_score(parts, 8.0, "intraday_market_relative_weakness", relative_ret_30m_pct=round(rel30, 3))
+
     if current_q is not None:
         if current_q_f < 45.0:
             score += _add_score(parts, 24.0, "current_quality_failed", current_q=round(current_q_f, 2), entry_q=round(entry_q, 2))
@@ -277,6 +456,21 @@ def evaluate_shadow_exit_omen(
             reason = "shadow_volume_sell_pressure"
         elif max_profit_pct >= 3.0 and giveback_ratio >= 0.45 and _num(metrics.get("volume_ratio20"), 0.0) >= 1.2 and _num(metrics.get("close_position"), 0.5) <= 0.45:
             reason = "shadow_high_volume_giveback"
+
+    if reason is None and intraday.get("ok"):
+        high_gb = _num(intraday.get("intraday_high_giveback_pct"), 0.0)
+        ret30 = _num(intraday.get("ret_30m_pct"), 0.0)
+        rel30 = _num(intraday.get("relative_ret_30m_pct"), 0.0)
+        if max_profit_pct >= 2.0 and giveback_ratio >= 0.35 and intraday.get("below_vwap") and intraday.get("below_ema9"):
+            reason = "shadow_intraday_vwap_ema_break"
+        elif max_profit_pct >= 3.0 and high_gb <= -2.0 and intraday.get("lower_high_recent"):
+            reason = "shadow_intraday_peak_failure"
+        elif pnl_pct <= -1.2 and intraday.get("below_vwap") and intraday.get("below_ema20"):
+            reason = "shadow_intraday_failed_below_vwap"
+        elif ret30 <= -1.0 and intraday.get("below_vwap") and intraday.get("down_volume_dominant") and (max_profit_pct >= 1.0 or pnl_pct <= -0.8):
+            reason = "shadow_intraday_sell_pressure"
+        elif rel30 <= -1.5 and intraday.get("below_vwap") and (max_profit_pct >= 1.5 or pnl_pct <= -0.8):
+            reason = "shadow_intraday_relative_break"
 
     if reason is None and current_q is not None:
         if entry_q >= 75.0 and current_q_f < 45.0 and (pnl_pct <= 0.8 or giveback_ratio >= 0.45):
@@ -322,13 +516,40 @@ def evaluate_shadow_exit_omen(
                 "volume_ratio20",
             ]
         })
+    if intraday.get("ok"):
+        out_metrics["intraday"] = {
+            k: intraday.get(k)
+            for k in [
+                "below_vwap",
+                "below_ema9",
+                "below_ema20",
+                "ema9_below_ema20",
+                "dist_vwap_pct",
+                "dist_ema9_pct",
+                "dist_ema20_pct",
+                "intraday_high_giveback_pct",
+                "intraday_range_position",
+                "bars_since_intraday_high",
+                "ret_15m_pct",
+                "ret_30m_pct",
+                "ret_60m_pct",
+                "lower_high_recent",
+                "lower_low_recent",
+                "down_volume_dominant",
+                "red_bar_ratio_30m",
+                "market_ret_30m_pct",
+                "relative_ret_30m_pct",
+            ]
+        }
+    else:
+        out_metrics["intraday"] = {"ok": False, "reason": intraday.get("reason")}
 
     return {
         "version": EXIT_OMEN_VERSION,
         "close": reason is not None,
         "reason": reason or "hold",
         "score": round(max(0.0, min(100.0, score)), 2),
-        "reasons": parts[:12],
+        "reasons": parts[:16],
         "metrics": out_metrics,
         "current_quality": {
             "score": quality.get("score"),
@@ -406,6 +627,7 @@ def run_shadow_exit_omen_tick(*, max_positions: int | None = None) -> dict[str, 
 
     market_df = _load_ohlcv(MARKET_PROXY)
     market_price = _latest_price(MARKET_PROXY, market_df) if market_df is not None else None
+    market_intraday_df = _load_intraday(MARKET_PROXY)
     evaluated = 0
     closed = 0
     errors: list[dict[str, Any]] = []
@@ -446,7 +668,15 @@ def run_shadow_exit_omen_tick(*, max_positions: int | None = None) -> dict[str, 
             pos["market_proxy"] = MARKET_PROXY
             pos["market_entry_price"] = market_price
 
-        omen = evaluate_shadow_exit_omen(pos=pos, df=df, price=price, market_price=market_price)
+        intraday_df = _load_intraday(ticker)
+        omen = evaluate_shadow_exit_omen(
+            pos=pos,
+            df=df,
+            price=price,
+            market_price=market_price,
+            intraday_df=intraday_df,
+            market_intraday_df=market_intraday_df,
+        )
         pos["shadow_exit_omen"] = omen
         pos["shadow_exit_omen_score"] = omen.get("score")
         pos["shadow_exit_omen_reason"] = omen.get("reason")

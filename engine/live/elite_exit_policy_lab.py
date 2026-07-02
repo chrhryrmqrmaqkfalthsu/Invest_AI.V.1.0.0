@@ -219,7 +219,15 @@ def _clean_entry_allowed(source_pos: dict[str, Any], state: dict[str, Any]) -> t
         return False, "opened_at_missing"
     if opened < created - timedelta(seconds=2):
         return False, "opened_before_lab_created"
-    return True, "clean_entry"
+
+    # Lab의 가상 매수는 원본 Shadow 진입시각이 미국 정규장일 때만 허용한다.
+    # 정규장 밖 Shadow 진입을 나중에 정규장 tick에서 backdated clone하면
+    # Lab이 프리/애프터마켓에 산 것처럼 기록되므로 공정 비교에서 제외한다.
+    entry_gate = regular_hours_snapshot(opened)
+    if not bool(entry_gate.get("allow_decision")):
+        return False, f"source_opened_outside_regular_hours:{entry_gate.get('reason') or 'not_regular'}"
+
+    return True, "clean_entry_regular_hours"
 
 
 def _copy_shadow_mark_fields(pos: dict[str, Any], source_pos: dict[str, Any]) -> None:

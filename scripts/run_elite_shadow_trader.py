@@ -5,6 +5,7 @@
 - broker 주문 없이 정예 후보 룰북을 주기적으로 평가한다.
 - BUY 신호가 뜨면 가상으로 매수했다고 기록한다.
 - 룰북 청산조건이 맞으면 가상으로 매도했다고 거래내역을 남긴다.
+- Elite Shadow 전용 청산 오멘을 추가 overlay로 적용해 수익반납/추세붕괴 전조를 가상 청산한다.
 - output:
   - data/_system/elite_shadow_state.json
   - data/_system/elite_shadow_trades.jsonl
@@ -26,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from engine.live.elite_shadow_exit_omen import run_shadow_exit_omen_tick
 from engine.live.elite_shadow_trader import run_shadow_tick, shadow_dashboard_payload
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
@@ -53,7 +55,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, on_signal)
 
     log.warning(
-        "Elite shadow trader 시작: interval=%ss max_candidates=%s notional=$%s 실제주문=OFF",
+        "Elite shadow trader 시작: interval=%ss max_candidates=%s notional=$%s 실제주문=OFF shadow_exit_omen=ON",
         args.interval,
         args.max_candidates,
         args.notional,
@@ -61,19 +63,24 @@ def main() -> int:
     while not stop["value"]:
         try:
             result = run_shadow_tick(max_candidates=int(args.max_candidates), notional=float(args.notional))
+            omen_result = run_shadow_exit_omen_tick()
             payload = shadow_dashboard_payload(recent_trade_limit=20)
             summary = payload.get("summary") or {}
+            closed_total_tick = int(result.get("closed") or 0) + int(omen_result.get("closed") or 0)
             log.info(
-                "tick ok=%s evaluated=%s opened=%s closed=%s open=%s closed_total=%s pnl=$%.2f unreal=$%.2f elapsed=%s",
+                "tick ok=%s evaluated=%s opened=%s closed=%s rulebook_closed=%s shadow_omen_closed=%s open=%s closed_total=%s pnl=$%.2f unreal=$%.2f elapsed=%s omen=%s",
                 result.get("ok"),
                 result.get("evaluated"),
                 result.get("opened"),
+                closed_total_tick,
                 result.get("closed"),
+                omen_result.get("closed"),
                 summary.get("open_count"),
                 summary.get("closed_count"),
                 float(summary.get("total_pnl_usd") or 0.0),
                 float(summary.get("open_unrealized_usd") or 0.0),
                 result.get("elapsed_sec"),
+                omen_result.get("close_counts"),
             )
         except Exception as exc:
             log.exception("elite shadow tick 실패: %s", exc)

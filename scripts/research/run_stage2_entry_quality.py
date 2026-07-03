@@ -10,7 +10,7 @@ Stage2 Entry Quality Runner — 스윙 진입 타이밍 개선 연구용 러너.
   전체 population 수집, rulebook hash 대표화, stress → train3 → train2 → train1 → oos early-cut,
   survivor gate, _calc_fitness_swing 기반 swing fitness.
 - 추가: 신규 러너 프로세스 내부에서만 Rulebook에 동적 진입 품질 유전자 3개를 붙입니다.
-  1) entry_quality_max_signal_age_days: 원신호가 오래 끌린 뒤의 늦은 진입을 차단.
+  1) entry_quality_max_signal_age_days: 원신호가 오래 끌린 뒤의 늦은 진입을 차단. 1~30으로 열어 OFF 선택지를 보장합니다.
   2) entry_quality_min_dist_high20_pct: D-1 종가가 최근 20일 고점에서 최소 몇 % 떨어져야 하는지.
   3) entry_quality_max_prev5_ret_pct: D-5~D-1 누적 상승률이 과열 상한을 넘으면 차단.
 - 변경 금지 준수: engine/, run_stage2.py, _calc_fitness_swing은 수정하지 않습니다.
@@ -41,8 +41,8 @@ import pandas as pd
 from engine.strategies.rulebook import Rulebook
 
 ENTRY_QUALITY_GENE_RANGES: dict[str, tuple[float, float]] = {
-    # integer gene: 1~8일. 값이 작을수록 원신호 발생 직후만 매수한다.
-    "entry_quality_max_signal_age_days": (1, 8),
+    # integer gene: 1~30일. 상한 30/default 30은 원본과 거의 같은 OFF 선택지를 보장한다.
+    "entry_quality_max_signal_age_days": (1, 30),
     # D-1 종가가 최근 20일 고점에서 최소 N% 아래여야 한다. 0이면 사실상 비활성.
     "entry_quality_min_dist_high20_pct": (0.0, 20.0),
     # D-5~D-1 누적 상승률이 N%를 넘으면 과열로 보고 차단한다.
@@ -50,7 +50,7 @@ ENTRY_QUALITY_GENE_RANGES: dict[str, tuple[float, float]] = {
 }
 ENTRY_QUALITY_INT_GENES = {"entry_quality_max_signal_age_days"}
 ENTRY_QUALITY_DEFAULTS: dict[str, float | int] = {
-    "entry_quality_max_signal_age_days": 8,
+    "entry_quality_max_signal_age_days": 30,
     "entry_quality_min_dist_high20_pct": 0.0,
     "entry_quality_max_prev5_ret_pct": 25.0,
 }
@@ -195,7 +195,7 @@ def _block_signal_with_entry_quality(rb: Rulebook, df: pd.DataFrame) -> tuple[bo
     signal_age = _signal_age_proxy_days(df)
     dist_high20 = _dist_from_high20_pct(df)
     prev5_ret = _prev5_ret_pct(df)
-    max_age = int(round(_safe_float(getattr(rb, "entry_quality_max_signal_age_days", 8), 8.0)))
+    max_age = int(round(_safe_float(getattr(rb, "entry_quality_max_signal_age_days", 30), 30.0)))
     min_dist_high20 = _safe_float(getattr(rb, "entry_quality_min_dist_high20_pct", 0.0), 0.0)
     max_prev5_ret = _safe_float(getattr(rb, "entry_quality_max_prev5_ret_pct", 25.0), 25.0)
     failed: list[str] = []

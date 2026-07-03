@@ -28,13 +28,14 @@ class ChartExitPlanRequest(BaseModel):
 CHART_EXIT_OVERLAY_JS = r"""
 (function(){
   const PLAN_API = (typeof API !== 'undefined' ? API : window.location.origin);
-  const state = {plans:{}, clickMode:null, lines:[], lastTicker:null, lastInterval:null, evalBusy:false, candles:[], rangeHooked:false};
+  const state = {plans:{}, clickMode:null, lines:[], lastTicker:null, lastInterval:null, evalBusy:false, candles:[], rangeHooked:false, inputBasis:{}};
   const css = `
   .chart-exit-panel{background:#0b1019;border:1px solid var(--line);border-radius:10px;margin:8px 0 12px;padding:10px;position:relative;z-index:8;}
   .chart-exit-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;font-size:12px;color:var(--dim);}
   .chart-exit-head b{color:#eaf1ff;}
   .chart-exit-grid{display:grid;grid-template-columns:repeat(4,minmax(86px,1fr)) auto auto auto;gap:7px;align-items:center;}
   .chart-exit-grid input{width:100%;background:#090d14;border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:7px 8px;font-size:12px;font-variant-numeric:tabular-nums;}
+  .chart-exit-grid input.active-basis{border-color:var(--accent);box-shadow:0 0 0 1px rgba(59,130,246,.35) inset;}
   .chart-exit-btn{border:1px solid var(--line);background:#121a28;color:var(--txt);border-radius:7px;padding:7px 10px;cursor:pointer;font-size:12px;font-weight:800;white-space:nowrap;}
   .chart-exit-btn:hover{border-color:var(--accent);}
   .chart-exit-btn.green{background:rgba(38,208,124,.12);color:var(--up);border-color:rgba(38,208,124,.35);}
@@ -59,6 +60,14 @@ CHART_EXIT_OVERLAY_JS = r"""
   async function loadPlans(){try{const r=await fetch(`${PLAN_API}/api/live/chart_exit_plans`);const d=await r.json();state.plans=(d.plans||{});return d;}catch(e){return {plans:{}}}}
   function activePlan(ticker){return state.plans[String(ticker||'').toUpperCase()]||null;}
   function currentSlot(ticker){try{return (slotData||[]).find(x=>String(x.ticker||'').toUpperCase()===String(ticker||'').toUpperCase())||null;}catch(e){return null}}
+  function basisFor(ticker){const tk=String(ticker||'').toUpperCase();state.inputBasis[tk]=state.inputBasis[tk]||{};return state.inputBasis[tk];}
+  function setBasis(ticker, side, basis){basisFor(ticker)[side]=basis;}
+  function displayField(plan, side, kind){
+    if(!plan)return '';
+    const basis=String(plan[`${side}_basis`]||'price');
+    if(kind==='price')return basis==='pct'?'':(plan[`${side}_price`] ?? '');
+    return basis==='pct'?(plan[`${side}_pct`] ?? ''):'';
+  }
   function ensurePanel(ticker){
     injectCss();
     const chartEl=document.getElementById('chart'); if(!chartEl)return null;
@@ -77,12 +86,12 @@ CHART_EXIT_OVERLAY_JS = r"""
     const s=currentSlot(tk)||{};
     const st=p.status||'none';
     const enabled=!!p.enabled && st==='active';
-    const tp=p.take_profit_price ?? '';
-    const sl=p.stop_loss_price ?? '';
-    const tpPct=p.take_profit_pct ?? '';
-    const slPct=p.stop_loss_pct ?? '';
+    const tp=displayField(p,'take_profit','price');
+    const sl=displayField(p,'stop_loss','price');
+    const tpPct=displayField(p,'take_profit','pct');
+    const slPct=displayField(p,'stop_loss','pct');
     let status='미설정', cls='warn';
-    if(enabled){status=`감시중 · TP ${price(tp)} / SL ${price(sl)}`;cls='ok'}
+    if(enabled){status=`감시중 · TP ${price(p.take_profit_price)} / SL ${price(p.stop_loss_price)}`;cls='ok'}
     else if(st==='triggered'){status=`트리거됨 · ${p.trigger_kind||''} @ ${price(p.triggered_price)}`;cls='bad'}
     else if(st==='disabled'){status='비활성';cls='warn'}
     else if(st==='orphaned'){status='보유 없음';cls='bad'}
@@ -99,7 +108,21 @@ CHART_EXIT_OVERLAY_JS = r"""
         <button id="chart-exit-save" class="chart-exit-btn">저장/감시</button>
         <button id="chart-exit-clear" class="chart-exit-btn">비활성</button>
       </div>
-      <div class="chart-exit-sub">진입 ${price(s.entry_price)} · 현재 ${price(s.current_price)} · 가격칸과 %칸 중 하나만 써도 적용. 둘 다 쓰면 가격이 우선된다. 반투명 영역은 <b>진입 시점부터</b> 진입가~익절가/손절가 사이에만 표시된다.</div>`;
+      <div class="chart-exit-sub">진입 ${price(s.entry_price)} · 현재 ${price(s.current_price)} · <b>마지막으로 수정한 칸이 우선</b>. %를 쓰면 가격칸은 자동 무시되고, 가격을 쓰면 %칸은 자동 무시된다. 저장 후에도 입력한 %가 다른 숫자로 바뀌지 않게 표시한다.</div>`;
+    const tpInput=document.getElementById('chart-exit-tp'), tpPctInput=document.getElementById('chart-exit-tp-pct'), slInput=document.getElementById('chart-exit-sl'), slPctInput=document.getElementById('chart-exit-sl-pct');
+    const b=basisFor(tk);
+    if(!b.tp)b.tp=String(p.take_profit_basis||'price')==='pct'?'pct':'price';
+    if(!b.sl)b.sl=String(p.stop_loss_basis||'price')==='pct'?'pct':'price';
+    function markBasis(){
+      [tpInput,tpPctInput,slInput,slPctInput].forEach(x=>x&&x.classList.remove('active-basis'));
+      if(b.tp==='pct')tpPctInput&&tpPctInput.classList.add('active-basis'); else tpInput&&tpInput.classList.add('active-basis');
+      if(b.sl==='pct')slPctInput&&slPctInput.classList.add('active-basis'); else slInput&&slInput.classList.add('active-basis');
+    }
+    if(tpInput)tpInput.oninput=()=>{setBasis(tk,'tp','price'); if(tpPctInput)tpPctInput.value=''; markBasis();};
+    if(tpPctInput)tpPctInput.oninput=()=>{setBasis(tk,'tp','pct'); if(tpInput)tpInput.value=''; markBasis();};
+    if(slInput)slInput.oninput=()=>{setBasis(tk,'sl','price'); if(slPctInput)slPctInput.value=''; markBasis();};
+    if(slPctInput)slPctInput.oninput=()=>{setBasis(tk,'sl','pct'); if(slInput)slInput.value=''; markBasis();};
+    markBasis();
     const tpBtn=document.getElementById('chart-exit-click-tp'), slBtn=document.getElementById('chart-exit-click-sl');
     if(state.clickMode==='tp')tpBtn.classList.add('active');
     if(state.clickMode==='sl')slBtn.classList.add('active');
@@ -111,14 +134,17 @@ CHART_EXIT_OVERLAY_JS = r"""
   function resolveInputs(ticker){
     const s=currentSlot(ticker)||{};
     const entry=n(s.entry_price);
-    const tpInput=n(document.getElementById('chart-exit-tp')?.value);
-    const tpPctInput=n(document.getElementById('chart-exit-tp-pct')?.value);
-    const slInput=n(document.getElementById('chart-exit-sl')?.value);
-    const slPctInput=n(document.getElementById('chart-exit-sl-pct')?.value);
+    const b=basisFor(ticker);
+    let tpInput=n(document.getElementById('chart-exit-tp')?.value);
+    let tpPctInput=n(document.getElementById('chart-exit-tp-pct')?.value);
+    let slInput=n(document.getElementById('chart-exit-sl')?.value);
+    let slPctInput=n(document.getElementById('chart-exit-sl-pct')?.value);
+    if(b.tp==='pct'){tpInput=null;} else {tpPctInput=null;}
+    if(b.sl==='pct'){slInput=null;} else {slPctInput=null;}
     let tp=tpInput, sl=slInput;
-    if(tp==null&&tpPctInput!=null&&entry!=null)tp=entry*(1+tpPctInput/100);
-    if(sl==null&&slPctInput!=null&&entry!=null)sl=entry*(1-Math.abs(slPctInput)/100);
-    return {entry,tp,sl,tpInput,tpPctInput,slInput,slPctInput};
+    if(tpPctInput!=null&&entry!=null)tp=entry*(1+tpPctInput/100);
+    if(slPctInput!=null&&entry!=null)sl=entry*(1-Math.abs(slPctInput)/100);
+    return {entry,tp,sl,tpInput,tpPctInput,slInput,slPctInput,tpBasis:b.tp||'price',slBasis:b.sl||'price'};
   }
   async function savePlan(ticker){
     const r0=resolveInputs(ticker);
@@ -131,7 +157,9 @@ CHART_EXIT_OVERLAY_JS = r"""
       const body={ticker,take_profit_price:r0.tpInput,stop_loss_price:r0.slInput,take_profit_pct:r0.tpPctInput,stop_loss_pct:r0.slPctInput,enabled:true,source:'dashboard_chart'};
       const r=await fetch(`${PLAN_API}/api/live/chart_exit_plan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json(); if(!r.ok)throw new Error(d.detail||`HTTP ${r.status}`);
-      state.plans[ticker]=d.plan; toast2('차트 TP/SL 저장',`${ticker} · TP ${price(d.plan.take_profit_price)}(${pct(d.plan.take_profit_pct)}) · SL ${price(d.plan.stop_loss_price)}(${pct(d.plan.stop_loss_pct)})`,'good');
+      state.plans[ticker]=d.plan;
+      const savedBasis=basisFor(ticker); savedBasis.tp=String(d.plan.take_profit_basis||r0.tpBasis||'price')==='pct'?'pct':'price'; savedBasis.sl=String(d.plan.stop_loss_basis||r0.slBasis||'price')==='pct'?'pct':'price';
+      toast2('차트 TP/SL 저장',`${ticker} · TP ${price(d.plan.take_profit_price)}(${pct(d.plan.take_profit_pct)}) · SL ${price(d.plan.stop_loss_price)}(${pct(d.plan.stop_loss_pct)})`,'good');
       renderPanel(ticker); drawPlan(ticker); if(d.evaluation&&d.evaluation.triggered&&d.evaluation.triggered.length)toast2('자동청산 트리거',`${ticker} 기준 도달 · 매도 intent 생성`,'warn');
     }catch(e){toast2('저장 실패',String(e.message||e),'warn')}
   }
@@ -235,6 +263,7 @@ CHART_EXIT_OVERLAY_JS = r"""
       if(!state.clickMode||!param||!param.point)return;
       const py=n(series.coordinateToPrice(param.point.y)); if(py==null)return;
       const id=state.clickMode==='tp'?'chart-exit-tp':'chart-exit-sl'; const input=document.getElementById(id); if(input)input.value=py.toFixed(2);
+      if(state.lastTicker){setBasis(state.lastTicker,state.clickMode==='tp'?'tp':'sl','price');const pctId=state.clickMode==='tp'?'chart-exit-tp-pct':'chart-exit-sl-pct';const pctInput=document.getElementById(pctId);if(pctInput)pctInput.value='';}
       state.clickMode=null; renderPanel(state.lastTicker); drawPlan(state.lastTicker);
     });}catch(e){}
   }
@@ -271,7 +300,7 @@ def _inject_dashboard_script(html: str) -> str:
     marker = "chart-exit-overlay.js"
     if marker in html:
         return html
-    snippet = '<script src="/chart-exit-overlay.js?v=chart_exit_v2"></script>\n'
+    snippet = '<script src="/chart-exit-overlay.js?v=chart_exit_v3"></script>\n'
     if "</body>" in html:
         return html.replace("</body>", snippet + "</body>")
     return html + snippet

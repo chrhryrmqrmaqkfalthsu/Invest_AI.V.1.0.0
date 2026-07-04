@@ -1,27 +1,25 @@
 #!/usr/bin/env python3
 """
-Rolling Stage2 + prior-5-day GA, precision-focused 2% event version.
+Rolling Stage2 + prior-5-day GA, TP/SL 실전형 LONG label version.
 
-타깃:
-- 다음날 시가 대비 +2% 이상 상방 이벤트(HIGH) 또는 -2% 이상 하방 이벤트(LOW)를 binary로 분류한다.
-- --event-side HIGH: 상방 이벤트만 따로 학습/평가한다.
-- --event-side LOW: 하방 이벤트만 따로 학습/평가한다.
-- 실거래 후보화를 위해 precision을 최우선으로 두고, 신호 빈도는 기본 5~20%로 조인다.
-
-유지:
-- 기존 Stage2 + 이전 5일 feature 생성 로직은 b03f39b 버전을 그대로 사용한다.
-- 252거래일 rolling window를 21거래일씩 앞으로 밀며 survivor만 다음 창으로 전달한다.
-- rule은 분위수 band(q_low~q_high) + softness를 진화시킨다.
+핵심 변경:
+- 기존 `다음날 high >= +2%` 단순 hit label을 버린다.
+- 다음날 시가 진입 기준 TP/SL 라벨을 만든다.
+- 기본 TP +2%, SL -1%, horizon 1일.
+- 일봉 OHLC만 있으므로 같은 날 TP와 SL이 둘 다 닿으면 보수적으로 loss 처리한다.
+- timeout, 즉 TP 미도달도 목적 실패로 보고 loss 처리한다.
+- fitness는 raw precision이 아니라 EV lower bound, precision lift lower bound, 최소 신호 수를 우선한다.
 
 Read/write scope:
-- OHLCV/cache/news csv는 read-only로 읽는다.
-- 결과는 out_dir 아래 연구 산출물만 생성한다.
+- OHLCV/cache/news csv는 read-only.
+- 결과는 out_dir 아래 연구 산출물만 생성.
 - run_live, 실거래, 캐시 갱신 없음.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import subprocess
 import sys
@@ -36,12 +34,19 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LEGACY_COMMIT = "b03f39b"
 LEGACY_PATH = "scripts/research/run_range_predictor_stage2_v3.py"
-EVENT_BIN_THRESHOLD = 3  # bin 3 이상 = 2% 이상 움직임
+
 EVENT_SIDE = "HIGH"
-MIN_PRECISION_TRAIN = 65.0
-MIN_PRECISION_FINAL = 65.0
-MIN_SIGNAL_RATE = 5.0
-MAX_SIGNAL_RATE = 20.0
+SIGNAL_BIN_THRESHOLD = 3
+TAKE_PROFIT_PCT = 2.0
+STOP_LOSS_PCT = 1.0
+COST_PCT = 0.15
+WILSON_Z = 1.0
+MIN_SIGNAL_RATE = 3.0
+MAX_SIGNAL_RATE = 25.0
+MIN_SIGNAL_COUNT_TRAIN = 12
+MIN_SIGNAL_COUNT_FINAL = 10
+MIN_TP_COUNT_TRAIN = 4
+MIN_TP_COUNT_FINAL = 3
 
 
 def _load_legacy_module() -> types.ModuleType:
@@ -57,10 +62,6 @@ def _load_legacy_module() -> types.ModuleType:
 L = _load_legacy_module()
 _ORIG_RANDOM_RULE = L.random_rule
 _ORIG_MUTATE_RULE = L.mutate_rule
-
-
-def json_safe(value: Any) -> Any:
-    return L.json_safe(value)
 
 
 def safe_float(value: Any, default: float = 0.0) -> float:
@@ -83,8 +84,8 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     L.write_jsonl(path, rows)
 
 
-def auto_out_dir(ticker: str, event_side: str) -> Path:
-    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_precision_event2pct_{event_side.lower()}_{time.strftime('%Y%m%d')}_"
+def auto_out_dir(ticker: str) -> Path:
+    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_tpsl_tp{TAKE_PROFIT_PCT:g}_sl{STOP_LOSS_PCT:g}_{time.strftime('%Y%m%d')}_".replace(".", "p")
     for idx in range(1, 10000):
         candidate = PROJECT_ROOT / f"{prefix}{idx:04d}"
         if not candidate.exists():
@@ -100,7 +101,7 @@ def build_rolling_splits(data, train_days: int, step_days: int, start: str | Non
         dates = [d for d in dates if d <= end]
     if len(dates) < train_days:
         raise ValueError(f"not enough dates for rolling train_days={train_days}: available={len(dates)}")
-    out: list[dict[str, Any]] = []
+    out = []
     idx = 0
     split_no = 1
     while idx + train_days <= len(dates):
@@ -112,253 +113,276 @@ def build_rolling_splits(data, train_days: int, step_days: int, start: str | Non
     return out
 
 
-def _event_arrays(df):
-    high_event = (df["high_bin"].to_numpy(dtype=int) >= EVENT_BIN_THRESHOLD)
-    low_event = (df["low_bin"].to_numpy(dtype=int) >= EVENT_BIN_THRESHOLD)
-    return high_event, low_event
+def wilson_lower_bound_pct(success: float, total: float, z: float | None = None) -> float:
+    z = WILSON_Z if z is None else float(z)
+    n = float(total)
+    if n <= 0:
+        return 0.0
+    p = float(success) / n
+    denom = 1.0 + z * z / n
+    centre = p + z * z / (2.0 * n)
+    margin = z * math.sqrt((p * (1.0 - p) + z * z / (4.0 * n)) / n)
+    return max(0.0, (centre - margin) / denom * 100.0)
 
 
-def _bool_metrics(y: np.ndarray, p: np.ndarray, prefix: str) -> dict[str, float]:
-    y = y.astype(bool)
-    p = p.astype(bool)
-    tp = float(np.sum(y & p))
-    tn = float(np.sum(~y & ~p))
-    fp = float(np.sum(~y & p))
-    fn = float(np.sum(y & ~p))
-    n = max(1.0, float(len(y)))
-    acc = (tp + tn) / n * 100.0
-    recall = tp / max(1.0, tp + fn) * 100.0
+def trade_label_arrays(df):
+    high_pct = df["high_pct_label"].to_numpy(dtype=float)
+    low_mag_pct = df["low_mag_pct_label"].to_numpy(dtype=float)
+    tp_hit = high_pct >= TAKE_PROFIT_PCT
+    sl_hit = low_mag_pct >= STOP_LOSS_PCT
+    ambiguous_both_hit = tp_hit & sl_hit
+    timeout = ~tp_hit & ~sl_hit
+    win = tp_hit & ~sl_hit
+    loss = ~win
+    return win.astype(bool), loss.astype(bool), tp_hit.astype(bool), sl_hit.astype(bool), ambiguous_both_hit.astype(bool), timeout.astype(bool)
+
+
+def signal_array(ph: np.ndarray) -> np.ndarray:
+    return ph.astype(int) >= SIGNAL_BIN_THRESHOLD
+
+
+def trade_metrics(y_win: np.ndarray, signal: np.ndarray) -> dict[str, float]:
+    y_win = y_win.astype(bool)
+    signal = signal.astype(bool)
+    tp = float(np.sum(y_win & signal))
+    fp = float(np.sum(~y_win & signal))
+    tn = float(np.sum(~y_win & ~signal))
+    fn = float(np.sum(y_win & ~signal))
+    n = max(1.0, float(len(y_win)))
+    signal_count = tp + fp
+    actual_win_count = tp + fn
+    precision = tp / max(1.0, signal_count) * 100.0
+    recall = tp / max(1.0, actual_win_count) * 100.0
     specificity = tn / max(1.0, tn + fp) * 100.0
-    precision = tp / max(1.0, tp + fp) * 100.0
-    f1 = (2.0 * precision * recall / max(1e-12, precision + recall)) if (precision + recall) > 0 else 0.0
+    acc = (tp + tn) / n * 100.0
     bal = (recall + specificity) / 2.0
-    pred_rate = float(np.mean(p) * 100.0) if len(p) else 0.0
-    actual_rate = float(np.mean(y) * 100.0) if len(y) else 0.0
+    f1 = (2.0 * precision * recall / max(1e-12, precision + recall)) if (precision + recall) > 0 else 0.0
+    signal_rate = signal_count / n * 100.0
+    actual_win_rate = actual_win_count / n * 100.0
+    precision_lcb = wilson_lower_bound_pct(tp, signal_count)
+    base_win_lcb = wilson_lower_bound_pct(actual_win_count, n)
+    ev_pct = (precision / 100.0) * TAKE_PROFIT_PCT - (1.0 - precision / 100.0) * STOP_LOSS_PCT - COST_PCT if signal_count > 0 else -COST_PCT
+    ev_lcb_pct = (precision_lcb / 100.0) * TAKE_PROFIT_PCT - (1.0 - precision_lcb / 100.0) * STOP_LOSS_PCT - COST_PCT if signal_count > 0 else -COST_PCT
     return {
-        f"{prefix}_event_acc_pct": acc,
-        f"{prefix}_event_bal_acc_pct": bal,
-        f"{prefix}_event_precision_pct": precision,
-        f"{prefix}_event_recall_pct": recall,
-        f"{prefix}_event_specificity_pct": specificity,
-        f"{prefix}_event_f1_pct": f1,
-        f"{prefix}_event_pred_rate_pct": pred_rate,
-        f"{prefix}_event_actual_rate_pct": actual_rate,
-        f"{prefix}_event_tp": tp,
-        f"{prefix}_event_fp": fp,
-        f"{prefix}_event_tn": tn,
-        f"{prefix}_event_fn": fn,
+        "trade_acc_pct": acc,
+        "trade_bal_acc_pct": bal,
+        "trade_precision_pct": precision,
+        "trade_precision_lcb_pct": precision_lcb,
+        "trade_recall_pct": recall,
+        "trade_specificity_pct": specificity,
+        "trade_f1_pct": f1,
+        "trade_signal_rate_pct": signal_rate,
+        "trade_actual_win_rate_pct": actual_win_rate,
+        "trade_base_win_lcb_pct": base_win_lcb,
+        "trade_precision_lift_pp": precision - actual_win_rate,
+        "trade_precision_lift_lcb_pp": precision_lcb - actual_win_rate,
+        "trade_precision_lcb_vs_base_lcb_pp": precision_lcb - base_win_lcb,
+        "trade_ev_pct": ev_pct,
+        "trade_ev_lcb_pct": ev_lcb_pct,
+        "trade_tp": tp,
+        "trade_fp": fp,
+        "trade_tn": tn,
+        "trade_fn": fn,
+        "trade_signal_count": signal_count,
+        "trade_actual_win_count": actual_win_count,
     }
 
 
-def make_event_baseline_spec(train_df) -> dict[str, Any]:
-    high_event, low_event = _event_arrays(train_df)
-    high_major = bool(np.mean(high_event) >= 0.5)
-    low_major = bool(np.mean(low_event) >= 0.5)
+def make_trade_baseline_spec(train_df) -> dict[str, Any]:
+    win, _, tp_hit, sl_hit, ambiguous, timeout = trade_label_arrays(train_df)
     return {
-        "event_bin_threshold": EVENT_BIN_THRESHOLD,
+        "target_mode": "long_tpsl_path_aware_daily_ohlc_conservative",
         "event_side": EVENT_SIDE,
-        "high_event_default": high_major,
-        "low_event_default": low_major,
-        "exact_high_bin": EVENT_BIN_THRESHOLD if high_major else 0,
-        "exact_low_bin": EVENT_BIN_THRESHOLD if low_major else 0,
-        "adjacent_high_bin": EVENT_BIN_THRESHOLD if high_major else 0,
-        "adjacent_low_bin": EVENT_BIN_THRESHOLD if low_major else 0,
-        "source": "current rolling train split majority binary event baseline",
+        "signal_bin_threshold": SIGNAL_BIN_THRESHOLD,
+        "take_profit_pct": TAKE_PROFIT_PCT,
+        "stop_loss_pct": STOP_LOSS_PCT,
+        "cost_pct": COST_PCT,
+        "wilson_z": WILSON_Z,
+        "train_win_rate_pct": float(np.mean(win) * 100.0) if len(win) else 0.0,
+        "train_tp_hit_rate_pct": float(np.mean(tp_hit) * 100.0) if len(tp_hit) else 0.0,
+        "train_sl_hit_rate_pct": float(np.mean(sl_hit) * 100.0) if len(sl_hit) else 0.0,
+        "train_ambiguous_both_hit_rate_pct": float(np.mean(ambiguous) * 100.0) if len(ambiguous) else 0.0,
+        "train_timeout_rate_pct": float(np.mean(timeout) * 100.0) if len(timeout) else 0.0,
+        "exact_high_bin": 0,
+        "exact_low_bin": 0,
+        "adjacent_high_bin": 0,
+        "adjacent_low_bin": 0,
+        "source": "rolling train split TP/SL long trade label baseline",
     }
 
 
-def score_event_predictions(df, ph: np.ndarray, pl: np.ndarray, spec: Mapping[str, Any]) -> dict[str, float]:
-    yh, yl = _event_arrays(df)
-    pred_h = ph.astype(int) >= EVENT_BIN_THRESHOLD
-    pred_l = pl.astype(int) >= EVENT_BIN_THRESHOLD
-    high = _bool_metrics(yh, pred_h, "high")
-    low = _bool_metrics(yl, pred_l, "low")
+def score_trade_predictions(df, ph: np.ndarray, pl: np.ndarray, spec: Mapping[str, Any]) -> dict[str, float]:
+    win, loss, tp_hit, sl_hit, ambiguous, timeout = trade_label_arrays(df)
+    sig = signal_array(ph)
+    m = trade_metrics(win, sig)
+    m.update(
+        {
+            "trade_loss_rate_pct": float(np.mean(loss) * 100.0) if len(loss) else 0.0,
+            "trade_tp_hit_rate_pct": float(np.mean(tp_hit) * 100.0) if len(tp_hit) else 0.0,
+            "trade_sl_hit_rate_pct": float(np.mean(sl_hit) * 100.0) if len(sl_hit) else 0.0,
+            "trade_ambiguous_both_hit_rate_pct": float(np.mean(ambiguous) * 100.0) if len(ambiguous) else 0.0,
+            "trade_timeout_rate_pct": float(np.mean(timeout) * 100.0) if len(timeout) else 0.0,
+        }
+    )
+    return m
+
+
+def trade_penalty(metrics: Mapping[str, Any]) -> dict[str, float]:
+    signal_rate = safe_float(metrics.get("trade_signal_rate_pct"))
+    signal_count = safe_float(metrics.get("trade_signal_count"))
+    tp_count = safe_float(metrics.get("trade_tp"))
+    rate_low = max(0.0, MIN_SIGNAL_RATE - signal_rate)
+    rate_high = max(0.0, signal_rate - MAX_SIGNAL_RATE)
+    signal_shortfall = max(0.0, float(MIN_SIGNAL_COUNT_TRAIN) - signal_count)
+    tp_shortfall = max(0.0, float(MIN_TP_COUNT_TRAIN) - tp_count)
+    total = rate_low * 0.80 + rate_high * 0.35 + signal_shortfall * 1.50 + tp_shortfall * 2.00
     return {
-        **high,
-        **low,
-        "combined_event_acc_pct": (high["high_event_acc_pct"] + low["low_event_acc_pct"]) / 2.0,
-        "combined_event_bal_acc_pct": (high["high_event_bal_acc_pct"] + low["low_event_bal_acc_pct"]) / 2.0,
-        "combined_event_f1_pct": (high["high_event_f1_pct"] + low["low_event_f1_pct"]) / 2.0,
-        "both_side_match_acc_pct": float((pred_h == yh).mean() * 50.0 + (pred_l == yl).mean() * 50.0) if len(yh) else 0.0,
+        "signal_rate_low_penalty": rate_low * 0.80,
+        "signal_rate_high_penalty": rate_high * 0.35,
+        "signal_count_shortfall_penalty": signal_shortfall * 1.50,
+        "tp_count_shortfall_penalty": tp_shortfall * 2.00,
+        "total_penalty": total,
     }
 
 
-def fixed_event_scores(df, high_event_default: bool, low_event_default: bool, spec: Mapping[str, Any]) -> dict[str, float]:
-    hb = EVENT_BIN_THRESHOLD if high_event_default else 0
-    lb = EVENT_BIN_THRESHOLD if low_event_default else 0
-    return score_event_predictions(df, np.full(len(df), hb, dtype=int), np.full(len(df), lb, dtype=int), spec)
-
-
-def side_prefix() -> str:
-    return "high" if EVENT_SIDE == "HIGH" else "low" if EVENT_SIDE == "LOW" else "high"
-
-
-def side_metric_names() -> dict[str, str]:
-    p = side_prefix()
-    return {
-        "acc": f"{p}_event_acc_pct",
-        "bal": f"{p}_event_bal_acc_pct",
-        "bal_lift": f"{p}_event_bal_acc_lift_pp",
-        "f1": f"{p}_event_f1_pct",
-        "f1_lift": f"{p}_event_f1_lift_pp",
-        "precision": f"{p}_event_precision_pct",
-        "recall": f"{p}_event_recall_pct",
-        "pred_rate": f"{p}_event_pred_rate_pct",
-        "actual_rate": f"{p}_event_actual_rate_pct",
-        "tp": f"{p}_event_tp",
-        "fp": f"{p}_event_fp",
-    }
-
-
-def precision_signal_penalty(metrics: Mapping[str, Any]) -> dict[str, float]:
-    k = side_metric_names()
-    pred_rate = safe_float(metrics.get(k["pred_rate"]))
-    precision = safe_float(metrics.get(k["precision"]))
-    rate_low = max(0.0, MIN_SIGNAL_RATE - pred_rate)
-    rate_high = max(0.0, pred_rate - MAX_SIGNAL_RATE)
-    precision_shortfall = max(0.0, MIN_PRECISION_TRAIN - precision)
-    # fitness에서는 train 기준 precision 부족도 부드럽게 벌점화한다. 최종 gate는 별도로 더 엄격히 본다.
-    return {
-        "signal_rate_low_penalty": rate_low * 1.20,
-        "signal_rate_high_penalty": rate_high * 1.00,
-        "precision_shortfall_penalty": precision_shortfall * 0.25,
-        "total_penalty": rate_low * 1.20 + rate_high * 1.00 + precision_shortfall * 0.25,
-    }
-
-
-def event_fitness(metrics: Mapping[str, Any]) -> float:
-    k = side_metric_names()
-    precision = safe_float(metrics.get(k["precision"]))
-    bal_lift = safe_float(metrics.get(k["bal_lift"]))
-    f1 = safe_float(metrics.get(k["f1"]))
-    pred_rate = safe_float(metrics.get(k["pred_rate"]))
-    # precision 최우선. recall/F1은 보조. 신호 빈도는 5~20% 중심으로 강하게 조인다.
-    raw = precision * 1.45 + bal_lift * 0.80 + f1 * 0.25
-    # 10~15% 신호 빈도 근처를 약하게 선호한다.
-    raw -= abs(pred_rate - 12.5) * 0.12
+def trade_fitness(metrics: Mapping[str, Any]) -> float:
+    ev_lcb = safe_float(metrics.get("trade_ev_lcb_pct"))
+    lift_lcb = safe_float(metrics.get("trade_precision_lift_lcb_pp"))
+    lcb_vs_base = safe_float(metrics.get("trade_precision_lcb_vs_base_lcb_pp"))
+    precision_lcb = safe_float(metrics.get("trade_precision_lcb_pct"))
+    bal = safe_float(metrics.get("trade_bal_acc_pct"))
+    signal_rate = safe_float(metrics.get("trade_signal_rate_pct"))
+    raw = ev_lcb * 35.0 + lift_lcb * 1.20 + lcb_vs_base * 0.80 + precision_lcb * 0.20 + (bal - 50.0) * 0.30
+    raw -= abs(signal_rate - 13.0) * 0.10
     return raw - safe_float(metrics.get("total_penalty"))
 
 
-def evaluate_event_predictor(ind, df, features: list[str], qspec: dict[str, dict[str, list[float]]]) -> dict[str, Any]:
+def evaluate_trade_predictor(ind, df, features: list[str], qspec: dict[str, dict[str, list[float]]]) -> dict[str, Any]:
     ph, pl, pred_diag = L.predict(ind, df[features], qspec)
-    scores = score_event_predictions(df, ph, pl, ind.baseline_spec)
-    base = fixed_event_scores(df, bool(ind.baseline_spec.get("high_event_default")), bool(ind.baseline_spec.get("low_event_default")), ind.baseline_spec)
+    scores = score_trade_predictions(df, ph, pl, ind.baseline_spec)
+    penalty = trade_penalty(scores)
     metrics = {
         **scores,
         "event_side": EVENT_SIDE,
+        "target_mode": "long_tpsl",
         "sample_count": int(len(df)),
-        "combined_event_acc_lift_pp": scores["combined_event_acc_pct"] - base["combined_event_acc_pct"],
-        "combined_event_bal_acc_lift_pp": scores["combined_event_bal_acc_pct"] - base["combined_event_bal_acc_pct"],
-        "combined_event_f1_lift_pp": scores["combined_event_f1_pct"] - base["combined_event_f1_pct"],
-        "high_event_acc_lift_pp": scores["high_event_acc_pct"] - base["high_event_acc_pct"],
-        "low_event_acc_lift_pp": scores["low_event_acc_pct"] - base["low_event_acc_pct"],
-        "high_event_bal_acc_lift_pp": scores["high_event_bal_acc_pct"] - base["high_event_bal_acc_pct"],
-        "low_event_bal_acc_lift_pp": scores["low_event_bal_acc_pct"] - base["low_event_bal_acc_pct"],
-        "high_event_f1_lift_pp": scores["high_event_f1_pct"] - base["high_event_f1_pct"],
-        "low_event_f1_lift_pp": scores["low_event_f1_pct"] - base["low_event_f1_pct"],
-        "baseline_combined_event_bal_acc_pct": base["combined_event_bal_acc_pct"],
-        "baseline_combined_event_f1_pct": base["combined_event_f1_pct"],
+        "take_profit_pct": TAKE_PROFIT_PCT,
+        "stop_loss_pct": STOP_LOSS_PCT,
+        "cost_pct": COST_PCT,
+        "signal_bin_threshold": SIGNAL_BIN_THRESHOLD,
+        **penalty,
         **pred_diag,
     }
-    metrics.update(precision_signal_penalty(metrics))
-    metrics["fitness"] = event_fitness(metrics)
+    metrics["fitness"] = trade_fitness(metrics)
     return metrics
 
 
-def event_fail_reasons(metrics: Mapping[str, Any], kind: str) -> list[dict[str, Any]]:
-    k = side_metric_names()
+def trade_fail_reasons(metrics: Mapping[str, Any], kind: str) -> list[dict[str, Any]]:
     final_kind = str(kind).lower() in {"stress", "oos"}
-    min_precision = MIN_PRECISION_FINAL if final_kind else MIN_PRECISION_TRAIN
+    min_signal_count = MIN_SIGNAL_COUNT_FINAL if final_kind else MIN_SIGNAL_COUNT_TRAIN
+    min_tp_count = MIN_TP_COUNT_FINAL if final_kind else MIN_TP_COUNT_TRAIN
     checks = [
         ("sample_count", safe_int(metrics.get("sample_count")), 100, ">="),
         ("member_score", safe_float(metrics.get("member_score")), 10.0, ">="),
-        (k["precision"], safe_float(metrics.get(k["precision"])), min_precision, ">="),
-        (k["pred_rate"], safe_float(metrics.get(k["pred_rate"])), MIN_SIGNAL_RATE, ">="),
-        (k["pred_rate"], safe_float(metrics.get(k["pred_rate"])), MAX_SIGNAL_RATE, "<="),
-        (k["bal_lift"], safe_float(metrics.get(k["bal_lift"])), 0.0, ">="),
-        ("total_penalty", safe_float(metrics.get("total_penalty")), 8.0, "<="),
+        ("trade_signal_count", safe_float(metrics.get("trade_signal_count")), float(min_signal_count), ">="),
+        ("trade_tp", safe_float(metrics.get("trade_tp")), float(min_tp_count), ">="),
+        ("trade_precision_lift_lcb_pp", safe_float(metrics.get("trade_precision_lift_lcb_pp")), 0.0, ">"),
+        ("trade_ev_lcb_pct", safe_float(metrics.get("trade_ev_lcb_pct")), 0.0, ">"),
+        ("total_penalty", safe_float(metrics.get("total_penalty")), 12.0, "<="),
     ]
     out = []
     for metric, value, threshold, rule in checks:
-        if (rule == ">=" and value < threshold) or (rule == "<=" and value > threshold):
+        failed = (rule == ">=" and value < threshold) or (rule == ">" and value <= threshold) or (rule == "<=" and value > threshold)
+        if failed:
             out.append({"metric": metric, "value": value, "threshold": threshold, "rule": rule})
     return out
 
 
-def event_score_period_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def trade_score_period_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = [dict(c) for c in candidates]
     if not rows:
         return []
-    k = side_metric_names()
-    precision_r = L.percentile_ranks([safe_float(r.get(k["precision"])) for r in rows])
-    bal_r = L.percentile_ranks([safe_float(r.get(k["bal_lift"])) for r in rows])
-    f1_r = L.percentile_ranks([safe_float(r.get(k["f1"])) for r in rows])
+    ev_r = L.percentile_ranks([safe_float(r.get("trade_ev_lcb_pct")) for r in rows])
+    lift_r = L.percentile_ranks([safe_float(r.get("trade_precision_lift_lcb_pp")) for r in rows])
+    precision_r = L.percentile_ranks([safe_float(r.get("trade_precision_lcb_pct")) for r in rows])
+    count_r = L.percentile_ranks([safe_float(r.get("trade_signal_count")) for r in rows])
     penalty_r = L.percentile_ranks([-safe_float(r.get("total_penalty")) for r in rows])
-    rate_center_r = L.percentile_ranks([-abs(safe_float(r.get(k["pred_rate"])) - 12.5) for r in rows])
     out = []
     for i, row in enumerate(rows):
-        score = max(0.0, min(1.0, precision_r[i] * 0.55 + bal_r[i] * 0.15 + f1_r[i] * 0.10 + penalty_r[i] * 0.10 + rate_center_r[i] * 0.10)) * 100.0
+        score = max(0.0, min(1.0, ev_r[i] * 0.40 + lift_r[i] * 0.25 + precision_r[i] * 0.20 + count_r[i] * 0.05 + penalty_r[i] * 0.10)) * 100.0
         r = dict(row)
         r["member_score"] = round(score, 6)
         r["member_score_components"] = {
-            "precision_percentile": round(precision_r[i], 6),
-            "bal_lift_percentile": round(bal_r[i], 6),
-            "f1_percentile": round(f1_r[i], 6),
+            "ev_lcb_percentile": round(ev_r[i], 6),
+            "precision_lift_lcb_percentile": round(lift_r[i], 6),
+            "precision_lcb_percentile": round(precision_r[i], 6),
+            "signal_count_percentile": round(count_r[i], 6),
             "low_penalty_percentile": round(penalty_r[i], 6),
-            "signal_rate_center_percentile": round(rate_center_r[i], 6),
         }
         out.append(r)
     return out
 
 
-def event_evaluate_population(pop, df, features: list[str], qspec: dict[str, dict[str, list[float]]], label: str, kind: str) -> list[dict[str, Any]]:
+def trade_evaluate_population(pop, df, features: list[str], qspec: dict[str, dict[str, list[float]]], label: str, kind: str) -> list[dict[str, Any]]:
     raw = []
     for rank, ind in enumerate(pop, 1):
-        m = evaluate_event_predictor(ind, df, features, qspec)
+        m = evaluate_trade_predictor(ind, df, features, qspec)
         raw.append({"rank_before_score": rank, "signature": ind.signature or predictor_signature(ind), "period_label": label, "period_kind": kind, **m})
-    scored = event_score_period_candidates(raw)
+    scored = trade_score_period_candidates(raw)
     for row in scored:
-        row["fail_reasons"] = event_fail_reasons(row, kind)
+        row["fail_reasons"] = trade_fail_reasons(row, kind)
         row["passed_gate"] = not row["fail_reasons"]
     return scored
 
 
 def forced_random_rule(rng: random.Random, qspec: dict[str, dict[str, list[float]]]):
     r = _ORIG_RANDOM_RULE(rng, qspec)
-    if EVENT_SIDE in {"HIGH", "LOW"}:
-        r.target = EVENT_SIDE
+    r.target = EVENT_SIDE
     return r
 
 
 def forced_mutate_rule(rule, rng: random.Random, qspec: dict[str, dict[str, list[float]]]):
     r = _ORIG_MUTATE_RULE(rule, rng, qspec)
-    if EVENT_SIDE in {"HIGH", "LOW"}:
-        r.target = EVENT_SIDE
+    r.target = EVENT_SIDE
     return r
 
 
 def force_population_side(pop) -> None:
-    if EVENT_SIDE not in {"HIGH", "LOW"}:
-        return
     for ind in pop:
         for rule in ind.rules:
             rule.target = EVENT_SIDE
         ind.signature = None
 
 
-def install_precision_target(event_side: str, min_precision_train: float, min_precision_final: float, min_signal_rate: float, max_signal_rate: float) -> None:
-    global EVENT_SIDE, MIN_PRECISION_TRAIN, MIN_PRECISION_FINAL, MIN_SIGNAL_RATE, MAX_SIGNAL_RATE
-    side = str(event_side or "HIGH").strip().upper()
-    if side not in {"HIGH", "LOW"}:
-        raise ValueError("precision target supports HIGH or LOW only")
-    EVENT_SIDE = side
-    MIN_PRECISION_TRAIN = float(min_precision_train)
-    MIN_PRECISION_FINAL = float(min_precision_final)
+def install_trade_target(
+    take_profit_pct: float,
+    stop_loss_pct: float,
+    cost_pct: float,
+    signal_bin_threshold: int,
+    wilson_z: float,
+    min_signal_rate: float,
+    max_signal_rate: float,
+    min_signal_count_train: int,
+    min_signal_count_final: int,
+    min_tp_count_train: int,
+    min_tp_count_final: int,
+) -> None:
+    global TAKE_PROFIT_PCT, STOP_LOSS_PCT, COST_PCT, SIGNAL_BIN_THRESHOLD, WILSON_Z
+    global MIN_SIGNAL_RATE, MAX_SIGNAL_RATE, MIN_SIGNAL_COUNT_TRAIN, MIN_SIGNAL_COUNT_FINAL, MIN_TP_COUNT_TRAIN, MIN_TP_COUNT_FINAL
+    TAKE_PROFIT_PCT = float(take_profit_pct)
+    STOP_LOSS_PCT = float(stop_loss_pct)
+    COST_PCT = float(cost_pct)
+    SIGNAL_BIN_THRESHOLD = int(signal_bin_threshold)
+    WILSON_Z = float(wilson_z)
     MIN_SIGNAL_RATE = float(min_signal_rate)
     MAX_SIGNAL_RATE = float(max_signal_rate)
-    L.make_baseline_spec = make_event_baseline_spec
-    L.evaluate_predictor = evaluate_event_predictor
-    L.evaluate_population = event_evaluate_population
+    MIN_SIGNAL_COUNT_TRAIN = int(min_signal_count_train)
+    MIN_SIGNAL_COUNT_FINAL = int(min_signal_count_final)
+    MIN_TP_COUNT_TRAIN = int(min_tp_count_train)
+    MIN_TP_COUNT_FINAL = int(min_tp_count_final)
+    L.make_baseline_spec = make_trade_baseline_spec
+    L.evaluate_predictor = evaluate_trade_predictor
+    L.evaluate_population = trade_evaluate_population
     L.random_rule = forced_random_rule
     L.mutate_rule = forced_mutate_rule
 
@@ -372,16 +396,26 @@ def run_rolling_stage2_predictor(
     rolling_step_days: int,
     rolling_start: str | None,
     rolling_end: str | None,
-    event_side: str,
-    min_precision_train: float,
-    min_precision_final: float,
+    take_profit_pct: float,
+    stop_loss_pct: float,
+    cost_pct: float,
+    signal_bin_threshold: int,
+    wilson_z: float,
     min_signal_rate: float,
     max_signal_rate: float,
+    min_signal_count_train: int,
+    min_signal_count_final: int,
+    min_tp_count_train: int,
+    min_tp_count_final: int,
 ) -> dict[str, Any]:
-    install_precision_target(event_side, min_precision_train, min_precision_final, min_signal_rate, max_signal_rate)
+    install_trade_target(take_profit_pct, stop_loss_pct, cost_pct, signal_bin_threshold, wilson_z, min_signal_rate, max_signal_rate, min_signal_count_train, min_signal_count_final, min_tp_count_train, min_tp_count_final)
     started = time.time()
     out_dir.mkdir(parents=True, exist_ok=False)
     data, feature_meta = L.build_dataset(ticker)
+    required_cols = {"high_pct_label", "low_mag_pct_label"}
+    missing = sorted(required_cols - set(data.columns))
+    if missing:
+        raise ValueError(f"missing required TP/SL columns: {missing}")
     all_features = L.feature_columns(data)
     rolling_splits = build_rolling_splits(data, rolling_train_days, rolling_step_days, rolling_start, rolling_end)
 
@@ -413,19 +447,16 @@ def run_rolling_stage2_predictor(
         survivors, selected_rows = L.select_survivors(pop, scored, survivor_count)
 
         for rank, ind in enumerate(pop, 1):
-            all_predictor_rows.append({"ticker": ticker, "event_side": EVENT_SIDE, "train_label": split["label"], "origin_rank": rank, "signature": ind.signature or predictor_signature(ind), "fitness": safe_float(ind.fitness), "metrics": ind.metrics, "predictor": L.individual_to_dict(ind), "stage": split_idx, "rolling_split": split})
+            all_predictor_rows.append({"ticker": ticker, "event_side": EVENT_SIDE, "target_mode": "long_tpsl", "train_label": split["label"], "origin_rank": rank, "signature": ind.signature or predictor_signature(ind), "fitness": safe_float(ind.fitness), "metrics": ind.metrics, "predictor": L.individual_to_dict(ind), "stage": split_idx, "rolling_split": split})
         for h in history:
-            h["generations_run"] = len(history)
-            h["early_stop_triggered"] = len(history) < L.GENERATIONS
-            h["rolling_split"] = split
-            h["event_side"] = EVENT_SIDE
+            h.update({"generations_run": len(history), "early_stop_triggered": len(history) < L.GENERATIONS, "rolling_split": split, "event_side": EVENT_SIDE, "target_mode": "long_tpsl"})
         all_history_rows.extend(history)
         for row in scored:
-            train_gate_rows.append({**dict(row), "ticker": ticker, "event_side": EVENT_SIDE, "stage": split_idx, "train_start": split["train_start"], "train_end": split["train_end"], "rolling_split": split})
+            train_gate_rows.append({**dict(row), "ticker": ticker, "event_side": EVENT_SIDE, "target_mode": "long_tpsl", "stage": split_idx, "train_start": split["train_start"], "train_end": split["train_end"], "rolling_split": split})
         for rank, row in enumerate(selected_rows, 1):
-            stage_survivor_rows.append({"ticker": ticker, "event_side": EVENT_SIDE, "stage": split_idx, "train_label": split["label"], "survivor_rank": rank, "rolling_split": split, **row})
+            stage_survivor_rows.append({"ticker": ticker, "event_side": EVENT_SIDE, "target_mode": "long_tpsl", "stage": split_idx, "train_label": split["label"], "survivor_rank": rank, "rolling_split": split, **row})
         gate_passed_count = sum(1 for r in scored if r.get("passed_gate"))
-        trace.append({"stage": split_idx, "event_side": EVENT_SIDE, "train_label": split["label"], "train_start": split["train_start"], "train_end": split["train_end"], "input_seed_count": len(seed_pop or []), "population": len(pop), "gate_passed_count": gate_passed_count, "selected_survivor_count": len(survivors), "fallback_used": gate_passed_count == 0, "best_fitness": safe_float(pop[0].fitness), "best_signature": pop[0].signature, "feature_count": len(usable_features)})
+        trace.append({"stage": split_idx, "event_side": EVENT_SIDE, "target_mode": "long_tpsl", "train_label": split["label"], "train_start": split["train_start"], "train_end": split["train_end"], "input_seed_count": len(seed_pop or []), "population": len(pop), "gate_passed_count": gate_passed_count, "selected_survivor_count": len(survivors), "fallback_used": gate_passed_count == 0, "best_fitness": safe_float(pop[0].fitness), "best_signature": pop[0].signature, "feature_count": len(usable_features), "train_win_rate_pct": safe_float(baseline_spec.get("train_win_rate_pct")), "train_tp_hit_rate_pct": safe_float(baseline_spec.get("train_tp_hit_rate_pct")), "train_sl_hit_rate_pct": safe_float(baseline_spec.get("train_sl_hit_rate_pct"))})
         seed_pop = survivors
         final_qspec = qspec
 
@@ -441,12 +472,17 @@ def run_rolling_stage2_predictor(
         scored = L.evaluate_population(alive, pdf, features_final, final_qspec, period["label"], period["kind"])
         passed_sigs = {str(r.get("signature")) for r in scored if r.get("passed_gate")}
         for row in scored:
-            final_eval_rows.append({**dict(row), "ticker": ticker, "event_side": EVENT_SIDE, "period_start": period["start"], "period_end": period["end"]})
+            final_eval_rows.append({**dict(row), "ticker": ticker, "event_side": EVENT_SIDE, "target_mode": "long_tpsl", "period_start": period["start"], "period_end": period["end"]})
         final_trace.append({"period_label": period["label"], "period_kind": period["kind"], "reached": len(alive), "passed": len(passed_sigs), "failed": len(alive) - len(passed_sigs)})
         alive = [ind for ind in alive if (ind.signature or predictor_signature(ind)) in passed_sigs]
 
-    final_survivor_rows = [{"ticker": ticker, "event_side": EVENT_SIDE, "signature": ind.signature or predictor_signature(ind), "predictor": L.individual_to_dict(ind)} for ind in alive]
-    distributions = {p["label"]: {"high": L.distribution(L.period_frame(data, p["start"], p["end"])["high_bin"].to_numpy(dtype=int)), "low": L.distribution(L.period_frame(data, p["start"], p["end"])["low_bin"].to_numpy(dtype=int))} for p in final_periods}
+    final_survivor_rows = [{"ticker": ticker, "event_side": EVENT_SIDE, "target_mode": "long_tpsl", "signature": ind.signature or predictor_signature(ind), "predictor": L.individual_to_dict(ind)} for ind in alive]
+    distributions = {}
+    for p in final_periods:
+        pdf = L.period_frame(data, p["start"], p["end"])
+        win, _, tp_hit, sl_hit, ambiguous, timeout = trade_label_arrays(pdf)
+        distributions[p["label"]] = {"high_bin": L.distribution(pdf["high_bin"].to_numpy(dtype=int)), "low_bin": L.distribution(pdf["low_bin"].to_numpy(dtype=int)), "trade_win_rate_pct": float(np.mean(win) * 100.0) if len(win) else 0.0, "tp_hit_rate_pct": float(np.mean(tp_hit) * 100.0) if len(tp_hit) else 0.0, "sl_hit_rate_pct": float(np.mean(sl_hit) * 100.0) if len(sl_hit) else 0.0, "ambiguous_both_hit_rate_pct": float(np.mean(ambiguous) * 100.0) if len(ambiguous) else 0.0, "timeout_rate_pct": float(np.mean(timeout) * 100.0) if len(timeout) else 0.0}
+
     write_jsonl(out_dir / "predictors_all.jsonl", all_predictor_rows)
     write_jsonl(out_dir / "ga_history.jsonl", all_history_rows)
     write_jsonl(out_dir / "train_gate_metrics.jsonl", train_gate_rows)
@@ -455,29 +491,17 @@ def run_rolling_stage2_predictor(
     write_jsonl(out_dir / "final_survivors.jsonl", final_survivor_rows)
 
     source_counts = Counter(m.get("source", "unknown") for m in feature_meta if m.get("feature") in features_final)
-    target_desc = {
-        "mode": "precision_focused_binary_event",
-        "event_side": EVENT_SIDE,
-        "high_event": "D-day high_pct >= 2% from D open",
-        "low_event": "D-day low_mag_pct >= 2% from D open",
-        "event_bin_threshold": EVENT_BIN_THRESHOLD,
-        "objective": "selected side precision first, signal rate constrained, balanced accuracy as support",
-        "min_precision_train_pct": MIN_PRECISION_TRAIN,
-        "min_precision_final_pct": MIN_PRECISION_FINAL,
-        "min_signal_rate_pct": MIN_SIGNAL_RATE,
-        "max_signal_rate_pct": MAX_SIGNAL_RATE,
-        "note": "diagnostic signal only; final trade logic still needs actual TP/SL simulation",
-    }
-    config = {"ticker": ticker, "runner": "scripts/research/run_range_predictor_stage2_v3.py", "legacy_feature_logic_source": f"{LEGACY_COMMIT}:{LEGACY_PATH}", "mode": f"rolling_stage2_plus_prior5_event2pct_{EVENT_SIDE.lower()}_precision", "rolling": {"train_days": rolling_train_days, "step_days": rolling_step_days, "start": rolling_start, "end": rolling_end, "split_count": len(rolling_splits), "splits": rolling_splits}, "final_periods": final_periods, "ga": {"population": L.POPULATION, "generations": L.GENERATIONS, "patience": L.PATIENCE, "elite_ratio": L.ELITE_RATIO, "mutation_rate": L.MUTATION_RATE, "rule_count": L.RULE_COUNT, "survivor_count": survivor_count, "random_immigrant_ratio": L.RANDOM_IMMIGRANT_RATIO, "seed_base": seed_base, "min_band_width_q": L.MIN_BAND_WIDTH_Q, "max_band_width_q": L.MAX_BAND_WIDTH_Q, "softness_range": [L.MIN_SOFTNESS, L.MAX_SOFTNESS]}, "target": target_desc, "lookahead_report": {"pass": True, "stock_features": "Stage2 entry components for D-1~D-5 plus D-1 tight swing-style features and D0 open gap", "flow_features": "optional D-1 orderbook/flow columns if cache provides them", "market_features": "ETF D0 gap or D-1 confirmed values only", "news_features": "market_history rows joined from D-1 date only", "final_eval_quantile_reference": "last rolling train qspec only; no final-period distribution fitting", "excluded": ["D0 high/low/close as features", "future trading results"]}, "feature_count": len(features_final), "feature_sources": dict(source_counts), "bin_labels": L.BIN_LABELS, "distributions": distributions}
+    target_desc = {"mode": "long_tpsl_path_aware_daily_ohlc_conservative", "entry": "D-day open", "take_profit_pct": TAKE_PROFIT_PCT, "stop_loss_pct": STOP_LOSS_PCT, "cost_pct": COST_PCT, "horizon_days": 1, "win": "high_pct_label >= TP and low_mag_pct_label < SL", "loss": "low_mag_pct_label >= SL, TP/SL same-day ambiguous, or timeout no TP", "ambiguous_policy": "same-day TP and SL both touched => loss because daily OHLC has no intraday order", "signal": f"legacy predicted HIGH bin >= {SIGNAL_BIN_THRESHOLD}", "objective": "EV lower bound + precision lift lower bound + minimum signal count", "wilson_z": WILSON_Z, "min_signal_rate_pct_soft": MIN_SIGNAL_RATE, "max_signal_rate_pct_soft": MAX_SIGNAL_RATE, "min_signal_count_train": MIN_SIGNAL_COUNT_TRAIN, "min_signal_count_final": MIN_SIGNAL_COUNT_FINAL, "min_tp_count_train": MIN_TP_COUNT_TRAIN, "min_tp_count_final": MIN_TP_COUNT_FINAL}
+    config = {"ticker": ticker, "runner": "scripts/research/run_range_predictor_stage2_v3.py", "legacy_feature_logic_source": f"{LEGACY_COMMIT}:{LEGACY_PATH}", "mode": "rolling_stage2_plus_prior5_long_tpsl", "rolling": {"train_days": rolling_train_days, "step_days": rolling_step_days, "start": rolling_start, "end": rolling_end, "split_count": len(rolling_splits), "splits": rolling_splits}, "final_periods": final_periods, "ga": {"population": L.POPULATION, "generations": L.GENERATIONS, "patience": L.PATIENCE, "elite_ratio": L.ELITE_RATIO, "mutation_rate": L.MUTATION_RATE, "rule_count": L.RULE_COUNT, "survivor_count": survivor_count, "random_immigrant_ratio": L.RANDOM_IMMIGRANT_RATIO, "seed_base": seed_base, "min_band_width_q": L.MIN_BAND_WIDTH_Q, "max_band_width_q": L.MAX_BAND_WIDTH_Q, "softness_range": [L.MIN_SOFTNESS, L.MAX_SOFTNESS]}, "target": target_desc, "lookahead_report": {"pass": True, "stock_features": "Stage2 entry components for D-1~D-5 plus D-1 tight swing-style features and D0 open gap", "flow_features": "optional D-1 orderbook/flow columns if cache provides them", "market_features": "ETF D0 gap or D-1 confirmed values only", "news_features": "market_history rows joined from D-1 date only", "label_columns": "D-day high_pct_label/low_mag_pct_label are labels only, not features", "final_eval_quantile_reference": "last rolling train qspec only; no final-period distribution fitting", "excluded": ["D0 high/low/close as features", "future trading results as features"]}, "feature_count": len(features_final), "feature_sources": dict(source_counts), "bin_labels": L.BIN_LABELS, "distributions": distributions}
     write_json(out_dir / "config.json", config)
-    summary = {"ticker": ticker, "mode": f"rolling_stage2_plus_prior5_event2pct_{EVENT_SIDE.lower()}_precision", "event_side": EVENT_SIDE, "rolling_split_count": len(rolling_splits), "stage_trace": trace, "final_trace": final_trace, "final_survivor_count": len(alive), "final_survivor_signatures": [ind.signature or predictor_signature(ind) for ind in alive], "elapsed_sec": time.time() - started, "outputs": {"predictors_all": str(out_dir / "predictors_all.jsonl"), "ga_history": str(out_dir / "ga_history.jsonl"), "train_gate_metrics": str(out_dir / "train_gate_metrics.jsonl"), "stage_survivors": str(out_dir / "stage_survivors.jsonl"), "final_period_metrics": str(out_dir / "final_period_metrics.jsonl"), "final_survivors": str(out_dir / "final_survivors.jsonl"), "config": str(out_dir / "config.json"), "summary": str(out_dir / "summary.json")}}
+    summary = {"ticker": ticker, "mode": "rolling_stage2_plus_prior5_long_tpsl", "event_side": EVENT_SIDE, "target": target_desc, "rolling_split_count": len(rolling_splits), "stage_trace": trace, "final_trace": final_trace, "final_survivor_count": len(alive), "final_survivor_signatures": [ind.signature or predictor_signature(ind) for ind in alive], "elapsed_sec": time.time() - started, "outputs": {"predictors_all": str(out_dir / "predictors_all.jsonl"), "ga_history": str(out_dir / "ga_history.jsonl"), "train_gate_metrics": str(out_dir / "train_gate_metrics.jsonl"), "stage_survivors": str(out_dir / "stage_survivors.jsonl"), "final_period_metrics": str(out_dir / "final_period_metrics.jsonl"), "final_survivors": str(out_dir / "final_survivors.jsonl"), "config": str(out_dir / "config.json"), "summary": str(out_dir / "summary.json")}}
     write_json(out_dir / "summary.json", summary)
-    print(json.dumps(json_safe(summary), ensure_ascii=False, indent=2, sort_keys=True))
+    print(json.dumps(L.json_safe(summary), ensure_ascii=False, indent=2, sort_keys=True))
     return summary
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Rolling Stage2 + prior 5 days precision-focused GA for separated 2pct HIGH/LOW event classification")
+    p = argparse.ArgumentParser(description="Rolling Stage2 + prior 5 days GA for TP/SL long trade labels")
     p.add_argument("--ticker", required=True)
     p.add_argument("--out-dir", default=None)
     p.add_argument("--seed-base", type=int, default=None)
@@ -486,11 +510,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--rolling-step-days", type=int, default=21)
     p.add_argument("--rolling-start", default="2022-07-01")
     p.add_argument("--rolling-end", default="2025-06-30")
-    p.add_argument("--event-side", choices=["HIGH", "LOW"], default="HIGH")
-    p.add_argument("--min-precision-train", type=float, default=65.0)
-    p.add_argument("--min-precision-final", type=float, default=65.0)
-    p.add_argument("--min-signal-rate", type=float, default=5.0)
-    p.add_argument("--max-signal-rate", type=float, default=20.0)
+    p.add_argument("--take-profit-pct", type=float, default=2.0)
+    p.add_argument("--stop-loss-pct", type=float, default=1.0)
+    p.add_argument("--cost-pct", type=float, default=0.15)
+    p.add_argument("--signal-bin-threshold", type=int, default=3)
+    p.add_argument("--wilson-z", type=float, default=1.0)
+    p.add_argument("--min-signal-rate", type=float, default=3.0)
+    p.add_argument("--max-signal-rate", type=float, default=25.0)
+    p.add_argument("--min-signal-count-train", type=int, default=12)
+    p.add_argument("--min-signal-count-final", type=int, default=10)
+    p.add_argument("--min-tp-count-train", type=int, default=4)
+    p.add_argument("--min-tp-count-final", type=int, default=3)
     p.add_argument("--parallel", action="store_true", help="accepted for interface parity; not used")
     return p.parse_args(argv)
 
@@ -500,8 +530,7 @@ def main(argv: list[str] | None = None) -> int:
     ticker = str(args.ticker).strip().upper()
     if not ticker:
         raise SystemExit("--ticker must not be empty")
-    event_side = str(args.event_side).strip().upper()
-    out_dir = Path(args.out_dir).resolve() if args.out_dir else auto_out_dir(ticker, event_side)
+    out_dir = Path(args.out_dir).resolve() if args.out_dir else auto_out_dir(ticker)
     seed_base = int(args.seed_base) if args.seed_base is not None else L.default_seed_base(ticker)
     run_rolling_stage2_predictor(
         ticker=ticker,
@@ -512,11 +541,17 @@ def main(argv: list[str] | None = None) -> int:
         rolling_step_days=max(1, int(args.rolling_step_days)),
         rolling_start=args.rolling_start,
         rolling_end=args.rolling_end,
-        event_side=event_side,
-        min_precision_train=float(args.min_precision_train),
-        min_precision_final=float(args.min_precision_final),
+        take_profit_pct=float(args.take_profit_pct),
+        stop_loss_pct=float(args.stop_loss_pct),
+        cost_pct=float(args.cost_pct),
+        signal_bin_threshold=int(args.signal_bin_threshold),
+        wilson_z=float(args.wilson_z),
         min_signal_rate=float(args.min_signal_rate),
         max_signal_rate=float(args.max_signal_rate),
+        min_signal_count_train=int(args.min_signal_count_train),
+        min_signal_count_final=int(args.min_signal_count_final),
+        min_tp_count_train=int(args.min_tp_count_train),
+        min_tp_count_final=int(args.min_tp_count_final),
     )
     return 0
 

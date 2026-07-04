@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 """
-Sequential Stage2-style next-day high/low range predictor GA.
+Stage2 + prior-5-day next-day high/low predictor GA.
 
-의도:
-- 기존 Stage2의 진입 컴포넌트 흐름을 D-1~D-5까지 본다.
-- 그 위에 최근 5일 OHLCV/캔들/수급(optional) 피처를 추가한다.
-- train_1 survivor -> train_2 seed -> train_3 seed 방식으로 강한 개체만 연속 생존시킨다.
-- 단일 threshold가 아니라 feature 분위수 band(q_low~q_high)를 GA가 진화시킨다.
-
-Target:
-- D일 시가 대비 D일 고가폭(high_pct)을 6-bin으로 예측
-- D일 시가 대비 D일 저가폭(low_mag_pct)을 6-bin으로 예측
+목표:
+- D일 시가 대비 D일 고가폭(high_pct)과 저가폭(low_mag_pct)을 둘 다 예측한다.
+- 6-bin 정확도만 보지 않고, bin midpoint 기반 실제 % 오차(MAE)도 같이 최소화한다.
+- train_1 survivor -> train_2 seed -> train_3 seed로 강한 개체만 연속 생존시킨다.
+- rule은 단일 threshold가 아니라 feature 분위수 band(q_low~q_high) + softness로 진화한다.
 
 Read/write scope:
 - OHLCV/cache/news csv는 read-only로 읽는다.
-- 결과는 지정 out_dir 아래 연구 산출물만 생성한다.
+- 결과는 out_dir 아래 연구 산출물만 생성한다.
 - run_live, 실거래, 캐시 갱신 없음.
 """
 from __future__ import annotations
@@ -68,6 +64,7 @@ FINAL_PERIODS_TEMPLATE = [
     {"label": "oos_2025h2", "kind": "oos", "start": "2025-07-01", "end": None, "order": 2},
 ]
 BIN_LABELS = ["0.0_0.5", "0.5_1.0", "1.0_2.0", "2.0_3.0", "3.0_5.0", "5.0_plus"]
+DEFAULT_BIN_CENTERS = [0.25, 0.75, 1.50, 2.50, 4.00, 6.00]
 BIN_COUNT = 6
 CONCENTRATION_CAP_PCT = 45.0
 CONCENTRATION_PENALTY_STRENGTH = 0.35
@@ -92,10 +89,13 @@ class GateConfig:
     min_member_score: float = 10.0
     train_min_exact_lift_pp: float = 0.0
     train_min_adjacent_lift_pp: float = 0.0
+    train_min_combined_mae_lift_pct: float = 0.0
     stress_min_exact_lift_pp: float = 0.0
     stress_min_adjacent_lift_pp: float = 0.0
+    stress_min_combined_mae_lift_pct: float = 0.0
     oos_min_exact_lift_pp: float = 0.0
     oos_min_adjacent_lift_pp: float = 0.0
+    oos_min_combined_mae_lift_pct: float = 0.0
     max_total_penalty: float = 10.0
     max_pred_share_pct: float = 65.0
 
@@ -187,7 +187,7 @@ def default_seed_base(ticker: str) -> int:
 
 
 def auto_out_dir(ticker: str) -> Path:
-    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_stage2plus5_{time.strftime('%Y%m%d')}_"
+    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_hilo_mae_{time.strftime('%Y%m%d')}_"
     for idx in range(1, 10000):
         candidate = PROJECT_ROOT / f"{prefix}{idx:04d}"
         if not candidate.exists():
@@ -271,24 +271,18 @@ def add_news_map() -> tuple[dict[str, dict[str, float]], list[dict[str, str]]]:
 
 
 def _stage2_components(df: pd.DataFrame, j: int, market_ctx: Mapping[str, float] | None = None) -> dict[str, float]:
-    """Stage2 evaluator의 진입 컴포넌트를 기본 룰북값으로 feature화한다."""
     row = df.iloc[j]
     close = safe_float(row.get("Close"), 0.0)
-    ma5 = safe_float(row.get("MA5"), 0.0)
-    ma20 = safe_float(row.get("MA20"), 0.0)
-    ma60 = safe_float(row.get("MA60"), 0.0)
+    ma5, ma20, ma60 = safe_float(row.get("MA5"), 0.0), safe_float(row.get("MA20"), 0.0), safe_float(row.get("MA60"), 0.0)
     aligned = 1.0 if bool(row.get("Aligned_bull", 0)) or (ma5 > 0 and ma5 > ma20 > ma60 > 0) else 0.0
     macd = 1.0 if bool(row.get("MACD_golden", 0)) else 0.0
     rsi = safe_float(row.get("RSI"), 50.0)
     rsi_zone = 1.0 if 30.0 <= rsi <= 70.0 else 0.0
-    bb_lower = safe_float(row.get("BB_lower"), 0.0)
-    bb_upper = safe_float(row.get("BB_upper"), 0.0)
-    bb_middle = safe_float(row.get("BB_middle"), 0.0)
+    bb_lower, bb_upper = safe_float(row.get("BB_lower"), 0.0), safe_float(row.get("BB_upper"), 0.0)
     bb_near_lower = 1.0 if bb_lower > 0 and close <= bb_lower * 1.05 else 0.0
     volume_ratio = safe_float(row.get("Volume_ratio"), 0.0)
     volume_surge = 1.0 if volume_ratio >= 1.5 else 0.0
     raw = aligned + macd + rsi_zone + bb_near_lower + volume_surge
-
     market_ctx = market_ctx or {}
     spy_ret5 = safe_float(market_ctx.get("MKT_SPY_ret5"), 0.0)
     spy_gap = safe_float(market_ctx.get("MKT_SPY_gap_d0"), 0.0)
@@ -297,13 +291,8 @@ def _stage2_components(df: pd.DataFrame, j: int, market_ctx: Mapping[str, float]
     market_score_proxy = clamp(50.0 + spy_ret5 * 5.0 + spy_gap * 8.0, 0.0, 100.0)
     sector_score_proxy = clamp(50.0 + qqq_ret5 * 5.0, 0.0, 100.0)
     vix_level_proxy = clamp(12.0 + vix_proxy * 4.0, 8.0, 45.0)
-    market_norm = (market_score_proxy - 50.0) / 50.0
-    sector_norm = (sector_score_proxy - 50.0) / 50.0
-    vix_norm = (18.0 - vix_level_proxy) / 10.0
-    correlation_adj = market_norm * 0.5 + sector_norm * 0.3 + vix_norm * 0.0
-    market_adjustment = 1.0 + clamp(correlation_adj * 0.3, -0.3, 0.3)
+    market_adjustment = 1.0 + clamp(((market_score_proxy - 50.0) / 50.0 * 0.5 + (sector_score_proxy - 50.0) / 50.0 * 0.3) * 0.3, -0.3, 0.3)
     score = raw * market_adjustment
-    threshold = 2.0
     bb_span = bb_upper - bb_lower
     return {
         "ma_align": aligned,
@@ -313,8 +302,8 @@ def _stage2_components(df: pd.DataFrame, j: int, market_ctx: Mapping[str, float]
         "volume_surge": volume_surge,
         "raw_score": raw,
         "score": score,
-        "score_margin": score - threshold,
-        "score_ratio": score / threshold if threshold else 0.0,
+        "score_margin": score - 2.0,
+        "score_ratio": score / 2.0,
         "market_adjustment": market_adjustment,
         "market_score_proxy": market_score_proxy,
         "sector_score_proxy": sector_score_proxy,
@@ -344,18 +333,9 @@ def build_dataset(ticker: str) -> tuple[pd.DataFrame, list[dict[str, str]]]:
         d = df.index[i]
         high_pct = _pct(H[i], O[i])
         low_mag = _pct(O[i], L[i]) if L[i] > 0 else np.nan
-        row: dict[str, Any] = {
-            "date": d.strftime("%Y-%m-%d"),
-            "year": int(d.year),
-            "high_pct_label": high_pct,
-            "low_mag_pct_label": low_mag,
-            "high_bin": label_bin(high_pct),
-            "low_bin": label_bin(low_mag),
-        }
+        row: dict[str, Any] = {"date": d.strftime("%Y-%m-%d"), "year": int(d.year), "high_pct_label": high_pct, "low_mag_pct_label": low_mag, "high_bin": label_bin(high_pct), "low_bin": label_bin(low_mag)}
         market_ctx = market_by_date.get(row["date"], {})
         add(row, "STK_gap_d0", _pct(O[i], C[i - 1]), "daily_stock_d0", "D0 open vs D-1 close; entry-time observable")
-
-        # 기존 Stage2 진입 컴포넌트를 최근 5일 모두에 대해 계산한다.
         for lag in range(1, LOOKBACK + 1):
             j = i - lag
             vol_base20 = np.nanmean(V[max(0, j - 20):j])
@@ -364,40 +344,42 @@ def build_dataset(ticker: str) -> tuple[pd.DataFrame, list[dict[str, str]]]:
             add(row, f"STK_lag{lag}_range", rng[j], "daily_stock_lag", f"D-{lag} high-low range")
             add(row, f"STK_lag{lag}_gap", _pct(O[j], C[j - 1]), "daily_stock_lag", f"D-{lag} gap")
             add(row, f"STK_lag{lag}_volratio20", V[j] / vol_base20 if vol_base20 else np.nan, "daily_stock_lag", f"D-{lag} volume vs prior 20d avg")
-            comps = _stage2_components(df, j, market_ctx if lag == 1 else None)
-            for k, v in comps.items():
+            for k, v in _stage2_components(df, j, market_ctx if lag == 1 else None).items():
                 add(row, f"STAGE2_lag{lag}_{k}", v, "stage2_entry_component_lag", f"Stage2 entry component {k} on D-{lag}")
-
-        # D-1은 기존 Stage2 + 캔들/수급/지표를 더 타이트하게 본다.
         j = i - 1
+        vol_base20 = np.nanmean(V[max(0, j - 20):j])
         day_range = max(H[j] - L[j], 1e-12)
         body = C[j] - O[j]
         upper = H[j] - max(O[j], C[j])
         lower = min(O[j], C[j]) - L[j]
-        add(row, "D1_body_pct", body / O[j] * 100.0, "daily_stock_d1_tight", "D-1 candle body pct")
-        add(row, "D1_abs_body_pct", abs(body) / O[j] * 100.0, "daily_stock_d1_tight", "D-1 absolute body pct")
-        add(row, "D1_upper_wick_pct", upper / O[j] * 100.0, "daily_stock_d1_tight", "D-1 upper wick pct")
-        add(row, "D1_lower_wick_pct", lower / O[j] * 100.0, "daily_stock_d1_tight", "D-1 lower wick pct")
-        add(row, "D1_body_to_range", abs(body) / day_range, "daily_stock_d1_tight", "D-1 candle body/range")
-        add(row, "D1_upper_wick_to_range", upper / day_range, "daily_stock_d1_tight", "D-1 upper wick/range")
-        add(row, "D1_lower_wick_to_range", lower / day_range, "daily_stock_d1_tight", "D-1 lower wick/range")
-        add(row, "D1_close_pos_candle", (C[j] - L[j]) / day_range * 100.0, "daily_stock_d1_tight", "D-1 close position in candle")
-        add(row, "D1_open_pos_candle", (O[j] - L[j]) / day_range * 100.0, "daily_stock_d1_tight", "D-1 open position in candle")
-        add(row, "D1_is_bullish", 1.0 if C[j] > O[j] else 0.0, "daily_stock_d1_tight", "D-1 bullish candle flag")
-        add(row, "D1_close_vs_prev_high_pct", _pct(C[j], H[j - 1]), "daily_stock_d1_tight", "D-1 close vs D-2 high")
-        add(row, "D1_close_vs_prev_low_pct", _pct(C[j], L[j - 1]), "daily_stock_d1_tight", "D-1 close vs D-2 low")
-        add(row, "D1_high_break_prev_high", 1.0 if H[j] > H[j - 1] else 0.0, "daily_stock_d1_tight", "D-1 high broke D-2 high")
-        add(row, "D1_low_break_prev_low", 1.0 if L[j] < L[j - 1] else 0.0, "daily_stock_d1_tight", "D-1 low broke D-2 low")
-        add(row, "D1_inside_bar", 1.0 if H[j] <= H[j - 1] and L[j] >= L[j - 1] else 0.0, "daily_stock_d1_tight", "D-1 inside bar")
-        add(row, "D1_outside_bar", 1.0 if H[j] >= H[j - 1] and L[j] <= L[j - 1] else 0.0, "daily_stock_d1_tight", "D-1 outside bar")
-        add(row, "D1_volratio5", V[j] / np.nanmean(V[max(0, j - 5):j]) if j >= 2 else np.nan, "daily_stock_d1_tight", "D-1 volume vs prior 5d avg")
-        add(row, "D1_volratio10", V[j] / np.nanmean(V[max(0, j - 10):j]) if j >= 2 else np.nan, "daily_stock_d1_tight", "D-1 volume vs prior 10d avg")
-        add(row, "D1_volume_chg1", _pct(V[j], V[j - 1]), "daily_stock_d1_tight", "D-1 volume change vs D-2")
-        add(row, "D1_volume_chg3", _pct(V[j], np.nanmean(V[max(0, j - 3):j])), "daily_stock_d1_tight", "D-1 volume change vs prior 3d avg")
+        for name, value, desc in [
+            ("D1_body_pct", body / O[j] * 100.0, "body pct"),
+            ("D1_abs_body_pct", abs(body) / O[j] * 100.0, "abs body pct"),
+            ("D1_upper_wick_pct", upper / O[j] * 100.0, "upper wick pct"),
+            ("D1_lower_wick_pct", lower / O[j] * 100.0, "lower wick pct"),
+            ("D1_body_to_range", abs(body) / day_range, "body/range"),
+            ("D1_upper_wick_to_range", upper / day_range, "upper wick/range"),
+            ("D1_lower_wick_to_range", lower / day_range, "lower wick/range"),
+            ("D1_close_pos_candle", (C[j] - L[j]) / day_range * 100.0, "close position"),
+            ("D1_open_pos_candle", (O[j] - L[j]) / day_range * 100.0, "open position"),
+            ("D1_is_bullish", 1.0 if C[j] > O[j] else 0.0, "bullish flag"),
+            ("D1_close_vs_prev_high_pct", _pct(C[j], H[j - 1]), "close vs prev high"),
+            ("D1_close_vs_prev_low_pct", _pct(C[j], L[j - 1]), "close vs prev low"),
+            ("D1_high_break_prev_high", 1.0 if H[j] > H[j - 1] else 0.0, "high broke prev high"),
+            ("D1_low_break_prev_low", 1.0 if L[j] < L[j - 1] else 0.0, "low broke prev low"),
+            ("D1_inside_bar", 1.0 if H[j] <= H[j - 1] and L[j] >= L[j - 1] else 0.0, "inside bar"),
+            ("D1_outside_bar", 1.0 if H[j] >= H[j - 1] and L[j] <= L[j - 1] else 0.0, "outside bar"),
+            ("D1_volratio5", V[j] / np.nanmean(V[max(0, j - 5):j]), "volume vs 5d"),
+            ("D1_volratio10", V[j] / np.nanmean(V[max(0, j - 10):j]), "volume vs 10d"),
+            ("D1_volume_chg1", _pct(V[j], V[j - 1]), "volume change 1d"),
+            ("D1_volume_chg3", _pct(V[j], np.nanmean(V[max(0, j - 3):j])), "volume change 3d"),
+            ("D1_signed_volume_ratio", (1.0 if body >= 0 else -1.0) * (V[j] / vol_base20 if vol_base20 else 0.0), "signed volume ratio"),
+            ("D1_range_vs_vol5", rng[j] / np.nanmean(rng[max(0, j - 5):j]), "range vs 5d"),
+            ("D1_range_vs_vol20", rng[j] / np.nanmean(rng[max(0, j - 20):j]), "range vs 20d"),
+        ]:
+            add(row, name, value, "daily_stock_d1_tight", f"D-1 {desc}")
         atr = safe_float(df["ATR"].iloc[j], 0.0) if "ATR" in df.columns else 0.0
         add(row, "D1_range_vs_ATR", (H[j] - L[j]) / atr if atr else np.nan, "daily_stock_d1_tight", "D-1 range / ATR")
-        add(row, "D1_range_vs_vol5", rng[j] / np.nanmean(rng[max(0, j - 5):j]) if j >= 2 else np.nan, "daily_stock_d1_tight", "D-1 range vs prior 5d avg range")
-        add(row, "D1_range_vs_vol20", rng[j] / np.nanmean(rng[max(0, j - 20):j]) if j >= 2 else np.nan, "daily_stock_d1_tight", "D-1 range vs prior 20d avg range")
         for ma_col in ["MA5", "MA20", "MA60", "MA200", "BB_upper", "BB_middle", "BB_lower"]:
             if ma_col in df.columns:
                 add(row, f"D1_close_vs_{ma_col}_pct", _pct(C[j], safe_float(df[ma_col].iloc[j], 0.0)), "daily_stock_d1_tight", f"D-1 close vs {ma_col}")
@@ -414,7 +396,6 @@ def build_dataset(ticker: str) -> tuple[pd.DataFrame, list[dict[str, str]]]:
                 add(row, f"D1_FLOW_{col}", val, "flow_d1_optional", f"optional D-1 flow/orderbook field {col}")
                 if j >= 2 and pd.notna(df[col].iloc[j - 1]):
                     add(row, f"D1_FLOW_{col}_chg1", val - safe_float(df[col].iloc[j - 1], 0.0), "flow_d1_optional", f"optional D-1 flow/orderbook 1d change {col}")
-
         for n in [3, 5, 10, 20]:
             add(row, f"STK_ret{n}", _pct(C[i - 1], C[i - 1 - n]), "daily_stock_aggregate", f"D-1 close vs D-{n + 1} close")
             add(row, f"STK_vol{n}", float(np.nanmean(rng[i - n:i])), "daily_stock_aggregate", f"D-{n}~D-1 average range")
@@ -495,9 +476,26 @@ def best_adjacent_bin(y: np.ndarray) -> int:
     return int(max(range(BIN_COUNT), key=lambda b: sum(int(counts[j]) for j in [b - 1, b, b + 1] if 0 <= j < BIN_COUNT)))
 
 
+def bin_centers_from_train(train_df: pd.DataFrame, label_col: str, bin_col: str) -> list[float]:
+    centers = list(DEFAULT_BIN_CENTERS)
+    for b in range(BIN_COUNT):
+        vals = train_df.loc[train_df[bin_col] == b, label_col].dropna().to_numpy(dtype=float)
+        if len(vals) >= 3:
+            centers[b] = float(np.nanmedian(vals))
+    return centers
+
+
 def make_baseline_spec(train_df: pd.DataFrame) -> dict[str, Any]:
     yh = train_df["high_bin"].to_numpy(dtype=int); yl = train_df["low_bin"].to_numpy(dtype=int)
-    return {"exact_high_bin": mode_bin(yh), "exact_low_bin": mode_bin(yl), "adjacent_high_bin": best_adjacent_bin(yh), "adjacent_low_bin": best_adjacent_bin(yl), "source": "current train split only"}
+    return {
+        "exact_high_bin": mode_bin(yh),
+        "exact_low_bin": mode_bin(yl),
+        "adjacent_high_bin": best_adjacent_bin(yh),
+        "adjacent_low_bin": best_adjacent_bin(yl),
+        "high_bin_centers_pct": bin_centers_from_train(train_df, "high_pct_label", "high_bin"),
+        "low_bin_centers_pct": bin_centers_from_train(train_df, "low_mag_pct_label", "low_bin"),
+        "source": "current train split only",
+    }
 
 
 def clone_individual(ind: PredictorIndividual) -> PredictorIndividual:
@@ -561,21 +559,55 @@ def predict(ind: PredictorIndividual, X: pd.DataFrame, qspec: dict[str, dict[str
     return hs.argmax(axis=1), ls.argmax(axis=1), diag
 
 
-def score_predictions(yh: np.ndarray, yl: np.ndarray, ph: np.ndarray, pl: np.ndarray) -> dict[str, float]:
+def centers_array(spec: Mapping[str, Any], key: str) -> np.ndarray:
+    vals = spec.get(key) or DEFAULT_BIN_CENTERS
+    if len(vals) != BIN_COUNT:
+        vals = DEFAULT_BIN_CENTERS
+    return np.array([safe_float(x, DEFAULT_BIN_CENTERS[i]) for i, x in enumerate(vals)], dtype=float)
+
+
+def prediction_pct_from_bins(spec: Mapping[str, Any], ph: np.ndarray, pl: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    hc = centers_array(spec, "high_bin_centers_pct")
+    lc = centers_array(spec, "low_bin_centers_pct")
+    return hc[ph.astype(int)], lc[pl.astype(int)]
+
+
+def score_predictions(df: pd.DataFrame, ph: np.ndarray, pl: np.ndarray, spec: Mapping[str, Any]) -> dict[str, float]:
+    yh = df["high_bin"].to_numpy(dtype=int); yl = df["low_bin"].to_numpy(dtype=int)
+    hp = df["high_pct_label"].to_numpy(dtype=float); lp = df["low_mag_pct_label"].to_numpy(dtype=float)
+    pred_hp, pred_lp = prediction_pct_from_bins(spec, ph, pl)
     he = float((ph == yh).mean() * 100.0) if len(yh) else 0.0
     le = float((pl == yl).mean() * 100.0) if len(yl) else 0.0
     ha = float((np.abs(ph - yh) <= 1).mean() * 100.0) if len(yh) else 0.0
     la = float((np.abs(pl - yl) <= 1).mean() * 100.0) if len(yl) else 0.0
-    return {"high_exact_acc_pct": he, "low_exact_acc_pct": le, "high_adjacent_acc_pct": ha, "low_adjacent_acc_pct": la, "combined_exact_acc_pct": (he + le) / 2.0, "combined_adjacent_acc_pct": (ha + la) / 2.0}
+    both_e = float(((ph == yh) & (pl == yl)).mean() * 100.0) if len(yh) else 0.0
+    both_a = float(((np.abs(ph - yh) <= 1) & (np.abs(pl - yl) <= 1)).mean() * 100.0) if len(yh) else 0.0
+    high_mae = float(np.nanmean(np.abs(pred_hp - hp))) if len(hp) else 0.0
+    low_mae = float(np.nanmean(np.abs(pred_lp - lp))) if len(lp) else 0.0
+    return {
+        "high_exact_acc_pct": he,
+        "low_exact_acc_pct": le,
+        "both_exact_acc_pct": both_e,
+        "high_adjacent_acc_pct": ha,
+        "low_adjacent_acc_pct": la,
+        "both_adjacent_acc_pct": both_a,
+        "combined_exact_acc_pct": (he + le) / 2.0,
+        "combined_adjacent_acc_pct": (ha + la) / 2.0,
+        "high_mae_pct": high_mae,
+        "low_mae_pct": low_mae,
+        "combined_mae_pct": (high_mae + low_mae) / 2.0,
+    }
 
 
-def fixed_prediction_scores(df: pd.DataFrame, high_bin: int, low_bin: int) -> dict[str, float]:
-    yh = df["high_bin"].to_numpy(dtype=int); yl = df["low_bin"].to_numpy(dtype=int)
-    return score_predictions(yh, yl, np.full(len(df), int(high_bin), dtype=int), np.full(len(df), int(low_bin), dtype=int))
+def fixed_prediction_scores(df: pd.DataFrame, high_bin: int, low_bin: int, spec: Mapping[str, Any]) -> dict[str, float]:
+    return score_predictions(df, np.full(len(df), int(high_bin), dtype=int), np.full(len(df), int(low_bin), dtype=int), spec)
 
 
 def baseline_metrics(df: pd.DataFrame, spec: Mapping[str, Any]) -> dict[str, Any]:
-    return {"exact_baseline": fixed_prediction_scores(df, safe_int(spec.get("exact_high_bin")), safe_int(spec.get("exact_low_bin"))), "adjacent_baseline": fixed_prediction_scores(df, safe_int(spec.get("adjacent_high_bin")), safe_int(spec.get("adjacent_low_bin")))}
+    return {
+        "exact_baseline": fixed_prediction_scores(df, safe_int(spec.get("exact_high_bin")), safe_int(spec.get("exact_low_bin")), spec),
+        "adjacent_baseline": fixed_prediction_scores(df, safe_int(spec.get("adjacent_high_bin")), safe_int(spec.get("adjacent_low_bin")), spec),
+    }
 
 
 def share_by_bin(pred: np.ndarray) -> list[float]:
@@ -608,16 +640,46 @@ def prediction_penalty(ind: PredictorIndividual, yh: np.ndarray, yl: np.ndarray,
 
 
 def predictor_fitness(metrics: Mapping[str, Any]) -> float:
-    raw = safe_float(metrics.get("combined_exact_lift_pp")) + safe_float(metrics.get("combined_adjacent_lift_pp")) * 0.35 + safe_float(metrics.get("high_exact_lift_pp")) * 0.15 + safe_float(metrics.get("low_exact_lift_pp")) * 0.15
+    # HIGH/LOW 둘 다 맞히는 동시 적중과 실제 % 오차 개선을 함께 보상한다.
+    raw = (
+        safe_float(metrics.get("combined_exact_lift_pp")) * 0.85
+        + safe_float(metrics.get("both_exact_lift_pp")) * 0.45
+        + safe_float(metrics.get("combined_adjacent_lift_pp")) * 0.25
+        + safe_float(metrics.get("both_adjacent_lift_pp")) * 0.15
+        + safe_float(metrics.get("combined_mae_lift_pct")) * 2.00
+        + safe_float(metrics.get("high_mae_lift_pct")) * 0.60
+        + safe_float(metrics.get("low_mae_lift_pct")) * 0.60
+    )
     return float(raw - safe_float(metrics.get("total_penalty")))
 
 
 def evaluate_predictor(ind: PredictorIndividual, df: pd.DataFrame, features: list[str], qspec: dict[str, dict[str, list[float]]]) -> dict[str, Any]:
     yh = df["high_bin"].to_numpy(dtype=int); yl = df["low_bin"].to_numpy(dtype=int)
     ph, pl, pred_diag = predict(ind, df[features], qspec)
-    scores = score_predictions(yh, yl, ph, pl); penalty = prediction_penalty(ind, yh, yl, ph, pl)
+    scores = score_predictions(df, ph, pl, ind.baseline_spec)
+    penalty = prediction_penalty(ind, yh, yl, ph, pl)
     bases = baseline_metrics(df, ind.baseline_spec); exact_base = bases["exact_baseline"]; adj_base = bases["adjacent_baseline"]
-    metrics = {**scores, "sample_count": int(len(df)), "combined_exact_lift_pp": scores["combined_exact_acc_pct"] - exact_base["combined_exact_acc_pct"], "combined_adjacent_lift_pp": scores["combined_adjacent_acc_pct"] - adj_base["combined_adjacent_acc_pct"], "high_exact_lift_pp": scores["high_exact_acc_pct"] - exact_base["high_exact_acc_pct"], "low_exact_lift_pp": scores["low_exact_acc_pct"] - exact_base["low_exact_acc_pct"], "high_adjacent_lift_pp": scores["high_adjacent_acc_pct"] - adj_base["high_adjacent_acc_pct"], "low_adjacent_lift_pp": scores["low_adjacent_acc_pct"] - adj_base["low_adjacent_acc_pct"], "baseline_exact_combined_acc_pct": exact_base["combined_exact_acc_pct"], "baseline_adjacent_combined_acc_pct": adj_base["combined_adjacent_acc_pct"], **penalty, **pred_diag}
+    metrics = {
+        **scores,
+        "sample_count": int(len(df)),
+        "combined_exact_lift_pp": scores["combined_exact_acc_pct"] - exact_base["combined_exact_acc_pct"],
+        "combined_adjacent_lift_pp": scores["combined_adjacent_acc_pct"] - adj_base["combined_adjacent_acc_pct"],
+        "both_exact_lift_pp": scores["both_exact_acc_pct"] - exact_base["both_exact_acc_pct"],
+        "both_adjacent_lift_pp": scores["both_adjacent_acc_pct"] - adj_base["both_adjacent_acc_pct"],
+        "high_exact_lift_pp": scores["high_exact_acc_pct"] - exact_base["high_exact_acc_pct"],
+        "low_exact_lift_pp": scores["low_exact_acc_pct"] - exact_base["low_exact_acc_pct"],
+        "high_adjacent_lift_pp": scores["high_adjacent_acc_pct"] - adj_base["high_adjacent_acc_pct"],
+        "low_adjacent_lift_pp": scores["low_adjacent_acc_pct"] - adj_base["low_adjacent_acc_pct"],
+        "high_mae_lift_pct": exact_base["high_mae_pct"] - scores["high_mae_pct"],
+        "low_mae_lift_pct": exact_base["low_mae_pct"] - scores["low_mae_pct"],
+        "combined_mae_lift_pct": exact_base["combined_mae_pct"] - scores["combined_mae_pct"],
+        "baseline_exact_combined_acc_pct": exact_base["combined_exact_acc_pct"],
+        "baseline_adjacent_combined_acc_pct": adj_base["combined_adjacent_acc_pct"],
+        "baseline_both_exact_acc_pct": exact_base["both_exact_acc_pct"],
+        "baseline_combined_mae_pct": exact_base["combined_mae_pct"],
+        **penalty,
+        **pred_diag,
+    }
     metrics["fitness"] = predictor_fitness(metrics)
     return metrics
 
@@ -679,11 +741,14 @@ def percentile_ranks(values: list[float]) -> list[float]:
 def score_period_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = [dict(c) for c in candidates]
     if not rows: return []
-    er = percentile_ranks([safe_float(r.get("combined_exact_lift_pp")) for r in rows]); ar = percentile_ranks([safe_float(r.get("combined_adjacent_lift_pp")) for r in rows]); pr = percentile_ranks([-safe_float(r.get("total_penalty")) for r in rows])
+    er = percentile_ranks([safe_float(r.get("combined_exact_lift_pp")) for r in rows])
+    br = percentile_ranks([safe_float(r.get("both_exact_lift_pp")) for r in rows])
+    mr = percentile_ranks([safe_float(r.get("combined_mae_lift_pct")) for r in rows])
+    pr = percentile_ranks([-safe_float(r.get("total_penalty")) for r in rows])
     out = []
     for i, row in enumerate(rows):
-        score = max(0.0, min(1.0, er[i] * 0.70 + ar[i] * 0.20 + pr[i] * 0.10)) * 100.0
-        r = dict(row); r["member_score"] = round(score, 6); r["member_score_components"] = {"exact_lift_percentile": round(er[i], 6), "adjacent_lift_percentile": round(ar[i], 6), "low_penalty_percentile": round(pr[i], 6)}; out.append(r)
+        score = max(0.0, min(1.0, er[i] * 0.40 + br[i] * 0.30 + mr[i] * 0.20 + pr[i] * 0.10)) * 100.0
+        r = dict(row); r["member_score"] = round(score, 6); r["member_score_components"] = {"combined_exact_percentile": round(er[i], 6), "both_exact_percentile": round(br[i], 6), "mae_lift_percentile": round(mr[i], 6), "low_penalty_percentile": round(pr[i], 6)}; out.append(r)
     return out
 
 
@@ -698,8 +763,9 @@ def fail_reasons(metrics: Mapping[str, Any], kind: str, config: GateConfig = DEF
     family = period_family(kind)
     min_exact = config.stress_min_exact_lift_pp if family == "stress" else config.oos_min_exact_lift_pp if family == "oos" else config.train_min_exact_lift_pp
     min_adj = config.stress_min_adjacent_lift_pp if family == "stress" else config.oos_min_adjacent_lift_pp if family == "oos" else config.train_min_adjacent_lift_pp
+    min_mae = config.stress_min_combined_mae_lift_pct if family == "stress" else config.oos_min_combined_mae_lift_pct if family == "oos" else config.train_min_combined_mae_lift_pct
     max_share = max(safe_float(metrics.get("max_pred_share_high_pct")), safe_float(metrics.get("max_pred_share_low_pct")))
-    checks = [("sample_count", safe_int(metrics.get("sample_count")), config.min_samples, ">="), ("member_score", safe_float(metrics.get("member_score")), config.min_member_score, ">="), ("combined_exact_lift_pp", safe_float(metrics.get("combined_exact_lift_pp")), min_exact, ">="), ("combined_adjacent_lift_pp", safe_float(metrics.get("combined_adjacent_lift_pp")), min_adj, ">="), ("total_penalty", safe_float(metrics.get("total_penalty")), config.max_total_penalty, "<="), ("max_pred_share_pct", max_share, config.max_pred_share_pct, "<=")]
+    checks = [("sample_count", safe_int(metrics.get("sample_count")), config.min_samples, ">="), ("member_score", safe_float(metrics.get("member_score")), config.min_member_score, ">="), ("combined_exact_lift_pp", safe_float(metrics.get("combined_exact_lift_pp")), min_exact, ">="), ("combined_adjacent_lift_pp", safe_float(metrics.get("combined_adjacent_lift_pp")), min_adj, ">="), ("combined_mae_lift_pct", safe_float(metrics.get("combined_mae_lift_pct")), min_mae, ">="), ("total_penalty", safe_float(metrics.get("total_penalty")), config.max_total_penalty, "<="), ("max_pred_share_pct", max_share, config.max_pred_share_pct, "<=")]
     out = []
     for metric, value, threshold, rule in checks:
         if (rule == ">=" and value < threshold) or (rule == "<=" and value > threshold):
@@ -808,14 +874,14 @@ def run_sequential_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, 
     distributions = {p["label"]: {"high": distribution(period_frame(data, p["start"], p["end"])["high_bin"].to_numpy(dtype=int)), "low": distribution(period_frame(data, p["start"], p["end"])["low_bin"].to_numpy(dtype=int))} for p in final_periods}
     write_jsonl(out_dir / "predictors_all.jsonl", all_predictor_rows); write_jsonl(out_dir / "ga_history.jsonl", all_history_rows); write_jsonl(out_dir / "train_gate_metrics.jsonl", train_gate_rows); write_jsonl(out_dir / "stage_survivors.jsonl", stage_survivor_rows); write_jsonl(out_dir / "final_period_metrics.jsonl", final_eval_rows); write_jsonl(out_dir / "final_survivors.jsonl", final_survivor_rows)
     source_counts = Counter(m.get("source", "unknown") for m in feature_meta if m.get("feature") in features_final)
-    config = {"ticker": ticker, "runner": "scripts/research/run_range_predictor_stage2_v3.py", "mode": "stage2_entry_components_plus_prior5_quantile_band", "train_splits": TRAIN_SPLITS, "final_periods": final_periods, "ga": {"population": POPULATION, "generations": GENERATIONS, "patience": PATIENCE, "elite_ratio": ELITE_RATIO, "mutation_rate": MUTATION_RATE, "rule_count": RULE_COUNT, "survivor_count": survivor_count, "random_immigrant_ratio": RANDOM_IMMIGRANT_RATIO, "seed_base": seed_base, "min_band_width_q": MIN_BAND_WIDTH_Q, "max_band_width_q": MAX_BAND_WIDTH_Q, "softness_range": [MIN_SOFTNESS, MAX_SOFTNESS]}, "gate": dataclasses.asdict(DEFAULT_GATE), "lookahead_report": {"pass": True, "stock_features": "Stage2 entry components for D-1~D-5 plus D-1 tight swing-style features and D0 open gap", "flow_features": "optional D-1 orderbook/flow columns if cache provides them", "market_features": "ETF D0 gap or D-1 confirmed values only", "news_features": "market_history rows joined from D-1 date only", "final_eval_quantile_reference": "train_3 qspec only; no final-period distribution fitting", "excluded": ["D0 high/low/close as features", "future trading results"]}, "feature_count": len(features_final), "feature_sources": dict(source_counts), "bin_labels": BIN_LABELS, "distributions": distributions}
+    config = {"ticker": ticker, "runner": "scripts/research/run_range_predictor_stage2_v3.py", "mode": "stage2_plus_prior5_hilo_bin_and_pct_mae", "train_splits": TRAIN_SPLITS, "final_periods": final_periods, "ga": {"population": POPULATION, "generations": GENERATIONS, "patience": PATIENCE, "elite_ratio": ELITE_RATIO, "mutation_rate": MUTATION_RATE, "rule_count": RULE_COUNT, "survivor_count": survivor_count, "random_immigrant_ratio": RANDOM_IMMIGRANT_RATIO, "seed_base": seed_base, "min_band_width_q": MIN_BAND_WIDTH_Q, "max_band_width_q": MAX_BAND_WIDTH_Q, "softness_range": [MIN_SOFTNESS, MAX_SOFTNESS]}, "target": {"high": "D-day high pct from D open", "low": "D-day low magnitude pct from D open", "objective": "both HIGH/LOW bin accuracy + actual pct MAE improvement"}, "gate": dataclasses.asdict(DEFAULT_GATE), "lookahead_report": {"pass": True, "stock_features": "Stage2 entry components for D-1~D-5 plus D-1 tight swing-style features and D0 open gap", "flow_features": "optional D-1 orderbook/flow columns if cache provides them", "market_features": "ETF D0 gap or D-1 confirmed values only", "news_features": "market_history rows joined from D-1 date only", "final_eval_quantile_reference": "train_3 qspec only; no final-period distribution fitting", "excluded": ["D0 high/low/close as features", "future trading results"]}, "feature_count": len(features_final), "feature_sources": dict(source_counts), "bin_labels": BIN_LABELS, "default_bin_centers_pct": DEFAULT_BIN_CENTERS, "distributions": distributions}
     write_json(out_dir / "config.json", config)
-    summary = {"ticker": ticker, "mode": "stage2_entry_components_plus_prior5_quantile_band", "stage_trace": trace, "final_trace": final_trace, "final_survivor_count": len(alive), "final_survivor_signatures": [ind.signature or predictor_signature(ind) for ind in alive], "elapsed_sec": time.time() - started, "outputs": {"predictors_all": str(out_dir / "predictors_all.jsonl"), "ga_history": str(out_dir / "ga_history.jsonl"), "train_gate_metrics": str(out_dir / "train_gate_metrics.jsonl"), "stage_survivors": str(out_dir / "stage_survivors.jsonl"), "final_period_metrics": str(out_dir / "final_period_metrics.jsonl"), "final_survivors": str(out_dir / "final_survivors.jsonl"), "config": str(out_dir / "config.json"), "summary": str(out_dir / "summary.json")}}
+    summary = {"ticker": ticker, "mode": "stage2_plus_prior5_hilo_bin_and_pct_mae", "stage_trace": trace, "final_trace": final_trace, "final_survivor_count": len(alive), "final_survivor_signatures": [ind.signature or predictor_signature(ind) for ind in alive], "elapsed_sec": time.time() - started, "outputs": {"predictors_all": str(out_dir / "predictors_all.jsonl"), "ga_history": str(out_dir / "ga_history.jsonl"), "train_gate_metrics": str(out_dir / "train_gate_metrics.jsonl"), "stage_survivors": str(out_dir / "stage_survivors.jsonl"), "final_period_metrics": str(out_dir / "final_period_metrics.jsonl"), "final_survivors": str(out_dir / "final_survivors.jsonl"), "config": str(out_dir / "config.json"), "summary": str(out_dir / "summary.json")}}
     write_json(out_dir / "summary.json", summary); print(json.dumps(json_safe(summary), ensure_ascii=False, indent=2, sort_keys=True)); return summary
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Sequential Stage2-style next-day high/low range predictor GA: Stage2 components + prior 5 days")
+    p = argparse.ArgumentParser(description="Stage2 + prior 5 days GA for next-day HIGH/LOW bin and pct-MAE prediction")
     p.add_argument("--ticker", required=True); p.add_argument("--out-dir", default=None); p.add_argument("--seed-base", type=int, default=None); p.add_argument("--survivor-count", type=int, default=SURVIVOR_COUNT); p.add_argument("--parallel", action="store_true", help="accepted for interface parity; not used")
     return p.parse_args(argv)
 

@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-Sequential Stage2-style next-day high/low range predictor GA.
+Sequential Stage2-style next-day high/low range predictor GA with quantile-band rules.
 
-핵심 변경점(v3 재구성):
-- train_1, train_2, train_3을 각각 독립 학습하지 않는다.
-- train_1에서 살아남은 predictor만 train_2의 seed population으로 들어간다.
-- train_2에서 살아남은 predictor만 train_3의 seed population으로 들어간다.
-- 즉, 시대별로 강한 개체만 연속 생존시키는 구조다.
+핵심 구조:
+- train_1에서 살아남은 predictor만 train_2 seed population으로 전달한다.
+- train_2에서 살아남은 predictor만 train_3 seed population으로 전달한다.
+- 최종 생존자를 stress / OOS에서 확인한다.
+
+이번 버전의 핵심 변경:
+- 단일 threshold 규칙(feature >= x, feature <= x)을 제거했다.
+- 각 rule은 feature의 분위수 구간(q_low~q_high)을 가진다.
+- GA가 q_low, q_high, weight, softness를 세대마다 조정한다.
+- 즉, 특정 숫자를 외우는 대신 "이 정도 범위 안이면 패턴으로 인정"하는 band rule을 진화시킨다.
 
 Target:
 - D일 시가 대비 D일 고가폭(high_pct)을 6-bin으로 예측
@@ -43,13 +48,19 @@ POPULATION = 100
 GENERATIONS = 50
 PATIENCE = 15
 ELITE_RATIO = 0.20
-MUTATION_RATE = 0.15
+MUTATION_RATE = 0.18
 MUTATION_STRENGTH = 0.20
 TOURNAMENT_SIZE = 3
-RULE_COUNT = 80
+RULE_COUNT = 60
 LOOKBACK = 5
 SURVIVOR_COUNT = 20
 RANDOM_IMMIGRANT_RATIO = 0.10
+
+MIN_BAND_WIDTH_Q = 0.10
+MAX_BAND_WIDTH_Q = 0.70
+DEFAULT_SOFTNESS = 0.35
+MIN_SOFTNESS = 0.00
+MAX_SOFTNESS = 1.25
 
 CACHE = PROJECT_ROOT / "data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache"
 MARKET_SYMS = ["SPY", "QQQ", "IWM", "DIA", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLB", "XLU", "XLRE", "XLC", "SMH", "ARKK"]
@@ -69,6 +80,8 @@ CONCENTRATION_PENALTY_STRENGTH = 0.35
 RARE_BIN_ACTUAL_MAX_PCT = 5.0
 RARE_BIN_PRED_ALLOW_PCT = 10.0
 RARE_BIN_PENALTY_STRENGTH = 0.45
+NARROW_BAND_PENALTY_STRENGTH = 0.10
+WIDE_BAND_PENALTY_STRENGTH = 0.04
 
 
 @dataclass(frozen=True)
@@ -92,10 +105,11 @@ DEFAULT_GATE = GateConfig()
 class RuleGene:
     target: str
     feature: str
-    op: str
-    threshold: float
+    q_low: float
+    q_high: float
     bin: int
     weight: float
+    softness: float
 
 
 @dataclass
@@ -146,6 +160,10 @@ def safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, float(value)))
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(json_safe(payload), ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -163,7 +181,7 @@ def default_seed_base(ticker: str) -> int:
 
 
 def auto_out_dir(ticker: str) -> Path:
-    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_seq_{time.strftime('%Y%m%d')}_"
+    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_qband_{time.strftime('%Y%m%d')}_"
     for idx in range(1, 10000):
         candidate = PROJECT_ROOT / f"{prefix}{idx:04d}"
         if not candidate.exists():
@@ -318,15 +336,42 @@ def period_frame(data: pd.DataFrame, start: str | None, end: str | None) -> pd.D
     return data.loc[mask].reset_index(drop=True)
 
 
-def make_quantiles(train_df: pd.DataFrame, features: list[str]) -> dict[str, list[float]]:
-    out: dict[str, list[float]] = {}
+def make_quantile_spec(train_df: pd.DataFrame, features: list[str]) -> dict[str, dict[str, list[float]]]:
+    levels = [0.0, 0.02, 0.05, 0.10, 0.20, 0.33333, 0.50, 0.66667, 0.80, 0.90, 0.95, 0.98, 1.0]
+    out: dict[str, dict[str, list[float]]] = {}
     for f in features:
         vals = train_df[f].dropna().to_numpy(dtype=float)
-        if len(vals) < 50:
+        vals = vals[np.isfinite(vals)]
+        if len(vals) < 50 or float(np.nanmax(vals)) == float(np.nanmin(vals)):
             continue
-        qs = np.nanpercentile(vals, [5, 10, 20, 33.333, 50, 66.667, 80, 90, 95])
-        out[f] = [float(x) for x in qs if math.isfinite(float(x))]
+        qs = np.nanpercentile(vals, [q * 100.0 for q in levels])
+        clean = [float(x) for x in qs]
+        if all(math.isfinite(x) for x in clean):
+            out[f] = {"levels": list(levels), "values": clean}
     return out
+
+
+def q_value(qspec: Mapping[str, list[float]], q: float) -> float:
+    levels = list(qspec.get("levels") or [])
+    values = list(qspec.get("values") or [])
+    if not levels or not values or len(levels) != len(values):
+        return float("nan")
+    return float(np.interp(clamp(q, 0.0, 1.0), levels, values))
+
+
+def normalize_band(q_low: float, q_high: float) -> tuple[float, float]:
+    lo = clamp(min(q_low, q_high), 0.0, 1.0)
+    hi = clamp(max(q_low, q_high), 0.0, 1.0)
+    width = hi - lo
+    if width < MIN_BAND_WIDTH_Q:
+        mid = (lo + hi) / 2.0
+        lo = clamp(mid - MIN_BAND_WIDTH_Q / 2.0, 0.0, 1.0 - MIN_BAND_WIDTH_Q)
+        hi = lo + MIN_BAND_WIDTH_Q
+    if hi - lo > MAX_BAND_WIDTH_Q:
+        mid = (lo + hi) / 2.0
+        lo = clamp(mid - MAX_BAND_WIDTH_Q / 2.0, 0.0, 1.0 - MAX_BAND_WIDTH_Q)
+        hi = lo + MAX_BAND_WIDTH_Q
+    return float(lo), float(hi)
 
 
 def mode_bin(y: np.ndarray) -> int:
@@ -378,28 +423,72 @@ def predictor_signature(ind: PredictorIndividual) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
 
-def random_rule(rng: random.Random, q: dict[str, list[float]]) -> RuleGene:
-    feature = rng.choice(list(q.keys()))
-    return RuleGene(rng.choice(["HIGH", "LOW"]), feature, rng.choice(["<=", ">="]), float(rng.choice(q[feature])), int(rng.randrange(BIN_COUNT)), float(rng.uniform(0.5, 3.0)))
+def random_rule(rng: random.Random, qspec: dict[str, dict[str, list[float]]]) -> RuleGene:
+    feature = rng.choice(list(qspec.keys()))
+    width = rng.uniform(MIN_BAND_WIDTH_Q, 0.45)
+    lo = rng.uniform(0.0, 1.0 - width)
+    hi = lo + width
+    return RuleGene(
+        target=rng.choice(["HIGH", "LOW"]),
+        feature=feature,
+        q_low=float(lo),
+        q_high=float(hi),
+        bin=int(rng.randrange(BIN_COUNT)),
+        weight=float(rng.uniform(0.4, 3.0)),
+        softness=float(rng.uniform(0.10, 0.80)),
+    )
 
 
-def random_individual(rng: random.Random, q: dict[str, list[float]], baseline_spec: dict[str, Any]) -> PredictorIndividual:
-    return PredictorIndividual([random_rule(rng, q) for _ in range(RULE_COUNT)], safe_int(baseline_spec.get("exact_high_bin")), safe_int(baseline_spec.get("exact_low_bin")), dict(baseline_spec))
+def random_individual(rng: random.Random, qspec: dict[str, dict[str, list[float]]], baseline_spec: dict[str, Any]) -> PredictorIndividual:
+    return PredictorIndividual([random_rule(rng, qspec) for _ in range(RULE_COUNT)], safe_int(baseline_spec.get("exact_high_bin")), safe_int(baseline_spec.get("exact_low_bin")), dict(baseline_spec))
 
 
-def predict(ind: PredictorIndividual, X: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+def band_match_strength(vals: np.ndarray, lo_val: float, hi_val: float, softness: float) -> np.ndarray:
+    out = np.zeros(len(vals), dtype=float)
+    finite = np.isfinite(vals)
+    if not finite.any() or not math.isfinite(lo_val) or not math.isfinite(hi_val):
+        return out
+    lo, hi = min(lo_val, hi_val), max(lo_val, hi_val)
+    width = max(1e-12, hi - lo)
+    margin = max(0.0, softness) * width
+    inside = finite & (vals >= lo) & (vals <= hi)
+    out[inside] = 1.0
+    if margin > 0:
+        lower = finite & (vals < lo) & (vals >= lo - margin)
+        upper = finite & (vals > hi) & (vals <= hi + margin)
+        out[lower] = (vals[lower] - (lo - margin)) / margin
+        out[upper] = ((hi + margin) - vals[upper]) / margin
+    return np.clip(out, 0.0, 1.0)
+
+
+def predict(ind: PredictorIndividual, X: pd.DataFrame, qspec: dict[str, dict[str, list[float]]]) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
     n = len(X)
     hs = np.zeros((n, BIN_COUNT), dtype=float); ls = np.zeros((n, BIN_COUNT), dtype=float)
     hs[:, ind.default_high_bin] = 1.0; ls[:, ind.default_low_bin] = 1.0
+    active_rule_count = 0
+    active_strength_sum = 0.0
+    band_widths = []
     for rule in ind.rules:
-        if rule.feature not in X.columns:
+        if rule.feature not in X.columns or rule.feature not in qspec:
             continue
+        q_low, q_high = normalize_band(rule.q_low, rule.q_high)
+        lo_val = q_value(qspec[rule.feature], q_low)
+        hi_val = q_value(qspec[rule.feature], q_high)
         vals = X[rule.feature].to_numpy(dtype=float)
-        mask = np.isfinite(vals) & (vals <= rule.threshold if rule.op == "<=" else vals >= rule.threshold)
-        if not mask.any():
+        strength = band_match_strength(vals, lo_val, hi_val, rule.softness)
+        if not np.any(strength > 0):
             continue
-        (hs if rule.target == "HIGH" else ls)[mask, rule.bin] += rule.weight
-    return hs.argmax(axis=1), ls.argmax(axis=1)
+        active_rule_count += 1
+        active_strength_sum += float(np.mean(strength))
+        band_widths.append(q_high - q_low)
+        target_scores = hs if rule.target == "HIGH" else ls
+        target_scores[:, int(rule.bin)] += strength * float(rule.weight)
+    diag = {
+        "active_rule_count": active_rule_count,
+        "avg_rule_match_strength": active_strength_sum / active_rule_count if active_rule_count else 0.0,
+        "avg_band_width_q": float(np.mean(band_widths)) if band_widths else 0.0,
+    }
+    return hs.argmax(axis=1), ls.argmax(axis=1), diag
 
 
 def score_predictions(yh: np.ndarray, yl: np.ndarray, ph: np.ndarray, pl: np.ndarray) -> dict[str, float]:
@@ -426,7 +515,21 @@ def share_by_bin(pred: np.ndarray) -> list[float]:
     return [float(c / total * 100.0) for c in counts]
 
 
-def prediction_penalty(yh: np.ndarray, yl: np.ndarray, ph: np.ndarray, pl: np.ndarray) -> dict[str, Any]:
+def band_shape_penalty(ind: PredictorIndividual) -> dict[str, float]:
+    narrow = 0.0
+    wide = 0.0
+    for rule in ind.rules:
+        lo, hi = normalize_band(rule.q_low, rule.q_high)
+        width = hi - lo
+        narrow += max(0.0, MIN_BAND_WIDTH_Q * 1.5 - width)
+        wide += max(0.0, width - 0.55)
+    return {
+        "narrow_band_penalty": narrow * NARROW_BAND_PENALTY_STRENGTH,
+        "wide_band_penalty": wide * WIDE_BAND_PENALTY_STRENGTH,
+    }
+
+
+def prediction_penalty(ind: PredictorIndividual, yh: np.ndarray, yl: np.ndarray, ph: np.ndarray, pl: np.ndarray) -> dict[str, Any]:
     hp, lp = share_by_bin(ph), share_by_bin(pl)
     ha, la = share_by_bin(yh), share_by_bin(yl)
     conc_excess = max(0.0, max(hp) - CONCENTRATION_CAP_PCT) + max(0.0, max(lp) - CONCENTRATION_CAP_PCT)
@@ -435,10 +538,15 @@ def prediction_penalty(yh: np.ndarray, yl: np.ndarray, ph: np.ndarray, pl: np.nd
         for p, a in zip(pred, actual):
             if a < RARE_BIN_ACTUAL_MAX_PCT:
                 rare_excess += max(0.0, p - RARE_BIN_PRED_ALLOW_PCT)
+    band_penalty = band_shape_penalty(ind)
+    conc_penalty = conc_excess * CONCENTRATION_PENALTY_STRENGTH
+    rare_penalty = rare_excess * RARE_BIN_PENALTY_STRENGTH
+    total = conc_penalty + rare_penalty + band_penalty["narrow_band_penalty"] + band_penalty["wide_band_penalty"]
     return {
-        "concentration_penalty": conc_excess * CONCENTRATION_PENALTY_STRENGTH,
-        "rare_bin_penalty": rare_excess * RARE_BIN_PENALTY_STRENGTH,
-        "total_penalty": conc_excess * CONCENTRATION_PENALTY_STRENGTH + rare_excess * RARE_BIN_PENALTY_STRENGTH,
+        "concentration_penalty": conc_penalty,
+        "rare_bin_penalty": rare_penalty,
+        **band_penalty,
+        "total_penalty": total,
         "max_pred_share_high_pct": max(hp) if hp else 0.0,
         "max_pred_share_low_pct": max(lp) if lp else 0.0,
         "pred_distribution_high_pct": hp,
@@ -451,11 +559,11 @@ def predictor_fitness(metrics: Mapping[str, Any]) -> float:
     return float(raw - safe_float(metrics.get("total_penalty")))
 
 
-def evaluate_predictor(ind: PredictorIndividual, df: pd.DataFrame, features: list[str]) -> dict[str, Any]:
+def evaluate_predictor(ind: PredictorIndividual, df: pd.DataFrame, features: list[str], qspec: dict[str, dict[str, list[float]]]) -> dict[str, Any]:
     yh = df["high_bin"].to_numpy(dtype=int); yl = df["low_bin"].to_numpy(dtype=int)
-    ph, pl = predict(ind, df[features])
+    ph, pl, pred_diag = predict(ind, df[features], qspec)
     scores = score_predictions(yh, yl, ph, pl)
-    penalty = prediction_penalty(yh, yl, ph, pl)
+    penalty = prediction_penalty(ind, yh, yl, ph, pl)
     bases = baseline_metrics(df, ind.baseline_spec)
     exact_base = bases["exact_baseline"]; adj_base = bases["adjacent_baseline"]
     metrics = {
@@ -470,35 +578,49 @@ def evaluate_predictor(ind: PredictorIndividual, df: pd.DataFrame, features: lis
         "baseline_exact_combined_acc_pct": exact_base["combined_exact_acc_pct"],
         "baseline_adjacent_combined_acc_pct": adj_base["combined_adjacent_acc_pct"],
         **penalty,
+        **pred_diag,
     }
     metrics["fitness"] = predictor_fitness(metrics)
     return metrics
 
 
-def mutate(ind: PredictorIndividual, rng: random.Random, q: dict[str, list[float]], baseline_spec: dict[str, Any] | None = None) -> PredictorIndividual:
+def mutate_rule(rule: RuleGene, rng: random.Random, qspec: dict[str, dict[str, list[float]]]) -> RuleGene:
+    r = RuleGene(**asdict(rule))
+    action = rng.choice(["replace", "feature", "shift_band", "resize_band", "bin", "weight", "softness", "target"])
+    if action == "replace" and qspec:
+        return random_rule(rng, qspec)
+    if action == "feature" and qspec:
+        r.feature = rng.choice(list(qspec.keys()))
+    elif action == "shift_band":
+        delta = rng.gauss(0.0, MUTATION_STRENGTH * 0.18)
+        r.q_low += delta; r.q_high += delta
+    elif action == "resize_band":
+        lo, hi = normalize_band(r.q_low, r.q_high)
+        mid = (lo + hi) / 2.0
+        width = clamp((hi - lo) * rng.uniform(0.70, 1.35), MIN_BAND_WIDTH_Q, MAX_BAND_WIDTH_Q)
+        r.q_low = mid - width / 2.0; r.q_high = mid + width / 2.0
+    elif action == "bin":
+        r.bin = int(max(0, min(BIN_COUNT - 1, r.bin + rng.choice([-2, -1, 1, 2]))))
+    elif action == "weight":
+        r.weight = float(max(0.1, min(5.0, r.weight + rng.gauss(0.0, MUTATION_STRENGTH))))
+    elif action == "softness":
+        r.softness = float(clamp(r.softness + rng.gauss(0.0, 0.18), MIN_SOFTNESS, MAX_SOFTNESS))
+    elif action == "target":
+        r.target = "LOW" if r.target == "HIGH" else "HIGH"
+    r.q_low, r.q_high = normalize_band(r.q_low, r.q_high)
+    r.softness = float(clamp(r.softness, MIN_SOFTNESS, MAX_SOFTNESS))
+    return r
+
+
+def mutate(ind: PredictorIndividual, rng: random.Random, qspec: dict[str, dict[str, list[float]]], baseline_spec: dict[str, Any] | None = None) -> PredictorIndividual:
     child = clone_individual(ind); child.fitness = -1e9; child.metrics = None; child.signature = None
     if baseline_spec is not None:
         child.baseline_spec = dict(baseline_spec)
         child.default_high_bin = safe_int(baseline_spec.get("exact_high_bin"), child.default_high_bin)
         child.default_low_bin = safe_int(baseline_spec.get("exact_low_bin"), child.default_low_bin)
     for i, rule in enumerate(child.rules):
-        if rng.random() > MUTATION_RATE:
-            continue
-        action = rng.choice(["replace", "feature", "threshold", "bin", "weight", "op", "target"])
-        if action == "replace":
-            child.rules[i] = random_rule(rng, q)
-        elif action == "feature":
-            f = rng.choice(list(q.keys())); rule.feature = f; rule.threshold = float(rng.choice(q[f]))
-        elif action == "threshold" and rule.feature in q:
-            rule.threshold = float(rng.choice(q[rule.feature]))
-        elif action == "bin":
-            rule.bin = int(max(0, min(BIN_COUNT - 1, rule.bin + rng.choice([-2, -1, 1, 2]))))
-        elif action == "weight":
-            rule.weight = float(max(0.1, min(5.0, rule.weight + rng.gauss(0.0, MUTATION_STRENGTH))))
-        elif action == "op":
-            rule.op = "<=" if rule.op == ">=" else ">="
-        elif action == "target":
-            rule.target = "LOW" if rule.target == "HIGH" else "HIGH"
+        if rng.random() <= MUTATION_RATE:
+            child.rules[i] = mutate_rule(rule, rng, qspec)
     return child
 
 
@@ -579,10 +701,10 @@ def fail_reasons(metrics: Mapping[str, Any], kind: str, config: GateConfig = DEF
     return out
 
 
-def evaluate_population(pop: list[PredictorIndividual], df: pd.DataFrame, features: list[str], label: str, kind: str) -> list[dict[str, Any]]:
+def evaluate_population(pop: list[PredictorIndividual], df: pd.DataFrame, features: list[str], qspec: dict[str, dict[str, list[float]]], label: str, kind: str) -> list[dict[str, Any]]:
     raw = []
     for rank, ind in enumerate(pop, 1):
-        m = evaluate_predictor(ind, df, features)
+        m = evaluate_predictor(ind, df, features, qspec)
         raw.append({"rank_before_score": rank, "signature": ind.signature or predictor_signature(ind), "period_label": label, "period_kind": kind, **m})
     scored = score_period_candidates(raw)
     for row in scored:
@@ -594,7 +716,6 @@ def evaluate_population(pop: list[PredictorIndividual], df: pd.DataFrame, featur
 def select_survivors(pop: list[PredictorIndividual], scored_rows: list[dict[str, Any]], survivor_count: int) -> tuple[list[PredictorIndividual], list[dict[str, Any]]]:
     by_sig = {ind.signature or predictor_signature(ind): ind for ind in pop}
     passed = [r for r in scored_rows if r.get("passed_gate")]
-    # 엄격 gate 통과자가 부족하면, 연속 진화가 끊기지 않도록 상위 member_score/fitness를 fallback survivor로 둔다.
     ordered = sorted(passed or scored_rows, key=lambda r: (safe_float(r.get("member_score")), safe_float(r.get("fitness"))), reverse=True)
     selected_rows = ordered[:max(1, survivor_count)]
     survivors = []
@@ -608,27 +729,27 @@ def select_survivors(pop: list[PredictorIndividual], scored_rows: list[dict[str,
     return survivors, selected_rows
 
 
-def prepare_population_for_split(seed_pop: list[PredictorIndividual] | None, rng: random.Random, q: dict[str, list[float]], baseline_spec: dict[str, Any]) -> list[PredictorIndividual]:
+def prepare_population_for_split(seed_pop: list[PredictorIndividual] | None, rng: random.Random, qspec: dict[str, dict[str, list[float]]], baseline_spec: dict[str, Any]) -> list[PredictorIndividual]:
     if not seed_pop:
-        return [random_individual(rng, q, baseline_spec) for _ in range(POPULATION)]
-    pop = [mutate(ind, rng, q, baseline_spec) for ind in seed_pop]
+        return [random_individual(rng, qspec, baseline_spec) for _ in range(POPULATION)]
+    pop = [mutate(ind, rng, qspec, baseline_spec) for ind in seed_pop]
     immigrant_n = max(0, int(POPULATION * RANDOM_IMMIGRANT_RATIO))
     while len(pop) < POPULATION - immigrant_n and len(seed_pop) >= 2:
         child = crossover(rng.choice(seed_pop), rng.choice(seed_pop), rng, baseline_spec)
-        pop.append(mutate(child, rng, q, baseline_spec))
+        pop.append(mutate(child, rng, qspec, baseline_spec))
     while len(pop) < POPULATION:
-        pop.append(random_individual(rng, q, baseline_spec))
+        pop.append(random_individual(rng, qspec, baseline_spec))
     return pop[:POPULATION]
 
 
-def run_ga_on_split(initial_pop: list[PredictorIndividual], train_df: pd.DataFrame, features: list[str], split: Mapping[str, str], seed: int) -> tuple[list[PredictorIndividual], list[dict[str, Any]]]:
+def run_ga_on_split(initial_pop: list[PredictorIndividual], train_df: pd.DataFrame, features: list[str], qspec: dict[str, dict[str, list[float]]], split: Mapping[str, str], seed: int) -> tuple[list[PredictorIndividual], list[dict[str, Any]]]:
     rng = random.Random(seed)
     pop = [clone_individual(ind) for ind in initial_pop]
     history = []
     best_fitness = -1e18
     no_improve = 0
     for ind in pop:
-        ind.metrics = evaluate_predictor(ind, train_df, features); ind.fitness = safe_float(ind.metrics.get("fitness")); ind.signature = predictor_signature(ind)
+        ind.metrics = evaluate_predictor(ind, train_df, features, qspec); ind.fitness = safe_float(ind.metrics.get("fitness")); ind.signature = predictor_signature(ind)
     for gen in range(1, GENERATIONS + 1):
         pop.sort(key=lambda x: x.fitness, reverse=True)
         best = pop[0]
@@ -643,13 +764,12 @@ def run_ga_on_split(initial_pop: list[PredictorIndividual], train_df: pd.DataFra
         new_pop = [clone_individual(x) for x in pop[:elite_n]]
         while len(new_pop) < POPULATION:
             child = crossover(tournament(pop, rng), tournament(pop, rng), rng, pop[0].baseline_spec)
-            child = mutate(child, rng, {}, pop[0].baseline_spec) if not features else child
+            child = mutate(child, rng, qspec, pop[0].baseline_spec)
+            child.metrics = evaluate_predictor(child, train_df, features, qspec)
+            child.fitness = safe_float(child.metrics.get("fitness"))
+            child.signature = predictor_signature(child)
             new_pop.append(child)
-        # crossover 자식은 현재 split quantile 기준 mutation이 필요하다.
-        q = make_quantiles(train_df, features)
-        pop = [new_pop[i] if i < elite_n else mutate(new_pop[i], rng, q, pop[0].baseline_spec) for i in range(len(new_pop))]
-        for ind in pop[elite_n:]:
-            ind.metrics = evaluate_predictor(ind, train_df, features); ind.fitness = safe_float(ind.metrics.get("fitness")); ind.signature = predictor_signature(ind)
+        pop = new_pop
     pop.sort(key=lambda x: x.fitness, reverse=True)
     return pop, history
 
@@ -681,17 +801,18 @@ def run_sequential_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, 
     stage_survivor_rows: list[dict[str, Any]] = []
     trace: list[dict[str, Any]] = []
     features_used_union: set[str] = set()
+    final_qspec: dict[str, dict[str, list[float]]] = {}
 
     for split_idx, split in enumerate(TRAIN_SPLITS, 1):
         rng = random.Random(seed_base + split_idx * 1000)
         train_df = period_frame(data, split["train_start"], split["train_end"])
-        q = make_quantiles(train_df, all_features)
-        usable_features = [f for f in all_features if f in q]
+        qspec = make_quantile_spec(train_df, all_features)
+        usable_features = [f for f in all_features if f in qspec]
         features_used_union.update(usable_features)
         baseline_spec = make_baseline_spec(train_df)
-        init_pop = prepare_population_for_split(seed_pop, rng, q, baseline_spec)
-        pop, history = run_ga_on_split(init_pop, train_df, usable_features, split, seed_base + split_idx)
-        scored = evaluate_population(pop, train_df, usable_features, split["label"], "train")
+        init_pop = prepare_population_for_split(seed_pop, rng, qspec, baseline_spec)
+        pop, history = run_ga_on_split(init_pop, train_df, usable_features, qspec, split, seed_base + split_idx)
+        scored = evaluate_population(pop, train_df, usable_features, qspec, split["label"], "train")
         survivors, selected_rows = select_survivors(pop, scored, survivor_count)
         for rank, ind in enumerate(pop, 1):
             all_predictor_rows.append({"ticker": ticker, "train_label": split["label"], "origin_rank": rank, "signature": ind.signature or predictor_signature(ind), "fitness": safe_float(ind.fitness), "metrics": ind.metrics, "predictor": individual_to_dict(ind), "stage": split_idx})
@@ -703,18 +824,19 @@ def run_sequential_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, 
             train_gate_rows.append(r)
         for rank, row in enumerate(selected_rows, 1):
             stage_survivor_rows.append({"ticker": ticker, "stage": split_idx, "train_label": split["label"], "survivor_rank": rank, **row})
-        trace.append({"stage": split_idx, "train_label": split["label"], "input_seed_count": len(seed_pop or []), "population": len(pop), "gate_passed_count": sum(1 for r in scored if r.get("passed_gate")), "selected_survivor_count": len(survivors), "fallback_used": sum(1 for r in scored if r.get("passed_gate")) == 0, "best_fitness": safe_float(pop[0].fitness), "best_signature": pop[0].signature})
+        trace.append({"stage": split_idx, "train_label": split["label"], "input_seed_count": len(seed_pop or []), "population": len(pop), "gate_passed_count": sum(1 for r in scored if r.get("passed_gate")), "selected_survivor_count": len(survivors), "fallback_used": sum(1 for r in scored if r.get("passed_gate")) == 0, "best_fitness": safe_float(pop[0].fitness), "best_signature": pop[0].signature, "feature_count": len(usable_features)})
         seed_pop = survivors
+        final_qspec = qspec
 
     final_pop = seed_pop or []
     final_periods = build_final_periods(data)
     final_eval_rows: list[dict[str, Any]] = []
     alive = final_pop
     final_trace = []
-    features_final = sorted(features_used_union)
+    features_final = sorted(f for f in features_used_union if f in final_qspec)
     for period in final_periods:
         pdf = period_frame(data, period["start"], period["end"])
-        scored = evaluate_population(alive, pdf, features_final, period["label"], period["kind"])
+        scored = evaluate_population(alive, pdf, features_final, final_qspec, period["label"], period["kind"])
         passed_sigs = {str(r.get("signature")) for r in scored if r.get("passed_gate")}
         for row in scored:
             r = dict(row); r.update({"ticker": ticker, "period_start": period["start"], "period_end": period["end"]})
@@ -733,12 +855,12 @@ def run_sequential_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, 
     config = {
         "ticker": ticker,
         "runner": "scripts/research/run_range_predictor_stage2_v3.py",
-        "mode": "sequential_survivor_stage2_style",
+        "mode": "sequential_survivor_quantile_band_stage2_style",
         "train_splits": TRAIN_SPLITS,
         "final_periods": final_periods,
-        "ga": {"population": POPULATION, "generations": GENERATIONS, "patience": PATIENCE, "elite_ratio": ELITE_RATIO, "mutation_rate": MUTATION_RATE, "rule_count": RULE_COUNT, "survivor_count": survivor_count, "random_immigrant_ratio": RANDOM_IMMIGRANT_RATIO, "seed_base": seed_base},
+        "ga": {"population": POPULATION, "generations": GENERATIONS, "patience": PATIENCE, "elite_ratio": ELITE_RATIO, "mutation_rate": MUTATION_RATE, "rule_count": RULE_COUNT, "survivor_count": survivor_count, "random_immigrant_ratio": RANDOM_IMMIGRANT_RATIO, "seed_base": seed_base, "min_band_width_q": MIN_BAND_WIDTH_Q, "max_band_width_q": MAX_BAND_WIDTH_Q, "softness_range": [MIN_SOFTNESS, MAX_SOFTNESS]},
         "gate": dataclasses.asdict(DEFAULT_GATE),
-        "lookahead_report": {"pass": True, "stock_features": "D-5~D-1 bars and D0 open gap only", "market_features": "ETF D0 gap or D-1 confirmed values only", "news_features": "market_history rows joined from D-1 date only", "excluded": ["D0 high/low/close as features", "future trading results"]},
+        "lookahead_report": {"pass": True, "stock_features": "D-5~D-1 bars and D0 open gap only", "market_features": "ETF D0 gap or D-1 confirmed values only", "news_features": "market_history rows joined from D-1 date only", "final_eval_quantile_reference": "train_3 qspec only; no final-period distribution fitting", "excluded": ["D0 high/low/close as features", "future trading results"]},
         "feature_count": len(features_final),
         "feature_sources": dict(Counter(m.get("source", "unknown") for m in feature_meta if m.get("feature") in features_final)),
         "bin_labels": BIN_LABELS,
@@ -747,7 +869,7 @@ def run_sequential_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, 
     write_json(out_dir / "config.json", config)
     summary = {
         "ticker": ticker,
-        "mode": "sequential_survivor_stage2_style",
+        "mode": "sequential_survivor_quantile_band_stage2_style",
         "stage_trace": trace,
         "final_trace": final_trace,
         "final_survivor_count": len(alive),
@@ -761,7 +883,7 @@ def run_sequential_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, 
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Sequential Stage2-style next-day high/low range predictor GA")
+    p = argparse.ArgumentParser(description="Sequential Stage2-style next-day high/low range predictor GA with quantile-band rules")
     p.add_argument("--ticker", required=True)
     p.add_argument("--out-dir", default=None)
     p.add_argument("--seed-base", type=int, default=None)

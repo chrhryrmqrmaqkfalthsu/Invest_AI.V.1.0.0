@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-Sequential Stage2-style next-day high/low range predictor GA with quantile-band rules.
+Sequential Stage2-style next-day high/low range predictor GA.
 
-구조:
-- train_1 survivor만 train_2 seed population으로 전달
-- train_2 survivor만 train_3 seed population으로 전달
-- 최종 survivor를 stress / OOS에서 검증
+의도:
+- 기존 Stage2의 진입 컴포넌트 흐름을 D-1~D-5까지 본다.
+- 그 위에 최근 5일 OHLCV/캔들/수급(optional) 피처를 추가한다.
+- train_1 survivor -> train_2 seed -> train_3 seed 방식으로 강한 개체만 연속 생존시킨다.
+- 단일 threshold가 아니라 feature 분위수 band(q_low~q_high)를 GA가 진화시킨다.
 
-규칙:
-- 단일 threshold가 아니라 feature 분위수 band(q_low~q_high)를 진화시킨다.
-- softness로 band 근처 값을 느슨하게 인정한다.
-- D-1 피처는 스윙 진입식으로 더 촘촘히 만들고, D-2~D-5는 비교적 기본 피처만 둔다.
-- 호가/미체결/수급 컬럼이 OHLCV 캐시에 있으면 자동으로 feature에 포함한다.
+Target:
+- D일 시가 대비 D일 고가폭(high_pct)을 6-bin으로 예측
+- D일 시가 대비 D일 저가폭(low_mag_pct)을 6-bin으로 예측
 
 Read/write scope:
 - OHLCV/cache/news csv는 read-only로 읽는다.
@@ -47,7 +46,7 @@ ELITE_RATIO = 0.20
 MUTATION_RATE = 0.18
 MUTATION_STRENGTH = 0.20
 TOURNAMENT_SIZE = 3
-RULE_COUNT = 70
+RULE_COUNT = 80
 LOOKBACK = 5
 SURVIVOR_COUNT = 20
 RANDOM_IMMIGRANT_RATIO = 0.10
@@ -78,7 +77,6 @@ RARE_BIN_PENALTY_STRENGTH = 0.45
 NARROW_BAND_PENALTY_STRENGTH = 0.10
 WIDE_BAND_PENALTY_STRENGTH = 0.04
 
-# 있으면 자동 수용할 수급/호가/미체결 후보 컬럼. 현재 CW 캐시에는 없음.
 FLOW_COLUMN_CANDIDATES = [
     "buy_unfilled", "sell_unfilled", "buy_unfilled_qty", "sell_unfilled_qty",
     "bid_size", "ask_size", "bid_depth", "ask_depth", "bid_volume", "ask_volume",
@@ -168,6 +166,10 @@ def clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, float(value)))
 
 
+def _pct(a: float, b: float) -> float:
+    return (a / b - 1.0) * 100.0 if b else np.nan
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(json_safe(payload), ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -185,7 +187,7 @@ def default_seed_base(ticker: str) -> int:
 
 
 def auto_out_dir(ticker: str) -> Path:
-    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_qband_{time.strftime('%Y%m%d')}_"
+    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_stage2plus5_{time.strftime('%Y%m%d')}_"
     for idx in range(1, 10000):
         candidate = PROJECT_ROOT / f"{prefix}{idx:04d}"
         if not candidate.exists():
@@ -233,9 +235,9 @@ def add_market_maps() -> tuple[dict[str, dict[str, float]], list[dict[str, str]]
             d = m.index[i].strftime("%Y-%m-%d")
             by_date.setdefault(d, {})
             by_date[d].update({
-                f"MKT_{sym}_gap_d0": (O[i] / C[i - 1] - 1.0) * 100.0,
-                f"MKT_{sym}_prev_ret1": (C[i - 1] / C[i - 2] - 1.0) * 100.0,
-                f"MKT_{sym}_ret5": (C[i - 1] / C[i - 6] - 1.0) * 100.0,
+                f"MKT_{sym}_gap_d0": _pct(O[i], C[i - 1]),
+                f"MKT_{sym}_prev_ret1": _pct(C[i - 1], C[i - 2]),
+                f"MKT_{sym}_ret5": _pct(C[i - 1], C[i - 6]),
                 f"MKT_{sym}_vol5": float(np.nanmean(rng[i - 5:i])),
                 f"MKT_{sym}_vol20": float(np.nanmean(rng[i - 20:i])),
             })
@@ -268,8 +270,59 @@ def add_news_map() -> tuple[dict[str, dict[str, float]], list[dict[str, str]]]:
     return by_prev_date, meta
 
 
-def _pct(a: float, b: float) -> float:
-    return (a / b - 1.0) * 100.0 if b else np.nan
+def _stage2_components(df: pd.DataFrame, j: int, market_ctx: Mapping[str, float] | None = None) -> dict[str, float]:
+    """Stage2 evaluator의 진입 컴포넌트를 기본 룰북값으로 feature화한다."""
+    row = df.iloc[j]
+    close = safe_float(row.get("Close"), 0.0)
+    ma5 = safe_float(row.get("MA5"), 0.0)
+    ma20 = safe_float(row.get("MA20"), 0.0)
+    ma60 = safe_float(row.get("MA60"), 0.0)
+    aligned = 1.0 if bool(row.get("Aligned_bull", 0)) or (ma5 > 0 and ma5 > ma20 > ma60 > 0) else 0.0
+    macd = 1.0 if bool(row.get("MACD_golden", 0)) else 0.0
+    rsi = safe_float(row.get("RSI"), 50.0)
+    rsi_zone = 1.0 if 30.0 <= rsi <= 70.0 else 0.0
+    bb_lower = safe_float(row.get("BB_lower"), 0.0)
+    bb_upper = safe_float(row.get("BB_upper"), 0.0)
+    bb_middle = safe_float(row.get("BB_middle"), 0.0)
+    bb_near_lower = 1.0 if bb_lower > 0 and close <= bb_lower * 1.05 else 0.0
+    volume_ratio = safe_float(row.get("Volume_ratio"), 0.0)
+    volume_surge = 1.0 if volume_ratio >= 1.5 else 0.0
+    raw = aligned + macd + rsi_zone + bb_near_lower + volume_surge
+
+    market_ctx = market_ctx or {}
+    spy_ret5 = safe_float(market_ctx.get("MKT_SPY_ret5"), 0.0)
+    spy_gap = safe_float(market_ctx.get("MKT_SPY_gap_d0"), 0.0)
+    qqq_ret5 = safe_float(market_ctx.get("MKT_QQQ_ret5"), spy_ret5)
+    vix_proxy = safe_float(market_ctx.get("MKT_SPY_vol20"), 1.5)
+    market_score_proxy = clamp(50.0 + spy_ret5 * 5.0 + spy_gap * 8.0, 0.0, 100.0)
+    sector_score_proxy = clamp(50.0 + qqq_ret5 * 5.0, 0.0, 100.0)
+    vix_level_proxy = clamp(12.0 + vix_proxy * 4.0, 8.0, 45.0)
+    market_norm = (market_score_proxy - 50.0) / 50.0
+    sector_norm = (sector_score_proxy - 50.0) / 50.0
+    vix_norm = (18.0 - vix_level_proxy) / 10.0
+    correlation_adj = market_norm * 0.5 + sector_norm * 0.3 + vix_norm * 0.0
+    market_adjustment = 1.0 + clamp(correlation_adj * 0.3, -0.3, 0.3)
+    score = raw * market_adjustment
+    threshold = 2.0
+    bb_span = bb_upper - bb_lower
+    return {
+        "ma_align": aligned,
+        "macd": macd,
+        "rsi_zone": rsi_zone,
+        "bb_near_lower": bb_near_lower,
+        "volume_surge": volume_surge,
+        "raw_score": raw,
+        "score": score,
+        "score_margin": score - threshold,
+        "score_ratio": score / threshold if threshold else 0.0,
+        "market_adjustment": market_adjustment,
+        "market_score_proxy": market_score_proxy,
+        "sector_score_proxy": sector_score_proxy,
+        "vix_level_proxy": vix_level_proxy,
+        "rsi_distance_mid": abs(rsi - 50.0),
+        "bb_position": (close - bb_lower) / bb_span * 100.0 if bb_span else np.nan,
+        "volume_ratio": volume_ratio,
+    }
 
 
 def build_dataset(ticker: str) -> tuple[pd.DataFrame, list[dict[str, str]]]:
@@ -289,8 +342,8 @@ def build_dataset(ticker: str) -> tuple[pd.DataFrame, list[dict[str, str]]]:
 
     for i in range(max(21, LOOKBACK + 1), len(df)):
         d = df.index[i]
-        high_pct = (H[i] / O[i] - 1.0) * 100.0
-        low_mag = (O[i] / L[i] - 1.0) * 100.0 if L[i] > 0 else np.nan
+        high_pct = _pct(H[i], O[i])
+        low_mag = _pct(O[i], L[i]) if L[i] > 0 else np.nan
         row: dict[str, Any] = {
             "date": d.strftime("%Y-%m-%d"),
             "year": int(d.year),
@@ -299,8 +352,10 @@ def build_dataset(ticker: str) -> tuple[pd.DataFrame, list[dict[str, str]]]:
             "high_bin": label_bin(high_pct),
             "low_bin": label_bin(low_mag),
         }
+        market_ctx = market_by_date.get(row["date"], {})
         add(row, "STK_gap_d0", _pct(O[i], C[i - 1]), "daily_stock_d0", "D0 open vs D-1 close; entry-time observable")
 
+        # 기존 Stage2 진입 컴포넌트를 최근 5일 모두에 대해 계산한다.
         for lag in range(1, LOOKBACK + 1):
             j = i - lag
             vol_base20 = np.nanmean(V[max(0, j - 20):j])
@@ -309,8 +364,11 @@ def build_dataset(ticker: str) -> tuple[pd.DataFrame, list[dict[str, str]]]:
             add(row, f"STK_lag{lag}_range", rng[j], "daily_stock_lag", f"D-{lag} high-low range")
             add(row, f"STK_lag{lag}_gap", _pct(O[j], C[j - 1]), "daily_stock_lag", f"D-{lag} gap")
             add(row, f"STK_lag{lag}_volratio20", V[j] / vol_base20 if vol_base20 else np.nan, "daily_stock_lag", f"D-{lag} volume vs prior 20d avg")
+            comps = _stage2_components(df, j, market_ctx if lag == 1 else None)
+            for k, v in comps.items():
+                add(row, f"STAGE2_lag{lag}_{k}", v, "stage2_entry_component_lag", f"Stage2 entry component {k} on D-{lag}")
 
-        # D-1은 스윙 진입식으로 촘촘하게 본다. 모두 D-1 종가까지 확정된 값만 사용한다.
+        # D-1은 기존 Stage2 + 캔들/수급/지표를 더 타이트하게 본다.
         j = i - 1
         day_range = max(H[j] - L[j], 1e-12)
         body = C[j] - O[j]
@@ -336,27 +394,20 @@ def build_dataset(ticker: str) -> tuple[pd.DataFrame, list[dict[str, str]]]:
         add(row, "D1_volratio10", V[j] / np.nanmean(V[max(0, j - 10):j]) if j >= 2 else np.nan, "daily_stock_d1_tight", "D-1 volume vs prior 10d avg")
         add(row, "D1_volume_chg1", _pct(V[j], V[j - 1]), "daily_stock_d1_tight", "D-1 volume change vs D-2")
         add(row, "D1_volume_chg3", _pct(V[j], np.nanmean(V[max(0, j - 3):j])), "daily_stock_d1_tight", "D-1 volume change vs prior 3d avg")
-        add(row, "D1_price_volume_sign", (1.0 if C[j] >= O[j] else -1.0) * (V[j] / vol_base20 if vol_base20 else 0.0), "daily_stock_d1_tight", "D-1 signed volume ratio")
         atr = safe_float(df["ATR"].iloc[j], 0.0) if "ATR" in df.columns else 0.0
         add(row, "D1_range_vs_ATR", (H[j] - L[j]) / atr if atr else np.nan, "daily_stock_d1_tight", "D-1 range / ATR")
         add(row, "D1_range_vs_vol5", rng[j] / np.nanmean(rng[max(0, j - 5):j]) if j >= 2 else np.nan, "daily_stock_d1_tight", "D-1 range vs prior 5d avg range")
         add(row, "D1_range_vs_vol20", rng[j] / np.nanmean(rng[max(0, j - 20):j]) if j >= 2 else np.nan, "daily_stock_d1_tight", "D-1 range vs prior 20d avg range")
         for ma_col in ["MA5", "MA20", "MA60", "MA200", "BB_upper", "BB_middle", "BB_lower"]:
             if ma_col in df.columns:
-                base = safe_float(df[ma_col].iloc[j], 0.0)
-                add(row, f"D1_close_vs_{ma_col}_pct", _pct(C[j], base), "daily_stock_d1_tight", f"D-1 close vs {ma_col}")
+                add(row, f"D1_close_vs_{ma_col}_pct", _pct(C[j], safe_float(df[ma_col].iloc[j], 0.0)), "daily_stock_d1_tight", f"D-1 close vs {ma_col}")
         if "MA5" in df.columns and "MA20" in df.columns:
             add(row, "D1_MA5_vs_MA20_pct", _pct(float(df["MA5"].iloc[j]), float(df["MA20"].iloc[j])), "daily_stock_d1_tight", "D-1 MA5 vs MA20")
-        if "BB_upper" in df.columns and "BB_lower" in df.columns:
-            bb_span = safe_float(df["BB_upper"].iloc[j], 0.0) - safe_float(df["BB_lower"].iloc[j], 0.0)
-            add(row, "D1_BB_position", (C[j] - safe_float(df["BB_lower"].iloc[j], 0.0)) / bb_span * 100.0 if bb_span else np.nan, "daily_stock_d1_tight", "D-1 close position in Bollinger band")
         for col in ["RSI", "ATR_pct", "BB_width", "Volume_ratio", "MACD", "MACD_signal", "MACD_hist", "Stoch_K", "Stoch_D", "Trend_pct", "Momentum_20d", "Aligned_bull", "MACD_golden"]:
             if col in df.columns:
                 add(row, f"D1_{col}", float(df[col].iloc[j]), "daily_stock_d1_tight", f"{col} as of D-1")
                 if j >= 2 and pd.notna(df[col].iloc[j - 1]):
                     add(row, f"D1_{col}_chg1", float(df[col].iloc[j]) - float(df[col].iloc[j - 1]), "daily_stock_d1_tight", f"{col} D-1 minus D-2")
-
-        # 호가/미체결/체결강도 계열은 데이터가 있을 때만 D-1 중심으로 자동 수용한다.
         for col in FLOW_COLUMN_CANDIDATES:
             if col in df.columns:
                 val = safe_float(df[col].iloc[j], np.nan)
@@ -371,8 +422,7 @@ def build_dataset(ticker: str) -> tuple[pd.DataFrame, list[dict[str, str]]]:
         lo20, hi20 = np.nanmin(L[i - 20:i]), np.nanmax(H[i - 20:i])
         add(row, "STK_range_pos5", (C[i - 1] - lo5) / (hi5 - lo5) * 100.0 if hi5 != lo5 else 50.0, "daily_stock_aggregate", "D-1 close position in prior 5d range")
         add(row, "STK_range_pos20", (C[i - 1] - lo20) / (hi20 - lo20) * 100.0 if hi20 != lo20 else 50.0, "daily_stock_aggregate", "D-1 close position in prior 20d range")
-
-        row.update(market_by_date.get(row["date"], {}))
+        row.update(market_ctx)
         row.update(news_by_prev_date.get(df.index[i - 1].strftime("%Y-%m-%d"), {}))
         rows.append(row)
     data = pd.DataFrame(rows).replace([np.inf, -np.inf], np.nan)
@@ -758,14 +808,14 @@ def run_sequential_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, 
     distributions = {p["label"]: {"high": distribution(period_frame(data, p["start"], p["end"])["high_bin"].to_numpy(dtype=int)), "low": distribution(period_frame(data, p["start"], p["end"])["low_bin"].to_numpy(dtype=int))} for p in final_periods}
     write_jsonl(out_dir / "predictors_all.jsonl", all_predictor_rows); write_jsonl(out_dir / "ga_history.jsonl", all_history_rows); write_jsonl(out_dir / "train_gate_metrics.jsonl", train_gate_rows); write_jsonl(out_dir / "stage_survivors.jsonl", stage_survivor_rows); write_jsonl(out_dir / "final_period_metrics.jsonl", final_eval_rows); write_jsonl(out_dir / "final_survivors.jsonl", final_survivor_rows)
     source_counts = Counter(m.get("source", "unknown") for m in feature_meta if m.get("feature") in features_final)
-    config = {"ticker": ticker, "runner": "scripts/research/run_range_predictor_stage2_v3.py", "mode": "sequential_survivor_quantile_band_d1_tight", "train_splits": TRAIN_SPLITS, "final_periods": final_periods, "ga": {"population": POPULATION, "generations": GENERATIONS, "patience": PATIENCE, "elite_ratio": ELITE_RATIO, "mutation_rate": MUTATION_RATE, "rule_count": RULE_COUNT, "survivor_count": survivor_count, "random_immigrant_ratio": RANDOM_IMMIGRANT_RATIO, "seed_base": seed_base, "min_band_width_q": MIN_BAND_WIDTH_Q, "max_band_width_q": MAX_BAND_WIDTH_Q, "softness_range": [MIN_SOFTNESS, MAX_SOFTNESS]}, "gate": dataclasses.asdict(DEFAULT_GATE), "lookahead_report": {"pass": True, "stock_features": "D-5~D-2 basic bars, D-1 tight swing-style features, D0 open gap only", "flow_features": "optional D-1 orderbook/flow columns if cache provides them", "market_features": "ETF D0 gap or D-1 confirmed values only", "news_features": "market_history rows joined from D-1 date only", "final_eval_quantile_reference": "train_3 qspec only; no final-period distribution fitting", "excluded": ["D0 high/low/close as features", "future trading results"]}, "feature_count": len(features_final), "feature_sources": dict(source_counts), "bin_labels": BIN_LABELS, "distributions": distributions}
+    config = {"ticker": ticker, "runner": "scripts/research/run_range_predictor_stage2_v3.py", "mode": "stage2_entry_components_plus_prior5_quantile_band", "train_splits": TRAIN_SPLITS, "final_periods": final_periods, "ga": {"population": POPULATION, "generations": GENERATIONS, "patience": PATIENCE, "elite_ratio": ELITE_RATIO, "mutation_rate": MUTATION_RATE, "rule_count": RULE_COUNT, "survivor_count": survivor_count, "random_immigrant_ratio": RANDOM_IMMIGRANT_RATIO, "seed_base": seed_base, "min_band_width_q": MIN_BAND_WIDTH_Q, "max_band_width_q": MAX_BAND_WIDTH_Q, "softness_range": [MIN_SOFTNESS, MAX_SOFTNESS]}, "gate": dataclasses.asdict(DEFAULT_GATE), "lookahead_report": {"pass": True, "stock_features": "Stage2 entry components for D-1~D-5 plus D-1 tight swing-style features and D0 open gap", "flow_features": "optional D-1 orderbook/flow columns if cache provides them", "market_features": "ETF D0 gap or D-1 confirmed values only", "news_features": "market_history rows joined from D-1 date only", "final_eval_quantile_reference": "train_3 qspec only; no final-period distribution fitting", "excluded": ["D0 high/low/close as features", "future trading results"]}, "feature_count": len(features_final), "feature_sources": dict(source_counts), "bin_labels": BIN_LABELS, "distributions": distributions}
     write_json(out_dir / "config.json", config)
-    summary = {"ticker": ticker, "mode": "sequential_survivor_quantile_band_d1_tight", "stage_trace": trace, "final_trace": final_trace, "final_survivor_count": len(alive), "final_survivor_signatures": [ind.signature or predictor_signature(ind) for ind in alive], "elapsed_sec": time.time() - started, "outputs": {"predictors_all": str(out_dir / "predictors_all.jsonl"), "ga_history": str(out_dir / "ga_history.jsonl"), "train_gate_metrics": str(out_dir / "train_gate_metrics.jsonl"), "stage_survivors": str(out_dir / "stage_survivors.jsonl"), "final_period_metrics": str(out_dir / "final_period_metrics.jsonl"), "final_survivors": str(out_dir / "final_survivors.jsonl"), "config": str(out_dir / "config.json"), "summary": str(out_dir / "summary.json")}}
+    summary = {"ticker": ticker, "mode": "stage2_entry_components_plus_prior5_quantile_band", "stage_trace": trace, "final_trace": final_trace, "final_survivor_count": len(alive), "final_survivor_signatures": [ind.signature or predictor_signature(ind) for ind in alive], "elapsed_sec": time.time() - started, "outputs": {"predictors_all": str(out_dir / "predictors_all.jsonl"), "ga_history": str(out_dir / "ga_history.jsonl"), "train_gate_metrics": str(out_dir / "train_gate_metrics.jsonl"), "stage_survivors": str(out_dir / "stage_survivors.jsonl"), "final_period_metrics": str(out_dir / "final_period_metrics.jsonl"), "final_survivors": str(out_dir / "final_survivors.jsonl"), "config": str(out_dir / "config.json"), "summary": str(out_dir / "summary.json")}}
     write_json(out_dir / "summary.json", summary); print(json.dumps(json_safe(summary), ensure_ascii=False, indent=2, sort_keys=True)); return summary
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Sequential Stage2-style next-day high/low range predictor GA with D-1 tight quantile-band rules")
+    p = argparse.ArgumentParser(description="Sequential Stage2-style next-day high/low range predictor GA: Stage2 components + prior 5 days")
     p.add_argument("--ticker", required=True); p.add_argument("--out-dir", default=None); p.add_argument("--seed-base", type=int, default=None); p.add_argument("--survivor-count", type=int, default=SURVIVOR_COUNT); p.add_argument("--parallel", action="store_true", help="accepted for interface parity; not used")
     return p.parse_args(argv)
 

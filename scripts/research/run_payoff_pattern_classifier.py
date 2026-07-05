@@ -16,6 +16,10 @@ A final long signal is:
     and P(BAD_RISK_DAY) <= threshold_bad
 
 Thresholds are selected only on stress/train periods, then reported on OOS.
+
+Leakage guard:
+- The feature list is captured BEFORE target columns are added.
+- All derived target columns and label columns are force-excluded.
 """
 from __future__ import annotations
 
@@ -47,6 +51,28 @@ PERIODS = [
     ("oos", "2025-07-01", "2026-06-30"),
 ]
 TRAIN_NAMES = ["stress", "train3", "train2", "train1"]
+TARGET_DERIVED_COLUMNS = {
+    "GOOD_LONG_DAY",
+    "BAD_RISK_DAY",
+    "PAYOFF_SCORE",
+    "next_high_atr",
+    "next_low_atr",
+    "high_pct_label",
+    "low_mag_pct_label",
+    "high_bin",
+    "low_bin",
+}
+LEAKY_NAME_TOKENS = (
+    "good_long_day",
+    "bad_risk_day",
+    "payoff_score",
+    "next_high_atr",
+    "next_low_atr",
+    "high_pct_label",
+    "low_mag_pct_label",
+    "high_bin",
+    "low_bin",
+)
 
 
 def load_runner():
@@ -76,6 +102,38 @@ def make_targets(df: pd.DataFrame, good_high_atr: float, good_max_low_atr: float
     out["BAD_RISK_DAY"] = (out["next_low_atr"] >= bad_low_atr).astype(int)
     out["PAYOFF_SCORE"] = out["next_high_atr"] - out["next_low_atr"]
     return out
+
+
+def safe_feature_list(raw_features: list[str], df: pd.DataFrame) -> tuple[list[str], dict[str, Any]]:
+    features: list[str] = []
+    excluded: list[str] = []
+    suspicious: list[str] = []
+    for f in raw_features:
+        fl = str(f).lower()
+        if f in TARGET_DERIVED_COLUMNS or any(tok == fl for tok in LEAKY_NAME_TOKENS):
+            excluded.append(f)
+            continue
+        if f not in df.columns:
+            excluded.append(f)
+            continue
+        # Keep legitimate previous/current-day names like D1_close_vs_prev_high_pct.
+        # Only exact target-derived names are force-excluded.
+        if any(tok in fl for tok in ("good_long", "bad_risk", "payoff", "next_high_atr", "next_low_atr")):
+            suspicious.append(f)
+            excluded.append(f)
+            continue
+        features.append(f)
+    audit = {
+        "feature_source": "runner.L.feature_columns(raw_data_before_target_creation)",
+        "feature_count": len(features),
+        "excluded_count": len(excluded),
+        "excluded_features": excluded,
+        "suspicious_features": suspicious,
+        "target_columns_present_in_features": sorted(set(features) & TARGET_DERIVED_COLUMNS),
+    }
+    if audit["target_columns_present_in_features"] or suspicious:
+        raise RuntimeError(f"feature leakage audit failed: {audit}")
+    return features, audit
 
 
 def numeric_matrix(df: pd.DataFrame, features: list[str]) -> pd.DataFrame:
@@ -287,9 +345,10 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     runner = load_runner()
-    data, _ = runner.L.build_dataset(args.ticker)
-    data = make_targets(data, args.good_high_atr, args.good_max_low_atr, args.bad_low_atr)
-    features = [f for f in runner.L.feature_columns(data) if f in data.columns]
+    raw_data, _ = runner.L.build_dataset(args.ticker)
+    raw_features = [f for f in runner.L.feature_columns(raw_data) if f in raw_data.columns]
+    data = make_targets(raw_data, args.good_high_atr, args.good_max_low_atr, args.bad_low_atr)
+    features, feature_audit = safe_feature_list(raw_features, data)
     frames = {name: runner.period_frame_checked(data, start, end, name).copy() for name, start, end in PERIODS}
     train_df = pd.concat([frames["train1"], frames["train2"], frames["train3"]], axis=0).sort_values("date")
 
@@ -323,7 +382,6 @@ def main(argv: list[str] | None = None) -> int:
         final_metrics[name]["good_prob_mean_signal"] = float(np.mean(good_probs[name][sig])) if int(np.sum(sig)) else 0.0
         final_metrics[name]["bad_prob_mean_signal"] = float(np.mean(bad_probs[name][sig])) if int(np.sum(sig)) else 0.0
 
-    # Baseline: all days and top raw GOOD probability with similar OOS coverage.
     oos = frames["oos"]
     oos_sig = (good_probs["oos"] >= gt) & (bad_probs["oos"] <= bt)
     oos_signal_rows = oos.loc[oos_sig, ["date", "high_pct_label", "low_mag_pct_label", "D1_ATR_pct", "next_high_atr", "next_low_atr", "GOOD_LONG_DAY", "BAD_RISK_DAY", "PAYOFF_SCORE"]].copy()
@@ -342,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
             "next_high_atr": "high_pct_label / D1_ATR_pct",
             "next_low_atr": "low_mag_pct_label / D1_ATR_pct",
         },
-        "features": {"count": len(features)},
+        "features": {"count": len(features), "audit": feature_audit},
         "train_rows": int(len(train_df)),
         "period_base_rates": {
             name: {
@@ -387,7 +445,12 @@ def main(argv: list[str] | None = None) -> int:
         "ticker": args.ticker,
         "out_dir": str(out_dir),
         "target": result["target"],
+        "feature_audit": feature_audit,
         "chosen_threshold": result["chosen_threshold"],
+        "model_quality_oos": {
+            "GOOD_LONG_DAY": model_quality["GOOD_LONG_DAY"].get("oos"),
+            "BAD_RISK_DAY": model_quality["BAD_RISK_DAY"].get("oos"),
+        },
         "final_metrics": {k: {kk: vv for kk, vv in v.items() if kk != "dates"} for k, v in final_metrics.items()},
         "oos_signal_dates": final_metrics["oos"]["dates"],
     }, indent=2, ensure_ascii=False))

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Original-Stage2-style dual-head GA runner for next-day HIGH/LOW bin prediction.
+Original-Stage2-style multi-condition dual-head GA runner for next-day HIGH/LOW bin prediction.
 
 원본 scripts/research/run_stage2.py 기준 Stage2 흐름:
 - train_1, train_2, train_3 각각 독립 GA를 실행한다.
@@ -16,11 +16,11 @@ Original-Stage2-style dual-head GA runner for next-day HIGH/LOW bin prediction.
 5. oos_2025h2
 
 이번 버전의 핵심:
-- large-range 변동성 타깃을 버린다.
 - 한 개체 안에 HIGH 전용 유전자와 LOW 전용 유전자를 분리한다.
-- high_rules는 predicted_high_bin만 만든다.
-- low_rules는 predicted_low_bin만 만든다.
-- 각 헤드의 rule 개수, fitness 가중치, gate 기준을 CLI로 조정 가능하게 한다.
+- 각 유전자는 feature 하나가 아니라 여러 조건을 가진다.
+- 조건들은 AND 방식으로 결합한다. 즉 모든 조건이 맞을 때만 해당 bin에 투표한다.
+- 예: STK_lag1_range q70~q95 AND STK_lag2_ccret q60~q90 AND D1_close_pos_candle q80~q100 -> HIGH bin 4.
+- 각 헤드의 gene 개수, gene당 조건 수, fitness 가중치, gate 기준을 CLI로 조정 가능하게 한다.
 
 Read/write scope:
 - OHLCV/cache/news csv는 read-only.
@@ -50,7 +50,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LEGACY_COMMIT = "b03f39b"
 LEGACY_PATH = "scripts/research/run_range_predictor_stage2_v3.py"
 
-TARGET_MODE = "next_day_hilo_dual_head_original_stage2"
+TARGET_MODE = "next_day_hilo_multicond_dual_head_original_stage2"
 
 TRAIN_SPLITS = (
     {"label": "train_1", "train_start": "2022-07-01", "train_end": "2023-06-30"},
@@ -83,6 +83,8 @@ LEGACY_MAKE_BASELINE_SPEC = L.make_baseline_spec
 # 헤드별 기본 파라미터. install_dual_head_target()에서 CLI 값으로 덮어쓴다.
 HIGH_RULE_COUNT = max(1, int(getattr(L, "RULE_COUNT", 80)) // 2)
 LOW_RULE_COUNT = max(1, int(getattr(L, "RULE_COUNT", 80)) - HIGH_RULE_COUNT)
+MIN_CONDITIONS_PER_GENE = 2
+MAX_CONDITIONS_PER_GENE = 3
 
 HIGH_HEAD_WEIGHT = 1.0
 LOW_HEAD_WEIGHT = 1.0
@@ -135,12 +137,29 @@ def json_clone(value: Any) -> Any:
 
 
 def auto_out_dir(ticker: str) -> Path:
-    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_original_stage2_dual_hilo_{time.strftime('%Y%m%d')}_"
+    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_original_stage2_multicond_dual_hilo_{time.strftime('%Y%m%d')}_"
     for idx in range(1, 10000):
         candidate = PROJECT_ROOT / f"{prefix}{idx:04d}"
         if not candidate.exists():
             return candidate
     raise RuntimeError("cannot allocate output directory")
+
+
+@dataclass
+class GeneCondition:
+    feature: str
+    q_low: float
+    q_high: float
+    softness: float
+
+
+@dataclass
+class MultiConditionGene:
+    target: str
+    conditions: list[GeneCondition]
+    bin: int
+    weight: float
+    combine_mode: str = "AND"
 
 
 @dataclass
@@ -160,8 +179,66 @@ class DualHeadPredictorIndividual:
         return list(self.high_rules) + list(self.low_rules)
 
 
-def clone_rule(rule: Any) -> Any:
-    return L.RuleGene(**asdict(rule)) if dataclasses.is_dataclass(rule) else L.RuleGene(**dict(rule))
+def condition_payload(cond: Any) -> dict[str, Any]:
+    if dataclasses.is_dataclass(cond):
+        return asdict(cond)
+    return dict(cond)
+
+
+def rule_payload(rule: Any) -> dict[str, Any]:
+    if isinstance(rule, MultiConditionGene):
+        return asdict(rule)
+    if dataclasses.is_dataclass(rule) and hasattr(rule, "conditions"):
+        return asdict(rule)
+    if dataclasses.is_dataclass(rule):
+        # 과거 단일조건 RuleGene 호환 표기
+        d = asdict(rule)
+        return {
+            "target": d.get("target"),
+            "conditions": [
+                {
+                    "feature": d.get("feature"),
+                    "q_low": d.get("q_low"),
+                    "q_high": d.get("q_high"),
+                    "softness": d.get("softness"),
+                }
+            ],
+            "bin": d.get("bin"),
+            "weight": d.get("weight"),
+            "combine_mode": "AND",
+        }
+    return dict(rule)
+
+
+def clone_condition(cond: Any) -> GeneCondition:
+    d = condition_payload(cond)
+    return GeneCondition(
+        str(d.get("feature")),
+        float(safe_float(d.get("q_low"))),
+        float(safe_float(d.get("q_high"))),
+        float(safe_float(d.get("softness"))),
+    )
+
+
+def clone_rule(rule: Any) -> MultiConditionGene:
+    if isinstance(rule, MultiConditionGene) or (dataclasses.is_dataclass(rule) and hasattr(rule, "conditions")):
+        d = asdict(rule) if dataclasses.is_dataclass(rule) else dict(rule)
+        return MultiConditionGene(
+            str(d.get("target", "HIGH")),
+            [clone_condition(c) for c in d.get("conditions", [])],
+            int(safe_int(d.get("bin"))),
+            float(safe_float(d.get("weight"), 1.0)),
+            str(d.get("combine_mode", "AND") or "AND"),
+        )
+    # 과거 단일조건 RuleGene를 MultiConditionGene로 변환
+    d = asdict(rule) if dataclasses.is_dataclass(rule) else dict(rule)
+    return MultiConditionGene(
+        str(d.get("target", "HIGH")),
+        [GeneCondition(str(d.get("feature")), float(safe_float(d.get("q_low"))), float(safe_float(d.get("q_high"))), float(safe_float(d.get("softness"))))],
+        int(safe_int(d.get("bin"))),
+        float(safe_float(d.get("weight"), 1.0)),
+        "AND",
+    )
 
 
 def clone_individual(ind: DualHeadPredictorIndividual) -> DualHeadPredictorIndividual:
@@ -177,14 +254,10 @@ def clone_individual(ind: DualHeadPredictorIndividual) -> DualHeadPredictorIndiv
     )
 
 
-def rule_payload(rule: Any) -> dict[str, Any]:
-    return asdict(rule) if dataclasses.is_dataclass(rule) else dict(rule)
-
-
 def predictor_signature(ind: DualHeadPredictorIndividual) -> str:
     payload = json.dumps(
         {
-            "version": "dual_head_v1",
+            "version": "multi_condition_dual_head_v1",
             "default_high_bin": int(ind.default_high_bin),
             "default_low_bin": int(ind.default_low_bin),
             "high_rules": [rule_payload(r) for r in ind.high_rules],
@@ -198,7 +271,7 @@ def predictor_signature(ind: DualHeadPredictorIndividual) -> str:
 
 def individual_to_dict(ind: DualHeadPredictorIndividual) -> dict[str, Any]:
     return {
-        "type": "dual_head_hilo_predictor",
+        "type": "multi_condition_dual_head_hilo_predictor",
         "high_rules": [rule_payload(r) for r in ind.high_rules],
         "low_rules": [rule_payload(r) for r in ind.low_rules],
         "rules": [rule_payload(r) for r in ind.rules],
@@ -212,18 +285,26 @@ def individual_to_dict(ind: DualHeadPredictorIndividual) -> dict[str, Any]:
     }
 
 
-def random_rule_for_target(target: str, rng: random.Random, qspec: dict[str, dict[str, list[float]]]) -> Any:
+def random_condition(rng: random.Random, qspec: dict[str, dict[str, list[float]]]) -> GeneCondition:
     feature = rng.choice(list(qspec.keys()))
     width = rng.uniform(L.MIN_BAND_WIDTH_Q, min(0.45, L.MAX_BAND_WIDTH_Q))
     lo = rng.uniform(0.0, 1.0 - width)
-    return L.RuleGene(
-        str(target),
+    return GeneCondition(
         feature,
         float(lo),
         float(lo + width),
+        float(rng.uniform(L.MIN_SOFTNESS, L.MAX_SOFTNESS)),
+    )
+
+
+def random_rule_for_target(target: str, rng: random.Random, qspec: dict[str, dict[str, list[float]]]) -> MultiConditionGene:
+    cond_n = rng.randint(MIN_CONDITIONS_PER_GENE, MAX_CONDITIONS_PER_GENE)
+    return MultiConditionGene(
+        str(target),
+        [random_condition(rng, qspec) for _ in range(cond_n)],
         int(rng.randrange(L.BIN_COUNT)),
         float(rng.uniform(0.4, 3.0)),
-        float(rng.uniform(L.MIN_SOFTNESS, L.MAX_SOFTNESS)),
+        "AND",
     )
 
 
@@ -237,15 +318,56 @@ def random_individual(rng: random.Random, qspec: dict[str, dict[str, list[float]
     )
 
 
-def repair_head_rules(rules: list[Any], target: str, count: int, rng: random.Random, qspec: dict[str, dict[str, list[float]]]) -> list[Any]:
-    out = [clone_rule(r) for r in rules]
-    for r in out:
-        r.target = target
-    while len(out) < count:
+def repair_gene(rule: Any, target: str, rng: random.Random, qspec: dict[str, dict[str, list[float]]]) -> MultiConditionGene:
+    gene = clone_rule(rule)
+    gene.target = target
+    gene.combine_mode = "AND"
+    gene.bin = int(max(0, min(L.BIN_COUNT - 1, safe_int(gene.bin))))
+    gene.weight = float(max(0.1, min(5.0, safe_float(gene.weight, 1.0))))
+    gene.conditions = [clone_condition(c) for c in gene.conditions if str(getattr(c, "feature", ""))]
+    for c in gene.conditions:
+        c.q_low, c.q_high = L.normalize_band(c.q_low, c.q_high)
+        c.softness = float(L.clamp(c.softness, L.MIN_SOFTNESS, L.MAX_SOFTNESS))
+    if qspec:
+        while len(gene.conditions) < MIN_CONDITIONS_PER_GENE:
+            gene.conditions.append(random_condition(rng, qspec))
+        while len(gene.conditions) > MAX_CONDITIONS_PER_GENE:
+            gene.conditions.pop(rng.randrange(len(gene.conditions)))
+    return gene
+
+
+def repair_head_rules(rules: list[Any], target: str, count: int, rng: random.Random, qspec: dict[str, dict[str, list[float]]]) -> list[MultiConditionGene]:
+    out = [repair_gene(r, target, rng, qspec) for r in rules]
+    while len(out) < count and qspec:
         out.append(random_rule_for_target(target, rng, qspec))
     if len(out) > count:
         out = out[:count]
     return out
+
+
+def condition_strength(cond: GeneCondition, X, qspec: dict[str, dict[str, list[float]]]) -> tuple[np.ndarray | None, float]:
+    if cond.feature not in X.columns or cond.feature not in qspec:
+        return None, 0.0
+    q_low, q_high = L.normalize_band(cond.q_low, cond.q_high)
+    lo_val = L.q_value(qspec[cond.feature], q_low)
+    hi_val = L.q_value(qspec[cond.feature], q_high)
+    strength = L.band_match_strength(X[cond.feature].to_numpy(dtype=float), lo_val, hi_val, cond.softness)
+    return strength, float(q_high - q_low)
+
+
+def gene_strength(gene: MultiConditionGene, X, qspec: dict[str, dict[str, list[float]]]) -> tuple[np.ndarray | None, list[float], int]:
+    strengths: list[np.ndarray] = []
+    widths: list[float] = []
+    for cond in gene.conditions:
+        strength, width = condition_strength(cond, X, qspec)
+        if strength is None:
+            return None, widths, len(strengths)
+        strengths.append(strength)
+        widths.append(width)
+    if not strengths:
+        return None, widths, 0
+    # AND 결합: 모든 조건이 강해야 gene도 강하다. soft match는 min으로 결합한다.
+    return np.minimum.reduce(strengths), widths, len(strengths)
 
 
 def predict(ind: DualHeadPredictorIndividual, X, qspec: dict[str, dict[str, list[float]]]) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
@@ -257,44 +379,62 @@ def predict(ind: DualHeadPredictorIndividual, X, qspec: dict[str, dict[str, list
 
     high_active = 0
     low_active = 0
+    high_condition_active = 0
+    low_condition_active = 0
     high_strength_sum = 0.0
     low_strength_sum = 0.0
     high_band_widths: list[float] = []
     low_band_widths: list[float] = []
+    high_condition_counts: list[int] = []
+    low_condition_counts: list[int] = []
 
-    for head_name, rules, scores, active_key in [
-        ("HIGH", ind.high_rules, hs, "high"),
-        ("LOW", ind.low_rules, ls, "low"),
+    for rules, scores, active_key in [
+        (ind.high_rules, hs, "high"),
+        (ind.low_rules, ls, "low"),
     ]:
-        for rule in rules:
-            if rule.feature not in X.columns or rule.feature not in qspec:
+        for raw_gene in rules:
+            gene = clone_rule(raw_gene)
+            strength, widths, cond_count = gene_strength(gene, X, qspec)
+            if strength is None or not np.any(strength > 0):
                 continue
-            q_low, q_high = L.normalize_band(rule.q_low, rule.q_high)
-            lo_val = L.q_value(qspec[rule.feature], q_low)
-            hi_val = L.q_value(qspec[rule.feature], q_high)
-            strength = L.band_match_strength(X[rule.feature].to_numpy(dtype=float), lo_val, hi_val, rule.softness)
-            if not np.any(strength > 0):
-                continue
-            scores[:, int(rule.bin)] += strength * float(rule.weight)
+            scores[:, int(gene.bin)] += strength * float(gene.weight)
             if active_key == "high":
                 high_active += 1
+                high_condition_active += cond_count
                 high_strength_sum += float(np.mean(strength))
-                high_band_widths.append(q_high - q_low)
+                high_band_widths.extend(widths)
+                high_condition_counts.append(cond_count)
             else:
                 low_active += 1
+                low_condition_active += cond_count
                 low_strength_sum += float(np.mean(strength))
-                low_band_widths.append(q_high - q_low)
+                low_band_widths.extend(widths)
+                low_condition_counts.append(cond_count)
 
+    active_count = int(high_active + low_active)
+    active_condition_count = int(high_condition_active + low_condition_active)
     diag = {
-        "active_rule_count": int(high_active + low_active),
+        "active_rule_count": active_count,
+        "active_gene_count": active_count,
+        "active_condition_count": active_condition_count,
         "high_active_rule_count": int(high_active),
         "low_active_rule_count": int(low_active),
-        "avg_rule_match_strength": float((high_strength_sum + low_strength_sum) / max(1, high_active + low_active)),
+        "high_active_gene_count": int(high_active),
+        "low_active_gene_count": int(low_active),
+        "high_active_condition_count": int(high_condition_active),
+        "low_active_condition_count": int(low_condition_active),
+        "avg_rule_match_strength": float((high_strength_sum + low_strength_sum) / max(1, active_count)),
+        "avg_gene_match_strength": float((high_strength_sum + low_strength_sum) / max(1, active_count)),
         "high_avg_rule_match_strength": float(high_strength_sum / high_active) if high_active else 0.0,
         "low_avg_rule_match_strength": float(low_strength_sum / low_active) if low_active else 0.0,
+        "high_avg_gene_match_strength": float(high_strength_sum / high_active) if high_active else 0.0,
+        "low_avg_gene_match_strength": float(low_strength_sum / low_active) if low_active else 0.0,
         "avg_band_width_q": float(np.mean(high_band_widths + low_band_widths)) if (high_band_widths or low_band_widths) else 0.0,
         "high_avg_band_width_q": float(np.mean(high_band_widths)) if high_band_widths else 0.0,
         "low_avg_band_width_q": float(np.mean(low_band_widths)) if low_band_widths else 0.0,
+        "avg_conditions_per_active_gene": float(active_condition_count / max(1, active_count)),
+        "high_avg_conditions_per_active_gene": float(np.mean(high_condition_counts)) if high_condition_counts else 0.0,
+        "low_avg_conditions_per_active_gene": float(np.mean(low_condition_counts)) if low_condition_counts else 0.0,
     }
     return hs.argmax(axis=1), ls.argmax(axis=1), diag
 
@@ -308,14 +448,19 @@ def share_by_bin(pred: np.ndarray) -> list[float]:
 def band_shape_penalty_by_head(rules: list[Any]) -> dict[str, float]:
     narrow = 0.0
     wide = 0.0
-    for rule in rules:
-        lo, hi = L.normalize_band(rule.q_low, rule.q_high)
-        width = hi - lo
-        narrow += max(0.0, L.MIN_BAND_WIDTH_Q * 1.5 - width)
-        wide += max(0.0, width - 0.55)
+    condition_count = 0
+    for raw_rule in rules:
+        rule = clone_rule(raw_rule)
+        for cond in rule.conditions:
+            lo, hi = L.normalize_band(cond.q_low, cond.q_high)
+            width = hi - lo
+            condition_count += 1
+            narrow += max(0.0, L.MIN_BAND_WIDTH_Q * 1.5 - width)
+            wide += max(0.0, width - 0.55)
     return {
         "narrow_band_penalty": narrow * L.NARROW_BAND_PENALTY_STRENGTH,
         "wide_band_penalty": wide * L.WIDE_BAND_PENALTY_STRENGTH,
+        "condition_count": float(condition_count),
     }
 
 
@@ -350,6 +495,8 @@ def prediction_penalty(ind: DualHeadPredictorIndividual, yh: np.ndarray, yl: np.
         "high_wide_band_penalty": hb["wide_band_penalty"],
         "low_narrow_band_penalty": lb["narrow_band_penalty"],
         "low_wide_band_penalty": lb["wide_band_penalty"],
+        "high_gene_condition_count": hb["condition_count"],
+        "low_gene_condition_count": lb["condition_count"],
         "high_total_penalty": high_penalty,
         "low_total_penalty": low_penalty,
         "total_penalty": total,
@@ -365,9 +512,11 @@ def make_dual_baseline_spec(train_df) -> dict[str, Any]:
     spec.update(
         {
             "target_mode": TARGET_MODE,
-            "source": "origin train split baseline for dual-head HIGH/LOW bin prediction",
+            "source": "origin train split baseline for multi-condition dual-head HIGH/LOW bin prediction",
             "high_rule_count": HIGH_RULE_COUNT,
             "low_rule_count": LOW_RULE_COUNT,
+            "min_conditions_per_gene": MIN_CONDITIONS_PER_GENE,
+            "max_conditions_per_gene": MAX_CONDITIONS_PER_GENE,
         }
     )
     return spec
@@ -418,6 +567,8 @@ def evaluate_predictor(ind: DualHeadPredictorIndividual, df, features: list[str]
         "sample_count": int(len(df)),
         "high_rule_count": len(ind.high_rules),
         "low_rule_count": len(ind.low_rules),
+        "min_conditions_per_gene": MIN_CONDITIONS_PER_GENE,
+        "max_conditions_per_gene": MAX_CONDITIONS_PER_GENE,
         "combined_exact_lift_pp": scores["combined_exact_acc_pct"] - exact_base["combined_exact_acc_pct"],
         "combined_adjacent_lift_pp": scores["combined_adjacent_acc_pct"] - adj_base["combined_adjacent_acc_pct"],
         "both_exact_lift_pp": scores["both_exact_acc_pct"] - exact_base["both_exact_acc_pct"],
@@ -467,34 +618,47 @@ def evaluate_predictor(ind: DualHeadPredictorIndividual, df, features: list[str]
     return metrics
 
 
-def mutate_rule(rule: Any, rng: random.Random, qspec: dict[str, dict[str, list[float]]], target: str) -> Any:
-    r = clone_rule(rule)
-    r.target = target
-    action = rng.choice(["replace", "feature", "shift_band", "resize_band", "bin", "weight", "softness"])
+def mutate_condition(cond: GeneCondition, rng: random.Random, qspec: dict[str, dict[str, list[float]]]) -> GeneCondition:
+    c = clone_condition(cond)
+    action = rng.choice(["feature", "shift_band", "resize_band", "softness", "replace"])
     if action == "replace" and qspec:
-        return random_rule_for_target(target, rng, qspec)
+        return random_condition(rng, qspec)
     if action == "feature" and qspec:
-        r.feature = rng.choice(list(qspec.keys()))
+        c.feature = rng.choice(list(qspec.keys()))
     elif action == "shift_band":
         delta = rng.gauss(0.0, L.MUTATION_STRENGTH * 0.18)
-        r.q_low += delta
-        r.q_high += delta
+        c.q_low += delta
+        c.q_high += delta
     elif action == "resize_band":
-        lo, hi = L.normalize_band(r.q_low, r.q_high)
+        lo, hi = L.normalize_band(c.q_low, c.q_high)
         mid = (lo + hi) / 2.0
         width = L.clamp((hi - lo) * rng.uniform(0.70, 1.35), L.MIN_BAND_WIDTH_Q, L.MAX_BAND_WIDTH_Q)
-        r.q_low = mid - width / 2.0
-        r.q_high = mid + width / 2.0
+        c.q_low = mid - width / 2.0
+        c.q_high = mid + width / 2.0
+    elif action == "softness":
+        c.softness = float(L.clamp(c.softness + rng.gauss(0.0, 0.18), L.MIN_SOFTNESS, L.MAX_SOFTNESS))
+    c.q_low, c.q_high = L.normalize_band(c.q_low, c.q_high)
+    c.softness = float(L.clamp(c.softness, L.MIN_SOFTNESS, L.MAX_SOFTNESS))
+    return c
+
+
+def mutate_rule(rule: Any, rng: random.Random, qspec: dict[str, dict[str, list[float]]], target: str) -> MultiConditionGene:
+    r = repair_gene(rule, target, rng, qspec)
+    action = rng.choice(["replace_gene", "add_condition", "remove_condition", "mutate_condition", "bin", "weight"])
+    if action == "replace_gene" and qspec:
+        return random_rule_for_target(target, rng, qspec)
+    if action == "add_condition" and qspec and len(r.conditions) < MAX_CONDITIONS_PER_GENE:
+        r.conditions.append(random_condition(rng, qspec))
+    elif action == "remove_condition" and len(r.conditions) > MIN_CONDITIONS_PER_GENE:
+        r.conditions.pop(rng.randrange(len(r.conditions)))
+    elif action == "mutate_condition" and r.conditions:
+        idx = rng.randrange(len(r.conditions))
+        r.conditions[idx] = mutate_condition(r.conditions[idx], rng, qspec)
     elif action == "bin":
         r.bin = int(max(0, min(L.BIN_COUNT - 1, r.bin + rng.choice([-2, -1, 1, 2]))))
     elif action == "weight":
         r.weight = float(max(0.1, min(5.0, r.weight + rng.gauss(0.0, L.MUTATION_STRENGTH))))
-    elif action == "softness":
-        r.softness = float(L.clamp(r.softness + rng.gauss(0.0, 0.18), L.MIN_SOFTNESS, L.MAX_SOFTNESS))
-    r.q_low, r.q_high = L.normalize_band(r.q_low, r.q_high)
-    r.softness = float(L.clamp(r.softness, L.MIN_SOFTNESS, L.MAX_SOFTNESS))
-    r.target = target
-    return r
+    return repair_gene(r, target, rng, qspec)
 
 
 def mutate(ind: DualHeadPredictorIndividual, rng: random.Random, qspec: dict[str, dict[str, list[float]]], baseline_spec: dict[str, Any] | None = None) -> DualHeadPredictorIndividual:
@@ -650,6 +814,14 @@ def dual_head_params() -> dict[str, Any]:
     return {
         "high_rule_count": HIGH_RULE_COUNT,
         "low_rule_count": LOW_RULE_COUNT,
+        "gene_structure": {
+            "type": "multi_condition_and_gene",
+            "min_conditions_per_gene": MIN_CONDITIONS_PER_GENE,
+            "max_conditions_per_gene": MAX_CONDITIONS_PER_GENE,
+            "condition_fields": ["feature", "q_low", "q_high", "softness"],
+            "gene_fields": ["target", "conditions", "bin", "weight", "combine_mode"],
+            "combine_mode": "AND/min_strength",
+        },
         "head_weights": {"high": HIGH_HEAD_WEIGHT, "low": LOW_HEAD_WEIGHT, "both": BOTH_HEAD_WEIGHT},
         "score_weights": {
             "high_exact": HIGH_EXACT_WEIGHT,
@@ -682,7 +854,7 @@ def dual_head_params() -> dict[str, Any]:
 
 
 def install_dual_head_target(args: argparse.Namespace) -> None:
-    global HIGH_RULE_COUNT, LOW_RULE_COUNT
+    global HIGH_RULE_COUNT, LOW_RULE_COUNT, MIN_CONDITIONS_PER_GENE, MAX_CONDITIONS_PER_GENE
     global HIGH_HEAD_WEIGHT, LOW_HEAD_WEIGHT, BOTH_HEAD_WEIGHT
     global HIGH_EXACT_WEIGHT, HIGH_ADJACENT_WEIGHT, HIGH_MAE_WEIGHT
     global LOW_EXACT_WEIGHT, LOW_ADJACENT_WEIGHT, LOW_MAE_WEIGHT
@@ -693,6 +865,8 @@ def install_dual_head_target(args: argparse.Namespace) -> None:
 
     HIGH_RULE_COUNT = max(1, int(args.high_rule_count))
     LOW_RULE_COUNT = max(1, int(args.low_rule_count))
+    MIN_CONDITIONS_PER_GENE = max(1, int(args.min_conditions_per_gene))
+    MAX_CONDITIONS_PER_GENE = max(MIN_CONDITIONS_PER_GENE, int(args.max_conditions_per_gene))
     HIGH_HEAD_WEIGHT = float(args.high_head_weight)
     LOW_HEAD_WEIGHT = float(args.low_head_weight)
     BOTH_HEAD_WEIGHT = float(args.both_head_weight)
@@ -721,7 +895,7 @@ def install_dual_head_target(args: argparse.Namespace) -> None:
     MAX_HIGH_PRED_SHARE = float(args.max_high_pred_share)
     MAX_LOW_PRED_SHARE = float(args.max_low_pred_share)
 
-    # legacy GA 루프가 참조하는 module-level 함수들을 dual-head 버전으로 교체한다.
+    # legacy GA 루프가 참조하는 module-level 함수들을 multi-condition dual-head 버전으로 교체한다.
     L.make_baseline_spec = make_dual_baseline_spec
     L.clone_individual = clone_individual
     L.individual_to_dict = individual_to_dict
@@ -1010,14 +1184,14 @@ def run_original_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, ar
             "high": "high_rules -> predicted_high_bin",
             "low": "low_rules -> predicted_low_bin",
         },
-        "objective": "separate HIGH/LOW bin exact/adjacent accuracy and pct MAE improvement, plus same-day both-head agreement",
+        "objective": "multi-condition HIGH/LOW bin exact/adjacent accuracy and pct MAE improvement, plus same-day both-head agreement",
         "dual_head_params": dual_head_params(),
     }
     config = {
         "ticker": ticker,
         "runner": "scripts/research/run_range_predictor_stage2_v3.py",
         "legacy_feature_logic_source": f"{LEGACY_COMMIT}:{LEGACY_PATH}",
-        "mode": "original_stage2_train123_independent_ga_then_early_cut_dual_hilo",
+        "mode": "original_stage2_train123_independent_ga_then_early_cut_multicond_dual_hilo",
         "stage2_original_reference": "scripts/research/run_stage2.py: TRAIN_SPLITS independent GA; PERIODS_TEMPLATE early-cut stress -> train_3 -> train_2 -> train_1 -> oos",
         "train_splits": list(TRAIN_SPLITS),
         "evaluation_periods": list(PERIODS_TEMPLATE),
@@ -1033,6 +1207,8 @@ def run_original_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, ar
             "rule_count_legacy": L.RULE_COUNT,
             "high_rule_count": HIGH_RULE_COUNT,
             "low_rule_count": LOW_RULE_COUNT,
+            "min_conditions_per_gene": MIN_CONDITIONS_PER_GENE,
+            "max_conditions_per_gene": MAX_CONDITIONS_PER_GENE,
             "random_immigrant_ratio": L.RANDOM_IMMIGRANT_RATIO,
             "seed_base": seed_base,
             "train_splits_independent": True,
@@ -1063,7 +1239,7 @@ def run_original_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, ar
     actual_eval_ratio = float(actual_eval_count / max_eval_count) if max_eval_count else 0.0
     summary = {
         "ticker": ticker,
-        "mode": "original_stage2_train123_independent_ga_then_early_cut_dual_hilo",
+        "mode": "original_stage2_train123_independent_ga_then_early_cut_multicond_dual_hilo",
         "target": target_desc,
         "generated_candidate_rows": len(predictor_rows),
         "unique_signatures": len(unique_sigs),
@@ -1095,14 +1271,14 @@ def run_original_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, ar
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Original Stage2 independent train1/train2/train3 GA + dual-head HIGH/LOW bin prediction")
+    p = argparse.ArgumentParser(description="Original Stage2 independent train1/train2/train3 GA + multi-condition dual-head HIGH/LOW bin prediction")
     p.add_argument("--ticker", required=True)
     p.add_argument("--out-dir", default=None)
     p.add_argument("--seed-base", type=int, default=None)
     p.add_argument("--survivor-count", type=int, default=None, help="accepted for compatibility; original Stage2 does not pre-limit train split populations")
     p.add_argument("--parallel", action="store_true", help="accepted for interface parity; not used")
 
-    # legacy large-range 인자는 호환용으로만 받는다. dual-head 모드에서는 쓰지 않는다.
+    # legacy large-range 인자는 호환용으로만 받는다. multi-condition dual-head 모드에서는 쓰지 않는다.
     p.add_argument("--range-quantile", type=float, default=None, help=argparse.SUPPRESS)
     p.add_argument("--signal-range-bin-sum-threshold", type=int, default=None, help=argparse.SUPPRESS)
     p.add_argument("--wilson-z", type=float, default=None, help=argparse.SUPPRESS)
@@ -1115,6 +1291,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     p.add_argument("--high-rule-count", type=int, default=HIGH_RULE_COUNT)
     p.add_argument("--low-rule-count", type=int, default=LOW_RULE_COUNT)
+    p.add_argument("--min-conditions-per-gene", type=int, default=MIN_CONDITIONS_PER_GENE)
+    p.add_argument("--max-conditions-per-gene", type=int, default=MAX_CONDITIONS_PER_GENE)
     p.add_argument("--high-head-weight", type=float, default=HIGH_HEAD_WEIGHT)
     p.add_argument("--low-head-weight", type=float, default=LOW_HEAD_WEIGHT)
     p.add_argument("--both-head-weight", type=float, default=BOTH_HEAD_WEIGHT)

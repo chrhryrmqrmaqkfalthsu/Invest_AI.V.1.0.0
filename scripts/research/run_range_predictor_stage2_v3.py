@@ -24,7 +24,6 @@ train_1 독립 GA 100개 + train_2 독립 GA 100개 + train_3 독립 GA 100개
 """
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 import types
@@ -55,16 +54,7 @@ P.BIN_TOLERANCE = 0
 
 
 def asymmetric_bin_metrics(yh: np.ndarray, yl: np.ndarray, ph: np.ndarray, pl: np.ndarray) -> dict[str, float]:
-    """위험하지 않은 방향 오차만 허용하고, 위험 방향 오차는 1칸도 허용하지 않는다.
-
-    HIGH bin은 숫자가 클수록 더 높은 고가 구간이다.
-    - ph > yh: +2를 예상했는데 +1만 찍은 꼴이라 위험 오차.
-    - ph < yh: +2를 예상했는데 +3을 찍은 꼴이라 안전 오차.
-
-    LOW bin은 숫자가 클수록 더 큰 하락폭 구간이다.
-    - pl < yl: -2를 예상했는데 -3까지 빠진 꼴이라 위험 오차.
-    - pl > yl: -2를 예상했는데 -1만 빠진 꼴이라 안전 오차.
-    """
+    """위험하지 않은 방향 오차만 허용하고, 위험 방향 오차는 1칸도 허용하지 않는다."""
     yh = yh.astype(int)
     yl = yl.astype(int)
     ph = ph.astype(int)
@@ -79,8 +69,6 @@ def asymmetric_bin_metrics(yh: np.ndarray, yl: np.ndarray, ph: np.ndarray, pl: n
     high_asym = high_danger * P.HIGH_DANGEROUS_BIN_ERROR_WEIGHT + high_safe * P.HIGH_SAFE_BIN_ERROR_WEIGHT
     low_asym = low_danger * P.LOW_DANGEROUS_BIN_ERROR_WEIGHT + low_safe * P.LOW_SAFE_BIN_ERROR_WEIGHT
 
-    # 핵심 변경: 위험 방향 오차는 1칸도 허용하지 않는다.
-    # 즉 danger == 0 인 경우만 OK다. 안전 방향 오차는 OK다.
     high_no_danger = high_danger == 0
     low_no_danger = low_danger == 0
     both_no_danger = high_no_danger & low_no_danger
@@ -127,7 +115,6 @@ _orig_run_original_stage2_predictor = P.run_original_stage2_predictor
 
 
 def install_dual_head_target(args: Any) -> None:
-    # --bin-tolerance를 사용자가 줘도 내부에서는 항상 0으로 강제한다.
     if hasattr(args, "bin_tolerance"):
         args.bin_tolerance = 0
     _orig_install_dual_head_target(args)
@@ -156,11 +143,6 @@ def dual_head_params() -> dict[str, Any]:
             "safe_direction_error_allowed": True,
         }
     )
-    params.setdefault("score_weights", {})
-    params["score_weights"]["high_directional_tolerance"] = P.HIGH_DIRECTIONAL_TOLERANCE_WEIGHT
-    params["score_weights"]["low_directional_tolerance"] = P.LOW_DIRECTIONAL_TOLERANCE_WEIGHT
-    params["score_weights"]["both_directional_tolerance"] = P.BOTH_DIRECTIONAL_TOLERANCE_WEIGHT
-    params["score_weights"]["asymmetric_bin_error"] = P.ASYMMETRIC_BIN_ERROR_WEIGHT
     return params
 
 
@@ -211,13 +193,19 @@ globals()["TARGET_MODE"] = TARGET_MODE
 globals()["BIN_TOLERANCE"] = 0
 
 
+def default_seed_base(ticker: str) -> int:
+    if hasattr(P, "default_seed_base"):
+        return int(P.default_seed_base(ticker))
+    return int(P.L.default_seed_base(ticker))
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     ticker = str(args.ticker).strip().upper()
     if not ticker:
         raise SystemExit("--ticker must not be empty")
     out_dir = Path(args.out_dir).resolve() if args.out_dir else P.auto_out_dir(ticker)
-    seed_base = int(args.seed_base) if args.seed_base is not None else P.default_seed_base(ticker)
+    seed_base = int(args.seed_base) if args.seed_base is not None else default_seed_base(ticker)
     run_original_stage2_predictor(ticker=ticker, out_dir=out_dir, seed_base=seed_base, args=args)
     return 0
 

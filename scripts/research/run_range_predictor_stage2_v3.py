@@ -1,18 +1,31 @@
 #!/usr/bin/env python3
 """
-Rolling Stage2 + prior-5-day GA, next-day large-range volatility label version.
+Stage2-style sequential survivor GA for next-day large-range volatility labels.
 
-핵심:
+핵심 수정:
+- 잘못 넣었던 252일/21일 rolling window를 제거한다.
+- Stage2 고정 구간 흐름으로 되돌린다.
+
+Stage2 흐름:
+- train_1: 2022-07-01 ~ 2023-06-30
+- train_2: 2023-07-01 ~ 2024-06-30
+- train_3: 2024-07-01 ~ 2025-06-30
+- stress_pre_2022h1: ~ 2022-06-30
+- oos_2025h2: 2025-07-01 ~
+
+생존 구조:
+- train_1에서 GA 생성/학습/선별
+- train_1 survivor만 train_2 seed로 전달
+- train_2 survivor만 train_3 seed로 전달
+- train_3 survivor만 stress 평가
+- stress 통과자만 oos 평가
+
+타깃:
 - 방향성 LONG/SHORT 진입 성공을 직접 맞히지 않는다.
 - 다음날 전체 변동폭이 큰 날인지 예측한다.
 - range_pct = high_pct_label + low_mag_pct_label
-- rolling train 기준 range_pct 상위 quantile을 large range 라벨로 둔다.
+- 각 train split 기준 range_pct 상위 quantile을 large range 라벨로 둔다.
 - 기본값: train 상위 30%, 즉 --range-quantile 0.70.
-
-목표:
-- “내일 크게 움직일 날인가”를 먼저 찾는다.
-- Stage2 방향 신호와 결합하기 전 단계의 변동성 후보 필터로 쓴다.
-- fitness는 precision lower bound, base-rate 대비 lift lower bound, 최소 신호 수를 본다.
 
 Read/write scope:
 - OHLCV/cache/news csv는 read-only.
@@ -39,7 +52,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LEGACY_COMMIT = "b03f39b"
 LEGACY_PATH = "scripts/research/run_range_predictor_stage2_v3.py"
 
-TARGET_MODE = "next_day_large_range"
+TARGET_MODE = "next_day_large_range_stage2_fixed"
 RANGE_QUANTILE = 0.70
 SIGNAL_RANGE_BIN_SUM_THRESHOLD = 4
 WILSON_Z = 1.0
@@ -49,6 +62,16 @@ MIN_SIGNAL_COUNT_TRAIN = 12
 MIN_SIGNAL_COUNT_FINAL = 10
 MIN_HIT_COUNT_TRAIN = 4
 MIN_HIT_COUNT_FINAL = 3
+
+STAGE2_TRAIN_PERIODS = (
+    {"label": "train_1", "eval_label": "train_1_eval", "start": "2022-07-01", "end": "2023-06-30"},
+    {"label": "train_2", "eval_label": "train_2_eval", "start": "2023-07-01", "end": "2024-06-30"},
+    {"label": "train_3", "eval_label": "train_3_eval", "start": "2024-07-01", "end": "2025-06-30"},
+)
+FINAL_PERIODS = (
+    {"label": "stress_pre_2022h1", "kind": "stress", "start": "1900-01-01", "end": "2022-06-30"},
+    {"label": "oos_2025h2", "kind": "oos", "start": "2025-07-01", "end": "2099-12-31"},
+)
 
 
 def _load_legacy_module() -> types.ModuleType:
@@ -86,32 +109,12 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def auto_out_dir(ticker: str) -> Path:
     q = int(round(RANGE_QUANTILE * 100))
-    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_large_range_q{q}_{time.strftime('%Y%m%d')}_"
+    prefix = f"exp_{ticker.lower()}_range_predictor_stage2_v3_stage2fixed_large_range_q{q}_{time.strftime('%Y%m%d')}_"
     for idx in range(1, 10000):
         candidate = PROJECT_ROOT / f"{prefix}{idx:04d}"
         if not candidate.exists():
             return candidate
     raise RuntimeError("cannot allocate output directory")
-
-
-def build_rolling_splits(data, train_days: int, step_days: int, start: str | None, end: str | None) -> list[dict[str, Any]]:
-    dates = list(data["date"].astype(str).drop_duplicates())
-    if start:
-        dates = [d for d in dates if d >= start]
-    if end:
-        dates = [d for d in dates if d <= end]
-    if len(dates) < train_days:
-        raise ValueError(f"not enough dates for rolling train_days={train_days}: available={len(dates)}")
-    out: list[dict[str, Any]] = []
-    idx = 0
-    split_no = 1
-    while idx + train_days <= len(dates):
-        s = dates[idx]
-        e = dates[idx + train_days - 1]
-        out.append({"label": f"roll_{split_no:03d}_{s}_{e}", "train_start": s, "train_end": e, "roll_index": split_no, "train_days": train_days, "step_days": step_days})
-        idx += step_days
-        split_no += 1
-    return out
 
 
 def wilson_lower_bound_pct(success: float, total: float, z: float | None = None) -> float:
@@ -130,7 +133,7 @@ def range_pct_array(df) -> np.ndarray:
     return df["high_pct_label"].to_numpy(dtype=float) + df["low_mag_pct_label"].to_numpy(dtype=float)
 
 
-def label_arrays(df, spec: Mapping[str, Any]):
+def label_arrays(df, spec: Mapping[str, Any]) -> tuple[np.ndarray, np.ndarray]:
     threshold = safe_float(spec.get("range_large_threshold_pct"))
     rng = range_pct_array(df)
     large = rng >= threshold
@@ -202,7 +205,7 @@ def make_range_baseline_spec(train_df) -> dict[str, Any]:
         "exact_low_bin": 0,
         "adjacent_high_bin": 0,
         "adjacent_low_bin": 0,
-        "source": "rolling train split next-day large range baseline",
+        "source": "stage2 fixed train split next-day large range baseline",
     }
 
 
@@ -366,15 +369,18 @@ def install_range_target(
     L.evaluate_population = range_evaluate_population
 
 
-def run_rolling_stage2_predictor(
+def period_frame_checked(data, start: str, end: str, label: str):
+    df = L.period_frame(data, start, end)
+    if df.empty:
+        raise ValueError(f"empty period: {label} {start}~{end}")
+    return df
+
+
+def run_stage2_fixed_predictor(
     ticker: str,
     out_dir: Path,
     seed_base: int,
     survivor_count: int,
-    rolling_train_days: int,
-    rolling_step_days: int,
-    rolling_start: str | None,
-    rolling_end: str | None,
     range_quantile: float,
     signal_range_bin_sum_threshold: int,
     wilson_z: float,
@@ -394,7 +400,6 @@ def run_rolling_stage2_predictor(
     if missing:
         raise ValueError(f"missing required range columns: {missing}")
     all_features = L.feature_columns(data)
-    rolling_splits = build_rolling_splits(data, rolling_train_days, rolling_step_days, rolling_start, rolling_end)
 
     seed_pop = None
     all_predictor_rows: list[dict[str, Any]] = []
@@ -404,59 +409,150 @@ def run_rolling_stage2_predictor(
     trace: list[dict[str, Any]] = []
     features_used_union: set[str] = set()
     final_qspec: dict[str, Any] = {}
+    final_features: list[str] = []
 
-    for split_idx, split in enumerate(rolling_splits, 1):
-        rng = random.Random(seed_base + split_idx * 1000)
-        train_df = L.period_frame(data, split["train_start"], split["train_end"])
+    for stage_idx, period in enumerate(STAGE2_TRAIN_PERIODS, start=1):
+        rng = random.Random(seed_base + stage_idx * 1000)
+        train_df = period_frame_checked(data, period["start"], period["end"], period["label"])
         qspec = L.make_quantile_spec(train_df, all_features)
         usable_features = [f for f in all_features if f in qspec]
         features_used_union.update(usable_features)
         baseline_spec = L.make_baseline_spec(train_df)
         init_pop = L.prepare_population_for_split(seed_pop, rng, qspec, baseline_spec)
-        pop, history = L.run_ga_on_split(init_pop, train_df, usable_features, qspec, split, seed_base + split_idx)
+        split_meta = {
+            "label": period["label"],
+            "eval_label": period["eval_label"],
+            "train_start": period["start"],
+            "train_end": period["end"],
+            "stage": stage_idx,
+        }
+        pop, history = L.run_ga_on_split(init_pop, train_df, usable_features, qspec, split_meta, seed_base + stage_idx)
         for ind in pop:
             ind.metrics = L.evaluate_predictor(ind, train_df, usable_features, qspec)
             ind.fitness = safe_float(ind.metrics.get("fitness"))
             ind.signature = predictor_signature(ind)
-        scored = L.evaluate_population(pop, train_df, usable_features, qspec, split["label"], "train")
+        scored = L.evaluate_population(pop, train_df, usable_features, qspec, period["eval_label"], "train")
         survivors, selected_rows = L.select_survivors(pop, scored, survivor_count)
 
         for rank, ind in enumerate(pop, 1):
-            all_predictor_rows.append({"ticker": ticker, "target_mode": TARGET_MODE, "train_label": split["label"], "origin_rank": rank, "signature": ind.signature or predictor_signature(ind), "fitness": safe_float(ind.fitness), "metrics": ind.metrics, "predictor": L.individual_to_dict(ind), "stage": split_idx, "rolling_split": split})
+            all_predictor_rows.append({
+                "ticker": ticker,
+                "target_mode": TARGET_MODE,
+                "origin_train_label": period["label"],
+                "period_label": period["eval_label"],
+                "origin_rank": rank,
+                "signature": ind.signature or predictor_signature(ind),
+                "fitness": safe_float(ind.fitness),
+                "metrics": ind.metrics,
+                "predictor": L.individual_to_dict(ind),
+                "stage": stage_idx,
+                "stage_period": split_meta,
+            })
         for h in history:
-            h.update({"generations_run": len(history), "early_stop_triggered": len(history) < L.GENERATIONS, "rolling_split": split, "target_mode": TARGET_MODE})
+            h.update({
+                "generations_run": len(history),
+                "early_stop_triggered": len(history) < L.GENERATIONS,
+                "stage_period": split_meta,
+                "target_mode": TARGET_MODE,
+            })
         all_history_rows.extend(history)
         for row in scored:
-            train_gate_rows.append({**dict(row), "ticker": ticker, "target_mode": TARGET_MODE, "stage": split_idx, "train_start": split["train_start"], "train_end": split["train_end"], "rolling_split": split})
+            train_gate_rows.append({
+                **dict(row),
+                "ticker": ticker,
+                "target_mode": TARGET_MODE,
+                "stage": stage_idx,
+                "origin_train_label": period["label"],
+                "train_start": period["start"],
+                "train_end": period["end"],
+                "stage_period": split_meta,
+            })
         for rank, row in enumerate(selected_rows, 1):
-            stage_survivor_rows.append({"ticker": ticker, "target_mode": TARGET_MODE, "stage": split_idx, "train_label": split["label"], "survivor_rank": rank, "rolling_split": split, **row})
+            stage_survivor_rows.append({
+                "ticker": ticker,
+                "target_mode": TARGET_MODE,
+                "stage": stage_idx,
+                "origin_train_label": period["label"],
+                "period_label": period["eval_label"],
+                "survivor_rank": rank,
+                "stage_period": split_meta,
+                **row,
+            })
         gate_passed_count = sum(1 for r in scored if r.get("passed_gate"))
-        trace.append({"stage": split_idx, "target_mode": TARGET_MODE, "train_label": split["label"], "train_start": split["train_start"], "train_end": split["train_end"], "input_seed_count": len(seed_pop or []), "population": len(pop), "gate_passed_count": gate_passed_count, "selected_survivor_count": len(survivors), "fallback_used": gate_passed_count == 0, "best_fitness": safe_float(pop[0].fitness), "best_signature": pop[0].signature, "feature_count": len(usable_features), "train_large_range_rate_pct": safe_float(baseline_spec.get("train_large_range_rate_pct")), "train_range_threshold_pct": safe_float(baseline_spec.get("range_large_threshold_pct")), "train_range_mean_pct": safe_float(baseline_spec.get("train_range_mean_pct")), "train_range_q90_pct": safe_float(baseline_spec.get("train_range_q90_pct"))})
+        trace.append({
+            "stage": stage_idx,
+            "target_mode": TARGET_MODE,
+            "origin_train_label": period["label"],
+            "period_label": period["eval_label"],
+            "train_start": period["start"],
+            "train_end": period["end"],
+            "input_seed_count": len(seed_pop or []),
+            "population": len(pop),
+            "gate_passed_count": gate_passed_count,
+            "selected_survivor_count": len(survivors),
+            "fallback_used": gate_passed_count == 0,
+            "best_fitness": safe_float(pop[0].fitness),
+            "best_signature": pop[0].signature,
+            "feature_count": len(usable_features),
+            "train_large_range_rate_pct": safe_float(baseline_spec.get("train_large_range_rate_pct")),
+            "train_range_threshold_pct": safe_float(baseline_spec.get("range_large_threshold_pct")),
+            "train_range_mean_pct": safe_float(baseline_spec.get("train_range_mean_pct")),
+            "train_range_q90_pct": safe_float(baseline_spec.get("train_range_q90_pct")),
+        })
         seed_pop = survivors
         final_qspec = qspec
+        final_features = usable_features
 
-    final_pop = seed_pop or []
-    final_periods = L.build_final_periods(data)
+    alive = seed_pop or []
     final_eval_rows: list[dict[str, Any]] = []
-    alive = final_pop
     final_trace: list[dict[str, Any]] = []
-    features_final = sorted(f for f in features_used_union if f in final_qspec)
+    features_final = sorted(f for f in features_used_union if f in final_qspec) or final_features
 
-    for period in final_periods:
-        pdf = L.period_frame(data, period["start"], period["end"])
+    for period in FINAL_PERIODS:
+        pdf = period_frame_checked(data, period["start"], period["end"], period["label"])
         scored = L.evaluate_population(alive, pdf, features_final, final_qspec, period["label"], period["kind"])
         passed_sigs = {str(r.get("signature")) for r in scored if r.get("passed_gate")}
         for row in scored:
-            final_eval_rows.append({**dict(row), "ticker": ticker, "target_mode": TARGET_MODE, "period_start": period["start"], "period_end": period["end"]})
-        final_trace.append({"period_label": period["label"], "period_kind": period["kind"], "reached": len(alive), "passed": len(passed_sigs), "failed": len(alive) - len(passed_sigs)})
+            final_eval_rows.append({
+                **dict(row),
+                "ticker": ticker,
+                "target_mode": TARGET_MODE,
+                "period_start": period["start"],
+                "period_end": period["end"],
+            })
+        final_trace.append({
+            "period_label": period["label"],
+            "period_kind": period["kind"],
+            "reached": len(alive),
+            "passed": len(passed_sigs),
+            "failed": len(alive) - len(passed_sigs),
+        })
         alive = [ind for ind in alive if (ind.signature or predictor_signature(ind)) in passed_sigs]
 
-    final_survivor_rows = [{"ticker": ticker, "target_mode": TARGET_MODE, "signature": ind.signature or predictor_signature(ind), "predictor": L.individual_to_dict(ind)} for ind in alive]
+    final_survivor_rows = [{
+        "ticker": ticker,
+        "target_mode": TARGET_MODE,
+        "signature": ind.signature or predictor_signature(ind),
+        "predictor": L.individual_to_dict(ind),
+    } for ind in alive]
+
     distributions = {}
-    for p in final_periods:
-        pdf = L.period_frame(data, p["start"], p["end"])
+    for p in (*STAGE2_TRAIN_PERIODS, *FINAL_PERIODS):
+        start = p["start"]
+        end = p["end"]
+        label = p.get("eval_label") or p["label"]
+        pdf = period_frame_checked(data, start, end, label)
         rng_arr = range_pct_array(pdf)
-        distributions[p["label"]] = {"high_bin": L.distribution(pdf["high_bin"].to_numpy(dtype=int)), "low_bin": L.distribution(pdf["low_bin"].to_numpy(dtype=int)), "range_mean_pct": float(np.nanmean(rng_arr)) if len(rng_arr) else 0.0, "range_median_pct": float(np.nanmedian(rng_arr)) if len(rng_arr) else 0.0, "range_q70_pct": float(np.nanquantile(rng_arr, 0.70)) if len(rng_arr) else 0.0, "range_q90_pct": float(np.nanquantile(rng_arr, 0.90)) if len(rng_arr) else 0.0}
+        distributions[label] = {
+            "start": start,
+            "end": end,
+            "high_bin": L.distribution(pdf["high_bin"].to_numpy(dtype=int)),
+            "low_bin": L.distribution(pdf["low_bin"].to_numpy(dtype=int)),
+            "range_mean_pct": float(np.nanmean(rng_arr)) if len(rng_arr) else 0.0,
+            "range_median_pct": float(np.nanmedian(rng_arr)) if len(rng_arr) else 0.0,
+            "range_q70_pct": float(np.nanquantile(rng_arr, 0.70)) if len(rng_arr) else 0.0,
+            "range_q90_pct": float(np.nanquantile(rng_arr, 0.90)) if len(rng_arr) else 0.0,
+        }
 
     write_jsonl(out_dir / "predictors_all.jsonl", all_predictor_rows)
     write_jsonl(out_dir / "ga_history.jsonl", all_history_rows)
@@ -466,25 +562,93 @@ def run_rolling_stage2_predictor(
     write_jsonl(out_dir / "final_survivors.jsonl", final_survivor_rows)
 
     source_counts = Counter(m.get("source", "unknown") for m in feature_meta if m.get("feature") in features_final)
-    target_desc = {"mode": TARGET_MODE, "range_pct": "high_pct_label + low_mag_pct_label", "range_quantile": RANGE_QUANTILE, "label": "range_pct >= rolling_train_quantile_threshold", "signal": f"predicted_high_bin + predicted_low_bin >= {SIGNAL_RANGE_BIN_SUM_THRESHOLD}", "objective": "large-range precision lower bound + base-rate lift lower bound + minimum signal count", "wilson_z": WILSON_Z, "min_signal_rate_pct_soft": MIN_SIGNAL_RATE, "max_signal_rate_pct_soft": MAX_SIGNAL_RATE, "min_signal_count_train": MIN_SIGNAL_COUNT_TRAIN, "min_signal_count_final": MIN_SIGNAL_COUNT_FINAL, "min_hit_count_train": MIN_HIT_COUNT_TRAIN, "min_hit_count_final": MIN_HIT_COUNT_FINAL}
-    config = {"ticker": ticker, "runner": "scripts/research/run_range_predictor_stage2_v3.py", "legacy_feature_logic_source": f"{LEGACY_COMMIT}:{LEGACY_PATH}", "mode": "rolling_stage2_plus_prior5_large_range", "rolling": {"train_days": rolling_train_days, "step_days": rolling_step_days, "start": rolling_start, "end": rolling_end, "split_count": len(rolling_splits), "splits": rolling_splits}, "final_periods": final_periods, "ga": {"population": L.POPULATION, "generations": L.GENERATIONS, "patience": L.PATIENCE, "elite_ratio": L.ELITE_RATIO, "mutation_rate": L.MUTATION_RATE, "rule_count": L.RULE_COUNT, "survivor_count": survivor_count, "random_immigrant_ratio": L.RANDOM_IMMIGRANT_RATIO, "seed_base": seed_base, "min_band_width_q": L.MIN_BAND_WIDTH_Q, "max_band_width_q": L.MAX_BAND_WIDTH_Q, "softness_range": [L.MIN_SOFTNESS, L.MAX_SOFTNESS]}, "target": target_desc, "lookahead_report": {"pass": True, "stock_features": "Stage2 entry components for D-1~D-5 plus D-1 tight swing-style features and D0 open gap", "flow_features": "optional D-1 orderbook/flow columns if cache provides them", "market_features": "ETF D0 gap or D-1 confirmed values only", "news_features": "market_history rows joined from D-1 date only", "label_columns": "D-day high_pct_label/low_mag_pct_label are labels only, not features", "final_eval_threshold_reference": "individual baseline threshold from rolling train split; no final-period distribution fitting", "excluded": ["D0 high/low/close as features", "future trading results as features"]}, "feature_count": len(features_final), "feature_sources": dict(source_counts), "bin_labels": L.BIN_LABELS, "distributions": distributions}
+    target_desc = {
+        "mode": TARGET_MODE,
+        "range_pct": "high_pct_label + low_mag_pct_label",
+        "range_quantile": RANGE_QUANTILE,
+        "label": "range_pct >= current_train_split_quantile_threshold",
+        "signal": f"predicted_high_bin + predicted_low_bin >= {SIGNAL_RANGE_BIN_SUM_THRESHOLD}",
+        "objective": "large-range precision lower bound + base-rate lift lower bound + minimum signal count",
+        "wilson_z": WILSON_Z,
+        "min_signal_rate_pct_soft": MIN_SIGNAL_RATE,
+        "max_signal_rate_pct_soft": MAX_SIGNAL_RATE,
+        "min_signal_count_train": MIN_SIGNAL_COUNT_TRAIN,
+        "min_signal_count_final": MIN_SIGNAL_COUNT_FINAL,
+        "min_hit_count_train": MIN_HIT_COUNT_TRAIN,
+        "min_hit_count_final": MIN_HIT_COUNT_FINAL,
+    }
+    config = {
+        "ticker": ticker,
+        "runner": "scripts/research/run_range_predictor_stage2_v3.py",
+        "legacy_feature_logic_source": f"{LEGACY_COMMIT}:{LEGACY_PATH}",
+        "mode": "stage2_fixed_train123_large_range",
+        "stage2_periods": {
+            "train": list(STAGE2_TRAIN_PERIODS),
+            "final": list(FINAL_PERIODS),
+        },
+        "stage2_flow": "train_1 survivors seed train_2; train_2 survivors seed train_3; train_3 survivors go stress then oos",
+        "ga": {
+            "population": L.POPULATION,
+            "generations": L.GENERATIONS,
+            "patience": L.PATIENCE,
+            "elite_ratio": L.ELITE_RATIO,
+            "mutation_rate": L.MUTATION_RATE,
+            "rule_count": L.RULE_COUNT,
+            "survivor_count": survivor_count,
+            "random_immigrant_ratio": L.RANDOM_IMMIGRANT_RATIO,
+            "seed_base": seed_base,
+            "min_band_width_q": L.MIN_BAND_WIDTH_Q,
+            "max_band_width_q": L.MAX_BAND_WIDTH_Q,
+            "softness_range": [L.MIN_SOFTNESS, L.MAX_SOFTNESS],
+        },
+        "target": target_desc,
+        "lookahead_report": {
+            "pass": True,
+            "stock_features": "Stage2 entry components for D-1~D-5 plus D-1 tight swing-style features and D0 open gap",
+            "flow_features": "optional D-1 orderbook/flow columns if cache provides them",
+            "market_features": "ETF D0 gap or D-1 confirmed values only",
+            "news_features": "market_history rows joined from D-1 date only",
+            "label_columns": "D-day high_pct_label/low_mag_pct_label are labels only, not features",
+            "final_eval_threshold_reference": "baseline threshold from last surviving train split; no final-period distribution fitting",
+            "excluded": ["D0 high/low/close as features", "future trading results as features"],
+        },
+        "feature_count": len(features_final),
+        "feature_sources": dict(source_counts),
+        "bin_labels": L.BIN_LABELS,
+        "distributions": distributions,
+    }
     write_json(out_dir / "config.json", config)
-    summary = {"ticker": ticker, "mode": "rolling_stage2_plus_prior5_large_range", "target": target_desc, "rolling_split_count": len(rolling_splits), "stage_trace": trace, "final_trace": final_trace, "final_survivor_count": len(alive), "final_survivor_signatures": [ind.signature or predictor_signature(ind) for ind in alive], "elapsed_sec": time.time() - started, "outputs": {"predictors_all": str(out_dir / "predictors_all.jsonl"), "ga_history": str(out_dir / "ga_history.jsonl"), "train_gate_metrics": str(out_dir / "train_gate_metrics.jsonl"), "stage_survivors": str(out_dir / "stage_survivors.jsonl"), "final_period_metrics": str(out_dir / "final_period_metrics.jsonl"), "final_survivors": str(out_dir / "final_survivors.jsonl"), "config": str(out_dir / "config.json"), "summary": str(out_dir / "summary.json")}}
+    summary = {
+        "ticker": ticker,
+        "mode": "stage2_fixed_train123_large_range",
+        "target": target_desc,
+        "stage_trace": trace,
+        "final_trace": final_trace,
+        "final_survivor_count": len(alive),
+        "final_survivor_signatures": [ind.signature or predictor_signature(ind) for ind in alive],
+        "elapsed_sec": time.time() - started,
+        "outputs": {
+            "predictors_all": str(out_dir / "predictors_all.jsonl"),
+            "ga_history": str(out_dir / "ga_history.jsonl"),
+            "train_gate_metrics": str(out_dir / "train_gate_metrics.jsonl"),
+            "stage_survivors": str(out_dir / "stage_survivors.jsonl"),
+            "final_period_metrics": str(out_dir / "final_period_metrics.jsonl"),
+            "final_survivors": str(out_dir / "final_survivors.jsonl"),
+            "config": str(out_dir / "config.json"),
+            "summary": str(out_dir / "summary.json"),
+        },
+    }
     write_json(out_dir / "summary.json", summary)
     print(json.dumps(L.json_safe(summary), ensure_ascii=False, indent=2, sort_keys=True))
     return summary
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Rolling Stage2 + prior 5 days GA for next-day large range volatility labels")
+    p = argparse.ArgumentParser(description="Stage2-fixed train1/train2/train3 survivor GA for next-day large-range volatility labels")
     p.add_argument("--ticker", required=True)
     p.add_argument("--out-dir", default=None)
     p.add_argument("--seed-base", type=int, default=None)
     p.add_argument("--survivor-count", type=int, default=L.SURVIVOR_COUNT)
-    p.add_argument("--rolling-train-days", type=int, default=252)
-    p.add_argument("--rolling-step-days", type=int, default=21)
-    p.add_argument("--rolling-start", default="2022-07-01")
-    p.add_argument("--rolling-end", default="2025-06-30")
     p.add_argument("--range-quantile", type=float, default=0.70)
     p.add_argument("--signal-range-bin-sum-threshold", type=int, default=4)
     p.add_argument("--wilson-z", type=float, default=1.0)
@@ -505,15 +669,11 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--ticker must not be empty")
     out_dir = Path(args.out_dir).resolve() if args.out_dir else auto_out_dir(ticker)
     seed_base = int(args.seed_base) if args.seed_base is not None else L.default_seed_base(ticker)
-    run_rolling_stage2_predictor(
+    run_stage2_fixed_predictor(
         ticker=ticker,
         out_dir=out_dir,
         seed_base=seed_base,
         survivor_count=max(1, int(args.survivor_count)),
-        rolling_train_days=max(50, int(args.rolling_train_days)),
-        rolling_step_days=max(1, int(args.rolling_step_days)),
-        rolling_start=args.rolling_start,
-        rolling_end=args.rolling_end,
         range_quantile=float(args.range_quantile),
         signal_range_bin_sum_threshold=int(args.signal_range_bin_sum_threshold),
         wilson_z=float(args.wilson_z),

@@ -7,6 +7,7 @@ Base: 3b24382 dense-feature pattern detector.
 - --head-objective both: 기존 HIGH/LOW 동시 signal detector
 - --head-objective high: HIGH 전용 detector로 signal/fitness/gate 계산
 - --head-objective low: LOW 전용 detector로 signal/fitness/gate 계산
+- feature LOOKBACK을 5일에서 10일로 확장해 STK_lag1~10, STAGE2_lag1~10을 모두 사용.
 
 목적:
 HIGH detector와 LOW detector를 따로 학습한 뒤, OOS에서 signal 날짜 overlap을 확인한다.
@@ -29,6 +30,7 @@ BASE_COMMIT = "3b24382"
 SELF_PATH = "scripts/research/run_range_predictor_stage2_v3.py"
 TARGET_MODE_BASE = "next_day_hilo_true_coarse3_pattern_detector_dense_feature_weights_head_objective_stage2"
 HEAD_OBJECTIVE = "both"
+FEATURE_LOOKBACK_DAYS = 10
 
 
 def _load_base_module() -> types.ModuleType:
@@ -44,6 +46,19 @@ def _load_base_module() -> types.ModuleType:
 P = _load_base_module()
 TARGET_MODE = TARGET_MODE_BASE
 P.TARGET_MODE = TARGET_MODE
+
+
+def _apply_feature_lookback_days() -> None:
+    """Force the loaded dataset builder to generate lag1~FEATURE_LOOKBACK_DAYS features."""
+    for target in (getattr(P, "L", None), P):
+        if target is None:
+            continue
+        if hasattr(target, "LOOKBACK"):
+            setattr(target, "LOOKBACK", int(FEATURE_LOOKBACK_DAYS))
+        setattr(target, "FEATURE_LOOKBACK_DAYS", int(FEATURE_LOOKBACK_DAYS))
+
+
+_apply_feature_lookback_days()
 
 _BASE_predict_signal = P.predict_signal
 _BASE_predict = P.predict
@@ -320,7 +335,7 @@ def individual_to_dict(ind: Any) -> dict[str, Any]:
 
 
 def predictor_signature(ind: Any) -> str:
-    payload = {"base_signature": _BASE_predictor_signature(ind), "head_objective": _objective_mode(), "target_mode": _objective_target_mode()}
+    payload = {"base_signature": _BASE_predictor_signature(ind), "head_objective": _objective_mode(), "target_mode": _objective_target_mode(), "feature_lookback_days": FEATURE_LOOKBACK_DAYS}
     return P.hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:24]
 
 
@@ -329,6 +344,13 @@ def dual_head_params() -> dict[str, Any]:
     params["mode"] = _objective_target_mode()
     params["head_objective"] = _objective_mode()
     params["separable_head_training"] = True
+    params["feature_lookback_days"] = int(FEATURE_LOOKBACK_DAYS)
+    params["lag_feature_expansion"] = {
+        "enabled": True,
+        "from_days": 5,
+        "to_days": int(FEATURE_LOOKBACK_DAYS),
+        "description": "Underlying dataset LOOKBACK is forced to 10, so STK_lag1~10 and STAGE2_lag1~10 are generated and used by qspec/dense weights.",
+    }
     return params
 
 
@@ -347,6 +369,7 @@ def _apply_head_args(args: argparse.Namespace) -> None:
 
 def install_dual_head_target(args: Any) -> None:
     _BASE_install_dual_head_target(args)
+    _apply_feature_lookback_days()
     replacements = {
         "predict_signal": predict_signal,
         "predict": predict,
@@ -369,15 +392,18 @@ def install_dual_head_target(args: Any) -> None:
 def parse_args(argv: list[str] | None = None):
     head_args, remaining = _parse_head_args(sys.argv[1:] if argv is None else argv)
     _apply_head_args(head_args)
+    _apply_feature_lookback_days()
     return _BASE_parse_args(remaining)
 
 
 def run_original_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, args: Any):
+    _apply_feature_lookback_days()
     P.install_dual_head_target = install_dual_head_target
     P.dual_head_params = dual_head_params
     return _BASE_run_original_stage2_predictor(ticker=ticker, out_dir=out_dir, seed_base=seed_base, args=args)
 
 
+_apply_feature_lookback_days()
 P.predict_signal = predict_signal
 P.predict = predict
 P.evaluate_predictor = evaluate_predictor
@@ -397,6 +423,7 @@ for _name in dir(P):
 for _name, _value in {
     "TARGET_MODE": TARGET_MODE,
     "HEAD_OBJECTIVE": HEAD_OBJECTIVE,
+    "FEATURE_LOOKBACK_DAYS": FEATURE_LOOKBACK_DAYS,
     "predict_signal": predict_signal,
     "predict": predict,
     "evaluate_predictor": evaluate_predictor,
@@ -410,6 +437,8 @@ for _name, _value in {
     "run_original_stage2_predictor": run_original_stage2_predictor,
 }.items():
     globals()[_name] = _value
+
+_apply_feature_lookback_days()
 
 
 def default_seed_base(ticker: str) -> int:

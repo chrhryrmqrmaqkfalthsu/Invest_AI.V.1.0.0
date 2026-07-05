@@ -20,6 +20,9 @@ Original-Stage2-style multi-condition dual-head GA runner for next-day HIGH/LOW 
 - 각 유전자는 feature 하나가 아니라 여러 조건을 가진다.
 - 조건들은 AND 방식으로 결합한다. 즉 모든 조건이 맞을 때만 해당 bin에 투표한다.
 - 예: STK_lag1_range q70~q95 AND STK_lag2_ccret q60~q90 AND D1_close_pos_candle q80~q100 -> HIGH bin 4.
+- bin 정확도는 정확히 같은 bin뿐 아니라 인접/허용 bin을 함께 본다.
+- HIGH는 예측보다 실제 고가 bin이 낮으면 위험 오차로 벌점, 실제가 더 높으면 안전 오차로 본다.
+- LOW는 예측보다 실제 저가 하락폭 bin이 높으면 위험 오차로 벌점, 실제가 덜 빠지면 안전 오차로 본다.
 - 각 헤드의 gene 개수, gene당 조건 수, fitness 가중치, gate 기준을 CLI로 조정 가능하게 한다.
 
 Read/write scope:
@@ -85,6 +88,22 @@ HIGH_RULE_COUNT = max(1, int(getattr(L, "RULE_COUNT", 80)) // 2)
 LOW_RULE_COUNT = max(1, int(getattr(L, "RULE_COUNT", 80)) - HIGH_RULE_COUNT)
 MIN_CONDITIONS_PER_GENE = 2
 MAX_CONDITIONS_PER_GENE = 3
+
+# BIN을 너무 빡빡하게 보지 않기 위한 허용 폭.
+# tolerance=1이면 예측보다 위험한 방향으로 1칸까지는 허용한다.
+BIN_TOLERANCE = 1
+
+# 비대칭 bin 오차 가중치.
+# HIGH: 예측 +2, 실제 +1은 위험 오차. 예측 +2, 실제 +3은 안전 오차.
+# LOW: 예측 -2, 실제 -3은 위험 오차. 예측 -2, 실제 -1은 안전 오차.
+HIGH_DANGEROUS_BIN_ERROR_WEIGHT = 1.0
+HIGH_SAFE_BIN_ERROR_WEIGHT = 0.0
+LOW_DANGEROUS_BIN_ERROR_WEIGHT = 1.0
+LOW_SAFE_BIN_ERROR_WEIGHT = 0.0
+HIGH_DIRECTIONAL_TOLERANCE_WEIGHT = 0.55
+LOW_DIRECTIONAL_TOLERANCE_WEIGHT = 0.55
+BOTH_DIRECTIONAL_TOLERANCE_WEIGHT = 0.35
+ASYMMETRIC_BIN_ERROR_WEIGHT = 1.20
 
 HIGH_HEAD_WEIGHT = 1.0
 LOW_HEAD_WEIGHT = 1.0
@@ -507,6 +526,56 @@ def prediction_penalty(ind: DualHeadPredictorIndividual, yh: np.ndarray, yl: np.
     }
 
 
+def asymmetric_bin_metrics(yh: np.ndarray, yl: np.ndarray, ph: np.ndarray, pl: np.ndarray) -> dict[str, float]:
+    """실전 위험 방향만 강하게 보는 비대칭 bin 오차 지표.
+
+    HIGH bin은 숫자가 클수록 더 높은 고가 구간이다.
+    - ph > yh: +2를 예상했는데 +1만 찍은 꼴이라 위험 오차.
+    - ph < yh: +2를 예상했는데 +3을 찍은 꼴이라 안전 오차.
+
+    LOW bin은 숫자가 클수록 더 큰 하락폭 구간이다.
+    - pl < yl: -2를 예상했는데 -3까지 빠진 꼴이라 위험 오차.
+    - pl > yl: -2를 예상했는데 -1만 빠진 꼴이라 안전 오차.
+    """
+    yh = yh.astype(int)
+    yl = yl.astype(int)
+    ph = ph.astype(int)
+    pl = pl.astype(int)
+    n = max(1, int(len(yh)))
+    high_danger = np.maximum(0, ph - yh).astype(float)
+    high_safe = np.maximum(0, yh - ph).astype(float)
+    low_danger = np.maximum(0, yl - pl).astype(float)
+    low_safe = np.maximum(0, pl - yl).astype(float)
+    high_asym = high_danger * HIGH_DANGEROUS_BIN_ERROR_WEIGHT + high_safe * HIGH_SAFE_BIN_ERROR_WEIGHT
+    low_asym = low_danger * LOW_DANGEROUS_BIN_ERROR_WEIGHT + low_safe * LOW_SAFE_BIN_ERROR_WEIGHT
+    high_directional_ok = high_danger <= BIN_TOLERANCE
+    low_directional_ok = low_danger <= BIN_TOLERANCE
+    both_directional_ok = high_directional_ok & low_directional_ok
+    high_safe_or_exact = high_danger == 0
+    low_safe_or_exact = low_danger == 0
+    both_safe_or_exact = high_safe_or_exact & low_safe_or_exact
+    return {
+        "bin_tolerance": float(BIN_TOLERANCE),
+        "high_dangerous_bin_error_mean": float(np.mean(high_danger)) if n else 0.0,
+        "low_dangerous_bin_error_mean": float(np.mean(low_danger)) if n else 0.0,
+        "combined_dangerous_bin_error_mean": float((np.mean(high_danger) + np.mean(low_danger)) / 2.0) if n else 0.0,
+        "high_safe_bin_error_mean": float(np.mean(high_safe)) if n else 0.0,
+        "low_safe_bin_error_mean": float(np.mean(low_safe)) if n else 0.0,
+        "combined_safe_bin_error_mean": float((np.mean(high_safe) + np.mean(low_safe)) / 2.0) if n else 0.0,
+        "high_asymmetric_bin_error_mean": float(np.mean(high_asym)) if n else 0.0,
+        "low_asymmetric_bin_error_mean": float(np.mean(low_asym)) if n else 0.0,
+        "combined_asymmetric_bin_error_mean": float((np.mean(high_asym) + np.mean(low_asym)) / 2.0) if n else 0.0,
+        "high_directional_tolerant_acc_pct": float(np.mean(high_directional_ok) * 100.0) if n else 0.0,
+        "low_directional_tolerant_acc_pct": float(np.mean(low_directional_ok) * 100.0) if n else 0.0,
+        "both_directional_tolerant_acc_pct": float(np.mean(both_directional_ok) * 100.0) if n else 0.0,
+        "combined_directional_tolerant_acc_pct": float((np.mean(high_directional_ok) + np.mean(low_directional_ok)) / 2.0 * 100.0) if n else 0.0,
+        "high_safe_or_exact_acc_pct": float(np.mean(high_safe_or_exact) * 100.0) if n else 0.0,
+        "low_safe_or_exact_acc_pct": float(np.mean(low_safe_or_exact) * 100.0) if n else 0.0,
+        "both_safe_or_exact_acc_pct": float(np.mean(both_safe_or_exact) * 100.0) if n else 0.0,
+        "combined_safe_or_exact_acc_pct": float((np.mean(high_safe_or_exact) + np.mean(low_safe_or_exact)) / 2.0 * 100.0) if n else 0.0,
+    }
+
+
 def make_dual_baseline_spec(train_df) -> dict[str, Any]:
     spec = dict(LEGACY_MAKE_BASELINE_SPEC(train_df))
     spec.update(
@@ -517,6 +586,11 @@ def make_dual_baseline_spec(train_df) -> dict[str, Any]:
             "low_rule_count": LOW_RULE_COUNT,
             "min_conditions_per_gene": MIN_CONDITIONS_PER_GENE,
             "max_conditions_per_gene": MAX_CONDITIONS_PER_GENE,
+            "bin_tolerance": BIN_TOLERANCE,
+            "asymmetric_bin_rule": {
+                "high": "penalize predicted bin above actual bin; do not penalize actual high above prediction",
+                "low": "penalize actual low-magnitude bin above predicted bin; do not penalize shallower low than prediction",
+            },
         }
     )
     return spec
@@ -524,10 +598,14 @@ def make_dual_baseline_spec(train_df) -> dict[str, Any]:
 
 def score_hilo_predictions(df, ph: np.ndarray, pl: np.ndarray, spec: Mapping[str, Any]) -> dict[str, float]:
     scores = L.score_predictions(df, ph, pl, spec)
+    yh = df["high_bin"].to_numpy(dtype=int)
+    yl = df["low_bin"].to_numpy(dtype=int)
+    asym = asymmetric_bin_metrics(yh, yl, ph, pl)
     # legacy score_predictions의 key를 그대로 쓰되, 둘의 불균형과 실제 pct 오차합을 추가한다.
     scores["head_exact_gap_abs_pp"] = abs(safe_float(scores.get("high_exact_acc_pct")) - safe_float(scores.get("low_exact_acc_pct")))
     scores["head_adjacent_gap_abs_pp"] = abs(safe_float(scores.get("high_adjacent_acc_pct")) - safe_float(scores.get("low_adjacent_acc_pct")))
     scores["combined_mae_sum_pct"] = safe_float(scores.get("high_mae_pct")) + safe_float(scores.get("low_mae_pct"))
+    scores.update(asym)
     return scores
 
 
@@ -536,16 +614,22 @@ def predictor_fitness(metrics: Mapping[str, Any]) -> float:
         safe_float(metrics.get("high_exact_lift_pp")) * HIGH_EXACT_WEIGHT
         + safe_float(metrics.get("high_adjacent_lift_pp")) * HIGH_ADJACENT_WEIGHT
         + safe_float(metrics.get("high_mae_lift_pct")) * HIGH_MAE_WEIGHT
+        + safe_float(metrics.get("high_directional_tolerant_lift_pp")) * HIGH_DIRECTIONAL_TOLERANCE_WEIGHT
+        + safe_float(metrics.get("high_asymmetric_bin_error_lift")) * ASYMMETRIC_BIN_ERROR_WEIGHT
     )
     low_component = (
         safe_float(metrics.get("low_exact_lift_pp")) * LOW_EXACT_WEIGHT
         + safe_float(metrics.get("low_adjacent_lift_pp")) * LOW_ADJACENT_WEIGHT
         + safe_float(metrics.get("low_mae_lift_pct")) * LOW_MAE_WEIGHT
+        + safe_float(metrics.get("low_directional_tolerant_lift_pp")) * LOW_DIRECTIONAL_TOLERANCE_WEIGHT
+        + safe_float(metrics.get("low_asymmetric_bin_error_lift")) * ASYMMETRIC_BIN_ERROR_WEIGHT
     )
     both_component = (
         safe_float(metrics.get("both_exact_lift_pp")) * BOTH_EXACT_WEIGHT
         + safe_float(metrics.get("both_adjacent_lift_pp")) * BOTH_ADJACENT_WEIGHT
         + safe_float(metrics.get("combined_mae_lift_pct")) * COMBINED_MAE_WEIGHT
+        + safe_float(metrics.get("both_directional_tolerant_lift_pp")) * BOTH_DIRECTIONAL_TOLERANCE_WEIGHT
+        + safe_float(metrics.get("combined_asymmetric_bin_error_lift")) * ASYMMETRIC_BIN_ERROR_WEIGHT
     )
     imbalance_penalty = abs(high_component - low_component) * HEAD_IMBALANCE_PENALTY
     raw = high_component * HIGH_HEAD_WEIGHT + low_component * LOW_HEAD_WEIGHT + both_component * BOTH_HEAD_WEIGHT
@@ -561,6 +645,9 @@ def evaluate_predictor(ind: DualHeadPredictorIndividual, df, features: list[str]
     bases = L.baseline_metrics(df, ind.baseline_spec)
     exact_base = bases["exact_baseline"]
     adj_base = bases["adjacent_baseline"]
+    base_ph = np.full(len(df), safe_int(ind.baseline_spec.get("exact_high_bin")), dtype=int)
+    base_pl = np.full(len(df), safe_int(ind.baseline_spec.get("exact_low_bin")), dtype=int)
+    asym_base = asymmetric_bin_metrics(yh, yl, base_ph, base_pl)
     metrics = {
         **scores,
         "target_mode": TARGET_MODE,
@@ -580,6 +667,20 @@ def evaluate_predictor(ind: DualHeadPredictorIndividual, df, features: list[str]
         "high_mae_lift_pct": exact_base["high_mae_pct"] - scores["high_mae_pct"],
         "low_mae_lift_pct": exact_base["low_mae_pct"] - scores["low_mae_pct"],
         "combined_mae_lift_pct": exact_base["combined_mae_pct"] - scores["combined_mae_pct"],
+        "high_directional_tolerant_lift_pp": scores["high_directional_tolerant_acc_pct"] - asym_base["high_directional_tolerant_acc_pct"],
+        "low_directional_tolerant_lift_pp": scores["low_directional_tolerant_acc_pct"] - asym_base["low_directional_tolerant_acc_pct"],
+        "both_directional_tolerant_lift_pp": scores["both_directional_tolerant_acc_pct"] - asym_base["both_directional_tolerant_acc_pct"],
+        "combined_directional_tolerant_lift_pp": scores["combined_directional_tolerant_acc_pct"] - asym_base["combined_directional_tolerant_acc_pct"],
+        "high_safe_or_exact_lift_pp": scores["high_safe_or_exact_acc_pct"] - asym_base["high_safe_or_exact_acc_pct"],
+        "low_safe_or_exact_lift_pp": scores["low_safe_or_exact_acc_pct"] - asym_base["low_safe_or_exact_acc_pct"],
+        "both_safe_or_exact_lift_pp": scores["both_safe_or_exact_acc_pct"] - asym_base["both_safe_or_exact_acc_pct"],
+        "combined_safe_or_exact_lift_pp": scores["combined_safe_or_exact_acc_pct"] - asym_base["combined_safe_or_exact_acc_pct"],
+        "high_dangerous_bin_error_lift": asym_base["high_dangerous_bin_error_mean"] - scores["high_dangerous_bin_error_mean"],
+        "low_dangerous_bin_error_lift": asym_base["low_dangerous_bin_error_mean"] - scores["low_dangerous_bin_error_mean"],
+        "combined_dangerous_bin_error_lift": asym_base["combined_dangerous_bin_error_mean"] - scores["combined_dangerous_bin_error_mean"],
+        "high_asymmetric_bin_error_lift": asym_base["high_asymmetric_bin_error_mean"] - scores["high_asymmetric_bin_error_mean"],
+        "low_asymmetric_bin_error_lift": asym_base["low_asymmetric_bin_error_mean"] - scores["low_asymmetric_bin_error_mean"],
+        "combined_asymmetric_bin_error_lift": asym_base["combined_asymmetric_bin_error_mean"] - scores["combined_asymmetric_bin_error_mean"],
         "baseline_exact_high_acc_pct": exact_base["high_exact_acc_pct"],
         "baseline_exact_low_acc_pct": exact_base["low_exact_acc_pct"],
         "baseline_exact_combined_acc_pct": exact_base["combined_exact_acc_pct"],
@@ -591,6 +692,13 @@ def evaluate_predictor(ind: DualHeadPredictorIndividual, df, features: list[str]
         "baseline_high_mae_pct": exact_base["high_mae_pct"],
         "baseline_low_mae_pct": exact_base["low_mae_pct"],
         "baseline_combined_mae_pct": exact_base["combined_mae_pct"],
+        "baseline_high_directional_tolerant_acc_pct": asym_base["high_directional_tolerant_acc_pct"],
+        "baseline_low_directional_tolerant_acc_pct": asym_base["low_directional_tolerant_acc_pct"],
+        "baseline_both_directional_tolerant_acc_pct": asym_base["both_directional_tolerant_acc_pct"],
+        "baseline_combined_directional_tolerant_acc_pct": asym_base["combined_directional_tolerant_acc_pct"],
+        "baseline_high_asymmetric_bin_error_mean": asym_base["high_asymmetric_bin_error_mean"],
+        "baseline_low_asymmetric_bin_error_mean": asym_base["low_asymmetric_bin_error_mean"],
+        "baseline_combined_asymmetric_bin_error_mean": asym_base["combined_asymmetric_bin_error_mean"],
         **penalty,
         **pred_diag,
     }
@@ -598,16 +706,22 @@ def evaluate_predictor(ind: DualHeadPredictorIndividual, df, features: list[str]
         metrics["high_exact_lift_pp"] * HIGH_EXACT_WEIGHT
         + metrics["high_adjacent_lift_pp"] * HIGH_ADJACENT_WEIGHT
         + metrics["high_mae_lift_pct"] * HIGH_MAE_WEIGHT
+        + metrics["high_directional_tolerant_lift_pp"] * HIGH_DIRECTIONAL_TOLERANCE_WEIGHT
+        + metrics["high_asymmetric_bin_error_lift"] * ASYMMETRIC_BIN_ERROR_WEIGHT
     )
     low_component = (
         metrics["low_exact_lift_pp"] * LOW_EXACT_WEIGHT
         + metrics["low_adjacent_lift_pp"] * LOW_ADJACENT_WEIGHT
         + metrics["low_mae_lift_pct"] * LOW_MAE_WEIGHT
+        + metrics["low_directional_tolerant_lift_pp"] * LOW_DIRECTIONAL_TOLERANCE_WEIGHT
+        + metrics["low_asymmetric_bin_error_lift"] * ASYMMETRIC_BIN_ERROR_WEIGHT
     )
     both_component = (
         metrics["both_exact_lift_pp"] * BOTH_EXACT_WEIGHT
         + metrics["both_adjacent_lift_pp"] * BOTH_ADJACENT_WEIGHT
         + metrics["combined_mae_lift_pct"] * COMBINED_MAE_WEIGHT
+        + metrics["both_directional_tolerant_lift_pp"] * BOTH_DIRECTIONAL_TOLERANCE_WEIGHT
+        + metrics["combined_asymmetric_bin_error_lift"] * ASYMMETRIC_BIN_ERROR_WEIGHT
     )
     metrics["high_component_score"] = high_component
     metrics["low_component_score"] = low_component
@@ -710,6 +824,10 @@ def score_period_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, 
     high_mae_r = L.percentile_ranks([safe_float(r.get("high_mae_lift_pct")) for r in rows])
     low_mae_r = L.percentile_ranks([safe_float(r.get("low_mae_lift_pct")) for r in rows])
     both_adj_r = L.percentile_ranks([safe_float(r.get("both_adjacent_lift_pp")) for r in rows])
+    high_dir_r = L.percentile_ranks([safe_float(r.get("high_directional_tolerant_lift_pp")) for r in rows])
+    low_dir_r = L.percentile_ranks([safe_float(r.get("low_directional_tolerant_lift_pp")) for r in rows])
+    both_dir_r = L.percentile_ranks([safe_float(r.get("both_directional_tolerant_lift_pp")) for r in rows])
+    asym_r = L.percentile_ranks([safe_float(r.get("combined_asymmetric_bin_error_lift")) for r in rows])
     fitness_r = L.percentile_ranks([safe_float(r.get("fitness")) for r in rows])
     penalty_r = L.percentile_ranks([-safe_float(r.get("total_penalty")) for r in rows])
     out = []
@@ -718,13 +836,17 @@ def score_period_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, 
             0.0,
             min(
                 1.0,
-                high_adj_r[i] * 0.18
-                + low_adj_r[i] * 0.18
-                + high_mae_r[i] * 0.16
-                + low_mae_r[i] * 0.16
-                + both_adj_r[i] * 0.16
-                + fitness_r[i] * 0.11
-                + penalty_r[i] * 0.05,
+                high_adj_r[i] * 0.12
+                + low_adj_r[i] * 0.12
+                + high_mae_r[i] * 0.10
+                + low_mae_r[i] * 0.10
+                + both_adj_r[i] * 0.10
+                + fitness_r[i] * 0.10
+                + penalty_r[i] * 0.05
+                + high_dir_r[i] * 0.13
+                + low_dir_r[i] * 0.13
+                + both_dir_r[i] * 0.10
+                + asym_r[i] * 0.05,
             ),
         ) * 100.0
         r = dict(row)
@@ -735,6 +857,10 @@ def score_period_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, 
             "high_mae_lift_percentile": round(high_mae_r[i], 6),
             "low_mae_lift_percentile": round(low_mae_r[i], 6),
             "both_adjacent_lift_percentile": round(both_adj_r[i], 6),
+            "high_directional_tolerant_lift_percentile": round(high_dir_r[i], 6),
+            "low_directional_tolerant_lift_percentile": round(low_dir_r[i], 6),
+            "both_directional_tolerant_lift_percentile": round(both_dir_r[i], 6),
+            "combined_asymmetric_bin_error_lift_percentile": round(asym_r[i], 6),
             "fitness_percentile": round(fitness_r[i], 6),
             "low_penalty_percentile": round(penalty_r[i], 6),
         }
@@ -822,6 +948,15 @@ def dual_head_params() -> dict[str, Any]:
             "gene_fields": ["target", "conditions", "bin", "weight", "combine_mode"],
             "combine_mode": "AND/min_strength",
         },
+        "bin_scoring": {
+            "bin_tolerance": BIN_TOLERANCE,
+            "high_rule": "predicted high bin above actual high bin is dangerous; actual high above prediction is safe",
+            "low_rule": "actual low-magnitude bin above predicted low bin is dangerous; shallower low than prediction is safe",
+            "high_dangerous_bin_error_weight": HIGH_DANGEROUS_BIN_ERROR_WEIGHT,
+            "high_safe_bin_error_weight": HIGH_SAFE_BIN_ERROR_WEIGHT,
+            "low_dangerous_bin_error_weight": LOW_DANGEROUS_BIN_ERROR_WEIGHT,
+            "low_safe_bin_error_weight": LOW_SAFE_BIN_ERROR_WEIGHT,
+        },
         "head_weights": {"high": HIGH_HEAD_WEIGHT, "low": LOW_HEAD_WEIGHT, "both": BOTH_HEAD_WEIGHT},
         "score_weights": {
             "high_exact": HIGH_EXACT_WEIGHT,
@@ -833,6 +968,10 @@ def dual_head_params() -> dict[str, Any]:
             "both_exact": BOTH_EXACT_WEIGHT,
             "both_adjacent": BOTH_ADJACENT_WEIGHT,
             "combined_mae": COMBINED_MAE_WEIGHT,
+            "high_directional_tolerance": HIGH_DIRECTIONAL_TOLERANCE_WEIGHT,
+            "low_directional_tolerance": LOW_DIRECTIONAL_TOLERANCE_WEIGHT,
+            "both_directional_tolerance": BOTH_DIRECTIONAL_TOLERANCE_WEIGHT,
+            "asymmetric_bin_error": ASYMMETRIC_BIN_ERROR_WEIGHT,
             "head_imbalance_penalty": HEAD_IMBALANCE_PENALTY,
         },
         "gate": {
@@ -855,6 +994,8 @@ def dual_head_params() -> dict[str, Any]:
 
 def install_dual_head_target(args: argparse.Namespace) -> None:
     global HIGH_RULE_COUNT, LOW_RULE_COUNT, MIN_CONDITIONS_PER_GENE, MAX_CONDITIONS_PER_GENE
+    global BIN_TOLERANCE, HIGH_DANGEROUS_BIN_ERROR_WEIGHT, HIGH_SAFE_BIN_ERROR_WEIGHT, LOW_DANGEROUS_BIN_ERROR_WEIGHT, LOW_SAFE_BIN_ERROR_WEIGHT
+    global HIGH_DIRECTIONAL_TOLERANCE_WEIGHT, LOW_DIRECTIONAL_TOLERANCE_WEIGHT, BOTH_DIRECTIONAL_TOLERANCE_WEIGHT, ASYMMETRIC_BIN_ERROR_WEIGHT
     global HIGH_HEAD_WEIGHT, LOW_HEAD_WEIGHT, BOTH_HEAD_WEIGHT
     global HIGH_EXACT_WEIGHT, HIGH_ADJACENT_WEIGHT, HIGH_MAE_WEIGHT
     global LOW_EXACT_WEIGHT, LOW_ADJACENT_WEIGHT, LOW_MAE_WEIGHT
@@ -867,6 +1008,15 @@ def install_dual_head_target(args: argparse.Namespace) -> None:
     LOW_RULE_COUNT = max(1, int(args.low_rule_count))
     MIN_CONDITIONS_PER_GENE = max(1, int(args.min_conditions_per_gene))
     MAX_CONDITIONS_PER_GENE = max(MIN_CONDITIONS_PER_GENE, int(args.max_conditions_per_gene))
+    BIN_TOLERANCE = max(0, int(args.bin_tolerance))
+    HIGH_DANGEROUS_BIN_ERROR_WEIGHT = float(args.high_dangerous_bin_error_weight)
+    HIGH_SAFE_BIN_ERROR_WEIGHT = float(args.high_safe_bin_error_weight)
+    LOW_DANGEROUS_BIN_ERROR_WEIGHT = float(args.low_dangerous_bin_error_weight)
+    LOW_SAFE_BIN_ERROR_WEIGHT = float(args.low_safe_bin_error_weight)
+    HIGH_DIRECTIONAL_TOLERANCE_WEIGHT = float(args.high_directional_tolerance_weight)
+    LOW_DIRECTIONAL_TOLERANCE_WEIGHT = float(args.low_directional_tolerance_weight)
+    BOTH_DIRECTIONAL_TOLERANCE_WEIGHT = float(args.both_directional_tolerance_weight)
+    ASYMMETRIC_BIN_ERROR_WEIGHT = float(args.asymmetric_bin_error_weight)
     HIGH_HEAD_WEIGHT = float(args.high_head_weight)
     LOW_HEAD_WEIGHT = float(args.low_head_weight)
     BOTH_HEAD_WEIGHT = float(args.both_head_weight)
@@ -1184,14 +1334,14 @@ def run_original_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, ar
             "high": "high_rules -> predicted_high_bin",
             "low": "low_rules -> predicted_low_bin",
         },
-        "objective": "multi-condition HIGH/LOW bin exact/adjacent accuracy and pct MAE improvement, plus same-day both-head agreement",
+        "objective": "multi-condition HIGH/LOW bin prediction with adjacent/tolerant accuracy and asymmetric risk-aware bin error",
         "dual_head_params": dual_head_params(),
     }
     config = {
         "ticker": ticker,
         "runner": "scripts/research/run_range_predictor_stage2_v3.py",
         "legacy_feature_logic_source": f"{LEGACY_COMMIT}:{LEGACY_PATH}",
-        "mode": "original_stage2_train123_independent_ga_then_early_cut_multicond_dual_hilo",
+        "mode": "original_stage2_train123_independent_ga_then_early_cut_multicond_dual_hilo_asymmetric_bin_error",
         "stage2_original_reference": "scripts/research/run_stage2.py: TRAIN_SPLITS independent GA; PERIODS_TEMPLATE early-cut stress -> train_3 -> train_2 -> train_1 -> oos",
         "train_splits": list(TRAIN_SPLITS),
         "evaluation_periods": list(PERIODS_TEMPLATE),
@@ -1209,6 +1359,7 @@ def run_original_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, ar
             "low_rule_count": LOW_RULE_COUNT,
             "min_conditions_per_gene": MIN_CONDITIONS_PER_GENE,
             "max_conditions_per_gene": MAX_CONDITIONS_PER_GENE,
+            "bin_tolerance": BIN_TOLERANCE,
             "random_immigrant_ratio": L.RANDOM_IMMIGRANT_RATIO,
             "seed_base": seed_base,
             "train_splits_independent": True,
@@ -1239,7 +1390,7 @@ def run_original_stage2_predictor(ticker: str, out_dir: Path, seed_base: int, ar
     actual_eval_ratio = float(actual_eval_count / max_eval_count) if max_eval_count else 0.0
     summary = {
         "ticker": ticker,
-        "mode": "original_stage2_train123_independent_ga_then_early_cut_multicond_dual_hilo",
+        "mode": "original_stage2_train123_independent_ga_then_early_cut_multicond_dual_hilo_asymmetric_bin_error",
         "target": target_desc,
         "generated_candidate_rows": len(predictor_rows),
         "unique_signatures": len(unique_sigs),
@@ -1293,6 +1444,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--low-rule-count", type=int, default=LOW_RULE_COUNT)
     p.add_argument("--min-conditions-per-gene", type=int, default=MIN_CONDITIONS_PER_GENE)
     p.add_argument("--max-conditions-per-gene", type=int, default=MAX_CONDITIONS_PER_GENE)
+    p.add_argument("--bin-tolerance", type=int, default=BIN_TOLERANCE)
+    p.add_argument("--high-dangerous-bin-error-weight", type=float, default=HIGH_DANGEROUS_BIN_ERROR_WEIGHT)
+    p.add_argument("--high-safe-bin-error-weight", type=float, default=HIGH_SAFE_BIN_ERROR_WEIGHT)
+    p.add_argument("--low-dangerous-bin-error-weight", type=float, default=LOW_DANGEROUS_BIN_ERROR_WEIGHT)
+    p.add_argument("--low-safe-bin-error-weight", type=float, default=LOW_SAFE_BIN_ERROR_WEIGHT)
+    p.add_argument("--high-directional-tolerance-weight", type=float, default=HIGH_DIRECTIONAL_TOLERANCE_WEIGHT)
+    p.add_argument("--low-directional-tolerance-weight", type=float, default=LOW_DIRECTIONAL_TOLERANCE_WEIGHT)
+    p.add_argument("--both-directional-tolerance-weight", type=float, default=BOTH_DIRECTIONAL_TOLERANCE_WEIGHT)
+    p.add_argument("--asymmetric-bin-error-weight", type=float, default=ASYMMETRIC_BIN_ERROR_WEIGHT)
     p.add_argument("--high-head-weight", type=float, default=HIGH_HEAD_WEIGHT)
     p.add_argument("--low-head-weight", type=float, default=LOW_HEAD_WEIGHT)
     p.add_argument("--both-head-weight", type=float, default=BOTH_HEAD_WEIGHT)

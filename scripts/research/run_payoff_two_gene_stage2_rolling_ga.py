@@ -6,6 +6,9 @@
 - stress: 개체 생성에 쓰지 않고 생존 평가에만 쓴다.
 - 최종 생존: stress, train1, train2, train3 모두 통과해야 한다.
 - oos: 마지막 검증으로만 본다.
+
+과적합 방지:
+- 생성 구간 안에서도 신호 발생일이 최소 기준 미만이면 진화 점수를 무효 처리한다.
 """
 from __future__ import annotations
 
@@ -24,6 +27,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BASE_PATH = PROJECT_ROOT / "scripts/research/run_payoff_two_gene_ga.py"
 GENERATION_PERIODS = ["train1", "train2", "train3"]
 SURVIVAL_PERIODS = ["stress", "train1", "train2", "train3"]
+INVALID_FITNESS = -1e9
 
 
 def load_base():
@@ -40,26 +44,25 @@ def clone(base: Any, ind: Any) -> Any:
     return base.Individual(
         up=base.Gene([dataclasses.replace(c) for c in ind.up.conditions], float(ind.up.cut)),
         low=base.Gene([dataclasses.replace(c) for c in ind.low.conditions], float(ind.low.cut)),
-        fitness=float(getattr(ind, "fitness", -1e18)),
+        fitness=float(getattr(ind, "fitness", INVALID_FITNESS)),
         train_metrics=getattr(ind, "train_metrics", None),
     )
 
 
 def source_fitness(m: dict[str, Any], args: argparse.Namespace) -> float:
     count = float(m.get("signal_count", 0.0))
-    if count <= 0:
-        return -1e9
-    shortage = max(0.0, args.min_signal_count - count)
-    cover_low = max(0.0, args.min_coverage_pct - float(m.get("coverage_pct", 0.0)))
-    cover_high = max(0.0, float(m.get("coverage_pct", 0.0)) - args.max_coverage_pct)
+    if count < float(args.min_signal_count):
+        return INVALID_FITNESS
+    cover = float(m.get("coverage_pct", 0.0))
+    if cover < float(args.min_coverage_pct):
+        return INVALID_FITNESS
+    cover_high = max(0.0, cover - args.max_coverage_pct)
     return float(
         float(m.get("precision_pct", 0.0)) * 3.0
         + float(m.get("avg_payoff_atr", 0.0)) * 22.0
         + count * 0.25
         - float(m.get("bad_rate_pct", 0.0)) * 4.0
         - float(m.get("bad_hits", 0.0)) * 18.0
-        - shortage * 18.0
-        - cover_low * 5.0
         - cover_high * 2.5
     )
 
@@ -78,11 +81,14 @@ def evolve_period(base: Any, period: str, rng: random.Random, qmat: np.ndarray, 
         for ind in pop:
             eval_source(base, ind, qmat, rows, data, period, args)
         pop.sort(key=lambda x: x.fitness, reverse=True)
+        valid_count = int(sum(1 for x in pop if x.fitness > INVALID_FITNESS / 2))
         if gen == 0 or (gen + 1) % 10 == 0 or gen == args.generations - 1:
             m = base.eval_period(pop[0], qmat, rows[period], data)
             item = {
                 "생성구간": period,
                 "세대": gen + 1,
+                "최소신호발생일_미만무효": args.min_signal_count,
+                "유효개체수": valid_count,
                 "최고진화점수": float(pop[0].fitness),
                 "중앙진화점수": float(np.median([x.fitness for x in pop])),
                 "최고개체_신호발생일": m["signal_count"],
@@ -94,10 +100,12 @@ def evolve_period(base: Any, period: str, rng: random.Random, qmat: np.ndarray, 
             print(json.dumps(item, ensure_ascii=False), flush=True)
         new_pop = [clone(base, e) for e in pop[:elite_n]]
         while len(new_pop) < args.per_period_count:
+            valid_pop = [x for x in pop if x.fitness > INVALID_FITNESS / 2]
+            parent_pool = valid_pop if len(valid_pop) >= 4 else pop
             if rng.random() < 0.75:
-                child = base.crossover(base.tournament(pop, rng), base.tournament(pop, rng), rng)
+                child = base.crossover(base.tournament(parent_pool, rng), base.tournament(parent_pool, rng), rng)
             else:
-                child = clone(base, base.tournament(pop, rng))
+                child = clone(base, base.tournament(parent_pool, rng))
             new_pop.append(base.mutate(child, rng, n_features, args.mutation_rate))
         pop = new_pop
     for ind in pop:
@@ -235,6 +243,7 @@ def main(argv: list[str] | None = None) -> int:
 
     summary = {
         "실험방식": "train1/train2/train3에서만 100개씩 생성하고, stress/train1/train2/train3 전체에서 살아남는 개체만 생존 처리",
+        "과적합방지": f"생성 구간 신호 발생일이 {args.min_signal_count}일 미만이거나 신호 발생 비율이 {args.min_coverage_pct}% 미만이면 진화 점수 무효",
         "종목": args.ticker,
         "특징감사": audit,
         "파라미터수": len(features),

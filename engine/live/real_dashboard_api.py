@@ -69,6 +69,17 @@ _real_broker = None
 _real_broker_error: str = ""
 _real_broker_error_logged = False
 _real_broker_config_cache: dict[str, Any] | None = None
+_real_candle_cache: dict[tuple[str, str, str], tuple[float, list[dict[str, Any]]]] = {}
+_REAL_CANDLE_TTL_SEC = {
+    "1m": 25,
+    "2m": 35,
+    "5m": 55,
+    "15m": 90,
+    "30m": 120,
+    "60m": 180,
+    "1h": 180,
+    "1d": 300,
+}
 
 
 class RealBuyIntentRequest(BaseModel):
@@ -926,9 +937,10 @@ def _real_slot_overlay_js() -> str:
     .real-order-ticket .ticket-foot{margin-top:7px;font-size:11px;color:var(--dim);display:flex;justify-content:space-between;gap:8px;}
     .real-order-ticket .share-est{color:#c9d4e5;font-weight:800;}
     .real-candidate-row{grid-template-columns:minmax(360px,46%) minmax(0,1fr)!important;min-height:340px!important;}
-    .real-candidate-chart-wrap{height:100%;min-height:310px;display:flex;}
-    .real-candidate-mini-chart{height:100%!important;min-height:310px;flex:1;}
-    @media(max-width:900px){.real-candidate-row{grid-template-columns:1fr!important}.real-candidate-chart-wrap{min-height:260px}.real-candidate-mini-chart{min-height:260px}.real-order-ticket .ticket-row{grid-template-columns:minmax(120px,1fr) repeat(3,56px);}.real-order-ticket .slot-buy-real{grid-column:1/-1;}}
+    .real-candidate-chart-wrap{height:100%;min-height:310px;display:flex;flex-direction:column;gap:6px;}
+    .real-candidate-mini-chart{height:100%!important;min-height:286px;flex:1;}
+    .real-candidate-chart-meta{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;display:flex;justify-content:space-between;gap:8px;}
+    @media(max-width:900px){.real-candidate-row{grid-template-columns:1fr!important}.real-candidate-chart-wrap{min-height:260px}.real-candidate-mini-chart{min-height:236px}.real-order-ticket .ticket-row{grid-template-columns:minmax(120px,1fr) repeat(3,56px);}.real-order-ticket .slot-buy-real{grid-column:1/-1;}}
     `;
     const el=document.createElement('style'); el.id='real-candidate-ticket-style'; el.textContent=css; document.head.appendChild(el);
   }
@@ -980,6 +992,25 @@ def _real_slot_overlay_js() -> str:
       };
     });
   }
+  function candidateSignature(rows){
+    return (rows||[]).map(s=>[s.candidate_id,s.price,s.current_price,s.final_score,s.first_signal_at,s.win_rate,s.expectancy_pct,s.mdd_pct].join('|')).join('||');
+  }
+  function timeLabel(t){
+    if(t==null || t==='') return '—';
+    if(typeof t==='number') return new Date(t*1000).toLocaleString();
+    return String(t);
+  }
+  function nowTimeLabel(){ return new Date().toLocaleTimeString(); }
+  function updateCandidateDynamicText(){
+    for(const s of (window.candidateSlotData||[])){
+      if(!s || s.empty || !s.candidate_id) continue;
+      const safeCid=String(s.candidate_id).replace(/[^A-Za-z0-9_-]/g,'_');
+      const elapsed=document.getElementById(`cand-elapsed-${safeCid}`);
+      if(elapsed) elapsed.textContent=elapsedSince(s.first_signal_at);
+      const deltaEl=document.getElementById(`cand-delta-${safeCid}`);
+      if(deltaEl){ const d=priceDeltaText(s.current_price ?? s.price, s.first_signal_price); deltaEl.textContent=d.txt; deltaEl.className=d.cls; }
+    }
+  }
   function candidateSlotCard(s){
     if(!s || s.empty) return `<div class="mslot empty" style="cursor:default;">후보 ${esc((s&&s.slot)||'')}<br>대기중</div>`;
     const eq=s.entry_quality_label || (s.entry_quality_allow?'ALLOW':'CHECK');
@@ -992,11 +1023,12 @@ def _real_slot_overlay_js() -> str:
     return `<div class="mslot real-buy-slot real-candidate-row" data-candidate-id="${esc(cid)}" style="display:grid;gap:14px;align-items:stretch;padding:14px;cursor:pointer;" onclick="openRealCandidateDetail('${esc(cid)}')">
       <div class="real-candidate-chart-wrap">
         <div id="${chartId}" class="real-candidate-mini-chart" style="border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0b1019;"></div>
+        <div id="cand-chart-meta-${safeCid}" class="real-candidate-chart-meta"><span>5m 차트 대기</span><span>서버 TTL 55초</span></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;min-width:0;">
         <div class="mslot-top"><span class="mslot-tk">${esc(s.ticker)}</span><span class="mslot-pnl" style="color:var(--up)">S ${fmt(s.final_score,2)}</span></div>
-        <div class="mslot-sub">현재 ${fmt(s.price ?? s.current_price,2)} · 최초신호 ${fmt(s.first_signal_price,2)} · <span class="${delta.cls}">${delta.txt}</span></div>
-        <div class="mslot-sub">최초 신호 후 <b style="color:var(--txt)">${elapsedSince(s.first_signal_at)}</b> · 기준 ${fmt(s.threshold,2)} · ratio ${fmt(s.ratio,2)}</div>
+        <div class="mslot-sub">현재 ${fmt(s.price ?? s.current_price,2)} · 최초신호 ${fmt(s.first_signal_price,2)} · <span id="cand-delta-${safeCid}" class="${delta.cls}">${delta.txt}</span></div>
+        <div class="mslot-sub">최초 신호 후 <b id="cand-elapsed-${safeCid}" style="color:var(--txt)">${elapsedSince(s.first_signal_at)}</b> · 기준 ${fmt(s.threshold,2)} · ratio ${fmt(s.ratio,2)}</div>
         <div class="mslot-sub">${tag(s.vol_group)} ${tag(s.stage)} ${tag(s.gate_status)} ${deprio}</div>
         <div class="mslot-sub ${eqCls}">EQ ${esc(eq)}${s.entry_quality_score!=null?' · Q'+fmt(s.entry_quality_score,0):''}</div>
         <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:2px;">
@@ -1010,31 +1042,60 @@ def _real_slot_overlay_js() -> str:
       </div>
     </div>`;
   }
-  async function drawCandidateMiniCharts(){
+  async function drawCandidateMiniCharts(force=false){
     window._realCandMiniCharts = window._realCandMiniCharts || {};
     const rows=(window.candidateSlotData||[]).filter(s=>s && !s.empty);
+    const activeIds=new Set();
     for(const s of rows){
       const cid=String(s.candidate_id||'');
       const safeCid=cid.replace(/[^A-Za-z0-9_-]/g,'_');
       const id=`cand-mini-chart-${safeCid}`;
+      activeIds.add(id);
       const el=document.getElementById(id);
+      const meta=document.getElementById(`cand-chart-meta-${safeCid}`);
       const ticker=String(s.ticker||'').toUpperCase();
       if(!el || !ticker || !window.LightweightCharts) continue;
-      try{ if(window._realCandMiniCharts[id]){ window._realCandMiniCharts[id].remove(); delete window._realCandMiniCharts[id]; } }catch(e){}
+      const cached=window._realCandMiniCharts[id];
+      const ttlMs=55000;
+      if(cached && !force && Date.now()-(cached.lastFetch||0)<ttlMs){
+        try{ cached.chart.resize(Math.max(el.clientWidth,280), Math.max(el.clientHeight||0, 286)); }catch(e){}
+        if(meta) meta.innerHTML=`<span>5m 최신봉 ${esc(cached.latestLabel||'—')}</span><span>차트 캐시 ${Math.max(0,Math.round((Date.now()-(cached.lastFetch||0))/1000))}초</span>`;
+        continue;
+      }
       try{
         const r=await fetch(`${API}/api/real/candles/${ticker}?interval=5m`);
         const candles=await r.json();
         if(!Array.isArray(candles) || !candles.length){ el.innerHTML='<div class="loading">분봉 없음</div>'; continue; }
         const use=candles.slice(-96);
-        const h=Math.max(el.clientHeight||0, 300);
-        const chart=LightweightCharts.createChart(el,{layout:{background:{color:'#0b1019'},textColor:'#5f6e85'},grid:{vertLines:{color:'#151d2b'},horzLines:{color:'#151d2b'}},timeScale:{borderColor:'#1c2535',timeVisible:true,secondsVisible:false},rightPriceScale:{borderColor:'#1c2535'},width:Math.max(el.clientWidth,280),height:h});
-        const ser=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',wickUpColor:'#26d07c',wickDownColor:'#ff4d6a',borderVisible:false});
-        ser.setData(use);
-        if(s.first_signal_price){ ser.createPriceLine({price:Number(s.first_signal_price),color:'#3b82f6',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'최초'}); }
-        if(s.price || s.current_price){ ser.createPriceLine({price:Number(s.price ?? s.current_price),color:'#c9d4e5',lineWidth:1,lineStyle:0,axisLabelVisible:true,title:'현재'}); }
-        chart.timeScale().fitContent();
-        window._realCandMiniCharts[id]=chart;
+        const h=Math.max(el.clientHeight||0, 286);
+        let entry=window._realCandMiniCharts[id];
+        if(!entry || !entry.chart || !entry.ser){
+          const chart=LightweightCharts.createChart(el,{layout:{background:{color:'#0b1019'},textColor:'#5f6e85'},grid:{vertLines:{color:'#151d2b'},horzLines:{color:'#151d2b'}},timeScale:{borderColor:'#1c2535',timeVisible:true,secondsVisible:false},rightPriceScale:{borderColor:'#1c2535'},width:Math.max(el.clientWidth,280),height:h});
+          const ser=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',wickUpColor:'#26d07c',wickDownColor:'#ff4d6a',borderVisible:false});
+          entry={chart,ser,lines:[]};
+          window._realCandMiniCharts[id]=entry;
+        }else{
+          entry.chart.resize(Math.max(el.clientWidth,280), h);
+          if(Array.isArray(entry.lines)){
+            for(const line of entry.lines){ try{ entry.ser.removePriceLine(line); }catch(e){} }
+          }
+          entry.lines=[];
+        }
+        entry.ser.setData(use);
+        if(s.first_signal_price){ entry.lines.push(entry.ser.createPriceLine({price:Number(s.first_signal_price),color:'#3b82f6',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'최초'})); }
+        if(s.price || s.current_price){ entry.lines.push(entry.ser.createPriceLine({price:Number(s.price ?? s.current_price),color:'#c9d4e5',lineWidth:1,lineStyle:0,axisLabelVisible:true,title:'현재'})); }
+        entry.chart.timeScale().fitContent();
+        const latest=use[use.length-1] && use[use.length-1].time;
+        entry.latestLabel=timeLabel(latest);
+        entry.lastFetch=Date.now();
+        if(meta) meta.innerHTML=`<span>5m 최신봉 ${esc(entry.latestLabel||'—')}</span><span>갱신 ${nowTimeLabel()} · TTL 55초</span>`;
       }catch(e){ el.innerHTML='<div class="loading">차트 오류</div>'; }
+    }
+    for(const [id, entry] of Object.entries(window._realCandMiniCharts||{})){
+      if(!activeIds.has(id)){
+        try{ entry.chart.remove(); }catch(e){}
+        delete window._realCandMiniCharts[id];
+      }
     }
   }
   function renderCandidateSlots(){
@@ -1054,10 +1115,11 @@ def _real_slot_overlay_js() -> str:
     });
     setTimeout(drawCandidateMiniCharts, 50);
   }
-  async function loadCandidateSlots(){
+  async function loadCandidateSlots(forceRender=false){
+    let next=[];
     try{
-      const r=await fetch(`${API}/api/real/candidate_slots`);
-      window.candidateSlotData=await r.json();
+      const r=await fetch(`${API}/api/real/candidate_slots`, {cache:'no-store'});
+      next=await r.json();
     }catch(e){
       window.candidateSlotData=[];
       const msg='<div class="loading">후보 슬롯 API 연결 실패</div>';
@@ -1067,7 +1129,16 @@ def _real_slot_overlay_js() -> str:
       if(full) full.innerHTML=msg;
       return;
     }
-    renderCandidateSlots();
+    const sig=candidateSignature(next);
+    window.candidateSlotData=next;
+    if(forceRender || sig !== window._lastCandidateSlotSignature){
+      window._lastCandidateSlotSignature=sig;
+      renderCandidateSlots();
+    }else{
+      updateCandidateDynamicText();
+      bindOrderTicketControls();
+      drawCandidateMiniCharts(false);
+    }
   }
   window.loadCandidateSlots = loadCandidateSlots;
   function arrangeRealHome(){
@@ -1245,6 +1316,7 @@ def _real_slot_overlay_js() -> str:
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', loadCandidateSlots); else loadCandidateSlots();
   setInterval(loadCandidateSlots, 30000);
+  setInterval(updateCandidateDynamicText, 10000);
 })();
 """
 
@@ -1313,6 +1385,48 @@ def _real_buy_amount_overlay_js() -> str:
 """
 
 
+def _real_candles_cached(base_module: Any, *, ticker: str, interval: str = "1d", period: str | None = None, refresh: bool = False) -> list[dict[str, Any]]:
+    tk = str(ticker or "").upper().strip()
+    iv = str(interval or "1d").strip()
+    pd = str(period or "")
+    key = (tk, iv, pd)
+    now = time.time()
+    ttl = float(_REAL_CANDLE_TTL_SEC.get(iv, 60))
+    hit = _real_candle_cache.get(key)
+    if hit and not refresh and now - hit[0] < ttl:
+        return hit[1]
+    data = base_module.live_candles(ticker=tk, interval=iv, period=period)
+    if not isinstance(data, list):
+        data = []
+    _real_candle_cache[key] = (now, data)
+    if len(_real_candle_cache) > 256:
+        for old_key, _ in sorted(_real_candle_cache.items(), key=lambda kv: kv[1][0])[:64]:
+            _real_candle_cache.pop(old_key, None)
+    return data
+
+
+def _real_candle_cache_status() -> dict[str, Any]:
+    now = time.time()
+    rows = []
+    for (ticker, interval, period), (ts, data) in sorted(_real_candle_cache.items()):
+        latest = None
+        if data:
+            try:
+                latest = data[-1].get("time")
+            except Exception:
+                latest = None
+        rows.append({
+            "ticker": ticker,
+            "interval": interval,
+            "period": period,
+            "age_sec": round(now - ts, 3),
+            "ttl_sec": _REAL_CANDLE_TTL_SEC.get(interval, 60),
+            "rows": len(data or []),
+            "latest_candle_time": latest,
+        })
+    return {"cache_size": len(rows), "items": rows, "ttl_policy_sec": dict(_REAL_CANDLE_TTL_SEC)}
+
+
 def _real_dashboard_html(base_module: Any) -> HTMLResponse:
     path = base_module.DASHBOARD_MAIN_PATH
     if not path.exists():
@@ -1376,11 +1490,9 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v7"></script>\n'
-    if "real-buy-amount-overlay.js" not in html:
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v8"></script>\n'
+    if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
-    elif "real-slot-overlay.js" not in html:
-        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v7"></script>\n</body>')
     return HTMLResponse(content=html, media_type="text/html")
 
 
@@ -1544,8 +1656,12 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
         return {"count": 0, "items": [], "isolated": True, "state_path": str(REAL_UNIVERSE_PATH), "note": "실거래 대시보드 전용 유니버스 파일이 아직 없습니다."}
 
     @app.get("/api/real/candles/{ticker}")
-    def real_candles(ticker: str, interval: str = "1d", period: str | None = None):
-        return base_module.live_candles(ticker=ticker, interval=interval, period=period)
+    def real_candles(ticker: str, interval: str = "1d", period: str | None = None, refresh: bool = False):
+        return _real_candles_cached(base_module, ticker=ticker, interval=interval, period=period, refresh=refresh)
+
+    @app.get("/api/real/candles_cache_status")
+    def real_candles_cache_status():
+        return _real_candle_cache_status()
 
     @app.get("/api/real/equity_curve")
     def real_equity_curve():

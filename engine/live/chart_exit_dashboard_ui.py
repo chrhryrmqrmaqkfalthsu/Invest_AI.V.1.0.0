@@ -28,7 +28,7 @@ class ChartExitPlanRequest(BaseModel):
 CHART_EXIT_OVERLAY_JS = r"""
 (function(){
   const PLAN_API = (typeof API !== 'undefined' ? API : window.location.origin);
-  const state = {plans:{}, clickMode:null, lines:[], lastTicker:null, lastInterval:null, evalBusy:false, candles:[], rangeHooked:false, inputBasis:{}};
+  const state = {plans:{}, clickMode:null, lines:[], lastTicker:null, lastInterval:null, evalBusy:false, candles:[], rangeHooked:false, inputBasis:{}, slotCardPatched:false, alertPatched:false};
   const css = `
   .chart-exit-panel{background:#0b1019;border:1px solid var(--line);border-radius:10px;margin:8px 0 12px;padding:10px;position:relative;z-index:8;}
   .chart-exit-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;font-size:12px;color:var(--dim);}
@@ -52,6 +52,7 @@ CHART_EXIT_OVERLAY_JS = r"""
   `;
   function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function n(v){if(v==null||v==='')return null;const x=Number(v);return isFinite(x)?x:null;}
+  function positivePrice(v){const x=n(v);return x!=null&&x>0?x:null;}
   function price(v){const x=n(v);return x==null?'—':'$'+x.toFixed(2);}
   function pct(v){const x=n(v);return x==null?'—':x.toFixed(2)+'%';}
   function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
@@ -59,6 +60,7 @@ CHART_EXIT_OVERLAY_JS = r"""
   function injectCss(){if(document.getElementById('chart-exit-style'))return;const el=document.createElement('style');el.id='chart-exit-style';el.textContent=css;document.head.appendChild(el);}
   async function loadPlans(){try{const r=await fetch(`${PLAN_API}/api/live/chart_exit_plans`);const d=await r.json();state.plans=(d.plans||{});return d;}catch(e){return {plans:{}}}}
   function activePlan(ticker){return state.plans[String(ticker||'').toUpperCase()]||null;}
+  function planActive(p){return !!p && !!p.enabled && String(p.status||'')==='active';}
   function currentSlot(ticker){try{return (slotData||[]).find(x=>String(x.ticker||'').toUpperCase()===String(ticker||'').toUpperCase())||null;}catch(e){return null}}
   function basisFor(ticker){const tk=String(ticker||'').toUpperCase();state.inputBasis[tk]=state.inputBasis[tk]||{};return state.inputBasis[tk];}
   function setBasis(ticker, side, basis){basisFor(ticker)[side]=basis;}
@@ -67,6 +69,55 @@ CHART_EXIT_OVERLAY_JS = r"""
     const basis=String(plan[`${side}_basis`]||'price');
     if(kind==='price')return basis==='pct'?'':(plan[`${side}_price`] ?? '');
     return basis==='pct'?(plan[`${side}_pct`] ?? ''):'';
+  }
+  function manualizedSlot(slot){
+    if(!slot || slot.empty) return slot;
+    const tk=String(slot.ticker||'').toUpperCase();
+    const p=activePlan(tk);
+    if(!planActive(p)) return slot;
+    const tp=positivePrice(p.take_profit_price);
+    const sl=positivePrice(p.stop_loss_price);
+    if(tp==null && sl==null) return slot;
+    const out={...slot, chart_exit_plan:p, manual_exit_plan_active:true};
+    if(tp!=null){
+      out.rulebook_target_price=slot.target_price;
+      out.target_price=tp;
+      if(n(p.take_profit_pct)!=null) out.target_return_pct=Number(p.take_profit_pct);
+    }
+    if(sl!=null){
+      out.rulebook_stop_price=slot.stop_price;
+      out.stop_price=sl;
+    }
+    return out;
+  }
+  function patchSlotCards(){
+    if(state.slotCardPatched || typeof window.slotCard!=='function') return;
+    const original=window.slotCard;
+    const patched=function(slot, onclick){
+      return original.call(this, manualizedSlot(slot), onclick);
+    };
+    patched.__chartExitPatched=true;
+    window.slotCard=patched;
+    try{ slotCard=patched; }catch(e){}
+    state.slotCardPatched=true;
+  }
+  function patchSlotAlerts(){
+    if(state.alertPatched || typeof window.checkSlotAlerts!=='function') return;
+    const original=window.checkSlotAlerts;
+    const patched=function(slots){
+      const rows=Array.isArray(slots)?slots.map(manualizedSlot):slots;
+      return original.call(this, rows);
+    };
+    patched.__chartExitPatched=true;
+    window.checkSlotAlerts=patched;
+    try{ checkSlotAlerts=patched; }catch(e){}
+    state.alertPatched=true;
+  }
+  function rerenderSlotViews(){
+    patchSlotCards();
+    patchSlotAlerts();
+    try{ if(typeof renderSlots==='function') renderSlots(); }catch(e){}
+    try{ if(state.lastTicker && typeof refreshDetailPanel==='function') refreshDetailPanel(state.lastTicker); }catch(e){}
   }
   function ensurePanel(ticker){
     injectCss();
@@ -160,13 +211,14 @@ CHART_EXIT_OVERLAY_JS = r"""
       state.plans[ticker]=d.plan;
       const savedBasis=basisFor(ticker); savedBasis.tp=String(d.plan.take_profit_basis||r0.tpBasis||'price')==='pct'?'pct':'price'; savedBasis.sl=String(d.plan.stop_loss_basis||r0.slBasis||'price')==='pct'?'pct':'price';
       toast2('차트 TP/SL 저장',`${ticker} · TP ${price(d.plan.take_profit_price)}(${pct(d.plan.take_profit_pct)}) · SL ${price(d.plan.stop_loss_price)}(${pct(d.plan.stop_loss_pct)})`,'good');
+      rerenderSlotViews();
       renderPanel(ticker); drawPlan(ticker); if(d.evaluation&&d.evaluation.triggered&&d.evaluation.triggered.length)toast2('자동청산 트리거',`${ticker} 기준 도달 · 매도 intent 생성`,'warn');
     }catch(e){toast2('저장 실패',String(e.message||e),'warn')}
   }
   async function disablePlan(ticker){
     try{
       const r=await fetch(`${PLAN_API}/api/live/chart_exit_plan/${encodeURIComponent(ticker)}`,{method:'DELETE'});const d=await r.json();if(!r.ok)throw new Error(d.detail||`HTTP ${r.status}`);
-      state.plans[ticker]=d.plan;toast2('차트 TP/SL 비활성',ticker,'good');renderPanel(ticker);drawPlan(ticker);
+      state.plans[ticker]=d.plan;toast2('차트 TP/SL 비활성',ticker,'good');rerenderSlotViews();renderPanel(ticker);drawPlan(ticker);
     }catch(e){toast2('비활성 실패',String(e.message||e),'warn')}
   }
   function clearLines(){try{state.lines.forEach(l=>series.removePriceLine(l));}catch(e){}state.lines=[];}
@@ -256,6 +308,7 @@ CHART_EXIT_OVERLAY_JS = r"""
     state.lastTicker=String(ticker||'').toUpperCase();state.lastInterval=interval||state.lastInterval||'1d';
     ensurePanel(state.lastTicker);
     await Promise.all([loadPlans(), refreshCandles(state.lastTicker,state.lastInterval)]);
+    rerenderSlotViews();
     renderPanel(state.lastTicker);drawPlan(state.lastTicker);
   }
   function installClick(){
@@ -276,18 +329,19 @@ CHART_EXIT_OVERLAY_JS = r"""
     if(state.evalBusy)return; state.evalBusy=true;
     try{
       const r=await fetch(`${PLAN_API}/api/live/chart_exit_plans/evaluate`,{method:'POST'});const d=await r.json();
-      if(d&&Array.isArray(d.triggered)&&d.triggered.length){await loadPlans();if(state.lastTicker){renderPanel(state.lastTicker);drawPlan(state.lastTicker);}d.triggered.forEach(x=>toast2('차트 자동청산',`${x.ticker} ${x.trigger_kind} @ ${price(x.trigger_price)}`,'warn'));}
+      if(d&&Array.isArray(d.triggered)&&d.triggered.length){await loadPlans();rerenderSlotViews();if(state.lastTicker){renderPanel(state.lastTicker);drawPlan(state.lastTicker);}d.triggered.forEach(x=>toast2('차트 자동청산',`${x.ticker} ${x.trigger_kind} @ ${price(x.trigger_price)}`,'warn'));}
     }catch(e){} finally{state.evalBusy=false;}
   }
   function patch(){
-    injectCss(); installClick(); installRangeHook();
+    injectCss(); installClick(); installRangeHook(); patchSlotCards(); patchSlotAlerts();
     const od=window.drawChart; if(typeof od==='function'&&!od.__chartExitPatched){
       const patched=async function(ticker,interval,opts){const r=await od.apply(this,arguments);try{await afterChartDraw(ticker,interval);}catch(e){}return r;}; patched.__chartExitPatched=true; window.drawChart=patched;
     }
     const orp=window.refreshDetailPanel; if(typeof orp==='function'&&!orp.__chartExitPatched){
       const patched=function(ticker){const r=orp.apply(this,arguments);try{ensurePanel(ticker);drawPlan(ticker);}catch(e){}return r;}; patched.__chartExitPatched=true; window.refreshDetailPanel=patched;
     }
-    loadPlans().then(()=>{if(typeof curTicker!=='undefined'&&curTicker)afterChartDraw(curTicker,typeof curInterval!=='undefined'?curInterval:'1d');});
+    loadPlans().then(()=>{rerenderSlotViews();if(typeof curTicker!=='undefined'&&curTicker)afterChartDraw(curTicker,typeof curInterval!=='undefined'?curInterval:'1d');});
+    setInterval(()=>loadPlans().then(()=>rerenderSlotViews()),30000);
     setInterval(evaluateLoop,10000);
     setTimeout(evaluateLoop,1500);
   }
@@ -300,7 +354,7 @@ def _inject_dashboard_script(html: str) -> str:
     marker = "chart-exit-overlay.js"
     if marker in html:
         return html
-    snippet = '<script src="/chart-exit-overlay.js?v=chart_exit_v3"></script>\n'
+    snippet = '<script src="/chart-exit-overlay.js?v=chart_exit_v4_slot_override"></script>\n'
     if "</body>" in html:
         return html.replace("</body>", snippet + "</body>")
     return html + snippet

@@ -909,6 +909,74 @@ def _real_slot_overlay_js() -> str:
     if(!rs.length && s.entry_quality_primary_reason) rs.push(s.entry_quality_primary_reason);
     return rs.length ? rs.map(r=>`<span class="tag">${esc(r)}</span>`).join(' ') : '<span style="color:var(--dim)">—</span>';
   }
+  function injectRealCandidateStyles(){
+    if(document.getElementById('real-candidate-ticket-style')) return;
+    const css=`
+    .real-order-ticket{margin-top:auto;background:linear-gradient(180deg,rgba(59,130,246,.12),rgba(15,23,42,.38));border:1px solid rgba(59,130,246,.30);border-radius:13px;padding:10px 12px;box-shadow:0 10px 28px rgba(0,0,0,.20) inset;}
+    .real-order-ticket .ticket-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:11px;color:var(--dim);font-weight:800;letter-spacing:.2px;}
+    .real-order-ticket .ticket-row{display:grid;grid-template-columns:minmax(140px,190px) repeat(3,62px) minmax(126px,160px);gap:8px;align-items:center;}
+    .real-order-ticket .amount-wrap{display:flex;align-items:center;gap:4px;background:#070b12;border:1px solid rgba(148,163,184,.22);border-radius:10px;padding:0 8px;height:38px;}
+    .real-order-ticket .amount-prefix{font-size:13px;color:#93c5fd;font-weight:900;}
+    .real-order-ticket .slot-buy-amount{width:100%;height:32px;border:0;background:transparent;color:var(--txt);font-weight:900;font-size:15px;font-variant-numeric:tabular-nums;outline:none;padding:0;}
+    .real-order-ticket .quick-amt{height:38px;border-radius:10px;border:1px solid rgba(148,163,184,.20);background:rgba(15,23,42,.72);color:#cbd5e1;font-size:12px;font-weight:900;cursor:pointer;}
+    .real-order-ticket .quick-amt:hover{border-color:#60a5fa;color:white;background:rgba(37,99,235,.24);}
+    .real-order-ticket .slot-buy-real{height:38px;border:0;border-radius:10px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;font-size:12px;font-weight:950;letter-spacing:.2px;cursor:pointer;box-shadow:0 8px 20px rgba(37,99,235,.28);}
+    .real-order-ticket .slot-buy-real:hover{filter:brightness(1.08);transform:translateY(-1px);}
+    .real-order-ticket .slot-buy-real:disabled{opacity:.55;cursor:not-allowed;transform:none;filter:none;}
+    .real-order-ticket .ticket-foot{margin-top:7px;font-size:11px;color:var(--dim);display:flex;justify-content:space-between;gap:8px;}
+    .real-order-ticket .share-est{color:#c9d4e5;font-weight:800;}
+    @media(max-width:900px){.real-candidate-row{grid-template-columns:1fr!important}.real-order-ticket .ticket-row{grid-template-columns:minmax(120px,1fr) repeat(3,56px);}.real-order-ticket .slot-buy-real{grid-column:1/-1;}}
+    `;
+    const el=document.createElement('style'); el.id='real-candidate-ticket-style'; el.textContent=css; document.head.appendChild(el);
+  }
+  function ticketHtml(s, opts={}){
+    const cid=String(s.candidate_id||'');
+    const slot=esc(s.slot||s.slot_no||'');
+    const price=num(s.price ?? s.current_price);
+    const amount=opts.amount || defaultNotional();
+    const shares=(price&&amount)?(amount/price):null;
+    const idSuffix=esc(opts.idSuffix||cid.replace(/[^A-Za-z0-9_-]/g,'_'));
+    return `<div class="real-order-ticket" onclick="event.stopPropagation()">
+      <div class="ticket-head"><span>실매수 금액</span><span class="share-est" id="share-est-${idSuffix}">예상 ${shares==null?'—':shares.toFixed(3)}주</span></div>
+      <div class="ticket-row">
+        <label class="amount-wrap"><span class="amount-prefix">$</span><input class="slot-buy-amount" data-candidate-id="${esc(cid)}" data-price="${esc(price||'')}" data-est-id="share-est-${idSuffix}" type="number" min="1" step="50" value="${amount}" /></label>
+        <button class="quick-amt" data-amount="100" data-candidate-id="${esc(cid)}">$100</button>
+        <button class="quick-amt" data-amount="250" data-candidate-id="${esc(cid)}">$250</button>
+        <button class="quick-amt" data-amount="500" data-candidate-id="${esc(cid)}">$500</button>
+        <button class="slot-buy-real" data-candidate-id="${esc(cid)}" data-slot="${slot}">매수 후보 선택</button>
+      </div>
+      <div class="ticket-foot"><span>현재가 기준 예상 수량</span><span>실제 주문 전 최종 확인</span></div>
+    </div>`;
+  }
+  function updateShareEstimate(input){
+    const amount=num(input && input.value);
+    const price=num(input && input.dataset.price);
+    const el=input && document.getElementById(input.dataset.estId||'');
+    if(!el) return;
+    if(amount==null || price==null || price<=0){ el.textContent='예상 —'; return; }
+    el.textContent=`예상 ${(amount/price).toFixed(3)}주`;
+  }
+  function bindOrderTicketControls(){
+    document.querySelectorAll('.slot-buy-amount[data-est-id]').forEach(input=>{
+      if(input.dataset.boundEst==='1') return;
+      input.dataset.boundEst='1';
+      input.addEventListener('input',()=>updateShareEstimate(input));
+      input.addEventListener('click',ev=>ev.stopPropagation());
+      input.addEventListener('keydown',ev=>{ ev.stopPropagation(); if(ev.key==='Enter'){ const cid=input.dataset.candidateId; const btn=document.querySelector(`.slot-buy-real[data-candidate-id="${CSS.escape(cid)}"]`); if(btn) btn.click(); } });
+      updateShareEstimate(input);
+    });
+    document.querySelectorAll('.quick-amt[data-candidate-id]').forEach(btn=>{
+      if(btn.dataset.boundQuick==='1') return;
+      btn.dataset.boundQuick='1';
+      btn.onclick=function(ev){
+        ev.stopPropagation();
+        const cid=btn.dataset.candidateId;
+        const scope=btn.closest('.real-order-ticket') || document;
+        const input=scope.querySelector(`.slot-buy-amount[data-candidate-id="${CSS.escape(cid)}"]`);
+        if(input){ input.value=btn.dataset.amount; updateShareEstimate(input); input.focus(); }
+      };
+    });
+  }
   function candidateSlotCard(s){
     if(!s || s.empty) return `<div class="mslot empty" style="cursor:default;">후보 ${esc((s&&s.slot)||'')}<br>대기중</div>`;
     const eq=s.entry_quality_label || (s.entry_quality_allow?'ALLOW':'CHECK');
@@ -935,11 +1003,7 @@ def _real_slot_overlay_js() -> str:
           <div class="rb-stat"><div class="v">${s.trade_count==null?'—':fmt(s.trade_count,0)}</div><div class="l">거래수</div></div>
         </div>
         <div class="mslot-sub" style="line-height:1.7;"><b style="color:var(--txt)">진입 사유</b><br>${reasonList(s)}</div>
-        <div style="margin-top:auto;display:flex;gap:8px;align-items:center;" onclick="event.stopPropagation()">
-          <input class="slot-buy-amount" data-candidate-id="${esc(cid)}" type="number" min="1" step="50" value="${defaultNotional()}" style="width:130px;" />
-          <button class="slot-buy-real" data-candidate-id="${esc(cid)}" data-slot="${esc(s.slot||s.slot_no||'')}">매수 선택</button>
-          <span class="mslot-sub">클릭하면 차트 상세</span>
-        </div>
+        ${ticketHtml(s)}
       </div>
     </div>`;
   }
@@ -970,6 +1034,7 @@ def _real_slot_overlay_js() -> str:
     }
   }
   function renderCandidateSlots(){
+    injectRealCandidateStyles();
     const html=(window.candidateSlotData||[]).map(candidateSlotCard).join('');
     const mini=document.getElementById('real-candidate-mini-slots');
     const full=document.getElementById('real-candidate-slots-full');
@@ -979,6 +1044,7 @@ def _real_slot_overlay_js() -> str:
       const filled=(window.candidateSlotData||[]).filter(x=>x && !x.empty).length;
       meta.textContent=`${filled}/8`;
     }
+    bindOrderTicketControls();
     document.querySelectorAll('.slot-buy-real[data-candidate-id]').forEach(btn=>{
       btn.onclick=function(ev){ev.stopPropagation(); handleBuy(btn.dataset.candidateId, Number(btn.dataset.slot||0));};
     });
@@ -1153,11 +1219,7 @@ def _real_slot_overlay_js() -> str:
         <div class="kv"><span>VIX</span><span>${fmt(s.vix_level,2)}</span></div>
         <div class="kv"><span>후순위</span><span>${s.down_deprioritize?'SPY DOWN + HIGH_VOL':'아님'}</span></div>
         <div class="kv" style="grid-column:1/-1;display:block;background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.35);">
-          <div style="font-size:11px;color:var(--dim);margin-bottom:6px;">실매수 금액</div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input id="real-slot-buy-amount" class="manual-buy-amount" type="number" min="1" step="50" value="${amount}" style="width:140px;" />
-            <button class="slot-buy-real" data-candidate-id="${esc(s.candidate_id)}" data-slot="${esc(s.slot||s.slot_no||'')}">매수 선택</button>
-          </div>
+          ${ticketHtml(s, {amount: amount, idSuffix: 'detail_'+String(s.candidate_id||'').replace(/[^A-Za-z0-9_-]/g,'_')})}
           <div style="font-size:11px;color:var(--dim);margin-top:6px;">후보 선택 시 보유/제외 목록에 기록되고 매수 대기 후보 8칸이 전면 재갱신됩니다.</div>
         </div>`;
     }
@@ -1168,6 +1230,7 @@ def _real_slot_overlay_js() -> str:
     }
     const omen=document.getElementById('sellomen-strip');
     if(omen) omen.innerHTML='';
+    bindOrderTicketControls();
     document.querySelectorAll('.slot-buy-real[data-candidate-id]').forEach(btn=>{
       btn.onclick=function(ev){ev.stopPropagation(); handleBuy(btn.dataset.candidateId, Number(btn.dataset.slot||0));};
     });
@@ -1309,11 +1372,11 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v5"></script>\n'
+    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v6"></script>\n'
     if "real-buy-amount-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     elif "real-slot-overlay.js" not in html:
-        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v5"></script>\n</body>')
+        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v6"></script>\n</body>')
     return HTMLResponse(content=html, media_type="text/html")
 
 

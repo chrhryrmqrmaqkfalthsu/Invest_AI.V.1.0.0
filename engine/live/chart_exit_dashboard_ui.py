@@ -309,8 +309,13 @@ def _inject_dashboard_script(html: str) -> str:
 def install_chart_exit_routes(app, base_module: Any, *, price_lookup, wake_runner) -> None:
     """Install chart-exit API routes and dashboard JS injection."""
     from engine.live.chart_exit_slot_display import install_slot_display_routes
+    from engine.live.manual_buy_amount_dashboard_ui import (
+        inject_manual_buy_amount_script,
+        install_manual_buy_amount_routes,
+    )
 
     install_slot_display_routes(app, base_module)
+    install_manual_buy_amount_routes(app, base_module)
 
     def _wake_triggered(evaluation: dict[str, Any]) -> list[dict[str, Any]]:
         wakes: list[dict[str, Any]] = []
@@ -380,7 +385,9 @@ def install_chart_exit_routes(app, base_module: Any, *, price_lookup, wake_runne
         response = base_module._dashboard_html_response()
         body = getattr(response, "body", b"")
         html = body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)
-        return HTMLResponse(content=_inject_dashboard_script(html), media_type="text/html")
+        html = _inject_dashboard_script(html)
+        html = inject_manual_buy_amount_script(html)
+        return HTMLResponse(content=html, media_type="text/html")
 
     target_paths = {"/dashboard", "/dashboard_home.html"}
     app.router.routes = [

@@ -169,6 +169,18 @@ def _as_int(value, default: int = 0) -> int:
         return default
 
 
+def _manual_notional_or_none(value) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        out = float(value)
+    except Exception:
+        raise ValueError("manual notional must be numeric")
+    if out != out or out <= 0.0:
+        raise ValueError("manual notional must be positive")
+    return out
+
+
 def _has_limit_notional_text(*values) -> bool:
     haystack = " ".join(str(v or "") for v in values).upper()
     return LIMIT_NOTIONAL_RETRY_CODE in haystack
@@ -225,12 +237,14 @@ def create_manual_buy_intent(
     *,
     candidate_id: str,
     source: str = "dashboard",
+    manual_notional: float | None = None,
     candidate_path: Path | str = CENTRAL_BUY_CANDIDATES_PATH,
     intent_path: Path | str = MANUAL_BUY_INTENT_PATH,
 ) -> dict:
     candidate_id = str(candidate_id or "").strip()
     if not candidate_id:
         raise ValueError("candidate_id required")
+    manual_notional_value = _manual_notional_or_none(manual_notional)
     candidate_state = load_candidate_state(candidate_path)
     candidate = (candidate_state.get("candidates") or {}).get(candidate_id)
     if not isinstance(candidate, dict):
@@ -251,20 +265,36 @@ def create_manual_buy_intent(
     if not isinstance(intent_state, dict) or intent_state.get("trade_date") != trade_date:
         intent_state = {"schema_version": 1, "trade_date": trade_date, "intents": {}}
     intents = intent_state.setdefault("intents", {})
-    existing = next(
-        (
-            dict(v, intent_id=k)
-            for k, v in intents.items()
-            if isinstance(v, dict)
-            and v.get("candidate_id") == candidate_id
-            and str(v.get("status") or "") == "pending"
-        ),
-        None,
-    )
-    if existing is not None:
-        return existing
     now = utc_now_iso()
+    existing_id = ""
+    existing_row = None
+    for intent_id, row0 in intents.items():
+        if not isinstance(row0, dict):
+            continue
+        if row0.get("candidate_id") == candidate_id and str(row0.get("status") or "") == "pending":
+            existing_id = str(intent_id)
+            existing_row = row0
+            break
+    if existing_row is not None:
+        if manual_notional_value is not None:
+            candidate_notional = float(candidate.get("notional") or 0.0)
+            existing_row["notional"] = manual_notional_value
+            existing_row["manual_notional"] = manual_notional_value
+            existing_row["candidate_notional"] = candidate_notional
+            existing_row["notional_source"] = "dashboard_amount"
+            existing_row["updated_at"] = now
+            intent_state["updated_at"] = now
+            atomic_write_json(intent_path, intent_state)
+            candidate["manual_requested_notional"] = manual_notional_value
+            candidate["manual_notional"] = manual_notional_value
+            candidate["notional_source"] = "dashboard_amount"
+            candidate["updated_at"] = now
+            candidate_state["updated_at"] = now
+            atomic_write_json(candidate_path, candidate_state)
+        return dict(existing_row, intent_id=existing_id)
     intent_id = f"manual-retry{retry_count}:{candidate_id}" if retrying_limit_notional else f"manual:{candidate_id}"
+    candidate_notional = float(candidate.get("notional") or 0.0)
+    order_notional = manual_notional_value if manual_notional_value is not None else candidate_notional
     row = {
         "intent_id": intent_id,
         "candidate_id": candidate_id,
@@ -273,7 +303,8 @@ def create_manual_buy_intent(
         "source": source,
         "ticker": candidate.get("ticker"),
         "entity_id": candidate.get("entity_id"),
-        "notional": float(candidate.get("notional") or 0.0),
+        "notional": float(order_notional or 0.0),
+        "candidate_notional": candidate_notional,
         "price": float(candidate.get("price") or 0.0),
         "created_at": now,
         "updated_at": now,
@@ -281,6 +312,9 @@ def create_manual_buy_intent(
         "rejected_at": "",
         "reason": "manual_timing",
     }
+    if manual_notional_value is not None:
+        row["manual_notional"] = manual_notional_value
+        row["notional_source"] = "dashboard_amount"
     if retrying_limit_notional:
         row["retry_count"] = retry_count
         row["retry_of"] = str(candidate.get("manual_intent_id") or "")
@@ -292,6 +326,10 @@ def create_manual_buy_intent(
     candidate["status"] = "manual_requested"
     candidate["manual_intent_id"] = intent_id
     candidate["updated_at"] = now
+    if manual_notional_value is not None:
+        candidate["manual_requested_notional"] = manual_notional_value
+        candidate["manual_notional"] = manual_notional_value
+        candidate["notional_source"] = "dashboard_amount"
     if retrying_limit_notional:
         candidate["retry_count"] = retry_count
         candidate["retry_code"] = LIMIT_NOTIONAL_RETRY_CODE
@@ -300,6 +338,59 @@ def create_manual_buy_intent(
     candidate_state["updated_at"] = now
     atomic_write_json(candidate_path, candidate_state)
     return row
+
+
+def _apply_manual_notional_overrides_to_caller_decisions(intents: list[dict]) -> None:
+    """Patch LiveCentralController's local decision map with intent notionals.
+
+    The central controller imports this module-level loader and then immediately
+    executes decisions from its local ``decision_by_candidate_id`` dictionary. To
+    keep the public controller flow unchanged while allowing dashboard-entered
+    amounts, this helper replaces matching frozen BuyDecision objects in that
+    local dict before the controller reads them.
+    """
+    try:
+        import inspect
+        from dataclasses import replace as dataclass_replace
+
+        frame = inspect.currentframe()
+        caller = frame.f_back.f_back if frame and frame.f_back else None
+        if caller is None:
+            return
+        decisions = caller.f_locals.get("decision_by_candidate_id")
+        prices = caller.f_locals.get("price_by_candidate_id")
+        if not isinstance(decisions, dict):
+            return
+        if not isinstance(prices, dict):
+            prices = {}
+        for intent in intents:
+            if not isinstance(intent, dict):
+                continue
+            cid = str(intent.get("candidate_id") or "")
+            if not cid or cid not in decisions:
+                continue
+            amount = _manual_notional_or_none(intent.get("notional"))
+            if amount is None:
+                continue
+            decision = decisions.get(cid)
+            if decision is None:
+                continue
+            try:
+                price = float(prices.get(cid) or 0.0)
+            except Exception:
+                price = 0.0
+            try:
+                shares = amount / price if price > 0.0 else float(getattr(decision, "shares", 0.0) or 0.0)
+                decisions[cid] = dataclass_replace(decision, notional=amount, shares=shares)
+            except Exception:
+                continue
+    except Exception:
+        return
+    finally:
+        try:
+            del frame
+        except Exception:
+            pass
 
 
 def load_pending_manual_intents(
@@ -321,6 +412,7 @@ def load_pending_manual_intents(
         copy = dict(row)
         copy["intent_id"] = intent_id
         out.append(copy)
+    _apply_manual_notional_overrides_to_caller_decisions(out)
     return out
 
 

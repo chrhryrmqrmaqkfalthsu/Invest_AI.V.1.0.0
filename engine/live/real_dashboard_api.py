@@ -6,6 +6,7 @@ routes account/position/order-related calls to /api/real/* instead of /api/live/
 Safety design:
 - The existing paper/live dashboard state files are not used for real order intents.
 - Real dashboard BUY/SELL requests are stored in separate real_dashboard_* intent files.
+- Real Alpaca credentials are looked up from live-specific env names first.
 - Direct broker order submission is disabled unless explicitly enabled by env var
   KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS=1.
 """
@@ -16,6 +17,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from dotenv import dotenv_values
 from fastapi import HTTPException
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
@@ -24,13 +26,38 @@ from engine.live.broker.base import BrokerError, OrderType
 from engine.live.manual_buy_intent import atomic_write_json, read_json, utc_now_iso
 
 ALPACA_LIVE_BASE_URL = "https://api.alpaca.markets"
+ENV_PATH = Path.home() / "kingmaker" / ".env"
 REAL_BUY_INTENT_PATH = Path("data/_system/real_dashboard_manual_buy_intent.json")
 REAL_SELL_INTENT_PATH = Path("data/_system/real_dashboard_manual_sell_intent.json")
 DIRECT_ORDER_ENV = "KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS"
 
+LIVE_KEY_NAMES = (
+    "ALPACA_LIVE_API_KEY",
+    "ALPACA_LIVE_KEY_ID",
+    "ALPACA_REAL_API_KEY",
+    "ALPACA_API_KEY_LIVE",
+    "APCA_LIVE_API_KEY_ID",
+)
+LIVE_SECRET_NAMES = (
+    "ALPACA_LIVE_SECRET_KEY",
+    "ALPACA_LIVE_API_SECRET",
+    "ALPACA_REAL_SECRET_KEY",
+    "ALPACA_SECRET_KEY_LIVE",
+    "APCA_LIVE_API_SECRET_KEY",
+)
+GENERIC_KEY_NAMES = ("ALPACA_API_KEY", "APCA_API_KEY_ID")
+GENERIC_SECRET_NAMES = ("ALPACA_SECRET_KEY", "APCA_API_SECRET_KEY")
+LIVE_BASE_URL_NAMES = (
+    "ALPACA_LIVE_BASE_URL",
+    "ALPACA_REAL_BASE_URL",
+    "ALPACA_BASE_URL_LIVE",
+    "APCA_LIVE_API_BASE_URL",
+)
+
 _real_broker = None
 _real_broker_error: str = ""
 _real_broker_error_logged = False
+_real_broker_config_cache: dict[str, Any] | None = None
 
 
 class RealBuyIntentRequest(BaseModel):
@@ -68,20 +95,131 @@ def _positive_float(value: Any, *, name: str) -> float:
     return float(out)
 
 
-def _get_real_broker():
+def _dotenv_values_safe() -> dict[str, Any]:
+    try:
+        if ENV_PATH.exists():
+            return dict(dotenv_values(str(ENV_PATH)) or {})
+    except Exception:
+        pass
+    return {}
+
+
+def _lookup_secret(names: tuple[str, ...], env_file: dict[str, Any]) -> tuple[str, str, str]:
+    for name in names:
+        value = str(os.environ.get(name) or "").strip()
+        if value:
+            return value, name, "process_env"
+    for name in names:
+        value = str(env_file.get(name) or "").strip()
+        if value:
+            return value, name, ".env"
+    return "", "", ""
+
+
+def _lookup_public(names: tuple[str, ...], env_file: dict[str, Any], default: str = "") -> tuple[str, str, str]:
+    value, name, source = _lookup_secret(names, env_file)
+    if value:
+        return value, name, source
+    return default, "default", "code_default"
+
+
+def _real_connection_config(refresh: bool = False) -> dict[str, Any]:
+    """Return live Alpaca connection config without exposing secret values."""
+    global _real_broker_config_cache
+    if _real_broker_config_cache is not None and not refresh:
+        return dict(_real_broker_config_cache)
+
+    env_file = _dotenv_values_safe()
+    api_key, key_name, key_location = _lookup_secret(LIVE_KEY_NAMES, env_file)
+    secret_key, secret_name, secret_location = _lookup_secret(LIVE_SECRET_NAMES, env_file)
+    credential_source = "live_specific"
+
+    if not api_key:
+        api_key, key_name, key_location = _lookup_secret(GENERIC_KEY_NAMES, env_file)
+        if api_key:
+            credential_source = "generic_fallback"
+    if not secret_key:
+        secret_key, secret_name, secret_location = _lookup_secret(GENERIC_SECRET_NAMES, env_file)
+        if secret_key and credential_source != "live_specific":
+            credential_source = "generic_fallback"
+
+    if not api_key or not secret_key:
+        credential_source = "missing"
+
+    base_url, base_url_name, base_url_location = _lookup_public(LIVE_BASE_URL_NAMES, env_file, ALPACA_LIVE_BASE_URL)
+    cfg = {
+        "api_key": api_key,
+        "secret_key": secret_key,
+        "base_url": base_url or ALPACA_LIVE_BASE_URL,
+        "key_name": key_name,
+        "key_location": key_location,
+        "secret_name": secret_name,
+        "secret_location": secret_location,
+        "base_url_name": base_url_name,
+        "base_url_location": base_url_location,
+        "credential_source": credential_source,
+        "has_api_key": bool(api_key),
+        "has_secret_key": bool(secret_key),
+        "direct_orders_enabled": _direct_orders_enabled(),
+    }
+    _real_broker_config_cache = dict(cfg)
+    return cfg
+
+
+def _public_connection_config(refresh: bool = False) -> dict[str, Any]:
+    cfg = _real_connection_config(refresh=refresh)
+    return {
+        "base_url": cfg.get("base_url"),
+        "credential_source": cfg.get("credential_source"),
+        "has_api_key": bool(cfg.get("has_api_key")),
+        "has_secret_key": bool(cfg.get("has_secret_key")),
+        "key_name": cfg.get("key_name") or "",
+        "key_location": cfg.get("key_location") or "",
+        "secret_name": cfg.get("secret_name") or "",
+        "secret_location": cfg.get("secret_location") or "",
+        "base_url_name": cfg.get("base_url_name") or "",
+        "base_url_location": cfg.get("base_url_location") or "",
+        "direct_orders_enabled": _direct_orders_enabled(),
+        "direct_order_env": DIRECT_ORDER_ENV,
+        "recommended_key_names": {
+            "api_key": LIVE_KEY_NAMES[0],
+            "secret_key": LIVE_SECRET_NAMES[0],
+            "base_url": LIVE_BASE_URL_NAMES[0],
+        },
+    }
+
+
+def _clear_real_broker_cache() -> None:
+    global _real_broker, _real_broker_error, _real_broker_config_cache
+    _real_broker = None
+    _real_broker_error = ""
+    _real_broker_config_cache = None
+
+
+def _get_real_broker(refresh: bool = False):
     """Lazy Alpaca live broker.
 
     Do not initialize at import time: missing live credentials must not break the
-    paper dashboard/API server.
+    paper dashboard/API server.  Real-specific credential names are preferred so
+    paper keys and real keys do not need to share one ALPACA_API_KEY variable.
     """
     global _real_broker, _real_broker_error, _real_broker_error_logged
+    if refresh:
+        _clear_real_broker_cache()
     if _real_broker is not None:
         return _real_broker
     try:
         from engine.live.broker.alpaca import AlpacaBroker
 
-        base_url = str(os.environ.get("ALPACA_LIVE_BASE_URL") or ALPACA_LIVE_BASE_URL).strip()
-        _real_broker = AlpacaBroker(base_url=base_url, paper=False)
+        cfg = _real_connection_config(refresh=refresh)
+        if not cfg.get("api_key") or not cfg.get("secret_key"):
+            raise BrokerError("Alpaca live credentials missing; set ALPACA_LIVE_API_KEY and ALPACA_LIVE_SECRET_KEY")
+        _real_broker = AlpacaBroker(
+            api_key=str(cfg.get("api_key") or ""),
+            secret_key=str(cfg.get("secret_key") or ""),
+            base_url=str(cfg.get("base_url") or ALPACA_LIVE_BASE_URL),
+            paper=False,
+        )
         _real_broker_error = ""
         return _real_broker
     except Exception as exc:
@@ -91,12 +229,69 @@ def _get_real_broker():
         return None
 
 
+def _real_connection_status(*, refresh: bool = False, account_check: bool = True) -> dict[str, Any]:
+    if refresh:
+        _clear_real_broker_cache()
+    cfg_public = _public_connection_config(refresh=refresh)
+    broker = _get_real_broker(refresh=False)
+    payload: dict[str, Any] = {
+        "ok": False,
+        "broker_mode": "alpaca_live",
+        "connection": cfg_public,
+        "direct_orders_enabled": _direct_orders_enabled(),
+        "error": _real_broker_error,
+        "account_check": "skipped" if not account_check else "not_run",
+    }
+    if broker is None:
+        payload["hint"] = _connection_hint(cfg_public, _real_broker_error)
+        return payload
+    payload["broker_mode"] = getattr(broker, "mode", "alpaca_live")
+    if not account_check:
+        payload["ok"] = True
+        payload["account_check"] = "skipped"
+        return payload
+    try:
+        bal = broker.get_balance()
+        payload.update(
+            {
+                "ok": True,
+                "account_check": "passed",
+                "account_source": "alpaca_live",
+                "total_value": _safe_float(getattr(bal, "total_value_usd", getattr(bal, "total_value_krw", 0.0)), 0.0),
+                "cash": _safe_float(getattr(bal, "cash_usd", getattr(bal, "cash_krw", 0.0)), 0.0),
+                "holdings_count": len(list(getattr(bal, "holdings", []) or [])),
+                "error": "",
+            }
+        )
+    except Exception as exc:
+        payload.update(
+            {
+                "ok": False,
+                "account_check": "failed",
+                "error": f"{type(exc).__name__}: {exc}",
+                "hint": _connection_hint(cfg_public, f"{type(exc).__name__}: {exc}"),
+            }
+        )
+    return payload
+
+
+def _connection_hint(cfg_public: dict[str, Any], error: str = "") -> str:
+    if not cfg_public.get("has_api_key") or not cfg_public.get("has_secret_key"):
+        return "실거래 전용 키 ALPACA_LIVE_API_KEY / ALPACA_LIVE_SECRET_KEY를 서버 환경 또는 .env에 추가해야 합니다."
+    if cfg_public.get("credential_source") == "generic_fallback":
+        return "현재 generic ALPACA_API_KEY/ALPACA_SECRET_KEY를 fallback으로 쓰고 있습니다. paper 키일 가능성이 있으니 live 전용 키 이름을 따로 넣는 것을 권장합니다."
+    if "401" in str(error) or "not authorized" in str(error).lower():
+        return "Alpaca live 인증이 거부되었습니다. live 계정용 key/secret인지, base_url이 https://api.alpaca.markets인지 확인해야 합니다."
+    return "실거래 API 연결 상태를 확인하세요."
+
+
 def _broker_unavailable_payload() -> dict[str, Any]:
     return {
         "ok": False,
         "account_source": "alpaca_live_unavailable",
         "broker_mode": "alpaca_live",
         "direct_orders_enabled": _direct_orders_enabled(),
+        "connection": _public_connection_config(),
         "error": _real_broker_error or "Alpaca live broker is not initialized",
         "cash": 0.0,
         "invested": 0.0,
@@ -193,6 +388,7 @@ def _candidate_state_for_real(base_module: Any, *, include_blocked: bool = False
     state["api_namespace"] = "real"
     state["order_intent_path"] = str(REAL_BUY_INTENT_PATH)
     state["direct_orders_enabled"] = _direct_orders_enabled()
+    state["connection"] = _public_connection_config()
     intents = _intent_state(REAL_BUY_INTENT_PATH, default_trade_date=str(state.get("trade_date") or ""))
     for intent_id, intent in (intents.get("intents") or {}).items():
         if not isinstance(intent, dict) or str(intent.get("status") or "") not in {"pending", "submitted"}:
@@ -257,6 +453,7 @@ def _create_real_buy_intent(base_module: Any, req: RealBuyIntentRequest) -> dict
             "updated_at": now,
             "execution_mode": "real_intent_only",
             "direct_orders_enabled": _direct_orders_enabled(),
+            "connection": _public_connection_config(),
             "note": "real dashboard separated intent; no paper/live intent file touched",
         }
     )
@@ -287,6 +484,9 @@ def _create_real_sell_intent(req: RealSellIntentRequest) -> dict[str, Any]:
     ticker = str(req.ticker or "").upper().strip()
     if not ticker:
         raise ValueError("ticker required")
+    broker = _get_real_broker()
+    if broker is None:
+        raise ValueError(f"real broker unavailable: {_real_broker_error}")
     positions = {str(p.get("ticker") or "").upper(): p for p in _real_positions_payload()}
     pos = positions.get(ticker)
     if not pos:
@@ -314,12 +514,10 @@ def _create_real_sell_intent(req: RealSellIntentRequest) -> dict[str, Any]:
         "updated_at": now,
         "execution_mode": "real_intent_only",
         "direct_orders_enabled": _direct_orders_enabled(),
+        "connection": _public_connection_config(),
         "note": "real dashboard separated sell intent; no paper/live intent file touched",
     }
     if _direct_orders_enabled():
-        broker = _get_real_broker()
-        if broker is None:
-            raise ValueError(f"real broker unavailable: {_real_broker_error}")
         order = broker.place_sell(ticker, shares_value, order_type=OrderType.MARKET, price=0.0, client_order_id=f"km-real-sell-{int(time.time())}-{ticker}")
         row.update(
             {
@@ -424,14 +622,14 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
     html = html.replace(
         "<body>",
         "<body>\n<div style=\"background:#3b0d0d;color:#fecaca;border-bottom:1px solid #7f1d1d;padding:8px 22px;font-size:12px;font-weight:800;letter-spacing:.2px;\">"
-        "⚠️ 실거래용 복제 대시보드 · 계좌/보유/주문요청 API는 /api/real/* 사용 · 기존 paper/live intent 파일과 분리됨 · 직접 주문은 KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS=1일 때만 제출"
+        "⚠️ 실거래용 복제 대시보드 · 계좌/보유/주문요청 API는 /api/real/* 사용 · 연결확인 /api/real/connection · 기존 paper/live intent 파일과 분리됨 · 직접 주문은 KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS=1일 때만 제출"
         "</div>",
     )
     html = html.replace(
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v1"></script>\n'
+    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v2"></script>\n'
     if "real-buy-amount-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")
@@ -453,6 +651,10 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
     @app.get("/real-buy-amount-overlay.js", include_in_schema=False)
     def real_buy_amount_overlay_js():
         return Response(content=_real_buy_amount_overlay_js(), media_type="application/javascript; charset=utf-8")
+
+    @app.get("/api/real/connection")
+    def real_connection(refresh: bool = False, account_check: bool = True):
+        return _real_connection_status(refresh=refresh, account_check=account_check)
 
     @app.get("/api/real/account")
     def real_account():
@@ -482,6 +684,7 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
                 "account_source": "alpaca_live",
                 "broker_mode": getattr(broker, "mode", "alpaca_live"),
                 "direct_orders_enabled": _direct_orders_enabled(),
+                "connection": _public_connection_config(),
                 "realized_pnl_today": 0.0,
                 "realized_pnl_total": 0.0,
                 "total_return_pct": 0.0,
@@ -489,6 +692,7 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
         except Exception as exc:
             payload = _broker_unavailable_payload()
             payload["error"] = f"{type(exc).__name__}: {exc}"
+            payload["hint"] = _connection_hint(payload.get("connection") or {}, str(exc))
             return payload
 
     @app.get("/api/real/positions")
@@ -505,6 +709,20 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
             else:
                 slots.append({"slot": i + 1, "empty": True})
         return slots
+
+    @app.get("/api/real/open_orders")
+    def real_open_orders():
+        broker = _get_real_broker()
+        if broker is None:
+            return {"ok": False, "orders": [], "connection": _public_connection_config(), "error": _real_broker_error}
+        try:
+            return {"ok": True, "orders": [_order_dict(o) for o in broker.get_open_orders()], "connection": _public_connection_config()}
+        except Exception as exc:
+            return {"ok": False, "orders": [], "connection": _public_connection_config(), "error": f"{type(exc).__name__}: {exc}"}
+
+    @app.get("/api/real/orders")
+    def real_orders_alias():
+        return real_open_orders()
 
     @app.get("/api/real/equity_curve")
     def real_equity_curve():

@@ -891,6 +891,51 @@ def _real_slot_overlay_js() -> str:
   function fmt(n,d=2){n=num(n); return n==null?'—':n.toFixed(d);}
   function money(n){n=num(n); return n==null?'':n.toLocaleString(undefined,{maximumFractionDigits:0});}
   function tag(v){return v?`<span class="tag">${esc(v)}</span>`:'';}
+  function kstDateObj(value){
+    if(value==null || value==='') return null;
+    let d;
+    if(typeof value==='number') d=new Date(value*1000);
+    else d=new Date(value);
+    if(!Number.isFinite(d.getTime())) return null;
+    return d;
+  }
+  function kstTime(value, opts={}){
+    const d=kstDateObj(value); if(!d) return '—';
+    const mode=opts.mode||'time';
+    const base={timeZone:'Asia/Seoul', hour12:false};
+    if(mode==='dateTime') return new Intl.DateTimeFormat('ko-KR',{...base, month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'}).format(d).replace(/\. /g,'/').replace('.','');
+    return new Intl.DateTimeFormat('ko-KR',{...base, hour:'2-digit', minute:'2-digit'}).format(d);
+  }
+  function kstAgeText(value){
+    const d=kstDateObj(value); if(!d) return '—';
+    const mins=Math.max(0, Math.floor((Date.now()-d.getTime())/60000));
+    if(mins<1) return '방금';
+    if(mins<60) return `${mins}분 전`;
+    const h=Math.floor(mins/60), m=mins%60;
+    if(h<24) return `${h}시간 ${m}분 전`;
+    return `${Math.floor(h/24)}일 ${h%24}시간 전`;
+  }
+  function ensureRealUpdateBadge(){
+    let el=document.getElementById('real-update-badge');
+    if(el) return el;
+    el=document.createElement('span');
+    el.id='real-update-badge';
+    el.style.cssText='border:1px solid rgba(59,130,246,.35);background:rgba(59,130,246,.12);color:#bfdbfe;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900;font-variant-numeric:tabular-nums;white-space:nowrap;';
+    const host=document.querySelector('.topbar .regime') || document.querySelector('.topbar') || document.body;
+    host.appendChild(el);
+    return el;
+  }
+  function updateRealUpdateBadge(extra={}){
+    const el=ensureRealUpdateBadge();
+    const candidateUpdated=extra.candidateUpdated || window._lastCandidateUpdatedAt || null;
+    const chartLatest=extra.chartLatest || window._lastCandidateChartLatest || null;
+    const chartFetch=extra.chartFetch || window._lastCandidateChartFetch || null;
+    const parts=[];
+    if(candidateUpdated) parts.push(`후보 ${kstTime(candidateUpdated)}`);
+    if(chartLatest) parts.push(`1m봉 ${kstTime(chartLatest)} (${kstAgeText(chartLatest)})`);
+    if(chartFetch) parts.push(`화면 ${kstTime(chartFetch)}`);
+    el.textContent = parts.length ? `최근 업데이트 · ${parts.join(' · ')}` : `최근 업데이트 · ${kstTime(new Date().toISOString())}`;
+  }
   function byCid(cid){return (window.candidateSlotData||[]).find(x=>String(x.candidate_id||'')===String(cid||''));}
   function defaultNotional(){
     try{
@@ -1023,7 +1068,7 @@ def _real_slot_overlay_js() -> str:
     return `<div class="mslot real-buy-slot real-candidate-row" data-candidate-id="${esc(cid)}" style="display:grid;gap:14px;align-items:stretch;padding:14px;cursor:pointer;" onclick="openRealCandidateDetail('${esc(cid)}')">
       <div class="real-candidate-chart-wrap">
         <div id="${chartId}" class="real-candidate-mini-chart" style="border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0b1019;"></div>
-        <div id="cand-chart-meta-${safeCid}" class="real-candidate-chart-meta"><span>5m 차트 대기</span><span>서버 TTL 55초</span></div>
+        <div id="cand-chart-meta-${safeCid}" class="real-candidate-chart-meta"><span>1m 차트 대기</span><span>KST · 서버 TTL 25초</span></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;min-width:0;">
         <div class="mslot-top"><span class="mslot-tk">${esc(s.ticker)}</span><span class="mslot-pnl" style="color:var(--up)">S ${fmt(s.final_score,2)}</span></div>
@@ -1056,21 +1101,22 @@ def _real_slot_overlay_js() -> str:
       const ticker=String(s.ticker||'').toUpperCase();
       if(!el || !ticker || !window.LightweightCharts) continue;
       const cached=window._realCandMiniCharts[id];
-      const ttlMs=55000;
+      const ttlMs=25000;
       if(cached && !force && Date.now()-(cached.lastFetch||0)<ttlMs){
         try{ cached.chart.resize(Math.max(el.clientWidth,280), Math.max(el.clientHeight||0, 286)); }catch(e){}
-        if(meta) meta.innerHTML=`<span>5m 최신봉 ${esc(cached.latestLabel||'—')}</span><span>차트 캐시 ${Math.max(0,Math.round((Date.now()-(cached.lastFetch||0))/1000))}초</span>`;
+        if(meta) meta.innerHTML=`<span>1m 최신봉 ${esc(cached.latestLabel||'—')} KST</span><span>차트 캐시 ${Math.max(0,Math.round((Date.now()-(cached.lastFetch||0))/1000))}초</span>`;
+        updateRealUpdateBadge({chartLatest: cached.latestRaw, chartFetch: cached.lastFetch ? new Date(cached.lastFetch).toISOString() : null});
         continue;
       }
       try{
-        const r=await fetch(`${API}/api/real/candles/${ticker}?interval=5m`);
+        const r=await fetch(`${API}/api/real/candles/${ticker}?interval=1m`);
         const candles=await r.json();
         if(!Array.isArray(candles) || !candles.length){ el.innerHTML='<div class="loading">분봉 없음</div>'; continue; }
         const use=candles.slice(-96);
         const h=Math.max(el.clientHeight||0, 286);
         let entry=window._realCandMiniCharts[id];
         if(!entry || !entry.chart || !entry.ser){
-          const chart=LightweightCharts.createChart(el,{layout:{background:{color:'#0b1019'},textColor:'#5f6e85'},grid:{vertLines:{color:'#151d2b'},horzLines:{color:'#151d2b'}},timeScale:{borderColor:'#1c2535',timeVisible:true,secondsVisible:false},rightPriceScale:{borderColor:'#1c2535'},width:Math.max(el.clientWidth,280),height:h});
+          const chart=LightweightCharts.createChart(el,{layout:{background:{color:'#0b1019'},textColor:'#5f6e85'},grid:{vertLines:{color:'#151d2b'},horzLines:{color:'#151d2b'}},localization:{timeFormatter:(time)=>kstTime(time,{mode:'dateTime'})},timeScale:{borderColor:'#1c2535',timeVisible:true,secondsVisible:false,tickMarkFormatter:(time)=>kstTime(time)},rightPriceScale:{borderColor:'#1c2535'},width:Math.max(el.clientWidth,280),height:h});
           const ser=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',wickUpColor:'#26d07c',wickDownColor:'#ff4d6a',borderVisible:false});
           entry={chart,ser,lines:[]};
           window._realCandMiniCharts[id]=entry;
@@ -1086,9 +1132,13 @@ def _real_slot_overlay_js() -> str:
         if(s.price || s.current_price){ entry.lines.push(entry.ser.createPriceLine({price:Number(s.price ?? s.current_price),color:'#c9d4e5',lineWidth:1,lineStyle:0,axisLabelVisible:true,title:'현재'})); }
         entry.chart.timeScale().fitContent();
         const latest=use[use.length-1] && use[use.length-1].time;
-        entry.latestLabel=timeLabel(latest);
+        entry.latestRaw=latest;
+        entry.latestLabel=kstTime(latest, {mode:'dateTime'});
         entry.lastFetch=Date.now();
-        if(meta) meta.innerHTML=`<span>5m 최신봉 ${esc(entry.latestLabel||'—')}</span><span>갱신 ${nowTimeLabel()} · TTL 55초</span>`;
+        window._lastCandidateChartLatest = latest;
+        window._lastCandidateChartFetch = new Date().toISOString();
+        if(meta) meta.innerHTML=`<span>1m 최신봉 ${esc(entry.latestLabel||'—')} KST · ${kstAgeText(latest)}</span><span>갱신 ${kstTime(window._lastCandidateChartFetch)} KST · TTL 25초</span>`;
+        updateRealUpdateBadge({chartLatest: latest, chartFetch: window._lastCandidateChartFetch});
       }catch(e){ el.innerHTML='<div class="loading">차트 오류</div>'; }
     }
     for(const [id, entry] of Object.entries(window._realCandMiniCharts||{})){
@@ -1131,6 +1181,8 @@ def _real_slot_overlay_js() -> str:
     }
     const sig=candidateSignature(next);
     window.candidateSlotData=next;
+    window._lastCandidateUpdatedAt = (next||[]).map(x=>x && (x.last_seen_at || x.first_signal_at)).filter(Boolean).sort().pop() || new Date().toISOString();
+    updateRealUpdateBadge({candidateUpdated: window._lastCandidateUpdatedAt});
     if(forceRender || sig !== window._lastCandidateSlotSignature){
       window._lastCandidateSlotSignature=sig;
       renderCandidateSlots();
@@ -1316,7 +1368,9 @@ def _real_slot_overlay_js() -> str:
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', loadCandidateSlots); else loadCandidateSlots();
   setInterval(loadCandidateSlots, 30000);
+  setInterval(()=>drawCandidateMiniCharts(false), 15000);
   setInterval(updateCandidateDynamicText, 10000);
+  updateRealUpdateBadge({chartFetch: new Date().toISOString()});
 })();
 """
 
@@ -1415,6 +1469,15 @@ def _real_candle_cache_status() -> dict[str, Any]:
                 latest = data[-1].get("time")
             except Exception:
                 latest = None
+        latest_kst = ""
+        latest_age_sec = None
+        if isinstance(latest, (int, float)):
+            try:
+                from datetime import datetime, timezone, timedelta
+                latest_kst = datetime.fromtimestamp(float(latest), timezone(timedelta(hours=9))).isoformat(timespec="seconds")
+                latest_age_sec = round(now - float(latest), 3)
+            except Exception:
+                latest_kst = ""
         rows.append({
             "ticker": ticker,
             "interval": interval,
@@ -1423,6 +1486,8 @@ def _real_candle_cache_status() -> dict[str, Any]:
             "ttl_sec": _REAL_CANDLE_TTL_SEC.get(interval, 60),
             "rows": len(data or []),
             "latest_candle_time": latest,
+            "latest_candle_time_kst": latest_kst,
+            "latest_candle_age_sec": latest_age_sec,
         })
     return {"cache_size": len(rows), "items": rows, "ttl_policy_sec": dict(_REAL_CANDLE_TTL_SEC)}
 
@@ -1490,7 +1555,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v8"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v9"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

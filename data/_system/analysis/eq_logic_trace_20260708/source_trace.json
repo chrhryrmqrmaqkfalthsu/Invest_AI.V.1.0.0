@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-07-08",
+  "verdict": "EQ_INDEPENDENT",
+  "files": {
+    "live_candidate_slots": "data/_system/ops/live_candidate_slots.py",
+    "candidate_evaluator": "engine/live/elite_shadow_trader.py",
+    "eq_function": "engine/live/elite_shadow_entry_quality.py",
+    "backtest_entry_signal": "engine/strategies/evaluator.py",
+    "elite_strategy_sim_eq_gate": "engine/live/elite_strategy_sim.py"
+  },
+  "source_trace": [
+    {
+      "step": 1,
+      "file": "data/_system/ops/live_candidate_slots.py",
+      "lines": "29, 269, 290-293, 393-406",
+      "meaning": "live_candidate_slots imports evaluate_candidate, calls it per candidate, skips candidates whose ev.should_buy is false, then copies ev.entry_quality into display fields. EQ is not used as a slot gate here."
+    },
+    {
+      "step": 2,
+      "file": "engine/live/elite_shadow_trader.py",
+      "lines": "32, 423-448, 455-462",
+      "meaning": "evaluate_candidate first calls evaluate_signal, then separately calls assess_shadow_entry_quality and returns both should_buy and entry_quality."
+    },
+    {
+      "step": 3,
+      "file": "engine/live/elite_shadow_entry_quality.py",
+      "lines": "16, 35-42, 69-113, 116-185, 188-303",
+      "meaning": "EQ implementation: shadow_entry_quality_v1 follow-through / risk / event-heavy quality filter."
+    },
+    {
+      "step": 4,
+      "file": "engine/strategies/evaluator.py",
+      "lines": "30-237, especially 223-225",
+      "meaning": "Backtest-style entry signal is evaluate_signal: final_score = raw components * market_adjustment; should_buy = final_score >= rb.signal_threshold."
+    },
+    {
+      "step": 5,
+      "file": "engine/live/elite_shadow_trader.py",
+      "lines": "808-817",
+      "meaning": "Elite shadow virtual ledger uses EQ allow as a virtual open filter, but that is a separate live/shadow overlay, not the frozen OOS entry rule itself."
+    },
+    {
+      "step": 6,
+      "file": "engine/live/elite_strategy_sim.py",
+      "lines": "1-9, 243-253, 473-480",
+      "meaning": "Elite strategy sim also gates virtual entries by entry_quality, again as a separate simulator layer."
+    }
+  ],
+  "classification_reason": "EQ is computed after evaluate_signal and uses additional follow-through metrics and heuristics that are not the same as evaluate_signal components or threshold. If used as a gate after should_buy, it becomes an unvalidated extra post-filter over the backtested entry signal."
+}

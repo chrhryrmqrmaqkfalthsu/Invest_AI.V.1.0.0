@@ -1,14 +1,15 @@
-"""Separate real-trading dashboard routes.
+"""Real-trading dashboard API routes separated from paper/live dashboard state.
 
-This module installs a second dashboard that reuses the main KINGMAKER UI but
-routes account/position/order-related calls to /api/real/* instead of /api/live/*.
+The real dashboard reuses the KINGMAKER UI, but every account/order/news/market/
+candidate endpoint is served under /api/real/* and uses real-dashboard-specific
+state files.  Public candle data is still fetched with the existing candle loader,
+but it is exposed through /api/real/candles/* so the browser never calls /api/live/*.
 
 Safety design:
-- The existing paper/live dashboard state files are not used for real order intents.
-- Real dashboard BUY/SELL requests are stored in separate real_dashboard_* intent files.
-- Real Alpaca credentials are looked up from live-specific env names first.
-- Direct broker order submission is disabled unless explicitly enabled by env var
-  KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS=1.
+- Real BUY/SELL intents are stored in real_dashboard_* files, not paper/live files.
+- Real candidates/news/market/rulebook/universe state is stored separately.
+- Direct live orders are disabled unless KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS=1.
+- Secret values are never returned by connection diagnostics.
 """
 from __future__ import annotations
 
@@ -27,9 +28,16 @@ from engine.live.manual_buy_intent import atomic_write_json, read_json, utc_now_
 
 ALPACA_LIVE_BASE_URL = "https://api.alpaca.markets"
 ENV_PATH = Path.home() / "kingmaker" / ".env"
+DIRECT_ORDER_ENV = "KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS"
+
+REAL_BUY_CANDIDATES_PATH = Path("data/_system/real_dashboard_buy_candidates.json")
 REAL_BUY_INTENT_PATH = Path("data/_system/real_dashboard_manual_buy_intent.json")
 REAL_SELL_INTENT_PATH = Path("data/_system/real_dashboard_manual_sell_intent.json")
-DIRECT_ORDER_ENV = "KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS"
+REAL_MARKET_STATE_PATH = Path("data/_system/real_dashboard_market_state.json")
+REAL_NEWS_STATE_PATH = Path("data/_system/real_dashboard_news_state.json")
+REAL_RULEBOOKS_PATH = Path("data/_system/real_dashboard_rulebooks.json")
+REAL_UNIVERSE_PATH = Path("data/_system/real_dashboard_universe.json")
+REAL_TRADES_HISTORY_PATH = Path("data/_system/real_dashboard_trades_history.json")
 
 LIVE_KEY_NAMES = (
     "ALPACA_LIVE_API_KEY",
@@ -124,7 +132,6 @@ def _lookup_public(names: tuple[str, ...], env_file: dict[str, Any], default: st
 
 
 def _real_connection_config(refresh: bool = False) -> dict[str, Any]:
-    """Return live Alpaca connection config without exposing secret values."""
     global _real_broker_config_cache
     if _real_broker_config_cache is not None and not refresh:
         return dict(_real_broker_config_cache)
@@ -142,7 +149,6 @@ def _real_connection_config(refresh: bool = False) -> dict[str, Any]:
         secret_key, secret_name, secret_location = _lookup_secret(GENERIC_SECRET_NAMES, env_file)
         if secret_key and credential_source != "live_specific":
             credential_source = "generic_fallback"
-
     if not api_key or not secret_key:
         credential_source = "missing"
 
@@ -197,12 +203,6 @@ def _clear_real_broker_cache() -> None:
 
 
 def _get_real_broker(refresh: bool = False):
-    """Lazy Alpaca live broker.
-
-    Do not initialize at import time: missing live credentials must not break the
-    paper dashboard/API server.  Real-specific credential names are preferred so
-    paper keys and real keys do not need to share one ALPACA_API_KEY variable.
-    """
     global _real_broker, _real_broker_error, _real_broker_error_logged
     if refresh:
         _clear_real_broker_cache()
@@ -227,6 +227,16 @@ def _get_real_broker(refresh: bool = False):
         if not _real_broker_error_logged:
             _real_broker_error_logged = True
         return None
+
+
+def _connection_hint(cfg_public: dict[str, Any], error: str = "") -> str:
+    if not cfg_public.get("has_api_key") or not cfg_public.get("has_secret_key"):
+        return "실거래 전용 키 ALPACA_LIVE_API_KEY / ALPACA_LIVE_SECRET_KEY를 서버 환경 또는 .env에 추가해야 합니다."
+    if cfg_public.get("credential_source") == "generic_fallback":
+        return "현재 generic ALPACA_API_KEY/ALPACA_SECRET_KEY를 fallback으로 쓰고 있습니다. paper 키일 가능성이 있으니 live 전용 키 이름을 따로 넣는 것을 권장합니다."
+    if "401" in str(error) or "not authorized" in str(error).lower():
+        return "Alpaca live 인증이 거부되었습니다. live 계정용 key/secret인지, base_url이 https://api.alpaca.markets인지 확인해야 합니다."
+    return "실거래 API 연결 상태를 확인하세요."
 
 
 def _real_connection_status(*, refresh: bool = False, account_check: bool = True) -> dict[str, Any]:
@@ -273,16 +283,6 @@ def _real_connection_status(*, refresh: bool = False, account_check: bool = True
             }
         )
     return payload
-
-
-def _connection_hint(cfg_public: dict[str, Any], error: str = "") -> str:
-    if not cfg_public.get("has_api_key") or not cfg_public.get("has_secret_key"):
-        return "실거래 전용 키 ALPACA_LIVE_API_KEY / ALPACA_LIVE_SECRET_KEY를 서버 환경 또는 .env에 추가해야 합니다."
-    if cfg_public.get("credential_source") == "generic_fallback":
-        return "현재 generic ALPACA_API_KEY/ALPACA_SECRET_KEY를 fallback으로 쓰고 있습니다. paper 키일 가능성이 있으니 live 전용 키 이름을 따로 넣는 것을 권장합니다."
-    if "401" in str(error) or "not authorized" in str(error).lower():
-        return "Alpaca live 인증이 거부되었습니다. live 계정용 key/secret인지, base_url이 https://api.alpaca.markets인지 확인해야 합니다."
-    return "실거래 API 연결 상태를 확인하세요."
 
 
 def _broker_unavailable_payload() -> dict[str, Any]:
@@ -375,28 +375,138 @@ def _write_intent_state(path: Path, data: dict[str, Any]) -> None:
     atomic_write_json(path, data)
 
 
-def _candidate_state_for_real(base_module: Any, *, include_blocked: bool = False) -> dict[str, Any]:
-    try:
-        state = base_module.central_candidates(include_blocked=include_blocked)
-    except Exception:
-        state = {"schema_version": 1, "trade_date": "", "candidates": {}}
-    if not isinstance(state, dict):
-        state = {"schema_version": 1, "trade_date": "", "candidates": {}}
-    state = dict(state)
-    candidates = state.get("candidates") if isinstance(state.get("candidates"), dict) else {}
-    state["candidates"] = {str(cid): dict(row) for cid, row in candidates.items() if isinstance(row, dict)}
-    state["api_namespace"] = "real"
+def _default_real_market_state() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "source": "real_dashboard_market_state",
+        "isolated": True,
+        "updated_at": "",
+        "regime": "neutral",
+        "score": None,
+        "vix_level": None,
+        "risk_events": [],
+        "benefit_events": [],
+        "active_events": {},
+        "sector_strength": {},
+        "note": "실거래 대시보드 전용 시장상태 파일이 아직 없습니다.",
+        "state_path": str(REAL_MARKET_STATE_PATH),
+    }
+
+
+def _real_market_state() -> dict[str, Any]:
+    data = read_json(REAL_MARKET_STATE_PATH, {})
+    if not isinstance(data, dict) or not data:
+        return _default_real_market_state()
+    out = dict(_default_real_market_state())
+    out.update(data)
+    out["source"] = data.get("source") or "real_dashboard_market_state"
+    out["isolated"] = True
+    out["state_path"] = str(REAL_MARKET_STATE_PATH)
+    return out
+
+
+def _default_real_news_state() -> dict[str, Any]:
+    held = [str(p.get("ticker") or "").upper() for p in _real_positions_payload() if p.get("ticker")]
+    entries = {
+        t: {
+            "ticker": t,
+            "score": None,
+            "risk_label": "missing",
+            "missing": True,
+            "stale": True,
+            "article_count": 0,
+            "source": "real_news_state_missing",
+            "articles": [],
+        }
+        for t in sorted(set(held))
+    }
+    return {
+        "sentiment": {
+            "entries": entries,
+            "meta": {
+                "source": "real_dashboard_news_state",
+                "isolated": True,
+                "held_count": len(entries),
+                "held_tickers": sorted(entries),
+                "cache_count": 0,
+                "cache_updated_at": "",
+                "state_path": str(REAL_NEWS_STATE_PATH),
+                "note": "실거래 대시보드 전용 뉴스 파일이 아직 없습니다.",
+            },
+        },
+        "alerts": {},
+    }
+
+
+def _real_news_state() -> dict[str, Any]:
+    data = read_json(REAL_NEWS_STATE_PATH, {})
+    if not isinstance(data, dict) or not data:
+        return _default_real_news_state()
+    if "sentiment" not in data:
+        entries = data.get("entries") if isinstance(data.get("entries"), dict) else {}
+        data = {"sentiment": {"entries": entries, "meta": data.get("meta") or {}}, "alerts": data.get("alerts") or {}}
+    out = dict(data)
+    sentiment = out.get("sentiment") if isinstance(out.get("sentiment"), dict) else {}
+    meta = sentiment.get("meta") if isinstance(sentiment.get("meta"), dict) else {}
+    meta.update({"source": "real_dashboard_news_state", "isolated": True, "state_path": str(REAL_NEWS_STATE_PATH)})
+    sentiment["meta"] = meta
+    if not isinstance(sentiment.get("entries"), dict):
+        sentiment["entries"] = {}
+    out["sentiment"] = sentiment
+    out.setdefault("alerts", {})
+    return out
+
+
+def _default_real_candidate_state() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "buy_mode": "real_isolated",
+        "source": "real_dashboard_buy_candidates",
+        "isolated": True,
+        "trade_date": "",
+        "updated_at": "",
+        "manual_buy_enabled": True,
+        "direct_orders_enabled": _direct_orders_enabled(),
+        "order_intent_path": str(REAL_BUY_INTENT_PATH),
+        "state_path": str(REAL_BUY_CANDIDATES_PATH),
+        "connection": _public_connection_config(),
+        "candidates": {},
+        "note": "실거래 대시보드 전용 매수 후보 파일이 아직 없거나 비어 있습니다.",
+    }
+
+
+def _real_candidate_state(*, include_blocked: bool = False) -> dict[str, Any]:
+    data = read_json(REAL_BUY_CANDIDATES_PATH, {})
+    if not isinstance(data, dict) or not data:
+        state = _default_real_candidate_state()
+    else:
+        state = dict(_default_real_candidate_state())
+        state.update(data)
+        if not isinstance(state.get("candidates"), dict):
+            state["candidates"] = {}
+    state["source"] = "real_dashboard_buy_candidates"
+    state["isolated"] = True
+    state["state_path"] = str(REAL_BUY_CANDIDATES_PATH)
     state["order_intent_path"] = str(REAL_BUY_INTENT_PATH)
     state["direct_orders_enabled"] = _direct_orders_enabled()
     state["connection"] = _public_connection_config()
+
+    hidden = {"manual_executed", "auto_executed", "expired", "cancelled", "canceled"}
+    if not include_blocked:
+        hidden.add("blocked")
+    candidates = {
+        str(cid): dict(row)
+        for cid, row in (state.get("candidates") or {}).items()
+        if isinstance(row, dict) and str(row.get("status") or "pending") not in hidden
+    }
     intents = _intent_state(REAL_BUY_INTENT_PATH, default_trade_date=str(state.get("trade_date") or ""))
     for intent_id, intent in (intents.get("intents") or {}).items():
         if not isinstance(intent, dict) or str(intent.get("status") or "") not in {"pending", "submitted"}:
             continue
         cid = str(intent.get("candidate_id") or "")
-        if not cid or cid not in state["candidates"]:
+        if not cid or cid not in candidates:
             continue
-        row = state["candidates"][cid]
+        row = candidates[cid]
         row["status"] = "manual_requested"
         row["manual_intent_id"] = str(intent_id)
         row["manual_buy_enabled"] = False
@@ -404,14 +514,23 @@ def _candidate_state_for_real(base_module: Any, *, include_blocked: bool = False
         row["manual_notional"] = intent.get("notional")
         row["notional_source"] = "real_dashboard_amount"
         row["action_label"] = "실거래 요청"
+    state["candidates"] = candidates
     return state
 
 
-def _candidate_for_real(base_module: Any, candidate_id: str) -> dict[str, Any]:
-    state = _candidate_state_for_real(base_module, include_blocked=True)
-    row = (state.get("candidates") or {}).get(candidate_id)
+def _candidate_for_real(candidate_id: str) -> dict[str, Any]:
+    cid = str(candidate_id or "").strip()
+    if not cid:
+        raise ValueError("candidate_id required")
+    state = _real_candidate_state(include_blocked=True)
+    row = (state.get("candidates") or {}).get(cid)
     if not isinstance(row, dict):
-        raise ValueError(f"candidate not found or stale: {candidate_id}")
+        raise ValueError(f"real candidate not found or stale: {cid}")
+    status = str(row.get("status") or "pending")
+    if status not in {"pending", "manual_requested"}:
+        raise ValueError(f"real candidate is not pending: {cid}")
+    if row.get("manual_buy_enabled") is False:
+        raise ValueError(f"real candidate manual buy disabled: {cid}")
     return row
 
 
@@ -421,14 +540,12 @@ def _order_dict(order: Any) -> dict[str, Any]:
     return dict(order) if isinstance(order, dict) else {"raw": str(order)}
 
 
-def _create_real_buy_intent(base_module: Any, req: RealBuyIntentRequest) -> dict[str, Any]:
+def _create_real_buy_intent(req: RealBuyIntentRequest) -> dict[str, Any]:
+    candidate = _candidate_for_real(req.candidate_id)
     candidate_id = str(req.candidate_id or "").strip()
-    if not candidate_id:
-        raise ValueError("candidate_id required")
-    candidate = _candidate_for_real(base_module, candidate_id)
     ticker = str(candidate.get("ticker") or "").upper().strip()
     if not ticker:
-        raise ValueError("candidate ticker missing")
+        raise ValueError("real candidate ticker missing")
     default_notional = _safe_float(candidate.get("notional"), 0.0) or 0.0
     notional = _positive_float(req.notional if req.notional is not None else default_notional, name="notional")
     trade_date = str(candidate.get("trade_date") or candidate.get("execution_session") or "")
@@ -453,8 +570,9 @@ def _create_real_buy_intent(base_module: Any, req: RealBuyIntentRequest) -> dict
             "updated_at": now,
             "execution_mode": "real_intent_only",
             "direct_orders_enabled": _direct_orders_enabled(),
+            "candidate_state_path": str(REAL_BUY_CANDIDATES_PATH),
             "connection": _public_connection_config(),
-            "note": "real dashboard separated intent; no paper/live intent file touched",
+            "note": "real dashboard isolated candidate/intents; no paper/live state touched",
         }
     )
     if _direct_orders_enabled():
@@ -492,13 +610,9 @@ def _create_real_sell_intent(req: RealSellIntentRequest) -> dict[str, Any]:
     if not pos:
         raise ValueError("not held in real account")
     held_shares = _positive_float(pos.get("shares"), name="held shares")
-    shares = req.shares_requested
-    if shares is None:
-        shares_value = held_shares
-    else:
-        shares_value = _positive_float(shares, name="shares_requested")
-        if shares_value > held_shares + 1e-6:
-            raise ValueError("shares_requested exceeds real holding")
+    shares_value = held_shares if req.shares_requested is None else _positive_float(req.shares_requested, name="shares_requested")
+    if shares_value > held_shares + 1e-6:
+        raise ValueError("shares_requested exceeds real holding")
     data = _intent_state(REAL_SELL_INTENT_PATH)
     intents = data.setdefault("intents", {})
     now = utc_now_iso()
@@ -530,6 +644,20 @@ def _create_real_sell_intent(req: RealSellIntentRequest) -> dict[str, Any]:
     intents[intent_id] = row
     _write_intent_state(REAL_SELL_INTENT_PATH, data)
     return row
+
+
+def _real_trades_history() -> dict[str, Any]:
+    data = read_json(REAL_TRADES_HISTORY_PATH, {})
+    if isinstance(data, dict) and data:
+        return data
+    return {
+        "stats": {"total_trades": 0, "wins": 0, "losses": 0, "win_rate": 0, "total_pnl": 0, "avg_win_pct": 0, "avg_loss_pct": 0},
+        "trades": [],
+        "account_source": "alpaca_live",
+        "isolated": True,
+        "state_path": str(REAL_TRADES_HISTORY_PATH),
+        "note": "실거래 대시보드 전용 거래내역 파일이 아직 없습니다.",
+    }
 
 
 def _real_buy_amount_overlay_js() -> str:
@@ -578,7 +706,7 @@ def _real_buy_amount_overlay_js() -> str:
     const box=btn.closest('.manual-buy-controls')||btn.parentElement; const input=box&&box.querySelector?box.querySelector('.manual-buy-amount'):null;
     const amount=num(input&&input.value); const c=state.candidates[cid]||{}; const ticker=String(c.ticker || cid).toUpperCase();
     if(amount==null || amount<=0){ toast2('실거래 매수 금액 필요', `${ticker} 매수 금액을 달러 기준으로 입력하세요`, 'warn'); if(input) input.focus(); return; }
-    if(!confirm(`[실거래 대시보드]\n${ticker} ${money(amount)} 매수 요청을 별도 real API에 기록할까요?\n\n직접 주문 활성화 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.`)) return;
+    if(!confirm(`[실거래 대시보드]\n${ticker} ${money(amount)} 매수 요청을 real 전용 후보/intent API에 기록할까요?\n\n직접 주문 활성화 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.`)) return;
     state.busy[cid]=true; btn.disabled=true; if(input) input.disabled=true; btn.textContent='요청 중…';
     try{
       const r=await fetch(`${BASE}${PREFIX}/manual_buy_intent`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({candidate_id:cid, source:'real_dashboard_amount', notional:amount})});
@@ -606,10 +734,15 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
     html = html.replace('const API="http://localhost:8001";', 'const API=window.location.origin;\nwindow.KM_DASHBOARD_MODE="real";')
     replacements = {
         "/api/live/account": "/api/real/account",
-        "/api/live/slots": "/api/real/slots",
         "/api/live/positions": "/api/real/positions",
+        "/api/live/slots": "/api/real/slots",
+        "/api/live/market": "/api/real/market",
+        "/api/live/news": "/api/real/news",
+        "/api/live/rulebooks": "/api/real/rulebooks",
+        "/api/live/candles": "/api/real/candles",
         "/api/live/equity_curve": "/api/real/equity_curve",
         "/api/live/trades_history": "/api/real/trades_history",
+        "/api/live/universe": "/api/real/universe",
         "/api/live/central_candidates": "/api/real/central_candidates",
         "/api/live/manual_buy_intents": "/api/real/manual_buy_intents",
         "/api/live/manual_buy_intent": "/api/real/manual_buy_intent",
@@ -622,14 +755,14 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
     html = html.replace(
         "<body>",
         "<body>\n<div style=\"background:#3b0d0d;color:#fecaca;border-bottom:1px solid #7f1d1d;padding:8px 22px;font-size:12px;font-weight:800;letter-spacing:.2px;\">"
-        "⚠️ 실거래용 복제 대시보드 · 계좌/보유/주문요청 API는 /api/real/* 사용 · 연결확인 /api/real/connection · 기존 paper/live intent 파일과 분리됨 · 직접 주문은 KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS=1일 때만 제출"
+        "⚠️ 실거래용 복제 대시보드 · 모든 운영 정보 API는 /api/real/* 사용 · 연결확인 /api/real/connection · 기존 paper/live state와 분리됨 · 직접 주문은 KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS=1일 때만 제출"
         "</div>",
     )
     html = html.replace(
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v2"></script>\n'
+    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n'
     if "real-buy-amount-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")
@@ -655,6 +788,20 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
     @app.get("/api/real/connection")
     def real_connection(refresh: bool = False, account_check: bool = True):
         return _real_connection_status(refresh=refresh, account_check=account_check)
+
+    @app.get("/api/real/data_sources")
+    def real_data_sources():
+        return {
+            "isolated": True,
+            "market": str(REAL_MARKET_STATE_PATH),
+            "news": str(REAL_NEWS_STATE_PATH),
+            "buy_candidates": str(REAL_BUY_CANDIDATES_PATH),
+            "buy_intents": str(REAL_BUY_INTENT_PATH),
+            "sell_intents": str(REAL_SELL_INTENT_PATH),
+            "rulebooks": str(REAL_RULEBOOKS_PATH),
+            "universe": str(REAL_UNIVERSE_PATH),
+            "trades_history": str(REAL_TRADES_HISTORY_PATH),
+        }
 
     @app.get("/api/real/account")
     def real_account():
@@ -724,6 +871,33 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
     def real_orders_alias():
         return real_open_orders()
 
+    @app.get("/api/real/market")
+    def real_market():
+        return _real_market_state()
+
+    @app.get("/api/real/news")
+    def real_news():
+        return _real_news_state()
+
+    @app.get("/api/real/rulebooks")
+    def real_rulebooks():
+        data = read_json(REAL_RULEBOOKS_PATH, [])
+        return data if isinstance(data, list) else []
+
+    @app.get("/api/real/universe")
+    def real_universe():
+        data = read_json(REAL_UNIVERSE_PATH, {})
+        if isinstance(data, dict) and data:
+            data = dict(data)
+            data.setdefault("isolated", True)
+            data.setdefault("state_path", str(REAL_UNIVERSE_PATH))
+            return data
+        return {"count": 0, "items": [], "isolated": True, "state_path": str(REAL_UNIVERSE_PATH), "note": "실거래 대시보드 전용 유니버스 파일이 아직 없습니다."}
+
+    @app.get("/api/real/candles/{ticker}")
+    def real_candles(ticker: str, interval: str = "1d", period: str | None = None):
+        return base_module.live_candles(ticker=ticker, interval=interval, period=period)
+
     @app.get("/api/real/equity_curve")
     def real_equity_curve():
         acct = real_account()
@@ -732,24 +906,11 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
 
     @app.get("/api/real/trades_history")
     def real_trades_history():
-        return {
-            "stats": {
-                "total_trades": 0,
-                "wins": 0,
-                "losses": 0,
-                "win_rate": 0,
-                "total_pnl": 0,
-                "avg_win_pct": 0,
-                "avg_loss_pct": 0,
-            },
-            "trades": [],
-            "account_source": "alpaca_live",
-            "note": "real dashboard trade history API is separated; broker historical fills are not merged yet",
-        }
+        return _real_trades_history()
 
     @app.get("/api/real/central_candidates")
     def real_central_candidates(include_blocked: bool = False):
-        return _candidate_state_for_real(base_module, include_blocked=include_blocked)
+        return _real_candidate_state(include_blocked=include_blocked)
 
     @app.get("/api/real/manual_buy_intents")
     def real_manual_buy_intents():
@@ -758,7 +919,7 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
     @app.post("/api/real/manual_buy_intent")
     def real_manual_buy_intent(req: RealBuyIntentRequest):
         try:
-            row = _create_real_buy_intent(base_module, req)
+            row = _create_real_buy_intent(req)
             return {"ok": True, "intent": row, "execution_mode": row.get("execution_mode")}
         except (ValueError, BrokerError) as exc:
             raise HTTPException(status_code=400, detail=str(exc))

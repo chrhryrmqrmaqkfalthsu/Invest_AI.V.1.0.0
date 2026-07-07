@@ -85,6 +85,7 @@ class RealSellIntentRequest(BaseModel):
 class RealSlotBuyRequest(BaseModel):
     slot: int | None = None
     candidate_id: str | None = None
+    notional: float | None = None
     note: str = ""
     source: str = "dashboard_real_slots"
 
@@ -810,6 +811,7 @@ def _mark_real_slot_manual_buy(req: RealSlotBuyRequest) -> dict[str, Any]:
         "slot_no": selected.get("slot_no") or selected.get("slot"),
         "note": req.note or "dashboard-real manual buy",
         "source": req.source or "dashboard_real_slots",
+        "notional": req.notional,
         "status": "open",
         "snapshot": selected,
     }
@@ -826,56 +828,133 @@ def _real_slot_overlay_js() -> str:
 (function(){
   if(window.KM_REAL_SLOT_OVERLAY_INSTALLED) return;
   window.KM_REAL_SLOT_OVERLAY_INSTALLED = true;
-  function esc(v){return String(v??'').replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];});}
+  function esc(v){return String(v??'').replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch];});}
   function num(v){const n=Number(v); return Number.isFinite(n)?n:null;}
   function fmt(n,d=2){n=num(n); return n==null?'—':n.toFixed(d);}
+  function money(n){n=num(n); return n==null?'':n.toLocaleString(undefined,{maximumFractionDigits:0});}
   function tag(v){return v?`<span class="tag">${esc(v)}</span>`:'';}
+  function byCid(cid){return (window.slotData||[]).find(x=>String(x.candidate_id||'')===String(cid||''));}
+  function defaultNotional(){
+    try{
+      const acct=window.accountData||window.acctData||{};
+      const cash=num(acct.cash);
+      if(cash!=null && cash>0) return Math.max(1, Math.floor(Math.min(100, cash/8)));
+    }catch(e){}
+    return 100;
+  }
+  async function markSlotBuy(cid, notional, slot){
+    const r=await fetch(`${API}/api/real/live_slot_buy`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({candidate_id:cid, slot:slot||null, notional:notional, source:'dashboard-real-detail', note:`dashboard-real notional ${notional}`})
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok || d.ok===false) throw new Error(d.detail||d.reason||`HTTP ${r.status}`);
+    return d;
+  }
+  async function handleBuy(cid, slot){
+    const s=byCid(cid) || {};
+    const input=document.getElementById('real-slot-buy-amount') || document.querySelector(`.slot-buy-amount[data-candidate-id="${CSS.escape(cid)}"]`);
+    const amount=num(input && input.value);
+    if(amount==null || amount<=0){
+      if(typeof toast==='function') toast('매수 금액 필요', '얼마치 살지 달러 금액을 입력하세요', 'warn'); else alert('매수 금액을 입력하세요');
+      if(input) input.focus();
+      return;
+    }
+    const ticker=s.ticker||cid;
+    if(!confirm(`${ticker} 후보를 $${money(amount)} 매수 대상으로 선택하고 슬롯에서 제외할까요?\n\n이 버튼은 후보 상태 기록/제외용입니다. 실제 주문은 사용하는 매매 화면/브로커에서 별도로 확인하세요.`)) return;
+    document.querySelectorAll(`[data-candidate-id="${CSS.escape(cid)}"].slot-buy-real, .slot-buy-real[data-candidate-id="${CSS.escape(cid)}"]`).forEach(b=>{b.disabled=true; b.textContent='처리 중…';});
+    try{
+      await markSlotBuy(cid, amount, slot);
+      if(typeof toast==='function') toast('매수 후보 선택 완료', `${ticker} · $${money(amount)} · 슬롯 재갱신`, 'good');
+      if(typeof loadSlots==='function') await loadSlots();
+      if(typeof closeDetail==='function') closeDetail();
+    }catch(e){
+      if(typeof toast==='function') toast('매수 후보 처리 실패', String(e.message||e), 'warn'); else alert(String(e.message||e));
+      document.querySelectorAll(`.slot-buy-real[data-candidate-id="${CSS.escape(cid)}"]`).forEach(b=>{b.disabled=false; b.textContent='매수 선택';});
+    }
+  }
+  window.openRealCandidateDetail = async function(candidateId){
+    const s=byCid(candidateId);
+    if(!s) return;
+    const ticker=String(s.ticker||'').toUpperCase();
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-slots').classList.add('active');
+    document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+    const nav=document.querySelectorAll('.nav button')[1]; if(nav) nav.classList.add('active');
+    document.getElementById('slot-list-view').style.display='none';
+    document.getElementById('slot-detail-view').style.display='block';
+    if(window.chart) chart.resize(document.getElementById('chart').clientWidth, 440);
+    document.querySelectorAll('.tf').forEach(b=>b.classList.toggle('active', b.dataset.tf==='1d'));
+    if(typeof drawChart==='function') await drawChart(ticker, '1d');
+    renderRealCandidateDetail(s);
+  };
+  function renderRealCandidateDetail(s){
+    const ticker=String(s.ticker||'').toUpperCase();
+    const amount=defaultNotional();
+    const title=document.getElementById('detail-title');
+    if(title) title.textContent=`${ticker} — 매수 후보 차트`;
+    const kv=document.getElementById('detail-kv');
+    if(kv){
+      kv.innerHTML=`
+        <div class="kv"><span>현재가</span><span>${fmt(s.price ?? s.current_price,2)}</span></div>
+        <div class="kv"><span>final_score</span><span style="color:var(--up)">${fmt(s.final_score,3)}</span></div>
+        <div class="kv"><span>threshold</span><span>${fmt(s.threshold,3)}</span></div>
+        <div class="kv"><span>ratio</span><span>${fmt(s.ratio,3)}</span></div>
+        <div class="kv"><span>vol_group</span><span>${esc(s.vol_group||'—')}</span></div>
+        <div class="kv"><span>게이트</span><span>${esc(s.gate_status||'—')}</span></div>
+        <div class="kv"><span>EQ</span><span class="${s.entry_quality_allow?'univ-pos':'univ-neg'}">${esc(s.entry_quality_label||'—')}</span></div>
+        <div class="kv"><span>stage</span><span>${esc(s.stage||'—')}</span></div>
+        <div class="kv"><span>candidate</span><span style="font-size:10px;word-break:break-all">${esc(s.candidate_id||'')}</span></div>
+        <div class="kv"><span>시장 점수</span><span>${fmt(s.market_score,2)}</span></div>
+        <div class="kv"><span>섹터 점수</span><span>${fmt(s.sector_score,2)}</span></div>
+        <div class="kv"><span>VIX</span><span>${fmt(s.vix_level,2)}</span></div>
+        <div class="kv"><span>후순위</span><span>${s.down_deprioritize?'SPY DOWN + HIGH_VOL':'아님'}</span></div>
+        <div class="kv" style="grid-column:1/-1;display:block;background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.35);">
+          <div style="font-size:11px;color:var(--dim);margin-bottom:6px;">실매수 금액</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="real-slot-buy-amount" class="manual-buy-amount" type="number" min="1" step="50" value="${amount}" style="width:140px;" />
+            <button class="slot-buy-real" data-candidate-id="${esc(s.candidate_id)}" data-slot="${esc(s.slot||s.slot_no||'')}">매수 선택</button>
+          </div>
+          <div style="font-size:11px;color:var(--dim);margin-top:6px;">후보 선택 시 보유/제외 목록에 기록되고 8칸이 전면 재갱신됩니다.</div>
+        </div>`;
+    }
+    const comm=document.getElementById('commentary');
+    if(comm){
+      const reasons=(s.reasons||[]).map(r=>`<li>${esc(r)}</li>`).join('');
+      comm.innerHTML=`<div class="comment"><b>매수 후보</b><br>${ticker} · score ${fmt(s.final_score,3)} · ${esc(s.vol_group||'')}</div>${reasons?`<ul style="margin:10px 0 0 18px;color:var(--dim);font-size:12px;">${reasons}</ul>`:''}`;
+    }
+    const omen=document.getElementById('sellomen-strip');
+    if(omen) omen.innerHTML='';
+    document.querySelectorAll('.slot-buy-real[data-candidate-id]').forEach(btn=>{
+      btn.onclick=function(ev){ev.stopPropagation(); handleBuy(btn.dataset.candidateId, Number(btn.dataset.slot||0));};
+    });
+  }
   const oldSlotCard = window.slotCard;
   window.slotCard = function(s, onclick){
     if(!s || s.empty) return `<div class="mslot empty">슬롯 ${esc((s&&s.slot)||'')}<br>대기중</div>`;
     if(s.slot_type !== 'buy_candidate') return oldSlotCard ? oldSlotCard(s, onclick) : `<div class="mslot">${esc(s.ticker||'')}</div>`;
-    const reasons=(s.reasons||[]).slice(0,3).map(esc).join(' · ');
+    const reasons=(s.reasons||[]).slice(0,2).map(esc).join(' · ');
     const eq=s.entry_quality_label || (s.entry_quality_allow?'ALLOW':'CHECK');
     const eqCls=s.entry_quality_allow===true?'univ-pos':(s.entry_quality_allow===false?'univ-neg':'');
     const deprio=s.down_deprioritize?'<span class="tag" style="border-color:#f59e0b;color:#fbbf24;">DOWN 후순위</span>':'';
-    return `<div class="mslot real-buy-slot" data-candidate-id="${esc(s.candidate_id)}">
+    return `<div class="mslot real-buy-slot" onclick="openRealCandidateDetail('${esc(s.candidate_id)}')" data-candidate-id="${esc(s.candidate_id)}">
       <div class="mslot-top"><span class="mslot-tk">${esc(s.ticker)}</span><span class="mslot-pnl" style="color:var(--up)">S ${fmt(s.final_score,2)}</span></div>
-      <div class="mslot-sub">가격 ${fmt(s.price ?? s.current_price,2)} · 기준 ${fmt(s.threshold,2)} · ratio ${fmt(s.ratio,2)}</div>
+      <div class="mslot-sub">현재 ${fmt(s.price ?? s.current_price,2)} · 기준 ${fmt(s.threshold,2)} · ratio ${fmt(s.ratio,2)}</div>
       <div class="mslot-sub">${tag(s.vol_group)} ${tag(s.stage)} ${tag(s.gate_status)} ${deprio}</div>
       <div class="mslot-sub ${eqCls}">EQ ${esc(eq)}${s.entry_quality_score!=null?' · Q'+fmt(s.entry_quality_score,0):''}</div>
       ${reasons?`<div class="mslot-sub">${reasons}</div>`:''}
-      <button class="slot-buy-real" data-candidate-id="${esc(s.candidate_id)}" data-slot="${esc(s.slot||s.slot_no||'')}">매수 선택</button>
+      <div class="mslot-sub" style="margin-top:8px;color:var(--accent);font-weight:800;">클릭 → 차트/매수금액</div>
     </div>`;
   };
-  const oldRenderSlots = window.renderSlots;
   window.renderSlots = function(){
     const mini=document.getElementById('mini-slots'), full=document.getElementById('slots-full');
     if(mini) mini.innerHTML=(window.slotData||[]).map(s=>window.slotCard(s,'openDetail')).join('');
     if(full) full.innerHTML=(window.slotData||[]).map(s=>window.slotCard(s,'openDetail')).join('');
-    document.querySelectorAll('.slot-buy-real[data-candidate-id]').forEach(btn=>{
-      btn.onclick=async function(ev){
-        ev.stopPropagation();
-        const cid=btn.dataset.candidateId, slot=Number(btn.dataset.slot||0);
-        if(!cid) return;
-        if(!confirm(`${cid} 후보를 직접 매수 처리하고 슬롯에서 제외할까요?`)) return;
-        btn.disabled=true; btn.textContent='처리 중…';
-        try{
-          const r=await fetch(`${API}/api/real/live_slot_buy`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({candidate_id:cid, slot:slot, source:'dashboard-real'})});
-          const d=await r.json().catch(()=>({}));
-          if(!r.ok || d.ok===false) throw new Error(d.detail||d.reason||`HTTP ${r.status}`);
-          if(typeof toast==='function') toast('후보 제외 완료', `${cid} 매수 처리 · 슬롯 재갱신`, 'good');
-          if(typeof loadSlots==='function') await loadSlots();
-        }catch(e){
-          btn.disabled=false; btn.textContent='매수 선택';
-          if(typeof toast==='function') toast('매수 처리 실패', String(e.message||e), 'warn'); else alert(String(e.message||e));
-        }
-      };
-    });
     document.querySelectorAll('.slot-sell[data-sell-ticker]').forEach(btn=>{ if(typeof requestSell==='function') btn.onclick=(ev)=>{ ev.stopPropagation(); requestSell(btn.dataset.sellTicker); }; });
   };
 })();
 """
-
 
 def _real_buy_amount_overlay_js() -> str:
     return r"""
@@ -983,11 +1062,11 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v1"></script>\n'
+    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v2"></script>\n'
     if "real-buy-amount-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     elif "real-slot-overlay.js" not in html:
-        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v1"></script>\n</body>')
+        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v2"></script>\n</body>')
     return HTMLResponse(content=html, media_type="text/html")
 
 

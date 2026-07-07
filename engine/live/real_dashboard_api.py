@@ -34,6 +34,7 @@ REAL_BUY_CANDIDATES_PATH = Path("data/_system/real_dashboard_buy_candidates.json
 REAL_BUY_INTENT_PATH = Path("data/_system/real_dashboard_manual_buy_intent.json")
 REAL_SELL_INTENT_PATH = Path("data/_system/real_dashboard_manual_sell_intent.json")
 REAL_MARKET_STATE_PATH = Path("data/_system/real_dashboard_market_state.json")
+LIVE_MARKET_STATE_PATH = Path("data/_system/market_state.json")
 REAL_NEWS_STATE_PATH = Path("data/_system/real_dashboard_news_state.json")
 REAL_RULEBOOKS_PATH = Path("data/_system/real_dashboard_rulebooks.json")
 REAL_UNIVERSE_PATH = Path("data/_system/real_dashboard_universe.json")
@@ -403,15 +404,46 @@ def _default_real_market_state() -> dict[str, Any]:
     }
 
 
+def _market_state_effectively_empty(data: dict[str, Any]) -> bool:
+    if not isinstance(data, dict) or not data:
+        return True
+    return (
+        data.get("score") is None
+        and data.get("vix_level") is None
+        and not data.get("risk_events")
+        and not data.get("benefit_events")
+        and not data.get("active_events")
+        and not data.get("sector_strength")
+    )
+
+
+def _live_market_state_fallback() -> dict[str, Any]:
+    live = read_json(LIVE_MARKET_STATE_PATH, {})
+    if not isinstance(live, dict) or not live:
+        return _default_real_market_state()
+    out = dict(_default_real_market_state())
+    out.update(live)
+    out["source"] = "live_market_state_fallback"
+    out["isolated"] = True
+    out["state_path"] = str(REAL_MARKET_STATE_PATH)
+    out["fallback_source_path"] = str(LIVE_MARKET_STATE_PATH)
+    out["note"] = "real_dashboard_market_state.json이 비어 있어 live market_state.json을 읽기 전용 fallback으로 표시합니다."
+    return out
+
+
 def _real_market_state() -> dict[str, Any]:
     data = read_json(REAL_MARKET_STATE_PATH, {})
     if not isinstance(data, dict) or not data:
-        return _default_real_market_state()
+        return _live_market_state_fallback()
     out = dict(_default_real_market_state())
     out.update(data)
     out["source"] = data.get("source") or "real_dashboard_market_state"
     out["isolated"] = True
     out["state_path"] = str(REAL_MARKET_STATE_PATH)
+    if _market_state_effectively_empty(out):
+        fallback = _live_market_state_fallback()
+        fallback["real_state_empty"] = True
+        return fallback
     return out
 
 
@@ -886,6 +918,89 @@ def _real_slot_overlay_js() -> str:
     renderCandidateSlots();
   }
   window.loadCandidateSlots = loadCandidateSlots;
+  function arrangeRealHome(){
+    const home=document.getElementById('page-home');
+    const grid=home && home.querySelector('.home-grid');
+    const hold=document.getElementById('mini-slots') && document.getElementById('mini-slots').parentElement;
+    const cand=document.getElementById('candidates-panel');
+    const market=document.getElementById('home-events') && document.getElementById('home-events').parentElement;
+    if(!home || !hold || !cand || !market) return;
+    let stack=document.getElementById('real-home-stack');
+    if(!stack){
+      stack=document.createElement('div');
+      stack.id='real-home-stack';
+      stack.style.display='flex';
+      stack.style.flexDirection='column';
+      stack.style.gap='16px';
+      stack.style.marginTop='0';
+      const equity=document.getElementById('equity-chart');
+      const equityPanel=equity ? equity.closest('.panel') : null;
+      if(equityPanel && equityPanel.parentElement) equityPanel.parentElement.insertBefore(stack, equityPanel.nextSibling);
+      else home.appendChild(stack);
+    }
+    const holdTitle=hold.querySelector('h3');
+    if(holdTitle) holdTitle.textContent='📦 보유 슬롯';
+    const candSummary=cand.querySelector('summary span:first-child');
+    if(candSummary) candSummary.textContent='🛒 매수 대기 후보 슬롯 (8)';
+    cand.open=true;
+    if(hold.parentElement!==stack) stack.appendChild(hold);
+    if(cand.parentElement!==stack) stack.appendChild(cand);
+    if(market.parentElement!==stack) stack.appendChild(market);
+    if(grid && grid.parentElement) grid.remove();
+  }
+  function holdingSlotCard(s, prefix){
+    const ticker=esc(String(s.ticker||'').toUpperCase());
+    const pnl=num(s.pnl_pct);
+    const pnlTxt=pnl==null?'—':`${pnl>=0?'+':''}${pnl.toFixed(2)}%`;
+    const pnlColor=pnl==null?'var(--dim)':(pnl>=0?'var(--up)':'var(--down)');
+    const invested=(num(s.entry_price)||0)*(num(s.shares)||0);
+    const chartId=`${prefix}-holding-chart-${ticker}`;
+    return `<div class="mslot real-holding-slot" onclick="openDetail('${ticker}')" style="min-height:265px;padding:14px;">
+      <div class="mslot-top"><span class="mslot-tk">${ticker}</span><span class="mslot-pnl" style="color:${pnlColor}">${pnlTxt}</span></div>
+      <div class="mslot-sub">현재 ${fmt(s.current_price,2)} · 진입 ${fmt(s.entry_price,2)} · 수량 ${fmt(s.shares,4)}</div>
+      <div class="mslot-sub">투입 ${invested?('$'+money(invested)):'—'} · ${esc(s.exit_strategy||'')} · 최대 ${esc(s.max_holding_days||'—')}일</div>
+      <div id="${chartId}" class="real-holding-mini-chart" style="height:165px;margin-top:10px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0b1019;"></div>
+      <div class="mslot-sub" style="margin-top:8px;color:var(--accent);font-weight:800;">클릭 → 보유 상세</div>
+    </div>`;
+  }
+  async function drawHoldingMiniCharts(prefix, holdings){
+    window._realHoldMiniCharts = window._realHoldMiniCharts || {};
+    for(const s of holdings){
+      const ticker=String(s.ticker||'').toUpperCase();
+      if(!ticker) continue;
+      const id=`${prefix}-holding-chart-${ticker}`;
+      const el=document.getElementById(id);
+      if(!el || !window.LightweightCharts) continue;
+      try{ if(window._realHoldMiniCharts[id]){ window._realHoldMiniCharts[id].remove(); delete window._realHoldMiniCharts[id]; } }catch(e){}
+      try{
+        const r=await fetch(`${API}/api/real/candles/${ticker}?interval=1d`);
+        const candles=await r.json();
+        if(!Array.isArray(candles) || !candles.length){ el.innerHTML='<div class="loading">일봉 없음</div>'; continue; }
+        const chart=LightweightCharts.createChart(el,{layout:{background:{color:'#0b1019'},textColor:'#5f6e85'},grid:{vertLines:{color:'#151d2b'},horzLines:{color:'#151d2b'}},timeScale:{borderColor:'#1c2535'},rightPriceScale:{borderColor:'#1c2535'},width:Math.max(el.clientWidth,240),height:165});
+        const ser=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',wickUpColor:'#26d07c',wickDownColor:'#ff4d6a',borderVisible:false});
+        ser.setData(candles.slice(-90));
+        chart.timeScale().fitContent();
+        window._realHoldMiniCharts[id]=chart;
+      }catch(e){ el.innerHTML='<div class="loading">차트 오류</div>'; }
+    }
+  }
+  function renderRealHoldingSlots(){
+    arrangeRealHome();
+    const holdings=(window.slotData||[]).filter(s=>s && !s.empty);
+    const gridCols=holdings.length<=1?'1fr':(holdings.length===2?'repeat(2, minmax(0, 1fr))':'repeat(auto-fit, minmax(280px, 1fr))');
+    const empty='<div class="panel" style="padding:26px;text-align:center;color:var(--dim);">현재 보유 슬롯 없음<br><span style="font-size:11px;">빈 슬롯 8칸은 표시하지 않습니다.</span></div>';
+    [['mini-slots','home'],['slots-full','full']].forEach(([id,prefix])=>{
+      const el=document.getElementById(id);
+      if(!el) return;
+      el.style.display='grid';
+      el.style.gridTemplateColumns=gridCols;
+      el.style.gap='12px';
+      el.innerHTML=holdings.length ? holdings.map(s=>holdingSlotCard(s,prefix)).join('') : empty;
+      if(holdings.length) setTimeout(()=>drawHoldingMiniCharts(prefix, holdings), 50);
+    });
+  }
+  const oldRenderSlots = window.renderSlots;
+  window.renderSlots = function(){ renderRealHoldingSlots(); };
   async function markSlotBuy(cid, notional, slot){
     const r=await fetch(`${API}/api/real/live_slot_buy`,{
       method:'POST',
@@ -1112,11 +1227,11 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v3"></script>\n'
+    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v4"></script>\n'
     if "real-buy-amount-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     elif "real-slot-overlay.js" not in html:
-        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v3"></script>\n</body>')
+        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v4"></script>\n</body>')
     return HTMLResponse(content=html, media_type="text/html")
 
 

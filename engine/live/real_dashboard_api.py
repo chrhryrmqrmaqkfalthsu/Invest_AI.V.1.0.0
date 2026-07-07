@@ -1316,15 +1316,25 @@ def _real_slot_overlay_js() -> str:
     return Math.floor(t/1000);
   }
   function findSignalCandle(candles, s, interval){
-    if(!Array.isArray(candles) || !candles.length || !s || !s.first_signal_at) return null;
+    if(!Array.isArray(candles) || !candles.length || !s || !s.first_signal_at) return {hit:null, reason:'no_candles'};
     const epoch=candidateSignalEpochSec(s);
-    if(epoch==null) return null;
+    if(epoch==null) return {hit:null, reason:'bad_signal_time'};
     const intraday = !['1d','1wk','1mo'].includes(interval);
+    const latest=candles[candles.length-1];
     if(intraday){
-      return candles.find(c=>Number(c.time)>=epoch) || candles[candles.length-1];
+      const latestEpoch=Number(latest && latest.time);
+      if(Number.isFinite(latestEpoch) && latestEpoch < epoch){
+        return {hit:null, reason:'signal_after_latest_bar', latest};
+      }
+      const hit=candles.find(c=>Number(c.time)>=epoch) || null;
+      return {hit, reason:hit?'ok':'not_found', latest};
     }
     const day=new Date(epoch*1000).toISOString().slice(0,10);
-    return candles.find(c=>String(c.time)>=day) || candles[candles.length-1];
+    if(String(latest && latest.time || '') < day){
+      return {hit:null, reason:'signal_after_latest_bar', latest};
+    }
+    const hit=candles.find(c=>String(c.time)>=day) || null;
+    return {hit, reason:hit?'ok':'not_found', latest};
   }
   function clearRealDetailSignalOverlay(){
     try{
@@ -1361,12 +1371,14 @@ def _real_slot_overlay_js() -> str:
     const update=()=>{
       try{
         const x=chart.timeScale().timeToCoordinate(hit.time);
-        if(x==null || !Number.isFinite(x)){
+        const w=wrap.clientWidth || 0;
+        if(x==null || !Number.isFinite(x) || x < 0 || x > w){
           line.style.display='none'; label.style.display='none'; return;
         }
         line.style.display='block'; label.style.display='block';
+        const lx=Math.min(Math.max(Math.round(x), 95), Math.max(95, w-95));
         line.style.left=`${Math.round(x)}px`;
-        label.style.left=`${Math.round(x)}px`;
+        label.style.left=`${lx}px`;
       }catch(e){}
     };
     update();
@@ -1381,12 +1393,17 @@ def _real_slot_overlay_js() -> str:
     }
     let candles=[];
     try{ candles=await (await fetch(`${API}/api/real/candles/${ticker}?interval=${interval}`, {cache:'no-store'})).json(); }catch(e){}
-    const hit=findSignalCandle(candles, s, interval);
-    if(!hit) return;
+    const found=findSignalCandle(candles, s, interval);
+    const hit=found && found.hit;
     clearRealDetailSignalOverlay();
     try{
-      series.setMarkers([{time:hit.time, position:'aboveBar', color:'#f5c451', shape:'circle', text:'최초 신호'}]);
+      const intraday = !['1d','1wk','1mo'].includes(interval);
+      chart.applyOptions({
+        localization:{timeFormatter:(time)=>kstTime(time,{mode:'dateTime'})},
+        timeScale:{timeVisible:intraday, secondsVisible:false, borderColor:'#1c2535', tickMarkFormatter:(time)=>kstTime(time)}
+      });
     }catch(e){}
+    try{ series.setMarkers(hit ? [{time:hit.time, position:'aboveBar', color:'#f5c451', shape:'circle', text:'최초 신호'}] : []); }catch(e){}
     window._realDetailSignalLines=[];
     try{
       if(s.first_signal_price){
@@ -1396,7 +1413,7 @@ def _real_slot_overlay_js() -> str:
         window._realDetailSignalLines.push(series.createPriceLine({price:Number(s.price ?? s.current_price),color:'#c9d4e5',lineWidth:1,lineStyle:0,axisLabelVisible:true,title:'현재'}));
       }
     }catch(e){}
-    renderRealDetailSignalOverlay(hit, s);
+    if(hit) renderRealDetailSignalOverlay(hit, s);
     const comm=document.getElementById('commentary');
     if(comm){
       let note=document.getElementById('real-signal-detail-note');
@@ -1407,7 +1424,14 @@ def _real_slot_overlay_js() -> str:
         note.style.marginTop='10px';
         comm.appendChild(note);
       }
-      note.innerHTML=`<b>상세 차트 신호 기준</b><br>${esc(interval)} 봉 기준 최초 신호 표시: ${esc(kstTime(s.first_signal_at,{mode:'dateTime'}))} KST · 신호가 ${fmt(s.first_signal_price,2)} · 표시봉 ${esc(kstTime(hit.time,{mode:'dateTime'}))} KST`;
+      if(hit){
+        note.innerHTML=`<b>상세 차트 신호 기준</b><br>${esc(interval)} 봉 기준 최초 신호 표시: ${esc(kstTime(s.first_signal_at,{mode:'dateTime'}))} KST · 신호가 ${fmt(s.first_signal_price,2)} · 표시봉 ${esc(kstTime(hit.time,{mode:'dateTime'}))} KST`;
+      }else if(found && found.reason==='signal_after_latest_bar'){
+        const latest=found.latest && found.latest.time;
+        note.innerHTML=`<b>상세 차트 신호 기준</b><br><span style="color:var(--gold)">신호 이후 ${esc(interval)} 봉이 아직 없습니다.</span><br>최초 신호 ${esc(kstTime(s.first_signal_at,{mode:'dateTime'}))} KST · 최신봉 ${esc(kstTime(latest,{mode:'dateTime'}))} KST · 신호가 ${fmt(s.first_signal_price,2)}<br>세로선은 봉 데이터가 들어오면 자동 표시됩니다.`;
+      }else{
+        note.innerHTML=`<b>상세 차트 신호 기준</b><br><span style="color:var(--gold)">${esc(interval)} 봉에서 최초 신호 봉을 찾지 못했습니다.</span><br>최초 신호 ${esc(kstTime(s.first_signal_at,{mode:'dateTime'}))} KST · 신호가 ${fmt(s.first_signal_price,2)}`;
+      }
     }
   }
   const _realOldDrawChart = window.drawChart || (typeof drawChart==='function' ? drawChart : null);
@@ -1686,7 +1710,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v10"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v11"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

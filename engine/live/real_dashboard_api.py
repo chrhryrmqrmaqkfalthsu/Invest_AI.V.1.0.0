@@ -961,13 +961,13 @@ def _real_slot_overlay_js() -> str:
             <input id="real-slot-buy-amount" class="manual-buy-amount" type="number" min="1" step="50" value="${amount}" style="width:140px;" />
             <button class="slot-buy-real" data-candidate-id="${esc(s.candidate_id)}" data-slot="${esc(s.slot||s.slot_no||'')}">매수 선택</button>
           </div>
-          <div style="font-size:11px;color:var(--dim);margin-top:6px;">후보 선택 시 보유/제외 목록에 기록되고 후보 8칸이 전면 재갱신됩니다.</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:6px;">후보 선택 시 보유/제외 목록에 기록되고 매수 대기 후보 8칸이 전면 재갱신됩니다.</div>
         </div>`;
     }
     const comm=document.getElementById('commentary');
     if(comm){
       const reasons=(s.reasons||[]).map(r=>`<li>${esc(r)}</li>`).join('');
-      comm.innerHTML=`<div class="comment"><b>매수 후보 슬롯</b><br>${ticker} · score ${fmt(s.final_score,3)} · ${esc(s.vol_group||'')}</div>${reasons?`<ul style="margin:10px 0 0 18px;color:var(--dim);font-size:12px;">${reasons}</ul>`:''}`;
+      comm.innerHTML=`<div class="comment"><b>매수 대기 후보</b><br>${ticker} · score ${fmt(s.final_score,3)} · ${esc(s.vol_group||'')}</div>${reasons?`<ul style="margin:10px 0 0 18px;color:var(--dim);font-size:12px;">${reasons}</ul>`:''}`;
     }
     const omen=document.getElementById('sellomen-strip');
     if(omen) omen.innerHTML='';
@@ -1059,10 +1059,28 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
     # a window property to re-render /api/real/slots as buy-candidate cards.
     html = html.replace("let slotData=[], marketData={}, _holdingNewsEntries={};", "var slotData=[], marketData={}, _holdingNewsEntries={};")
     html = html.replace("<title>KINGMAKER</title>", "<title>KINGMAKER REAL</title>")
-    candidate_home = '\n    <div class="panel" style="margin-bottom:18px;">\n      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">\n        <h3 style="margin:0;">🛒 매수 후보 슬롯 (8)</h3>\n        <span id="real-candidate-meta" style="font-size:12px;color:var(--dim);"></span>\n      </div>\n      <div class="mini-slots" id="real-candidate-mini-slots"><div class="loading">후보 로딩...</div></div>\n    </div>\n'
     if "real-candidate-mini-slots" not in html:
-        html = html.replace('    <div class="home-grid">', candidate_home + '    <div class="home-grid">')
-        html = html.replace('      <h3>📦 슬롯 클릭 → 상세</h3>\n      <div class="mini-slots" id="slots-full"><div class="loading">로딩...</div></div>', '      <h3>🛒 매수 후보 슬롯 클릭 → 차트/매수금액</h3>\n      <div class="mini-slots" id="real-candidate-slots-full"><div class="loading">후보 로딩...</div></div>\n      <h3 style="margin-top:18px;">📦 보유 슬롯 클릭 → 상세</h3>\n      <div class="mini-slots" id="slots-full"><div class="loading">로딩...</div></div>')
+        # Reuse the existing "매수 대기 후보" panel as the one and only buy-candidate slot area.
+        # Do not add a second candidate section.
+        html = html.replace(
+            '<summary><span>🛒 매수 대기 후보</span><span id="cand-meta" style="font-size:12px;color:var(--dim);"></span></summary>',
+            '<summary><span>🛒 매수 대기 후보 슬롯 (8)</span><span id="real-candidate-meta" style="font-size:12px;color:var(--dim);"></span><span id="cand-meta" style="display:none;"></span></summary>',
+        )
+        html = html.replace(
+            """<div id="cand-list" class="cand-list">
+          <div class="cand-empty">대기 중인 후보 없음</div>
+        </div>""",
+            """<div class="mini-slots" id="real-candidate-mini-slots"><div class="loading">후보 로딩...</div></div>
+        <div id="cand-list" class="cand-list" style="display:none;"><div class="cand-empty">대기 중인 후보 없음</div></div>""",
+        )
+        html = html.replace(
+            """      <h3>📦 슬롯 클릭 → 상세</h3>
+      <div class="mini-slots" id="slots-full"><div class="loading">로딩...</div></div>""",
+            """      <h3>🛒 매수 대기 후보 클릭 → 차트/매수금액</h3>
+      <div class="mini-slots" id="real-candidate-slots-full"><div class="loading">후보 로딩...</div></div>
+      <h3 style="margin-top:18px;">📦 보유 슬롯 클릭 → 상세</h3>
+      <div class="mini-slots" id="slots-full"><div class="loading">로딩...</div></div>""",
+        )
     html = html.replace('const API="http://localhost:8001";', 'const API=window.location.origin;\nwindow.KM_DASHBOARD_MODE="real";')
     replacements = {
         "/api/live/account": "/api/real/account",

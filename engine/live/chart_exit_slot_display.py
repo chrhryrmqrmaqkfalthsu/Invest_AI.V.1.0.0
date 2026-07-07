@@ -4,7 +4,7 @@
 - broker 주문을 직접 호출하지 않는다.
 - positions.json을 수정하지 않는다.
 - chart_exit_plans.json의 active 계획이 있을 때만 /api/live/slots 게이지용
-  stop_price/target_price를 수동값으로 대체한다.
+  stop_price/target_price와 손절/익절 퍼센트 표시값을 수동값으로 대체한다.
 """
 from __future__ import annotations
 
@@ -25,12 +25,39 @@ def _num(value: Any) -> float | None:
         return None
 
 
+def _signed_num(value: Any) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        out = float(value)
+        return None if out != out else out
+    except Exception:
+        return None
+
+
 def _return_pct(entry: Any, price: Any) -> float | None:
     e = _num(entry)
     p = _num(price)
     if e is None or p is None:
         return None
     return (p / e - 1.0) * 100.0
+
+
+def _target_return_pct(plan: dict[str, Any], entry: Any, price: Any) -> float | None:
+    """화면용 익절 퍼센트. 사용자가 입력한 %가 있으면 그 값을 우선 보존한다."""
+    pct = _signed_num(plan.get("take_profit_pct"))
+    if pct is not None:
+        return abs(pct)
+    return _return_pct(entry, price)
+
+
+def _stop_return_pct(plan: dict[str, Any], entry: Any, price: Any) -> float | None:
+    """화면용 손절 퍼센트. 손절은 슬롯 게이지에서 음수로 표시되게 통일한다."""
+    pct = _signed_num(plan.get("stop_loss_pct"))
+    if pct is not None:
+        return -abs(pct)
+    ret = _return_pct(entry, price)
+    return ret if ret is None else -abs(ret)
 
 
 def _ticker(value: Any) -> str:
@@ -58,8 +85,10 @@ def _compact_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "status": plan.get("status"),
         "take_profit_price": _num(plan.get("take_profit_price")),
         "stop_loss_price": _num(plan.get("stop_loss_price")),
-        "take_profit_pct": plan.get("take_profit_pct"),
-        "stop_loss_pct": plan.get("stop_loss_pct"),
+        "take_profit_pct": _signed_num(plan.get("take_profit_pct")),
+        "stop_loss_pct": _signed_num(plan.get("stop_loss_pct")),
+        "display_take_profit_pct": abs(_signed_num(plan.get("take_profit_pct")) or 0.0) if _signed_num(plan.get("take_profit_pct")) is not None else None,
+        "display_stop_loss_pct": -abs(_signed_num(plan.get("stop_loss_pct")) or 0.0) if _signed_num(plan.get("stop_loss_pct")) is not None else None,
         "take_profit_basis": plan.get("take_profit_basis"),
         "stop_loss_basis": plan.get("stop_loss_basis"),
         "updated_at": plan.get("updated_at"),
@@ -72,6 +101,7 @@ def apply_chart_exit_display_override(row: dict[str, Any], plans: dict[str, Any]
 
     슬롯 게이지는 기존 dashboard_home.html이 row.stop_price/row.target_price를 기준으로
     계산하므로, active chart_exit_plan이 있으면 응답 row에서만 해당 값을 교체한다.
+    작은 손절/익절 퍼센트 표시도 같은 수동 계획 기준으로 내려준다.
     실제 매매/청산 판단 파일인 positions.json은 건드리지 않는다.
     """
     if not isinstance(row, dict) or row.get("empty"):
@@ -89,16 +119,24 @@ def apply_chart_exit_display_override(row: dict[str, Any], plans: dict[str, Any]
     out = dict(row)
     out.setdefault("rulebook_target_price", row.get("target_price"))
     out.setdefault("rulebook_stop_price", row.get("stop_price"))
+    out.setdefault("rulebook_target_return_pct", row.get("target_return_pct"))
+    out.setdefault("rulebook_stop_return_pct", row.get("stop_return_pct"))
     out["manual_exit_plan_active"] = True
     out["display_exit_plan_source"] = "chart_exit_plan"
     out["chart_exit_plan"] = _compact_plan(plan)
 
     if tp is not None:
+        target_pct = _target_return_pct(plan, out.get("entry_price"), tp)
         out["target_price"] = tp
-        out["target_return_pct"] = _return_pct(out.get("entry_price"), tp)
+        out["target_return_pct"] = target_pct
+        out["display_target_return_pct"] = target_pct
+        out["manual_take_profit_pct"] = target_pct
     if sl is not None:
+        stop_pct = _stop_return_pct(plan, out.get("entry_price"), sl)
         out["stop_price"] = sl
-        out["stop_return_pct"] = _return_pct(out.get("entry_price"), sl)
+        out["stop_return_pct"] = stop_pct
+        out["display_stop_return_pct"] = stop_pct
+        out["manual_stop_loss_pct"] = stop_pct
     return out
 
 

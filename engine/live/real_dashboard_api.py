@@ -747,6 +747,20 @@ def _candidate_slot_to_dashboard(slot: dict[str, Any], idx: int) -> dict[str, An
         "entry_quality_label": slot.get("entry_quality_label"),
         "entry_quality_score": slot.get("entry_quality_score"),
         "entry_quality_primary_reason": slot.get("entry_quality_primary_reason"),
+        "win_rate": _safe_float(slot.get("win_rate"), None),
+        "expectancy_pct": _safe_float(slot.get("expectancy_pct"), None),
+        "mdd_pct": _safe_float(slot.get("mdd_pct"), None),
+        "fitness": _safe_float(slot.get("fitness"), None),
+        "trade_count": _safe_float(slot.get("trade_count"), None),
+        "first_signal_at": slot.get("first_signal_at"),
+        "first_signal_price": _safe_float(slot.get("first_signal_price"), None),
+        "first_final_score": _safe_float(slot.get("first_final_score"), None),
+        "last_seen_at": slot.get("last_seen_at"),
+        "max_holding_days": slot.get("max_holding_days"),
+        "exit_strategy_name": slot.get("exit_strategy"),
+        "stop_loss_atr": _safe_float(slot.get("stop_loss_atr"), None),
+        "take_profit_atr": _safe_float(slot.get("take_profit_atr"), None),
+        "trailing_atr": _safe_float(slot.get("trailing_atr"), None),
         "market_score": _safe_float(slot.get("market_score"), None),
         "sector_score": _safe_float(slot.get("sector_score"), None),
         "vix_level": _safe_float(slot.get("vix_level"), None),
@@ -875,32 +889,100 @@ def _real_slot_overlay_js() -> str:
     }catch(e){}
     return 100;
   }
+  function elapsedSince(iso){
+    if(!iso) return '—';
+    const t=new Date(iso).getTime();
+    if(!Number.isFinite(t)) return '—';
+    const mins=Math.max(0, Math.floor((Date.now()-t)/60000));
+    const h=Math.floor(mins/60), m=mins%60;
+    if(h>=24){ const d=Math.floor(h/24); return `+${d}일 ${h%24}시간`; }
+    return `+${h}시간 ${m}분`;
+  }
+  function priceDeltaText(cur, first){
+    cur=num(cur); first=num(first);
+    if(cur==null || first==null || first<=0) return {txt:'—', cls:''};
+    const d=cur-first, p=d/first*100;
+    return {txt:`${d>=0?'+':''}$${d.toFixed(2)} / ${p>=0?'+':''}${p.toFixed(2)}%`, cls:d>=0?'univ-pos':'univ-neg'};
+  }
+  function reasonList(s){
+    const rs=(s.reasons||[]).slice(0,5);
+    if(!rs.length && s.entry_quality_primary_reason) rs.push(s.entry_quality_primary_reason);
+    return rs.length ? rs.map(r=>`<span class="tag">${esc(r)}</span>`).join(' ') : '<span style="color:var(--dim)">—</span>';
+  }
   function candidateSlotCard(s){
-    if(!s || s.empty) return `<div class="mslot empty">후보 ${esc((s&&s.slot)||'')}<br>대기중</div>`;
-    const reasons=(s.reasons||[]).slice(0,2).map(esc).join(' · ');
+    if(!s || s.empty) return `<div class="mslot empty" style="cursor:default;">후보 ${esc((s&&s.slot)||'')}<br>대기중</div>`;
     const eq=s.entry_quality_label || (s.entry_quality_allow?'ALLOW':'CHECK');
     const eqCls=s.entry_quality_allow===true?'univ-pos':(s.entry_quality_allow===false?'univ-neg':'');
     const deprio=s.down_deprioritize?'<span class="tag" style="border-color:#f59e0b;color:#fbbf24;">DOWN 후순위</span>':'';
-    return `<div class="mslot real-buy-slot" onclick="openRealCandidateDetail('${esc(s.candidate_id)}')" data-candidate-id="${esc(s.candidate_id)}">
-      <div class="mslot-top"><span class="mslot-tk">${esc(s.ticker)}</span><span class="mslot-pnl" style="color:var(--up)">S ${fmt(s.final_score,2)}</span></div>
-      <div class="mslot-sub">현재 ${fmt(s.price ?? s.current_price,2)} · 기준 ${fmt(s.threshold,2)} · ratio ${fmt(s.ratio,2)}</div>
-      <div class="mslot-sub">${tag(s.vol_group)} ${tag(s.stage)} ${tag(s.gate_status)} ${deprio}</div>
-      <div class="mslot-sub ${eqCls}">EQ ${esc(eq)}${s.entry_quality_score!=null?' · Q'+fmt(s.entry_quality_score,0):''}</div>
-      ${reasons?`<div class="mslot-sub">${reasons}</div>`:''}
-      <div class="mslot-sub" style="margin-top:8px;color:var(--accent);font-weight:800;">클릭 → 차트/매수금액</div>
+    const cid=String(s.candidate_id||'');
+    const safeCid=cid.replace(/[^A-Za-z0-9_-]/g,'_');
+    const chartId=`cand-mini-chart-${safeCid}`;
+    const delta=priceDeltaText(s.current_price ?? s.price, s.first_signal_price);
+    return `<div class="mslot real-buy-slot real-candidate-row" data-candidate-id="${esc(cid)}" style="display:grid;grid-template-columns:minmax(300px,42%) minmax(0,1fr);gap:14px;align-items:stretch;min-height:250px;padding:14px;cursor:pointer;" onclick="openRealCandidateDetail('${esc(cid)}')">
+      <div>
+        <div id="${chartId}" class="real-candidate-mini-chart" style="height:220px;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0b1019;"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;min-width:0;">
+        <div class="mslot-top"><span class="mslot-tk">${esc(s.ticker)}</span><span class="mslot-pnl" style="color:var(--up)">S ${fmt(s.final_score,2)}</span></div>
+        <div class="mslot-sub">현재 ${fmt(s.price ?? s.current_price,2)} · 최초신호 ${fmt(s.first_signal_price,2)} · <span class="${delta.cls}">${delta.txt}</span></div>
+        <div class="mslot-sub">최초 신호 후 <b style="color:var(--txt)">${elapsedSince(s.first_signal_at)}</b> · 기준 ${fmt(s.threshold,2)} · ratio ${fmt(s.ratio,2)}</div>
+        <div class="mslot-sub">${tag(s.vol_group)} ${tag(s.stage)} ${tag(s.gate_status)} ${deprio}</div>
+        <div class="mslot-sub ${eqCls}">EQ ${esc(eq)}${s.entry_quality_score!=null?' · Q'+fmt(s.entry_quality_score,0):''}</div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:2px;">
+          <div class="rb-stat"><div class="v" style="color:var(--up)">${fmt(s.win_rate,1)}%</div><div class="l">승률</div></div>
+          <div class="rb-stat"><div class="v" style="color:var(--up)">${fmt(s.expectancy_pct,2)}%</div><div class="l">기대값</div></div>
+          <div class="rb-stat"><div class="v" style="color:var(--down)">${fmt(s.mdd_pct,2)}%</div><div class="l">MDD</div></div>
+          <div class="rb-stat"><div class="v">${s.trade_count==null?'—':fmt(s.trade_count,0)}</div><div class="l">거래수</div></div>
+        </div>
+        <div class="mslot-sub" style="line-height:1.7;"><b style="color:var(--txt)">진입 사유</b><br>${reasonList(s)}</div>
+        <div style="margin-top:auto;display:flex;gap:8px;align-items:center;" onclick="event.stopPropagation()">
+          <input class="slot-buy-amount" data-candidate-id="${esc(cid)}" type="number" min="1" step="50" value="${defaultNotional()}" style="width:130px;" />
+          <button class="slot-buy-real" data-candidate-id="${esc(cid)}" data-slot="${esc(s.slot||s.slot_no||'')}">매수 선택</button>
+          <span class="mslot-sub">클릭하면 차트 상세</span>
+        </div>
+      </div>
     </div>`;
+  }
+  async function drawCandidateMiniCharts(){
+    window._realCandMiniCharts = window._realCandMiniCharts || {};
+    const rows=(window.candidateSlotData||[]).filter(s=>s && !s.empty);
+    for(const s of rows){
+      const cid=String(s.candidate_id||'');
+      const safeCid=cid.replace(/[^A-Za-z0-9_-]/g,'_');
+      const id=`cand-mini-chart-${safeCid}`;
+      const el=document.getElementById(id);
+      const ticker=String(s.ticker||'').toUpperCase();
+      if(!el || !ticker || !window.LightweightCharts) continue;
+      try{ if(window._realCandMiniCharts[id]){ window._realCandMiniCharts[id].remove(); delete window._realCandMiniCharts[id]; } }catch(e){}
+      try{
+        const r=await fetch(`${API}/api/real/candles/${ticker}?interval=5m`);
+        const candles=await r.json();
+        if(!Array.isArray(candles) || !candles.length){ el.innerHTML='<div class="loading">분봉 없음</div>'; continue; }
+        const use=candles.slice(-96);
+        const chart=LightweightCharts.createChart(el,{layout:{background:{color:'#0b1019'},textColor:'#5f6e85'},grid:{vertLines:{color:'#151d2b'},horzLines:{color:'#151d2b'}},timeScale:{borderColor:'#1c2535',timeVisible:true,secondsVisible:false},rightPriceScale:{borderColor:'#1c2535'},width:Math.max(el.clientWidth,280),height:220});
+        const ser=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',wickUpColor:'#26d07c',wickDownColor:'#ff4d6a',borderVisible:false});
+        ser.setData(use);
+        if(s.first_signal_price){ ser.createPriceLine({price:Number(s.first_signal_price),color:'#3b82f6',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'최초'}); }
+        if(s.price || s.current_price){ ser.createPriceLine({price:Number(s.price ?? s.current_price),color:'#c9d4e5',lineWidth:1,lineStyle:0,axisLabelVisible:true,title:'현재'}); }
+        chart.timeScale().fitContent();
+        window._realCandMiniCharts[id]=chart;
+      }catch(e){ el.innerHTML='<div class="loading">차트 오류</div>'; }
+    }
   }
   function renderCandidateSlots(){
     const html=(window.candidateSlotData||[]).map(candidateSlotCard).join('');
     const mini=document.getElementById('real-candidate-mini-slots');
     const full=document.getElementById('real-candidate-slots-full');
-    if(mini) mini.innerHTML=html || '<div class="loading">후보 없음</div>';
-    if(full) full.innerHTML=html || '<div class="loading">후보 없음</div>';
+    [mini, full].forEach(el=>{ if(el){ el.style.display='grid'; el.style.gridTemplateColumns='1fr'; el.style.gap='12px'; el.innerHTML=html || '<div class="loading">후보 없음</div>'; } });
     const meta=document.getElementById('real-candidate-meta');
     if(meta){
       const filled=(window.candidateSlotData||[]).filter(x=>x && !x.empty).length;
       meta.textContent=`${filled}/8`;
     }
+    document.querySelectorAll('.slot-buy-real[data-candidate-id]').forEach(btn=>{
+      btn.onclick=function(ev){ev.stopPropagation(); handleBuy(btn.dataset.candidateId, Number(btn.dataset.slot||0));};
+    });
+    setTimeout(drawCandidateMiniCharts, 50);
   }
   async function loadCandidateSlots(){
     try{
@@ -1227,11 +1309,11 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v4"></script>\n'
+    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v5"></script>\n'
     if "real-buy-amount-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     elif "real-slot-overlay.js" not in html:
-        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v4"></script>\n</body>')
+        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v5"></script>\n</body>')
     return HTMLResponse(content=html, media_type="text/html")
 
 

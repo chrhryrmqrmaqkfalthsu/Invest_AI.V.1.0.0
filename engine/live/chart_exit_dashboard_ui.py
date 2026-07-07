@@ -308,6 +308,9 @@ def _inject_dashboard_script(html: str) -> str:
 
 def install_chart_exit_routes(app, base_module: Any, *, price_lookup, wake_runner) -> None:
     """Install chart-exit API routes and dashboard JS injection."""
+    from engine.live.chart_exit_slot_display import install_slot_display_routes
+
+    install_slot_display_routes(app, base_module)
 
     def _wake_triggered(evaluation: dict[str, Any]) -> list[dict[str, Any]]:
         wakes: list[dict[str, Any]] = []

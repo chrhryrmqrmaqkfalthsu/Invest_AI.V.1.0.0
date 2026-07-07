@@ -1,0 +1,3 @@
+split,n_allow,n_block,diff_allow_minus_block,ci95_low,ci95_high,p_perm_two_sided,note
+IS,11757,19300,-0.216829270813,-0.4800620283,0.0416142291876,0.109178164367,bootstrap_allow_minus_block_mean_s2_net
+OOS,5690,7225,-0.0553453655771,-0.527845099373,0.444863296805,0.820835832833,bootstrap_allow_minus_block_mean_s2_net

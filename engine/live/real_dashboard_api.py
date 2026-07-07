@@ -828,12 +828,13 @@ def _real_slot_overlay_js() -> str:
 (function(){
   if(window.KM_REAL_SLOT_OVERLAY_INSTALLED) return;
   window.KM_REAL_SLOT_OVERLAY_INSTALLED = true;
+  window.candidateSlotData = [];
   function esc(v){return String(v??'').replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch];});}
   function num(v){const n=Number(v); return Number.isFinite(n)?n:null;}
   function fmt(n,d=2){n=num(n); return n==null?'—':n.toFixed(d);}
   function money(n){n=num(n); return n==null?'':n.toLocaleString(undefined,{maximumFractionDigits:0});}
   function tag(v){return v?`<span class="tag">${esc(v)}</span>`:'';}
-  function byCid(cid){return (window.slotData||[]).find(x=>String(x.candidate_id||'')===String(cid||''));}
+  function byCid(cid){return (window.candidateSlotData||[]).find(x=>String(x.candidate_id||'')===String(cid||''));}
   function defaultNotional(){
     try{
       const acct=window.accountData||window.acctData||{};
@@ -842,6 +843,49 @@ def _real_slot_overlay_js() -> str:
     }catch(e){}
     return 100;
   }
+  function candidateSlotCard(s){
+    if(!s || s.empty) return `<div class="mslot empty">후보 ${esc((s&&s.slot)||'')}<br>대기중</div>`;
+    const reasons=(s.reasons||[]).slice(0,2).map(esc).join(' · ');
+    const eq=s.entry_quality_label || (s.entry_quality_allow?'ALLOW':'CHECK');
+    const eqCls=s.entry_quality_allow===true?'univ-pos':(s.entry_quality_allow===false?'univ-neg':'');
+    const deprio=s.down_deprioritize?'<span class="tag" style="border-color:#f59e0b;color:#fbbf24;">DOWN 후순위</span>':'';
+    return `<div class="mslot real-buy-slot" onclick="openRealCandidateDetail('${esc(s.candidate_id)}')" data-candidate-id="${esc(s.candidate_id)}">
+      <div class="mslot-top"><span class="mslot-tk">${esc(s.ticker)}</span><span class="mslot-pnl" style="color:var(--up)">S ${fmt(s.final_score,2)}</span></div>
+      <div class="mslot-sub">현재 ${fmt(s.price ?? s.current_price,2)} · 기준 ${fmt(s.threshold,2)} · ratio ${fmt(s.ratio,2)}</div>
+      <div class="mslot-sub">${tag(s.vol_group)} ${tag(s.stage)} ${tag(s.gate_status)} ${deprio}</div>
+      <div class="mslot-sub ${eqCls}">EQ ${esc(eq)}${s.entry_quality_score!=null?' · Q'+fmt(s.entry_quality_score,0):''}</div>
+      ${reasons?`<div class="mslot-sub">${reasons}</div>`:''}
+      <div class="mslot-sub" style="margin-top:8px;color:var(--accent);font-weight:800;">클릭 → 차트/매수금액</div>
+    </div>`;
+  }
+  function renderCandidateSlots(){
+    const html=(window.candidateSlotData||[]).map(candidateSlotCard).join('');
+    const mini=document.getElementById('real-candidate-mini-slots');
+    const full=document.getElementById('real-candidate-slots-full');
+    if(mini) mini.innerHTML=html || '<div class="loading">후보 없음</div>';
+    if(full) full.innerHTML=html || '<div class="loading">후보 없음</div>';
+    const meta=document.getElementById('real-candidate-meta');
+    if(meta){
+      const filled=(window.candidateSlotData||[]).filter(x=>x && !x.empty).length;
+      meta.textContent=`${filled}/8`;
+    }
+  }
+  async function loadCandidateSlots(){
+    try{
+      const r=await fetch(`${API}/api/real/candidate_slots`);
+      window.candidateSlotData=await r.json();
+    }catch(e){
+      window.candidateSlotData=[];
+      const msg='<div class="loading">후보 슬롯 API 연결 실패</div>';
+      const mini=document.getElementById('real-candidate-mini-slots');
+      const full=document.getElementById('real-candidate-slots-full');
+      if(mini) mini.innerHTML=msg;
+      if(full) full.innerHTML=msg;
+      return;
+    }
+    renderCandidateSlots();
+  }
+  window.loadCandidateSlots = loadCandidateSlots;
   async function markSlotBuy(cid, notional, slot){
     const r=await fetch(`${API}/api/real/live_slot_buy`,{
       method:'POST',
@@ -862,12 +906,12 @@ def _real_slot_overlay_js() -> str:
       return;
     }
     const ticker=s.ticker||cid;
-    if(!confirm(`${ticker} 후보를 $${money(amount)} 매수 대상으로 선택하고 슬롯에서 제외할까요?\n\n이 버튼은 후보 상태 기록/제외용입니다. 실제 주문은 사용하는 매매 화면/브로커에서 별도로 확인하세요.`)) return;
-    document.querySelectorAll(`[data-candidate-id="${CSS.escape(cid)}"].slot-buy-real, .slot-buy-real[data-candidate-id="${CSS.escape(cid)}"]`).forEach(b=>{b.disabled=true; b.textContent='처리 중…';});
+    if(!confirm(`${ticker} 후보를 $${money(amount)} 매수 대상으로 선택하고 후보 슬롯에서 제외할까요?\n\n이 버튼은 후보 상태 기록/제외용입니다. 실제 주문은 사용하는 매매 화면/브로커에서 별도로 확인하세요.`)) return;
+    document.querySelectorAll(`.slot-buy-real[data-candidate-id="${CSS.escape(cid)}"]`).forEach(b=>{b.disabled=true; b.textContent='처리 중…';});
     try{
       await markSlotBuy(cid, amount, slot);
-      if(typeof toast==='function') toast('매수 후보 선택 완료', `${ticker} · $${money(amount)} · 슬롯 재갱신`, 'good');
-      if(typeof loadSlots==='function') await loadSlots();
+      if(typeof toast==='function') toast('매수 후보 선택 완료', `${ticker} · $${money(amount)} · 후보 슬롯 재갱신`, 'good');
+      await loadCandidateSlots();
       if(typeof closeDetail==='function') closeDetail();
     }catch(e){
       if(typeof toast==='function') toast('매수 후보 처리 실패', String(e.message||e), 'warn'); else alert(String(e.message||e));
@@ -887,6 +931,7 @@ def _real_slot_overlay_js() -> str:
     if(window.chart) chart.resize(document.getElementById('chart').clientWidth, 440);
     document.querySelectorAll('.tf').forEach(b=>b.classList.toggle('active', b.dataset.tf==='1d'));
     if(typeof drawChart==='function') await drawChart(ticker, '1d');
+    if(window._activeChart) window._activeChart = {type:'real_candidate', ticker:ticker, interval:'1d'};
     renderRealCandidateDetail(s);
   };
   function renderRealCandidateDetail(s){
@@ -916,13 +961,13 @@ def _real_slot_overlay_js() -> str:
             <input id="real-slot-buy-amount" class="manual-buy-amount" type="number" min="1" step="50" value="${amount}" style="width:140px;" />
             <button class="slot-buy-real" data-candidate-id="${esc(s.candidate_id)}" data-slot="${esc(s.slot||s.slot_no||'')}">매수 선택</button>
           </div>
-          <div style="font-size:11px;color:var(--dim);margin-top:6px;">후보 선택 시 보유/제외 목록에 기록되고 8칸이 전면 재갱신됩니다.</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:6px;">후보 선택 시 보유/제외 목록에 기록되고 후보 8칸이 전면 재갱신됩니다.</div>
         </div>`;
     }
     const comm=document.getElementById('commentary');
     if(comm){
       const reasons=(s.reasons||[]).map(r=>`<li>${esc(r)}</li>`).join('');
-      comm.innerHTML=`<div class="comment"><b>매수 후보</b><br>${ticker} · score ${fmt(s.final_score,3)} · ${esc(s.vol_group||'')}</div>${reasons?`<ul style="margin:10px 0 0 18px;color:var(--dim);font-size:12px;">${reasons}</ul>`:''}`;
+      comm.innerHTML=`<div class="comment"><b>매수 후보 슬롯</b><br>${ticker} · score ${fmt(s.final_score,3)} · ${esc(s.vol_group||'')}</div>${reasons?`<ul style="margin:10px 0 0 18px;color:var(--dim);font-size:12px;">${reasons}</ul>`:''}`;
     }
     const omen=document.getElementById('sellomen-strip');
     if(omen) omen.innerHTML='';
@@ -930,29 +975,12 @@ def _real_slot_overlay_js() -> str:
       btn.onclick=function(ev){ev.stopPropagation(); handleBuy(btn.dataset.candidateId, Number(btn.dataset.slot||0));};
     });
   }
-  const oldSlotCard = window.slotCard;
-  window.slotCard = function(s, onclick){
-    if(!s || s.empty) return `<div class="mslot empty">슬롯 ${esc((s&&s.slot)||'')}<br>대기중</div>`;
-    if(s.slot_type !== 'buy_candidate') return oldSlotCard ? oldSlotCard(s, onclick) : `<div class="mslot">${esc(s.ticker||'')}</div>`;
-    const reasons=(s.reasons||[]).slice(0,2).map(esc).join(' · ');
-    const eq=s.entry_quality_label || (s.entry_quality_allow?'ALLOW':'CHECK');
-    const eqCls=s.entry_quality_allow===true?'univ-pos':(s.entry_quality_allow===false?'univ-neg':'');
-    const deprio=s.down_deprioritize?'<span class="tag" style="border-color:#f59e0b;color:#fbbf24;">DOWN 후순위</span>':'';
-    return `<div class="mslot real-buy-slot" onclick="openRealCandidateDetail('${esc(s.candidate_id)}')" data-candidate-id="${esc(s.candidate_id)}">
-      <div class="mslot-top"><span class="mslot-tk">${esc(s.ticker)}</span><span class="mslot-pnl" style="color:var(--up)">S ${fmt(s.final_score,2)}</span></div>
-      <div class="mslot-sub">현재 ${fmt(s.price ?? s.current_price,2)} · 기준 ${fmt(s.threshold,2)} · ratio ${fmt(s.ratio,2)}</div>
-      <div class="mslot-sub">${tag(s.vol_group)} ${tag(s.stage)} ${tag(s.gate_status)} ${deprio}</div>
-      <div class="mslot-sub ${eqCls}">EQ ${esc(eq)}${s.entry_quality_score!=null?' · Q'+fmt(s.entry_quality_score,0):''}</div>
-      ${reasons?`<div class="mslot-sub">${reasons}</div>`:''}
-      <div class="mslot-sub" style="margin-top:8px;color:var(--accent);font-weight:800;">클릭 → 차트/매수금액</div>
-    </div>`;
-  };
-  window.renderSlots = function(){
-    const mini=document.getElementById('mini-slots'), full=document.getElementById('slots-full');
-    if(mini) mini.innerHTML=(window.slotData||[]).map(s=>window.slotCard(s,'openDetail')).join('');
-    if(full) full.innerHTML=(window.slotData||[]).map(s=>window.slotCard(s,'openDetail')).join('');
-    document.querySelectorAll('.slot-sell[data-sell-ticker]').forEach(btn=>{ if(typeof requestSell==='function') btn.onclick=(ev)=>{ ev.stopPropagation(); requestSell(btn.dataset.sellTicker); }; });
-  };
+  const oldLoadSlots = window.loadSlots;
+  if(typeof oldLoadSlots === 'function'){
+    window.loadSlots = async function(){ await oldLoadSlots(); await loadCandidateSlots(); };
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', loadCandidateSlots); else loadCandidateSlots();
+  setInterval(loadCandidateSlots, 30000);
 })();
 """
 
@@ -1031,6 +1059,10 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
     # a window property to re-render /api/real/slots as buy-candidate cards.
     html = html.replace("let slotData=[], marketData={}, _holdingNewsEntries={};", "var slotData=[], marketData={}, _holdingNewsEntries={};")
     html = html.replace("<title>KINGMAKER</title>", "<title>KINGMAKER REAL</title>")
+    candidate_home = '\n    <div class="panel" style="margin-bottom:18px;">\n      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">\n        <h3 style="margin:0;">🛒 매수 후보 슬롯 (8)</h3>\n        <span id="real-candidate-meta" style="font-size:12px;color:var(--dim);"></span>\n      </div>\n      <div class="mini-slots" id="real-candidate-mini-slots"><div class="loading">후보 로딩...</div></div>\n    </div>\n'
+    if "real-candidate-mini-slots" not in html:
+        html = html.replace('    <div class="home-grid">', candidate_home + '    <div class="home-grid">')
+        html = html.replace('      <h3>📦 슬롯 클릭 → 상세</h3>\n      <div class="mini-slots" id="slots-full"><div class="loading">로딩...</div></div>', '      <h3>🛒 매수 후보 슬롯 클릭 → 차트/매수금액</h3>\n      <div class="mini-slots" id="real-candidate-slots-full"><div class="loading">후보 로딩...</div></div>\n      <h3 style="margin-top:18px;">📦 보유 슬롯 클릭 → 상세</h3>\n      <div class="mini-slots" id="slots-full"><div class="loading">로딩...</div></div>')
     html = html.replace('const API="http://localhost:8001";', 'const API=window.location.origin;\nwindow.KM_DASHBOARD_MODE="real";')
     replacements = {
         "/api/live/account": "/api/real/account",
@@ -1062,11 +1094,11 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v2"></script>\n'
+    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v3"></script>\n'
     if "real-buy-amount-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     elif "real-slot-overlay.js" not in html:
-        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v2"></script>\n</body>')
+        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v3"></script>\n</body>')
     return HTMLResponse(content=html, media_type="text/html")
 
 
@@ -1154,6 +1186,17 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
 
     @app.get("/api/real/slots")
     def real_slots(max_slots: int = 8):
+        filled = _real_positions_payload()
+        slots = []
+        for i in range(int(max_slots or 8)):
+            if i < len(filled):
+                slots.append({"slot": i + 1, "empty": False, **filled[i]})
+            else:
+                slots.append({"slot": i + 1, "empty": True})
+        return slots
+
+    @app.get("/api/real/candidate_slots")
+    def real_candidate_slots(max_slots: int = 8):
         return _real_candidate_slots_payload(max_slots=max_slots)
 
     @app.get("/api/real/live_slots_state")

@@ -985,6 +985,8 @@ def _real_slot_overlay_js() -> str:
     .real-candidate-chart-wrap{height:100%;min-height:310px;display:flex;flex-direction:column;gap:6px;}
     .real-candidate-mini-chart{height:100%!important;min-height:286px;flex:1;}
     .real-candidate-chart-meta{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;display:flex;justify-content:space-between;gap:8px;}
+    .real-signal-vline{position:absolute;top:0;bottom:0;width:2px;background:#f5c451;box-shadow:0 0 10px rgba(245,196,81,.75);z-index:18;pointer-events:none;}
+    .real-signal-label{position:absolute;top:8px;transform:translateX(-50%);z-index:19;background:rgba(245,196,81,.16);border:1px solid rgba(245,196,81,.65);color:#fde68a;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:900;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums;}
     @media(max-width:900px){.real-candidate-row{grid-template-columns:1fr!important}.real-candidate-chart-wrap{min-height:260px}.real-candidate-mini-chart{min-height:236px}.real-order-ticket .ticket-row{grid-template-columns:minmax(120px,1fr) repeat(3,56px);}.real-order-ticket .slot-buy-real{grid-column:1/-1;}}
     `;
     const el=document.createElement('style'); el.id='real-candidate-ticket-style'; el.textContent=css; document.head.appendChild(el);
@@ -1308,6 +1310,121 @@ def _real_slot_overlay_js() -> str:
       document.querySelectorAll(`.slot-buy-real[data-candidate-id="${CSS.escape(cid)}"]`).forEach(b=>{b.disabled=false; b.textContent='매수 선택';});
     }
   }
+  function candidateSignalEpochSec(s){
+    const t=new Date(s && s.first_signal_at || '').getTime();
+    if(!Number.isFinite(t)) return null;
+    return Math.floor(t/1000);
+  }
+  function findSignalCandle(candles, s, interval){
+    if(!Array.isArray(candles) || !candles.length || !s || !s.first_signal_at) return null;
+    const epoch=candidateSignalEpochSec(s);
+    if(epoch==null) return null;
+    const intraday = !['1d','1wk','1mo'].includes(interval);
+    if(intraday){
+      return candles.find(c=>Number(c.time)>=epoch) || candles[candles.length-1];
+    }
+    const day=new Date(epoch*1000).toISOString().slice(0,10);
+    return candles.find(c=>String(c.time)>=day) || candles[candles.length-1];
+  }
+  function clearRealDetailSignalOverlay(){
+    try{
+      if(window._realDetailSignalLines && typeof series!=='undefined'){
+        for(const line of window._realDetailSignalLines){ try{ series.removePriceLine(line); }catch(e){} }
+      }
+    }catch(e){}
+    window._realDetailSignalLines=[];
+    try{
+      if(window._realDetailSignalUnsub && typeof chart!=='undefined'){
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(window._realDetailSignalUnsub);
+      }
+    }catch(e){}
+    window._realDetailSignalUnsub=null;
+    document.querySelectorAll('.real-signal-vline,.real-signal-label').forEach(el=>el.remove());
+  }
+  function renderRealDetailSignalOverlay(hit, s){
+    const wrap=document.getElementById('chart');
+    if(!wrap || !hit || typeof chart==='undefined') return;
+    try{
+      if(window._realDetailSignalUnsub && typeof chart!=='undefined'){
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(window._realDetailSignalUnsub);
+      }
+    }catch(e){}
+    window._realDetailSignalUnsub=null;
+    document.querySelectorAll('.real-signal-vline,.real-signal-label').forEach(el=>el.remove());
+    const line=document.createElement('div');
+    line.className='real-signal-vline';
+    const label=document.createElement('div');
+    label.className='real-signal-label';
+    label.textContent=`최초 신호 ${kstTime(s.first_signal_at,{mode:'dateTime'})} KST`;
+    wrap.appendChild(line);
+    wrap.appendChild(label);
+    const update=()=>{
+      try{
+        const x=chart.timeScale().timeToCoordinate(hit.time);
+        if(x==null || !Number.isFinite(x)){
+          line.style.display='none'; label.style.display='none'; return;
+        }
+        line.style.display='block'; label.style.display='block';
+        line.style.left=`${Math.round(x)}px`;
+        label.style.left=`${Math.round(x)}px`;
+      }catch(e){}
+    };
+    update();
+    setTimeout(update,80);
+    try{ chart.timeScale().subscribeVisibleLogicalRangeChange(update); window._realDetailSignalUnsub=update; }catch(e){}
+  }
+  async function applyRealCandidateDetailSignal(ticker, interval){
+    const s=window._activeRealCandidate;
+    if(!s || String(s.ticker||'').toUpperCase()!==String(ticker||'').toUpperCase()){
+      clearRealDetailSignalOverlay();
+      return;
+    }
+    let candles=[];
+    try{ candles=await (await fetch(`${API}/api/real/candles/${ticker}?interval=${interval}`, {cache:'no-store'})).json(); }catch(e){}
+    const hit=findSignalCandle(candles, s, interval);
+    if(!hit) return;
+    clearRealDetailSignalOverlay();
+    try{
+      series.setMarkers([{time:hit.time, position:'aboveBar', color:'#f5c451', shape:'circle', text:'최초 신호'}]);
+    }catch(e){}
+    window._realDetailSignalLines=[];
+    try{
+      if(s.first_signal_price){
+        window._realDetailSignalLines.push(series.createPriceLine({price:Number(s.first_signal_price),color:'#f5c451',lineWidth:2,lineStyle:2,axisLabelVisible:true,title:'최초 신호가'}));
+      }
+      if(s.price || s.current_price){
+        window._realDetailSignalLines.push(series.createPriceLine({price:Number(s.price ?? s.current_price),color:'#c9d4e5',lineWidth:1,lineStyle:0,axisLabelVisible:true,title:'현재'}));
+      }
+    }catch(e){}
+    renderRealDetailSignalOverlay(hit, s);
+    const comm=document.getElementById('commentary');
+    if(comm){
+      let note=document.getElementById('real-signal-detail-note');
+      if(!note){
+        note=document.createElement('div');
+        note.id='real-signal-detail-note';
+        note.className='comment';
+        note.style.marginTop='10px';
+        comm.appendChild(note);
+      }
+      note.innerHTML=`<b>상세 차트 신호 기준</b><br>${esc(interval)} 봉 기준 최초 신호 표시: ${esc(kstTime(s.first_signal_at,{mode:'dateTime'}))} KST · 신호가 ${fmt(s.first_signal_price,2)} · 표시봉 ${esc(kstTime(hit.time,{mode:'dateTime'}))} KST`;
+    }
+  }
+  const _realOldDrawChart = window.drawChart || (typeof drawChart==='function' ? drawChart : null);
+  if(_realOldDrawChart && !window.KM_REAL_DRAWCHART_WRAPPED){
+    window.KM_REAL_DRAWCHART_WRAPPED=true;
+    window.drawChart = async function(ticker, interval, opts){
+      const out = await _realOldDrawChart(ticker, interval, opts);
+      if(window._activeRealCandidate && String(window._activeRealCandidate.ticker||'').toUpperCase()===String(ticker||'').toUpperCase()){
+        await applyRealCandidateDetailSignal(ticker, interval);
+        if(typeof _activeChart !== 'undefined') _activeChart = {type:'real_candidate', ticker, interval};
+      }else{
+        clearRealDetailSignalOverlay();
+      }
+      return out;
+    };
+    try{ drawChart = window.drawChart; }catch(e){}
+  }
   window.openRealCandidateDetail = async function(candidateId){
     const s=byCid(candidateId);
     if(!s) return;
@@ -1319,9 +1436,10 @@ def _real_slot_overlay_js() -> str:
     document.getElementById('slot-list-view').style.display='none';
     document.getElementById('slot-detail-view').style.display='block';
     if(window.chart) chart.resize(document.getElementById('chart').clientWidth, 440);
-    document.querySelectorAll('.tf').forEach(b=>b.classList.toggle('active', b.dataset.tf==='1d'));
-    if(typeof drawChart==='function') await drawChart(ticker, '1d');
-    if(window._activeChart) window._activeChart = {type:'real_candidate', ticker:ticker, interval:'1d'};
+    window._activeRealCandidate = s;
+    document.querySelectorAll('.tf').forEach(b=>b.classList.toggle('active', b.dataset.tf==='1m'));
+    if(typeof window.drawChart==='function') await window.drawChart(ticker, '1m');
+    if(typeof _activeChart !== 'undefined') _activeChart = {type:'real_candidate', ticker:ticker, interval:'1m'};
     renderRealCandidateDetail(s);
   };
   function renderRealCandidateDetail(s){
@@ -1333,6 +1451,8 @@ def _real_slot_overlay_js() -> str:
     if(kv){
       kv.innerHTML=`
         <div class="kv"><span>현재가</span><span>${fmt(s.price ?? s.current_price,2)}</span></div>
+        <div class="kv"><span>최초 신호</span><span>${esc(kstTime(s.first_signal_at,{mode:'dateTime'}))} KST</span></div>
+        <div class="kv"><span>최초 신호가</span><span>${fmt(s.first_signal_price,2)}</span></div>
         <div class="kv"><span>final_score</span><span style="color:var(--up)">${fmt(s.final_score,3)}</span></div>
         <div class="kv"><span>threshold</span><span>${fmt(s.threshold,3)}</span></div>
         <div class="kv"><span>ratio</span><span>${fmt(s.ratio,3)}</span></div>
@@ -1361,6 +1481,17 @@ def _real_slot_overlay_js() -> str:
     document.querySelectorAll('.slot-buy-real[data-candidate-id]').forEach(btn=>{
       btn.onclick=function(ev){ev.stopPropagation(); handleBuy(btn.dataset.candidateId, Number(btn.dataset.slot||0));};
     });
+  }
+  const _realOldCloseDetail = window.closeDetail || (typeof closeDetail==='function' ? closeDetail : null);
+  if(_realOldCloseDetail && !window.KM_REAL_CLOSEDETAIL_WRAPPED){
+    window.KM_REAL_CLOSEDETAIL_WRAPPED=true;
+    window.closeDetail=function(){
+      window._activeRealCandidate=null;
+      clearRealDetailSignalOverlay();
+      try{ series.setMarkers([]); }catch(e){}
+      return _realOldCloseDetail();
+    };
+    try{ closeDetail = window.closeDetail; }catch(e){}
   }
   const oldLoadSlots = window.loadSlots;
   if(typeof oldLoadSlots === 'function'){
@@ -1555,7 +1686,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v9"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v10"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

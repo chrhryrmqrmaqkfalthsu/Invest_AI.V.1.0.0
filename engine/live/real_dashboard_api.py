@@ -925,7 +925,10 @@ def _real_slot_overlay_js() -> str:
     .real-order-ticket .slot-buy-real:disabled{opacity:.55;cursor:not-allowed;transform:none;filter:none;}
     .real-order-ticket .ticket-foot{margin-top:7px;font-size:11px;color:var(--dim);display:flex;justify-content:space-between;gap:8px;}
     .real-order-ticket .share-est{color:#c9d4e5;font-weight:800;}
-    @media(max-width:900px){.real-candidate-row{grid-template-columns:1fr!important}.real-order-ticket .ticket-row{grid-template-columns:minmax(120px,1fr) repeat(3,56px);}.real-order-ticket .slot-buy-real{grid-column:1/-1;}}
+    .real-candidate-row{grid-template-columns:minmax(360px,46%) minmax(0,1fr)!important;min-height:340px!important;}
+    .real-candidate-chart-wrap{height:100%;min-height:310px;display:flex;}
+    .real-candidate-mini-chart{height:100%!important;min-height:310px;flex:1;}
+    @media(max-width:900px){.real-candidate-row{grid-template-columns:1fr!important}.real-candidate-chart-wrap{min-height:260px}.real-candidate-mini-chart{min-height:260px}.real-order-ticket .ticket-row{grid-template-columns:minmax(120px,1fr) repeat(3,56px);}.real-order-ticket .slot-buy-real{grid-column:1/-1;}}
     `;
     const el=document.createElement('style'); el.id='real-candidate-ticket-style'; el.textContent=css; document.head.appendChild(el);
   }
@@ -986,9 +989,9 @@ def _real_slot_overlay_js() -> str:
     const safeCid=cid.replace(/[^A-Za-z0-9_-]/g,'_');
     const chartId=`cand-mini-chart-${safeCid}`;
     const delta=priceDeltaText(s.current_price ?? s.price, s.first_signal_price);
-    return `<div class="mslot real-buy-slot real-candidate-row" data-candidate-id="${esc(cid)}" style="display:grid;grid-template-columns:minmax(300px,42%) minmax(0,1fr);gap:14px;align-items:stretch;min-height:250px;padding:14px;cursor:pointer;" onclick="openRealCandidateDetail('${esc(cid)}')">
-      <div>
-        <div id="${chartId}" class="real-candidate-mini-chart" style="height:220px;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0b1019;"></div>
+    return `<div class="mslot real-buy-slot real-candidate-row" data-candidate-id="${esc(cid)}" style="display:grid;gap:14px;align-items:stretch;padding:14px;cursor:pointer;" onclick="openRealCandidateDetail('${esc(cid)}')">
+      <div class="real-candidate-chart-wrap">
+        <div id="${chartId}" class="real-candidate-mini-chart" style="border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0b1019;"></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;min-width:0;">
         <div class="mslot-top"><span class="mslot-tk">${esc(s.ticker)}</span><span class="mslot-pnl" style="color:var(--up)">S ${fmt(s.final_score,2)}</span></div>
@@ -1023,7 +1026,8 @@ def _real_slot_overlay_js() -> str:
         const candles=await r.json();
         if(!Array.isArray(candles) || !candles.length){ el.innerHTML='<div class="loading">분봉 없음</div>'; continue; }
         const use=candles.slice(-96);
-        const chart=LightweightCharts.createChart(el,{layout:{background:{color:'#0b1019'},textColor:'#5f6e85'},grid:{vertLines:{color:'#151d2b'},horzLines:{color:'#151d2b'}},timeScale:{borderColor:'#1c2535',timeVisible:true,secondsVisible:false},rightPriceScale:{borderColor:'#1c2535'},width:Math.max(el.clientWidth,280),height:220});
+        const h=Math.max(el.clientHeight||0, 300);
+        const chart=LightweightCharts.createChart(el,{layout:{background:{color:'#0b1019'},textColor:'#5f6e85'},grid:{vertLines:{color:'#151d2b'},horzLines:{color:'#151d2b'}},timeScale:{borderColor:'#1c2535',timeVisible:true,secondsVisible:false},rightPriceScale:{borderColor:'#1c2535'},width:Math.max(el.clientWidth,280),height:h});
         const ser=chart.addCandlestickSeries({upColor:'#26d07c',downColor:'#ff4d6a',wickUpColor:'#26d07c',wickDownColor:'#ff4d6a',borderVisible:false});
         ser.setData(use);
         if(s.first_signal_price){ ser.createPriceLine({price:Number(s.first_signal_price),color:'#3b82f6',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'최초'}); }
@@ -1372,11 +1376,11 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v6"></script>\n'
+    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v7"></script>\n'
     if "real-buy-amount-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     elif "real-slot-overlay.js" not in html:
-        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v6"></script>\n</body>')
+        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v7"></script>\n</body>')
     return HTMLResponse(content=html, media_type="text/html")
 
 

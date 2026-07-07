@@ -947,6 +947,10 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
     if not path.exists():
         raise HTTPException(status_code=500, detail=f"dashboard file missing: {path}")
     html = path.read_text(encoding="utf-8")
+    # dashboard_home.html declares slotData with let, which is not exposed on window.
+    # The real-slot overlay is injected as a later script, so it needs slotData to be
+    # a window property to re-render /api/real/slots as buy-candidate cards.
+    html = html.replace("let slotData=[], marketData={}, _holdingNewsEntries={};", "var slotData=[], marketData={}, _holdingNewsEntries={};")
     html = html.replace("<title>KINGMAKER</title>", "<title>KINGMAKER REAL</title>")
     html = html.replace('const API="http://localhost:8001";', 'const API=window.location.origin;\nwindow.KM_DASHBOARD_MODE="real";')
     replacements = {

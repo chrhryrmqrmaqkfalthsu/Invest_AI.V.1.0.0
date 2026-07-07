@@ -38,6 +38,8 @@ REAL_NEWS_STATE_PATH = Path("data/_system/real_dashboard_news_state.json")
 REAL_RULEBOOKS_PATH = Path("data/_system/real_dashboard_rulebooks.json")
 REAL_UNIVERSE_PATH = Path("data/_system/real_dashboard_universe.json")
 REAL_TRADES_HISTORY_PATH = Path("data/_system/real_dashboard_trades_history.json")
+LIVE_SLOTS_STATE_PATH = Path("data/_system/live_slots_state.json")
+LIVE_SLOTS_EVENTS_PATH = Path("data/_system/live_slots_events.jsonl")
 
 LIVE_KEY_NAMES = (
     "ALPACA_LIVE_API_KEY",
@@ -78,6 +80,13 @@ class RealSellIntentRequest(BaseModel):
     ticker: str
     shares_requested: float | None = None
     source: str = "real_dashboard"
+
+
+class RealSlotBuyRequest(BaseModel):
+    slot: int | None = None
+    candidate_id: str | None = None
+    note: str = ""
+    source: str = "dashboard_real_slots"
 
 
 def _direct_orders_enabled() -> bool:
@@ -660,6 +669,214 @@ def _real_trades_history() -> dict[str, Any]:
     }
 
 
+def _live_slots_state() -> dict[str, Any]:
+    data = read_json(LIVE_SLOTS_STATE_PATH, {})
+    return data if isinstance(data, dict) else {}
+
+
+def _active_live_slot_held_ids(state: dict[str, Any]) -> set[str]:
+    held = state.get("held_exclusions") if isinstance(state.get("held_exclusions"), dict) else {}
+    out: set[str] = set()
+    for cid, row in held.items():
+        if isinstance(row, dict) and str(row.get("status") or "open").lower() in {"open", "held", "active"}:
+            out.add(str(cid))
+    return out
+
+
+def _candidate_slot_to_dashboard(slot: dict[str, Any], idx: int) -> dict[str, Any]:
+    if not isinstance(slot, dict) or not slot.get("candidate_id"):
+        return {"slot": idx, "slot_no": idx, "empty": True, "status": "WAITING_FOR_SIGNAL", "slot_type": "buy_candidate"}
+    price = _safe_float(slot.get("price"), None)
+    return {
+        "slot": int(slot.get("slot_no") or slot.get("slot") or idx),
+        "slot_no": int(slot.get("slot_no") or slot.get("slot") or idx),
+        "empty": False,
+        "status": slot.get("status") or "FILLED",
+        "slot_type": "buy_candidate",
+        "candidate_id": slot.get("candidate_id"),
+        "ticker": str(slot.get("ticker") or "").upper(),
+        "stage": slot.get("stage"),
+        "bucket": slot.get("bucket"),
+        "rulebook_hash_short": slot.get("rulebook_hash_short"),
+        "final_score": _safe_float(slot.get("final_score"), None),
+        "raw_score": _safe_float(slot.get("raw_score"), None),
+        "threshold": _safe_float(slot.get("threshold"), None),
+        "ratio": _safe_float(slot.get("ratio"), None),
+        "price": price,
+        "current_price": price,
+        "entry_price": None,
+        "shares": 0,
+        "pnl_pct": None,
+        "vol_group": slot.get("vol_group"),
+        "down_deprioritize": bool(slot.get("down_deprioritize")),
+        "gate_status": slot.get("gate_status"),
+        "entry_quality_allow": slot.get("entry_quality_allow"),
+        "entry_quality_label": slot.get("entry_quality_label"),
+        "entry_quality_score": slot.get("entry_quality_score"),
+        "entry_quality_primary_reason": slot.get("entry_quality_primary_reason"),
+        "market_score": _safe_float(slot.get("market_score"), None),
+        "sector_score": _safe_float(slot.get("sector_score"), None),
+        "vix_level": _safe_float(slot.get("vix_level"), None),
+        "reasons": slot.get("reasons") or [],
+        "exit_strategy": "BUY_CANDIDATE",
+        "direction": str(slot.get("vol_group") or ""),
+        "max_holding_days": None,
+        "target_price": None,
+        "stop_price": None,
+        "trailing_stop": None,
+        "manual_buy_enabled": True,
+        "action_label": "매수 선택",
+    }
+
+
+def _real_candidate_slots_payload(max_slots: int = 8) -> list[dict[str, Any]]:
+    state = _live_slots_state()
+    slots = state.get("slots") if isinstance(state.get("slots"), list) else []
+    limit = max(1, int(max_slots or 8))
+    return [_candidate_slot_to_dashboard(slots[i] if i < len(slots) else {}, i + 1) for i in range(limit)]
+
+
+def _sort_live_slot_pool(pool: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def key(row: dict[str, Any]):
+        return (
+            int(row.get("priority_group") or 0),
+            -float(_safe_float(row.get("final_score"), 0.0) or 0.0),
+            str(row.get("ticker") or ""),
+            str(row.get("candidate_id") or ""),
+        )
+    return sorted([r for r in pool if isinstance(r, dict)], key=key)
+
+
+def _rebuild_live_slots_state(state: dict[str, Any], reason: str) -> dict[str, Any]:
+    held = _active_live_slot_held_ids(state)
+    pool = state.get("candidate_pool") if isinstance(state.get("candidate_pool"), list) else []
+    pool = _sort_live_slot_pool([r for r in pool if str(r.get("candidate_id") or "") not in held])
+    slots: list[dict[str, Any]] = []
+    for idx in range(8):
+        if idx < len(pool):
+            row = dict(pool[idx])
+            row["slot_no"] = idx + 1
+            row["slot"] = idx + 1
+            row["status"] = "FILLED"
+            slots.append(row)
+        else:
+            slots.append({"slot_no": idx + 1, "slot": idx + 1, "status": "WAITING_FOR_SIGNAL"})
+    state["slots"] = slots
+    state["current_slots"] = slots
+    state["slots_filled"] = sum(1 for r in slots if r.get("candidate_id"))
+    state["waitlist"] = [dict(r, wait_rank=i + 1) for i, r in enumerate(pool[8:])]
+    state["waitlist_count"] = len(state["waitlist"])
+    state["held_count"] = len(held)
+    state["last_rebuild_reason"] = reason
+    state["updated_at"] = utc_now_iso()
+    return state
+
+
+def _append_live_slot_event(row: dict[str, Any]) -> None:
+    try:
+        LIVE_SLOTS_EVENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        import json as _json
+        with LIVE_SLOTS_EVENTS_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(_json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    except Exception:
+        pass
+
+
+def _mark_real_slot_manual_buy(req: RealSlotBuyRequest) -> dict[str, Any]:
+    state = _live_slots_state()
+    if not state:
+        raise ValueError(f"live slot state missing: {LIVE_SLOTS_STATE_PATH}")
+    selected: dict[str, Any] | None = None
+    if req.slot is not None:
+        for row in state.get("slots") or []:
+            if int(row.get("slot_no") or row.get("slot") or 0) == int(req.slot) and row.get("candidate_id"):
+                selected = dict(row)
+                break
+    if selected is None and req.candidate_id:
+        cid = str(req.candidate_id)
+        for row in (state.get("slots") or []) + (state.get("waitlist") or []) + (state.get("candidate_pool") or []):
+            if str(row.get("candidate_id") or "") == cid:
+                selected = dict(row)
+                break
+        if selected is None:
+            selected = {"candidate_id": cid}
+    if not selected or not selected.get("candidate_id"):
+        raise ValueError("slot candidate not found")
+    cid = str(selected.get("candidate_id"))
+    event = {
+        "time": utc_now_iso(),
+        "candidate_id": cid,
+        "ticker": selected.get("ticker"),
+        "slot_no": selected.get("slot_no") or selected.get("slot"),
+        "note": req.note or "dashboard-real manual buy",
+        "source": req.source or "dashboard_real_slots",
+        "status": "open",
+        "snapshot": selected,
+    }
+    state.setdefault("held_exclusions", {})[cid] = event
+    state.setdefault("manual_buy_events", []).append(event)
+    state = _rebuild_live_slots_state(state, "dashboard_real_slot_buy")
+    atomic_write_json(LIVE_SLOTS_STATE_PATH, state)
+    _append_live_slot_event({"event": "DASHBOARD_REAL_SLOT_BUY", **event})
+    return {"ok": True, "event": event, "slots": _real_candidate_slots_payload(8), "state_path": str(LIVE_SLOTS_STATE_PATH)}
+
+
+def _real_slot_overlay_js() -> str:
+    return r"""
+(function(){
+  if(window.KM_REAL_SLOT_OVERLAY_INSTALLED) return;
+  window.KM_REAL_SLOT_OVERLAY_INSTALLED = true;
+  function esc(v){return String(v??'').replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];});}
+  function num(v){const n=Number(v); return Number.isFinite(n)?n:null;}
+  function fmt(n,d=2){n=num(n); return n==null?'—':n.toFixed(d);}
+  function tag(v){return v?`<span class="tag">${esc(v)}</span>`:'';}
+  const oldSlotCard = window.slotCard;
+  window.slotCard = function(s, onclick){
+    if(!s || s.empty) return `<div class="mslot empty">슬롯 ${esc((s&&s.slot)||'')}<br>대기중</div>`;
+    if(s.slot_type !== 'buy_candidate') return oldSlotCard ? oldSlotCard(s, onclick) : `<div class="mslot">${esc(s.ticker||'')}</div>`;
+    const reasons=(s.reasons||[]).slice(0,3).map(esc).join(' · ');
+    const eq=s.entry_quality_label || (s.entry_quality_allow?'ALLOW':'CHECK');
+    const eqCls=s.entry_quality_allow===true?'univ-pos':(s.entry_quality_allow===false?'univ-neg':'');
+    const deprio=s.down_deprioritize?'<span class="tag" style="border-color:#f59e0b;color:#fbbf24;">DOWN 후순위</span>':'';
+    return `<div class="mslot real-buy-slot" data-candidate-id="${esc(s.candidate_id)}">
+      <div class="mslot-top"><span class="mslot-tk">${esc(s.ticker)}</span><span class="mslot-pnl" style="color:var(--up)">S ${fmt(s.final_score,2)}</span></div>
+      <div class="mslot-sub">가격 ${fmt(s.price ?? s.current_price,2)} · 기준 ${fmt(s.threshold,2)} · ratio ${fmt(s.ratio,2)}</div>
+      <div class="mslot-sub">${tag(s.vol_group)} ${tag(s.stage)} ${tag(s.gate_status)} ${deprio}</div>
+      <div class="mslot-sub ${eqCls}">EQ ${esc(eq)}${s.entry_quality_score!=null?' · Q'+fmt(s.entry_quality_score,0):''}</div>
+      ${reasons?`<div class="mslot-sub">${reasons}</div>`:''}
+      <button class="slot-buy-real" data-candidate-id="${esc(s.candidate_id)}" data-slot="${esc(s.slot||s.slot_no||'')}">매수 선택</button>
+    </div>`;
+  };
+  const oldRenderSlots = window.renderSlots;
+  window.renderSlots = function(){
+    const mini=document.getElementById('mini-slots'), full=document.getElementById('slots-full');
+    if(mini) mini.innerHTML=(window.slotData||[]).map(s=>window.slotCard(s,'openDetail')).join('');
+    if(full) full.innerHTML=(window.slotData||[]).map(s=>window.slotCard(s,'openDetail')).join('');
+    document.querySelectorAll('.slot-buy-real[data-candidate-id]').forEach(btn=>{
+      btn.onclick=async function(ev){
+        ev.stopPropagation();
+        const cid=btn.dataset.candidateId, slot=Number(btn.dataset.slot||0);
+        if(!cid) return;
+        if(!confirm(`${cid} 후보를 직접 매수 처리하고 슬롯에서 제외할까요?`)) return;
+        btn.disabled=true; btn.textContent='처리 중…';
+        try{
+          const r=await fetch(`${API}/api/real/live_slot_buy`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({candidate_id:cid, slot:slot, source:'dashboard-real'})});
+          const d=await r.json().catch(()=>({}));
+          if(!r.ok || d.ok===false) throw new Error(d.detail||d.reason||`HTTP ${r.status}`);
+          if(typeof toast==='function') toast('후보 제외 완료', `${cid} 매수 처리 · 슬롯 재갱신`, 'good');
+          if(typeof loadSlots==='function') await loadSlots();
+        }catch(e){
+          btn.disabled=false; btn.textContent='매수 선택';
+          if(typeof toast==='function') toast('매수 처리 실패', String(e.message||e), 'warn'); else alert(String(e.message||e));
+        }
+      };
+    });
+    document.querySelectorAll('.slot-sell[data-sell-ticker]').forEach(btn=>{ if(typeof requestSell==='function') btn.onclick=(ev)=>{ ev.stopPropagation(); requestSell(btn.dataset.sellTicker); }; });
+  };
+})();
+"""
+
+
 def _real_buy_amount_overlay_js() -> str:
     return r"""
 (function(){
@@ -762,9 +979,11 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n'
+    snippet = '<script src="/real-buy-amount-overlay.js?v=real_dashboard_v3"></script>\n<script src="/real-slot-overlay.js?v=real_slots_v1"></script>\n'
     if "real-buy-amount-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
+    elif "real-slot-overlay.js" not in html:
+        html = html.replace("</body>", '<script src="/real-slot-overlay.js?v=real_slots_v1"></script>\n</body>')
     return HTMLResponse(content=html, media_type="text/html")
 
 
@@ -784,6 +1003,10 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
     @app.get("/real-buy-amount-overlay.js", include_in_schema=False)
     def real_buy_amount_overlay_js():
         return Response(content=_real_buy_amount_overlay_js(), media_type="application/javascript; charset=utf-8")
+
+    @app.get("/real-slot-overlay.js", include_in_schema=False)
+    def real_slot_overlay_js():
+        return Response(content=_real_slot_overlay_js(), media_type="application/javascript; charset=utf-8")
 
     @app.get("/api/real/connection")
     def real_connection(refresh: bool = False, account_check: bool = True):
@@ -848,6 +1071,24 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
 
     @app.get("/api/real/slots")
     def real_slots(max_slots: int = 8):
+        return _real_candidate_slots_payload(max_slots=max_slots)
+
+    @app.get("/api/real/live_slots_state")
+    def real_live_slots_state():
+        state = _live_slots_state()
+        state["api_source"] = "data/_system/live_slots_state.json"
+        state["slots_payload"] = _real_candidate_slots_payload(8)
+        return state
+
+    @app.post("/api/real/live_slot_buy")
+    def real_live_slot_buy(req: RealSlotBuyRequest):
+        try:
+            return _mark_real_slot_manual_buy(req)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/api/real/position_slots")
+    def real_position_slots(max_slots: int = 8):
         filled = _real_positions_payload()
         slots = []
         for i in range(int(max_slots or 8)):

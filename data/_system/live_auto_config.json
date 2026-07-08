@@ -11,7 +11,7 @@
   },
   "capital_source": "available_cash",
   "display_slots": 8,
-  "dry_run": true,
+  "dry_run": false,
   "entry_timing": "next_open",
   "exit": {
     "allow_legacy_fallback": false,
@@ -32,13 +32,13 @@
     "confirmation_phrase_required": true,
     "operator_armed": false
   },
-  "portfolio_K": 20,
-  "real_orders_enabled": false,
+  "portfolio_K": 1,
+  "real_orders_enabled": true,
   "risk_limits": {
-    "max_daily_buy_notional_usd": 300.0,
+    "max_daily_buy_notional_usd": 1000.0,
     "max_daily_orders": 3,
-    "max_order_notional_usd": 100.0,
-    "max_total_exposure_usd": 650.0,
+    "max_order_notional_usd": 1000.0,
+    "max_total_exposure_usd": 1000.0,
     "min_cash_buffer_usd": 10.0,
     "min_fractional_shares": 0.0001,
     "one_position_per_ticker": true

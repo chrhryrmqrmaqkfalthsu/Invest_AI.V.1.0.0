@@ -1,14 +1,16 @@
 """Runtime patch for real-dashboard held-position intraday charts.
 
 This patch is intentionally separated from ``real_dashboard_api.py`` so the large
-HTML/JS generator does not need invasive edits.  It fixes two real-trading UI
-issues:
+HTML/JS generator does not need invasive edits.  It fixes real-trading UI issues:
 
 1. Held-position detail pages should open/refresh the 1m chart, not silently stay
    on the base dashboard's default daily chart.
 2. For held tickers, yfinance 1m bars can lag or skip minutes.  Append a display
    candle from Alpaca's current position price so the held-position chart reflects
    the live account mark while waiting for the next public 1m bar.
+3. Automatic refresh must not reset the user's zoom/scroll range.  The detail
+   refresh updates only the newest candle/volume point when possible and restores
+   the existing visible range on fallback redraws.
 """
 from __future__ import annotations
 
@@ -124,6 +126,48 @@ def _patch_slot_overlay_js() -> None:
     _ORIG_SLOT_OVERLAY_JS = real_api._real_slot_overlay_js
 
     detail_refresh = r'''
+  function realVisibleRange(){
+    try{
+      return (typeof chart!=='undefined' && chart && chart.timeScale && chart.timeScale().getVisibleLogicalRange) ? chart.timeScale().getVisibleLogicalRange() : null;
+    }catch(e){ return null; }
+  }
+  function restoreRealVisibleRange(range){
+    try{
+      if(range && typeof chart!=='undefined' && chart && chart.timeScale && chart.timeScale().setVisibleLogicalRange){
+        chart.timeScale().setVisibleLogicalRange(range);
+      }
+    }catch(e){}
+  }
+  async function updateRealDetailLatestCandle(ticker, interval){
+    try{
+      if(interval!=='1m') return false;
+      if(typeof series==='undefined' || !series || typeof series.update!=='function') return false;
+      const r=await fetch(`${API}/api/real/candles/${encodeURIComponent(ticker)}?interval=${encodeURIComponent(interval)}`, {cache:'no-store'});
+      const candles=await r.json();
+      if(!Array.isArray(candles) || !candles.length) return false;
+      const last=candles[candles.length-1];
+      if(!last || last.time==null) return false;
+      const range=realVisibleRange();
+      series.update(last);
+      if(typeof volSeries!=='undefined' && volSeries && typeof volSeries.update==='function'){
+        volSeries.update({
+          time:last.time,
+          value:last.volume||0,
+          color: Number(last.close)>=Number(last.open) ? 'rgba(38,208,124,.5)' : 'rgba(255,77,106,.5)'
+        });
+      }
+      restoreRealVisibleRange(range);
+      window._lastRealDetailCandleTime=last.time;
+      window._lastRealDetailCandleClose=last.close;
+      updateRealUpdateBadge({chartLatest:last.time, chartFetch:new Date().toISOString()});
+      return true;
+    }catch(e){ return false; }
+  }
+  async function drawRealDetailPreservingRange(ticker, interval){
+    const range=realVisibleRange();
+    if(typeof window.drawChart==='function') await window.drawChart(ticker, interval, {preserveRange:true});
+    restoreRealVisibleRange(range);
+  }
   async function forceRealHoldingOneMinuteChart(ticker){
     try{
       const tk=String(ticker||'').toUpperCase();
@@ -145,10 +189,24 @@ def _patch_slot_overlay_js() -> None:
             )
         js = js.replace(
             "      const interval=String(ac.interval||'1m');\n"
-            "      if(!ticker || interval!=='1m') return;",
+            "      if(!ticker || interval!=='1m') return;\n"
+            "      if(typeof window.drawChart==='function') await window.drawChart(ticker, interval);",
             "      let interval=String(ac.interval||'1m');\n"
             "      if(String(ac.type||'')==='real_holding') interval='1m';\n"
-            "      if(!ticker || interval!=='1m') return;",
+            "      if(!ticker || interval!=='1m') return;\n"
+            "      const updated=await updateRealDetailLatestCandle(ticker, interval);\n"
+            "      if(!updated) await drawRealDetailPreservingRange(ticker, interval);",
+        )
+        js = js.replace(
+            "      let interval=String(ac.interval||'1m');\n"
+            "      if(String(ac.type||'')==='real_holding') interval='1m';\n"
+            "      if(!ticker || interval!=='1m') return;\n"
+            "      if(typeof window.drawChart==='function') await window.drawChart(ticker, interval);",
+            "      let interval=String(ac.interval||'1m');\n"
+            "      if(String(ac.type||'')==='real_holding') interval='1m';\n"
+            "      if(!ticker || interval!=='1m') return;\n"
+            "      const updated=await updateRealDetailLatestCandle(ticker, interval);\n"
+            "      if(!updated) await drawRealDetailPreservingRange(ticker, interval);",
         )
         js = js.replace(
             "        if(typeof _activeChart !== 'undefined') _activeChart={type:'real_holding', ticker:String(ticker||'').toUpperCase(), interval:(_activeChart&&_activeChart.interval)||'1d'};\n"
@@ -157,6 +215,16 @@ def _patch_slot_overlay_js() -> None:
             "        if(typeof _activeChart !== 'undefined') _activeChart={type:'real_holding', ticker:realHoldingTicker, interval:'1m'};\n"
             "        renderRealHoldingLiveEnhancements(s);\n"
             "        setTimeout(()=>forceRealHoldingOneMinuteChart(realHoldingTicker),120);",
+        )
+        # Mini candidate/holding charts should also keep the user's zoom/scroll
+        # instead of fitContent() on every refresh.
+        js = js.replace(
+            "          entry.ser.setData(use);",
+            "          const _kmMiniRange=entry.chart&&entry.chart.timeScale&&entry.chart.timeScale().getVisibleLogicalRange ? entry.chart.timeScale().getVisibleLogicalRange() : null;\n          entry.ser.setData(use);",
+        )
+        js = js.replace(
+            "          entry.chart.timeScale().fitContent();",
+            "          if(_kmMiniRange) entry.chart.timeScale().setVisibleLogicalRange(_kmMiniRange); else entry.chart.timeScale().fitContent();",
         )
         return js
 

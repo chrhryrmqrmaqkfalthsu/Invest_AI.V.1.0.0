@@ -1474,6 +1474,15 @@ def _real_slot_overlay_js() -> str:
       }
     }catch(e){}
     window._previewExitLines=[];
+    try{
+      if(window._previewExitZoneUnsub && typeof chart!=='undefined'){
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(window._previewExitZoneUnsub);
+      }
+    }catch(e){}
+    try{ if(window._previewExitZoneResize){ window.removeEventListener('resize', window._previewExitZoneResize); } }catch(e){}
+    window._previewExitZoneUnsub=null;
+    window._previewExitZoneResize=null;
+    window._previewExitZoneState=null;
     document.querySelectorAll('.preview-exit-zone,.preview-exit-zone-label,.preview-entry-xline').forEach(el=>el.remove());
   }
   function previewPlanKey(s){
@@ -1524,57 +1533,63 @@ def _real_slot_overlay_js() -> str:
     }catch(e){}
     return epoch;
   }
-  async function drawPreviewExitZones(s){
+  function clearPreviewExitZoneElements(){
     document.querySelectorAll('.preview-exit-zone,.preview-exit-zone-label,.preview-entry-xline').forEach(el=>el.remove());
-    if(!s || typeof series==='undefined' || typeof series.priceToCoordinate!=='function') return;
+  }
+  function renderPreviewExitZoneOverlay(state){
+    clearPreviewExitZoneElements();
+    if(!state || typeof series==='undefined' || typeof chart==='undefined') return;
+    if(typeof series.priceToCoordinate!=='function') return;
     const wrap=document.getElementById('chart');
     if(!wrap) return;
-    try{ wrap.style.position='relative'; }catch(e){}
-    const plan=previewPlanDefaults(s);
+    const {s, plan, entryTime}=state;
     const entry=num(s.entry_price), stop=num(plan.stop_loss_price), take=num(plan.take_profit_price);
     if(!(entry>0)) return;
-    const entryYRaw=series.priceToCoordinate(entry);
-    if(entryYRaw==null || !Number.isFinite(entryYRaw)) return;
     const h=wrap.clientHeight||440;
     const w=wrap.clientWidth||0;
+    if(w<=0 || h<=0) return;
     const clampY=y=>Math.max(0,Math.min(h,Number(y)));
-    const clampX=x=>Math.max(0,Math.min(w,Number(x)));
+    const entryYRaw=series.priceToCoordinate(entry);
+    if(entryYRaw==null || !Number.isFinite(entryYRaw)) return;
     const entryY=clampY(entryYRaw);
-    let entryTime=await previewEntryChartTime(s);
     let xRaw=null;
-    try{ if(entryTime!=null && typeof chart!=='undefined') xRaw=chart.timeScale().timeToCoordinate(entryTime); }catch(e){}
-    let xStart=(xRaw==null || !Number.isFinite(xRaw)) ? 0 : clampX(xRaw);
-    // If the buy point is at or beyond the right edge, still show a small live
-    // preview band from the latest candle area instead of painting the past.
-    if(xStart>=w-2) xStart=Math.max(0,w-48);
-    const zoneW=Math.max(2,w-xStart);
-    const addEntryXLine=()=>{
+    try{ if(entryTime!=null) xRaw=chart.timeScale().timeToCoordinate(entryTime); }catch(e){}
+    if(xRaw==null || !Number.isFinite(xRaw)) return;
+
+    // The X anchor is the actual entry candle coordinate. Do not clamp the
+    // vertical entry line to a fake edge position. If the candle is off-screen,
+    // hide the line instead of letting it leak outside the chart.
+    const entryVisible = xRaw >= 0 && xRaw <= w;
+    if(xRaw > w) return; // entry candle is to the right of the visible range
+    const xStart = xRaw < 0 ? 0 : xRaw;
+    const zoneW = Math.max(0, w - xStart);
+    if(zoneW <= 1) return;
+    try{ wrap.style.position='relative'; }catch(e){}
+
+    if(entryVisible){
       const line=document.createElement('div');
       line.className='preview-entry-xline';
-      line.style.cssText=`position:absolute;left:${xStart}px;top:0;bottom:0;width:2px;background:rgba(59,130,246,.72);box-shadow:0 0 10px rgba(59,130,246,.45);z-index:17;pointer-events:none;`;
+      line.style.cssText=`position:absolute;left:${xRaw}px;top:0;bottom:0;width:2px;background:rgba(59,130,246,.78);box-shadow:0 0 10px rgba(59,130,246,.45);z-index:17;pointer-events:none;`;
       wrap.appendChild(line);
-    };
-    const addEntrySplitLabel=()=>{
       const tag=document.createElement('div');
       tag.className='preview-exit-zone-label entry';
-      tag.textContent='진입가 기준선';
-      tag.style.cssText=`position:absolute;left:${Math.min(w-120,Math.max(8,xStart+8))}px;top:${Math.max(4,entryY-14)}px;z-index:18;pointer-events:none;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:950;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.45);color:#bfdbfe;`;
+      tag.textContent='진입 봉';
+      tag.style.cssText=`position:absolute;left:${Math.min(w-96,Math.max(8,xRaw+8))}px;top:${Math.max(4,entryY-14)}px;z-index:18;pointer-events:none;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:950;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.45);color:#bfdbfe;`;
       wrap.appendChild(tag);
-    };
+    }
+
     const addZone=(kind, boundaryPrice, label)=>{
       const boundaryRaw=series.priceToCoordinate(boundaryPrice);
       if(boundaryRaw==null || !Number.isFinite(boundaryRaw)) return;
       const isProfit=kind==='profit';
-      // Price above entry has lower Y coordinate. If TP/SL is beyond the visible
-      // chart, clamp to the chart edge so the visible part is fully filled.
       const boundaryY=clampY(boundaryRaw);
       const top=isProfit ? Math.min(boundaryY,entryY) : Math.min(entryY,boundaryY);
       const bottom=isProfit ? Math.max(boundaryY,entryY) : Math.max(entryY,boundaryY);
       const height=Math.max(3,bottom-top);
-      if(height<3 || zoneW<=2) return;
+      if(height<3) return;
       const zone=document.createElement('div');
       zone.className=`preview-exit-zone ${kind}`;
-      zone.style.cssText=`position:absolute;left:${xStart}px;width:${zoneW}px;top:${top}px;height:${height}px;z-index:14;pointer-events:none;border-left:1px solid rgba(59,130,246,.30);border-top:1px solid ${isProfit?'rgba(38,208,124,.46)':'rgba(255,77,106,.18)'};border-bottom:1px solid ${isProfit?'rgba(38,208,124,.18)':'rgba(255,77,106,.46)'};background:${isProfit?'rgba(38,208,124,.16)':'rgba(255,77,106,.16)'};`;
+      zone.style.cssText=`position:absolute;left:${xStart}px;width:${zoneW}px;top:${top}px;height:${height}px;z-index:14;pointer-events:none;border-left:${entryVisible?'1px solid rgba(59,130,246,.30)':'0'};border-top:1px solid ${isProfit?'rgba(38,208,124,.48)':'rgba(255,77,106,.18)'};border-bottom:1px solid ${isProfit?'rgba(38,208,124,.18)':'rgba(255,77,106,.48)'};background:${isProfit?'rgba(38,208,124,.16)':'rgba(255,77,106,.16)'};`;
       wrap.appendChild(zone);
       const tag=document.createElement('div');
       tag.className=`preview-exit-zone-label ${kind}`;
@@ -1582,10 +1597,27 @@ def _real_slot_overlay_js() -> str:
       tag.style.cssText=`position:absolute;right:10px;top:${Math.max(4,top+Math.min(12,Math.max(2,height/2-8)))}px;z-index:18;pointer-events:none;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:950;background:${isProfit?'rgba(38,208,124,.18)':'rgba(255,77,106,.18)'};border:1px solid ${isProfit?'rgba(38,208,124,.50)':'rgba(255,77,106,.50)'};color:${isProfit?'#86efac':'#fecdd3'};`;
       wrap.appendChild(tag);
     };
-    addEntryXLine();
-    addEntrySplitLabel();
     if(plan.take_enabled && take>entry) addZone('profit', take, `익절 영역 · 진입 이후 +${((take/entry-1)*100).toFixed(2)}%`);
     if(plan.stop_enabled && stop>0 && stop<entry) addZone('stop', stop, `손절 영역 · 진입 이후 -${((1-stop/entry)*100).toFixed(2)}%`);
+  }
+  async function drawPreviewExitZones(s){
+    clearPreviewExitZoneElements();
+    if(!s || typeof series==='undefined' || typeof chart==='undefined') return;
+    const plan=previewPlanDefaults(s);
+    const entryTime=await previewEntryChartTime(s);
+    const state={s, plan, entryTime};
+    window._previewExitZoneState=state;
+    const update=()=>renderPreviewExitZoneOverlay(window._previewExitZoneState);
+    try{
+      if(window._previewExitZoneUnsub){ chart.timeScale().unsubscribeVisibleLogicalRangeChange(window._previewExitZoneUnsub); }
+    }catch(e){}
+    try{ if(window._previewExitZoneResize){ window.removeEventListener('resize', window._previewExitZoneResize); } }catch(e){}
+    window._previewExitZoneUnsub=update;
+    window._previewExitZoneResize=update;
+    try{ chart.timeScale().subscribeVisibleLogicalRangeChange(update); }catch(e){}
+    try{ window.addEventListener('resize', update); }catch(e){}
+    update();
+    setTimeout(update,80);
   }
   function drawPreviewExitLines(s){
     clearPreviewExitLines();
@@ -2287,7 +2319,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v23_entry_time_zones"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v24_entry_candle_anchor"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

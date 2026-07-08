@@ -886,15 +886,45 @@ def _candidate_slot_to_dashboard(slot: dict[str, Any], idx: int) -> dict[str, An
         "stop_price": None,
         "trailing_stop": None,
         "manual_buy_enabled": True,
-        "action_label": "매수 선택",
+        "action_label": "실전 매수",
     }
 
 
 def _real_candidate_slots_payload(max_slots: int = 8) -> list[dict[str, Any]]:
+    """Return real-dashboard candidate slots.
+
+    In real mode, stale dashboard/manual held_exclusions must not hide candidates.
+    A ticker is removed from the buy-candidate area only when the real broker
+    currently reports it as an actual holding.
+    """
     state = _live_slots_state()
-    slots = state.get("slots") if isinstance(state.get("slots"), list) else []
     limit = max(1, int(max_slots or 8))
-    return [_candidate_slot_to_dashboard(slots[i] if i < len(slots) else {}, i + 1) for i in range(limit)]
+    actual_held_tickers = {
+        str(row.get("ticker") or "").upper().strip()
+        for row in _real_positions_payload()
+        if row.get("ticker") and _safe_float(row.get("shares"), 0.0)
+    }
+    pool = state.get("candidate_pool") if isinstance(state.get("candidate_pool"), list) else []
+    if pool:
+        ordered = _sort_live_slot_pool([
+            dict(r) for r in pool
+            if str(r.get("ticker") or "").upper().strip() not in actual_held_tickers
+        ])
+    else:
+        raw_slots = state.get("slots") if isinstance(state.get("slots"), list) else []
+        ordered = [
+            dict(r) for r in raw_slots
+            if isinstance(r, dict) and str(r.get("ticker") or "").upper().strip() not in actual_held_tickers
+        ]
+    out=[]
+    for idx in range(limit):
+        raw = dict(ordered[idx]) if idx < len(ordered) else {}
+        if raw:
+            raw["slot_no"] = idx + 1
+            raw["slot"] = idx + 1
+            raw["status"] = "FILLED"
+        out.append(_candidate_slot_to_dashboard(raw, idx + 1))
+    return out
 
 
 def _find_live_slot_candidate_raw(state: dict[str, Any], candidate_id: str) -> dict[str, Any] | None:
@@ -1074,43 +1104,42 @@ def _append_live_slot_event(row: dict[str, Any]) -> None:
 
 
 def _mark_real_slot_manual_buy(req: RealSlotBuyRequest) -> dict[str, Any]:
-    state = _live_slots_state()
-    if not state:
-        raise ValueError(f"live slot state missing: {LIVE_SLOTS_STATE_PATH}")
-    selected: dict[str, Any] | None = None
-    if req.slot is not None:
+    """Submit a real buy intent/order without excluding the candidate locally.
+
+    Previous dashboard behavior wrote held_exclusions immediately. In real mode
+    that is wrong: a candidate leaves the buy list only after the broker reports
+    an actual holding.
+    """
+    cid = str(req.candidate_id or "").strip()
+    if not cid and req.slot is not None:
+        state = _live_slots_state()
         for row in state.get("slots") or []:
             if int(row.get("slot_no") or row.get("slot") or 0) == int(req.slot) and row.get("candidate_id"):
-                selected = dict(row)
+                cid = str(row.get("candidate_id") or "").strip()
                 break
-    if selected is None and req.candidate_id:
-        cid = str(req.candidate_id)
-        for row in (state.get("slots") or []) + (state.get("waitlist") or []) + (state.get("candidate_pool") or []):
-            if str(row.get("candidate_id") or "") == cid:
-                selected = dict(row)
-                break
-        if selected is None:
-            selected = {"candidate_id": cid}
-    if not selected or not selected.get("candidate_id"):
-        raise ValueError("slot candidate not found")
-    cid = str(selected.get("candidate_id"))
-    event = {
+    if not cid:
+        raise ValueError("candidate_id missing")
+    intent = _create_real_buy_intent(RealBuyIntentRequest(candidate_id=cid, source=req.source or "dashboard-real-detail", notional=req.notional))
+    _append_live_slot_event({
+        "event": "DASHBOARD_REAL_BUY_INTENT",
         "time": utc_now_iso(),
         "candidate_id": cid,
-        "ticker": selected.get("ticker"),
-        "slot_no": selected.get("slot_no") or selected.get("slot"),
-        "note": req.note or "dashboard-real manual buy",
-        "source": req.source or "dashboard_real_slots",
+        "ticker": intent.get("ticker"),
         "notional": req.notional,
-        "status": "open",
-        "snapshot": selected,
+        "source": req.source or "dashboard-real-detail",
+        "execution_mode": intent.get("execution_mode"),
+        "status": intent.get("status"),
+        "note": "real buy intent/order submitted; candidate exclusion waits for actual broker holding",
+    })
+    return {
+        "ok": True,
+        "intent": intent,
+        "event": intent,
+        "slots": _real_candidate_slots_payload(8),
+        "positions": _real_positions_payload(),
+        "state_path": str(REAL_BUY_INTENT_PATH),
+        "note": "candidate not excluded until actual broker holding is detected",
     }
-    state.setdefault("held_exclusions", {})[cid] = event
-    state.setdefault("manual_buy_events", []).append(event)
-    state = _rebuild_live_slots_state(state, "dashboard_real_slot_buy")
-    atomic_write_json(LIVE_SLOTS_STATE_PATH, state)
-    _append_live_slot_event({"event": "DASHBOARD_REAL_SLOT_BUY", **event})
-    return {"ok": True, "event": event, "slots": _real_candidate_slots_payload(8), "state_path": str(LIVE_SLOTS_STATE_PATH)}
 
 
 def _real_slot_overlay_js() -> str:
@@ -1300,7 +1329,7 @@ def _real_slot_overlay_js() -> str:
         <button class="quick-amt" data-amount="100" data-candidate-id="${esc(cid)}">$100</button>
         <button class="quick-amt" data-amount="250" data-candidate-id="${esc(cid)}">$250</button>
         <button class="quick-amt" data-amount="500" data-candidate-id="${esc(cid)}">$500</button>
-        <button class="slot-buy-real" data-candidate-id="${esc(cid)}" data-slot="${slot}">매수 후보 선택</button>
+        <button class="slot-buy-real" data-candidate-id="${esc(cid)}" data-slot="${slot}">실전 매수</button>
       </div>
       <div class="ticket-foot"><span>현재가 기준 예상 수량</span><span>실제 주문 전 최종 확인</span></div>
     </div>`;
@@ -2134,7 +2163,7 @@ def _real_slot_overlay_js() -> str:
     const r=await fetch(`${API}/api/real/live_slot_buy`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({candidate_id:cid, slot:slot||null, notional:notional, source:'dashboard-real-detail', note:`dashboard-real notional ${notional}`})
+      body:JSON.stringify({candidate_id:cid, slot:slot||null, notional:notional, source:'dashboard-real-detail', note:`dashboard-real real buy ${notional}`})
     });
     const d=await r.json().catch(()=>({}));
     if(!r.ok || d.ok===false) throw new Error(d.detail||d.reason||`HTTP ${r.status}`);
@@ -2150,16 +2179,19 @@ def _real_slot_overlay_js() -> str:
       return;
     }
     const ticker=s.ticker||cid;
-    if(!confirm(`${ticker} 후보를 $${money(amount)} 매수 대상으로 선택하고 후보 슬롯에서 제외할까요?\n\n이 버튼은 후보 상태 기록/제외용입니다. 실제 주문은 사용하는 매매 화면/브로커에서 별도로 확인하세요.`)) return;
+    if(!confirm(`${ticker} 후보를 $${money(amount)} 실전 매수 요청으로 제출할까요?\n\n실제 브로커 보유가 확인되기 전까지 후보 슬롯에서는 제외하지 않습니다.`)) return;
     candidateNodes('.slot-buy-real[data-candidate-id]', cid).forEach(b=>{b.disabled=true; b.textContent='처리 중…';});
     try{
       await markSlotBuy(cid, amount, slot);
-      if(typeof toast==='function') toast('매수 후보 선택 완료', `${ticker} · $${money(amount)} · 후보 슬롯 재갱신`, 'good');
-      await loadCandidateSlots();
+      const mode=(d.intent&&d.intent.execution_mode)||d.execution_mode||'real_intent';
+      if(typeof toast==='function') toast('실전 매수 요청 완료', `${ticker} · $${money(amount)} · ${mode}`, 'good');
+      try{ if(typeof loadAccount==='function') await loadAccount(); }catch(e){}
+      try{ if(typeof oldLoadSlots === 'function') await oldLoadSlots(); }catch(e){}
+      await loadCandidateSlots(true);
       if(typeof closeDetail==='function') closeDetail();
     }catch(e){
-      if(typeof toast==='function') toast('매수 후보 처리 실패', String(e.message||e), 'warn'); else alert(String(e.message||e));
-      candidateNodes('.slot-buy-real[data-candidate-id]', cid).forEach(b=>{b.disabled=false; b.textContent='매수 선택';});
+      if(typeof toast==='function') toast('실전 매수 요청 실패', String(e.message||e), 'warn'); else alert(String(e.message||e));
+      candidateNodes('.slot-buy-real[data-candidate-id]', cid).forEach(b=>{b.disabled=false; b.textContent='실전 매수';});
     }
   }
   function candidateSignalEpochSec(s){
@@ -2402,7 +2434,7 @@ def _real_slot_overlay_js() -> str:
         <div class="kv"><span>후순위</span><span>${s.down_deprioritize?'SPY DOWN + HIGH_VOL':'아님'}</span></div>
         <div class="kv" style="grid-column:1/-1;display:block;background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.35);">
           ${ticketHtml(s, {amount: amount, idSuffix: 'detail_'+String(s.candidate_id||'').replace(/[^A-Za-z0-9_-]/g,'_')})}
-          <div style="font-size:11px;color:var(--dim);margin-top:6px;">후보 선택 시 보유/제외 목록에 기록되고 매수 대기 후보 8칸이 전면 재갱신됩니다.</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:6px;">실전 매수 요청/주문을 제출합니다. 실제 브로커 보유가 확인되기 전까지 후보 슬롯에서는 제외하지 않습니다.</div>
         </div>`;
     }
     const comm=document.getElementById('commentary');
@@ -2654,7 +2686,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v31_real_holding_no_preview"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v32_real_holdings_only_exclusion"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html", headers={"Cache-Control":"no-store, max-age=0", "Pragma":"no-cache"})

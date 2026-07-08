@@ -794,6 +794,108 @@ def _real_candidate_slots_payload(max_slots: int = 8) -> list[dict[str, Any]]:
     return [_candidate_slot_to_dashboard(slots[i] if i < len(slots) else {}, i + 1) for i in range(limit)]
 
 
+def _find_live_slot_candidate_raw(state: dict[str, Any], candidate_id: str) -> dict[str, Any] | None:
+    cid = str(candidate_id or "").strip()
+    if not cid:
+        return None
+    for source in ("slots", "candidate_pool", "waitlist"):
+        rows = state.get(source) if isinstance(state.get(source), list) else []
+        for row in rows:
+            if isinstance(row, dict) and str(row.get("candidate_id") or "") == cid:
+                return dict(row)
+    return None
+
+
+def _real_buy_preview_dashboard_payload(candidate_id: str, notional: float | None = None) -> dict[str, Any]:
+    """Read-only dashboard preview for a hypothetical candidate buy.
+
+    This does not write live_slots_state, held_exclusions, positions.json, or
+    broker orders. It only returns the dashboard arrays as they would look after
+    the selected candidate becomes a holding and is removed from the buy list.
+    """
+    state = _live_slots_state()
+    cid = str(candidate_id or "").strip()
+    cand = _find_live_slot_candidate_raw(state, cid)
+    if not cand:
+        raise ValueError("candidate_id not found in live slot state")
+    price = _safe_float(cand.get("price") or cand.get("current_price"), None)
+    if price is None or price <= 0:
+        raise ValueError("candidate price unavailable")
+    amount = _safe_float(notional, None)
+    if amount is None or amount <= 0:
+        amount = 100.0
+    shares = amount / price if price > 0 else 0.0
+    ticker = str(cand.get("ticker") or "").upper().strip()
+    holdings = _real_positions_payload()
+    virtual_holding = {
+        "slot": 1,
+        "slot_no": 1,
+        "empty": False,
+        "preview": True,
+        "preview_mode": True,
+        "slot_type": "virtual_holding_preview",
+        "status": "PREVIEW_ONLY_NO_ORDER",
+        "ticker": ticker,
+        "candidate_id": cid,
+        "entry_price": round(price, 6),
+        "current_price": round(price, 6),
+        "shares": round(shares, 6),
+        "pnl_pct": 0.0,
+        "unrealized_pnl": 0.0,
+        "invested": round(amount, 6),
+        "exit_strategy": "S2 no-TP PREVIEW",
+        "exit_strategy_name": cand.get("exit_strategy"),
+        "max_holding_days": cand.get("max_holding_days"),
+        "take_profit_enabled": False,
+        "target_price": None,
+        "stop_price": None,
+        "trailing_stop": None,
+        "stop_loss_atr": _safe_float(cand.get("stop_loss_atr"), None),
+        "trailing_atr": _safe_float(cand.get("trailing_atr"), None),
+        "take_profit_atr": _safe_float(cand.get("take_profit_atr"), None),
+        "preview_note": "화면 확인용 가상 보유입니다. 실제 주문/상태변경 없음.",
+    }
+    preview_holdings = [virtual_holding]
+    for idx, row in enumerate(holdings, start=2):
+        h = dict(row)
+        h["slot"] = idx
+        h["slot_no"] = idx
+        preview_holdings.append(h)
+
+    held = _active_live_slot_held_ids(state)
+    pool = state.get("candidate_pool") if isinstance(state.get("candidate_pool"), list) else []
+    filtered = []
+    for row in pool:
+        if not isinstance(row, dict):
+            continue
+        rcid = str(row.get("candidate_id") or "")
+        if rcid == cid or rcid in held:
+            continue
+        filtered.append(dict(row))
+    filtered = _sort_live_slot_pool(filtered)
+    slots = []
+    for idx in range(8):
+        raw = dict(filtered[idx]) if idx < len(filtered) else {}
+        if raw:
+            raw["slot_no"] = idx + 1
+            raw["slot"] = idx + 1
+            raw["status"] = "PREVIEW_AFTER_BUY"
+        slots.append(_candidate_slot_to_dashboard(raw, idx + 1))
+
+    return {
+        "ok": True,
+        "preview": True,
+        "candidate_id": cid,
+        "ticker": ticker,
+        "notional": round(amount, 6),
+        "price": round(price, 6),
+        "shares": round(shares, 6),
+        "holdings": preview_holdings,
+        "candidate_slots": slots,
+        "note": "read-only preview; no broker order, no held_exclusions write, no positions write",
+    }
+
+
 def _sort_live_slot_pool(pool: list[dict[str, Any]]) -> list[dict[str, Any]]:
     def key(row: dict[str, Any]):
         return (
@@ -1048,52 +1150,68 @@ def _real_slot_overlay_js() -> str:
         <button class="quick-amt" data-amount="100" data-candidate-id="${esc(cid)}">$100</button>
         <button class="quick-amt" data-amount="250" data-candidate-id="${esc(cid)}">$250</button>
         <button class="quick-amt" data-amount="500" data-candidate-id="${esc(cid)}">$500</button>
-        <button class="slot-preview-real" data-candidate-id="${esc(cid)}" data-slot="${slot}" style="border:1px solid rgba(59,130,246,.55);background:#13233a;color:#bfdbfe;">매수 후 미리보기</button>
+        <button class="slot-preview-real" data-candidate-id="${esc(cid)}" data-slot="${slot}" style="border:1px solid rgba(59,130,246,.55);background:#13233a;color:#bfdbfe;">매수 후 대시보드 미리보기</button>
         <button class="slot-buy-real" data-candidate-id="${esc(cid)}" data-slot="${slot}">매수 후보 선택</button>
       </div>
       <div class="ticket-foot"><span>현재가 기준 예상 수량</span><span>실제 주문 전 최종 확인</span></div>
     </div>`;
   }
-  async function openBuyPreviewModal(s, amount){
-    const ticker=String(s.ticker||'').toUpperCase();
-    const price=num(s.price ?? s.current_price) || 0;
-    const shares=(price>0 && amount>0)? amount/price : 0;
-    let cfg=null, news=null;
-    try{ cfg=await (await fetch(`${API}/api/real/live_auto_config`,{cache:'no-store'})).json(); }catch(e){}
-    try{ news=await (await fetch(`${API}/api/real/news`,{cache:'no-store'})).json(); }catch(e){}
-    const cash=num(cfg && cfg.status && cfg.status.account && cfg.status.account.cash_usd);
-    const k=Number(cfg && cfg.config && cfg.config.portfolio_K || 20);
-    const slotNotional=(cash!=null && k>0)? cash/k : null;
-    const entry=(news && news.sentiment && news.sentiment.entries && news.sentiment.entries[ticker]) || {};
-    let modal=document.getElementById('real-buy-preview-modal');
-    if(!modal){
-      modal=document.createElement('div');
-      modal.id='real-buy-preview-modal';
-      modal.style.cssText='position:fixed;inset:0;background:rgba(3,7,18,.72);backdrop-filter:blur(6px);z-index:100000;display:flex;align-items:center;justify-content:center;padding:22px;';
-      document.body.appendChild(modal);
-      modal.addEventListener('click',e=>{ if(e.target===modal) modal.style.display='none'; });
-    }
-    modal.innerHTML=`<div style="width:min(920px,96vw);max-height:92vh;overflow:auto;background:#0b111c;border:1px solid rgba(59,130,246,.45);border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.55);padding:18px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;"><div><div style="font-size:20px;font-weight:950;color:#e7eefb;">📦 가상 매수 후 대시보드 프리뷰</div><div style="font-size:12px;color:#93a4bd;">실제 주문 없음 · state 변경 없음 · held_exclusions 변경 없음</div></div><button id="real-buy-preview-close" style="background:#263246;color:#e7eefb;border:0;border-radius:10px;padding:8px 12px;font-weight:900;cursor:pointer;">닫기 ✕</button></div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;">
-        <div class="panel" style="padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><div style="font-size:26px;font-weight:950;">${esc(ticker)}</div><div style="color:#93a4bd;font-size:12px;">가상 보유 슬롯</div></div>
-        <div class="panel" style="padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>가상 매수가</b><br><span style="font-size:22px;">$${money(price)}</span></div>
-        <div class="panel" style="padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>가상 매수금액</b><br><span style="font-size:22px;">$${money(amount)}</span></div>
-        <div class="panel" style="padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>예상 수량</b><br><span style="font-size:22px;">${shares?shares.toFixed(6):'—'}주</span></div>
-      </div>
-      <div style="margin-top:12px;padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>S2 청산 프리뷰</b><div style="color:#93a4bd;font-size:12px;margin-top:6px;">take_profit OFF(no-TP) · stop_loss ${fmt(s.stop_loss_atr,2)} ATR · trailing ${fmt(s.trailing_atr,2)} ATR · sell_omen · timeout ${esc(s.max_holding_days||'rulebook')}일</div></div>
-      <div style="margin-top:12px;padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>K/자본 프리뷰</b><div style="color:#93a4bd;font-size:12px;margin-top:6px;">현재 현금 ${cash==null?'—':'$'+money(cash)} · K=${k} · 계좌 기준 슬롯당 ${slotNotional==null?'—':'$'+money(slotNotional)}</div></div>
-      <div style="margin-top:12px;padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>뉴스 프리뷰</b><div style="color:#93a4bd;font-size:12px;margin-top:6px;">score ${entry.score==null?'—':entry.score} · ${esc(entry.risk_label||'—')} · 기사 ${entry.article_count||0}개 · fresh ${entry.fresh===true?'true':'false'}</div></div>
-      <div style="margin-top:12px;padding:12px;background:#25131a;border:1px solid #6a2630;border-radius:12px;color:#ffd5d9;font-size:12px;">이 프리뷰는 화면 확인용 임시 기능입니다. 실제 주문, 보유 등록, 후보 제외, 상태파일 변경을 하지 않습니다.</div>
+  function previewBannerHtml(p){
+    return `<div id="real-buy-preview-banner" style="background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(245,196,81,.12));border:1px solid rgba(59,130,246,.45);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div><div style="font-size:15px;font-weight:950;color:#e7eefb;">📦 가상 매수 프리뷰 중 · ${esc(p.ticker||'')}</div><div style="font-size:12px;color:var(--dim);">보유 슬롯/후보 슬롯이 매수 후처럼 임시 재구성되었습니다. 실제 주문 · 후보 제외 · 상태 저장은 없습니다.</div></div>
+      <button id="clear-buy-preview" style="background:#263246;color:#e7eefb;border:0;border-radius:10px;padding:9px 12px;font-weight:900;cursor:pointer;">프리뷰 해제</button>
     </div>`;
-    document.getElementById('real-buy-preview-close').onclick=()=>{ modal.style.display='none'; };
-    modal.style.display='flex';
   }
-  function handlePreview(cid){
-    const s=byCid(cid) || {};
+  function updateBuyPreviewBanner(){
+    const stack=document.getElementById('real-home-stack');
+    if(!stack) return;
+    let banner=document.getElementById('real-buy-preview-banner');
+    if(window._realBuyDashboardPreview){
+      if(!banner){
+        const wrap=document.createElement('div');
+        wrap.innerHTML=previewBannerHtml(window._realBuyDashboardPreview);
+        banner=wrap.firstElementChild;
+        stack.insertBefore(banner, stack.firstChild);
+      }else{
+        banner.outerHTML=previewBannerHtml(window._realBuyDashboardPreview);
+        banner=document.getElementById('real-buy-preview-banner');
+      }
+      const btn=document.getElementById('clear-buy-preview');
+      if(btn) btn.onclick=clearBuyDashboardPreview;
+    }else if(banner){
+      banner.remove();
+    }
+  }
+  async function clearBuyDashboardPreview(){
+    window._realBuyDashboardPreview=null;
+    if(typeof toast==='function') toast('프리뷰 해제', '실제 대시보드 상태로 다시 불러옵니다.', 'good');
+    await loadCandidateSlots(true);
+    if(typeof oldLoadSlots === 'function') await oldLoadSlots();
+    renderRealHoldingSlots();
+    updateBuyPreviewBanner();
+  }
+  async function applyBuyDashboardPreview(cid, amount){
+    const r=await fetch(`${API}/api/real/buy_preview_dashboard?candidate_id=${encodeURIComponent(cid)}&notional=${encodeURIComponent(amount||100)}`, {cache:'no-store'});
+    const p=await r.json().catch(()=>({}));
+    if(!r.ok || p.ok===false) throw new Error(p.detail||p.reason||`HTTP ${r.status}`);
+    window._realBuyDashboardPreview=p;
+    window.slotData=p.holdings||[];
+    window.candidateSlotData=p.candidate_slots||[];
+    document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+    const home=document.getElementById('page-home'); if(home) home.classList.add('active');
+    document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+    const nav=document.querySelectorAll('.nav button')[0]; if(nav) nav.classList.add('active');
+    arrangeRealHome();
+    renderRealHoldingSlots();
+    renderCandidateSlots();
+    updateBuyPreviewBanner();
+    if(typeof toast==='function') toast('가상 매수 프리뷰 적용', `${p.ticker} · $${money(p.notional)} · 실제 주문 없음`, 'good');
+  }
+  async function handlePreview(cid){
     const input=document.querySelector(`.slot-buy-amount[data-candidate-id="${CSS.escape(cid)}"]`);
     const amount=num(input && input.value) || defaultNotional();
-    openBuyPreviewModal(s, amount);
+    try{ await applyBuyDashboardPreview(cid, amount); }
+    catch(e){ if(typeof toast==='function') toast('프리뷰 실패', String(e.message||e), 'warn'); else alert(String(e.message||e)); }
   }
   function updateShareEstimate(input){
     const amount=num(input && input.value);
@@ -1256,6 +1374,7 @@ def _real_slot_overlay_js() -> str:
     setTimeout(drawCandidateMiniCharts, 50);
   }
   async function loadCandidateSlots(forceRender=false){
+    if(window._realBuyDashboardPreview) return;
     let next=[];
     try{
       const r=await fetch(`${API}/api/real/candidate_slots`, {cache:'no-store'});
@@ -1321,12 +1440,15 @@ def _real_slot_overlay_js() -> str:
     const pnlColor=pnl==null?'var(--dim)':(pnl>=0?'var(--up)':'var(--down)');
     const invested=(num(s.entry_price)||0)*(num(s.shares)||0);
     const chartId=`${prefix}-holding-chart-${ticker}`;
-    return `<div class="mslot real-holding-slot" onclick="openDetail('${ticker}')" style="min-height:265px;padding:14px;">
-      <div class="mslot-top"><span class="mslot-tk">${ticker}</span><span class="mslot-pnl" style="color:${pnlColor}">${pnlTxt}</span></div>
+    const preview=!!s.preview;
+    const click=preview?'':`onclick="openDetail('${ticker}')"`;
+    const badge=preview?'<span class="tag" style="border-color:#3b82f6;color:#bfdbfe;margin-left:8px;">가상 PREVIEW</span>':'';
+    return `<div class="mslot real-holding-slot" ${click} style="min-height:265px;padding:14px;${preview?'border-color:rgba(59,130,246,.55);box-shadow:0 0 0 1px rgba(59,130,246,.2) inset;':''}">
+      <div class="mslot-top"><span class="mslot-tk">${ticker}${badge}</span><span class="mslot-pnl" style="color:${pnlColor}">${pnlTxt}</span></div>
       <div class="mslot-sub">현재 ${fmt(s.current_price,2)} · 진입 ${fmt(s.entry_price,2)} · 수량 ${fmt(s.shares,4)}</div>
       <div class="mslot-sub">투입 ${invested?('$'+money(invested)):'—'} · ${esc(s.exit_strategy||'')} · 최대 ${esc(s.max_holding_days||'—')}일</div>
       <div id="${chartId}" class="real-holding-mini-chart" style="height:165px;margin-top:10px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0b1019;"></div>
-      <div class="mslot-sub" style="margin-top:8px;color:var(--accent);font-weight:800;">클릭 → 보유 상세</div>
+      <div class="mslot-sub" style="margin-top:8px;color:var(--accent);font-weight:800;">${s.preview?'가상 프리뷰 · 실제 보유 아님':'클릭 → 보유 상세'}</div>
     </div>`;
   }
   async function drawHoldingMiniCharts(prefix, holdings){
@@ -1352,6 +1474,7 @@ def _real_slot_overlay_js() -> str:
   }
   function renderRealHoldingSlots(){
     arrangeRealHome();
+    updateBuyPreviewBanner();
     const holdings=(window.slotData||[]).filter(s=>s && !s.empty);
     const gridCols=holdings.length<=1?'1fr':(holdings.length===2?'repeat(2, minmax(0, 1fr))':'repeat(auto-fit, minmax(280px, 1fr))');
     const empty='<div class="panel" style="padding:26px;text-align:center;color:var(--dim);">현재 보유 슬롯 없음<br><span style="font-size:11px;">빈 슬롯 8칸은 표시하지 않습니다.</span></div>';
@@ -1611,7 +1734,7 @@ def _real_slot_overlay_js() -> str:
   }
   const oldLoadSlots = window.loadSlots;
   if(typeof oldLoadSlots === 'function'){
-    window.loadSlots = async function(){ await oldLoadSlots(); await loadCandidateSlots(); };
+    window.loadSlots = async function(){ if(window._realBuyDashboardPreview) return; await oldLoadSlots(); await loadCandidateSlots(); };
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', loadCandidateSlots); else loadCandidateSlots();
   setInterval(loadCandidateSlots, 30000);
@@ -1802,7 +1925,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v15_preview_hold"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v16_dashboard_preview"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")
@@ -1904,6 +2027,13 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
     @app.get("/api/real/candidate_slots")
     def real_candidate_slots(max_slots: int = 8):
         return _real_candidate_slots_payload(max_slots=max_slots)
+
+    @app.get("/api/real/buy_preview_dashboard")
+    def real_buy_preview_dashboard(candidate_id: str, notional: float = 100.0):
+        try:
+            return _real_buy_preview_dashboard_payload(candidate_id=candidate_id, notional=notional)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
     @app.get("/api/real/live_slots_state")
     def real_live_slots_state():

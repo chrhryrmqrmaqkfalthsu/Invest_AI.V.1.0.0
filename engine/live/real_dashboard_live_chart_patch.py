@@ -5,25 +5,31 @@ HTML/JS generator does not need invasive edits.  It fixes real-trading UI issues
 
 1. Held-position detail pages should open/refresh the 1m chart, not silently stay
    on the base dashboard's default daily chart.
-2. For held tickers, yfinance 1m bars can lag or skip minutes.  Append a display
-   candle from the same display price used by the real positions panel so the
-   held-position chart reflects the dashboard mark while waiting for the next
-   public 1m bar.
+2. Held-position 1m candles must be stable and truthful.  The earlier live-tail
+   display candle used position/current-price marks on top of yfinance bars; that
+   made candle bodies/wicks differ after a full refresh.  For actually held
+   symbols, use Alpaca IEX 1m OHLCV bars first and do not invent missing bars.
 3. Automatic refresh must not reset the user's zoom/scroll range.  The detail
-   refresh now reloads the full candle dataset with the existing viewport
-   restored, so delayed yfinance backfills/revised recent bars are reflected
-   without the chart jumping back to the origin.
+   refresh reloads the full candle dataset with the existing viewport restored,
+   so delayed/revised recent bars are reflected without the chart jumping.
 """
 from __future__ import annotations
 
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
+
+from alpaca.data.enums import Adjustment, DataFeed
+from alpaca.data.requests import StockBarsRequest
+from alpaca.data.timeframe import TimeFrame
 
 from engine.live import real_dashboard_api as real_api
 
 _INSTALLED = False
 _ORIG_CANDLES_CACHED = None
 _ORIG_SLOT_OVERLAY_JS = None
+_ALPACA_1M_BAR_CACHE: dict[tuple[str, str], tuple[float, list[dict[str, Any]]]] = {}
+_ALPACA_1M_BAR_TTL_SEC = 8.0
 
 
 def _to_float(value: Any) -> float | None:
@@ -38,85 +44,91 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
-def _holding_current_price(ticker: str) -> tuple[float | None, str]:
-    """Return the display price used for a held ticker and its source.
+def _is_real_holding(ticker: str) -> bool:
+    tk = str(ticker or "").upper().strip()
+    if not tk:
+        return False
+    try:
+        for row in real_api._real_positions_payload():
+            if str(row.get("ticker") or "").upper().strip() == tk and _to_float(row.get("shares")):
+                return True
+    except Exception:
+        pass
+    return False
 
-    The real positions panel uses ``_real_positions_payload()`` which, through
-    AlpacaBroker.get_holdings(), already prefers yfinance pre/post display price
-    and then Alpaca latest trade.  The live-tail candle must use the same path;
-    otherwise held-position charts can feel delayed or inconsistent versus the
-    position card.
+
+def _alpaca_iex_1m_candles(ticker: str, *, refresh: bool = False) -> list[dict[str, Any]]:
+    """Return actual Alpaca IEX 1m OHLCV bars for a held ticker.
+
+    We intentionally do not fill missing minutes and do not append a synthetic
+    current-price candle.  Missing bars mean there was no IEX print for that
+    minute; fabricating OHLC values creates fake wicks/bodies and is exactly what
+    made the chart look different after refresh.
     """
     tk = str(ticker or "").upper().strip()
     if not tk:
-        return None, "none"
+        return []
+    cache_key = (tk, "1m:alpaca_iex")
+    now = time.time()
+    if not refresh:
+        hit = _ALPACA_1M_BAR_CACHE.get(cache_key)
+        if hit and now - hit[0] <= _ALPACA_1M_BAR_TTL_SEC:
+            return [dict(x) for x in hit[1]]
+    broker = real_api._get_real_broker()
+    if broker is None or getattr(broker, "data", None) is None:
+        return []
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=5)
+    req = StockBarsRequest(
+        symbol_or_symbols=tk,
+        timeframe=TimeFrame.Minute,
+        start=start,
+        end=end,
+        adjustment=Adjustment.RAW,
+        feed=DataFeed.IEX,
+    )
+    bars = broker.data.get_stock_bars(req)
+    raw_bars = []
     try:
-        for row in real_api._real_positions_payload():
-            if str(row.get("ticker") or "").upper().strip() == tk:
-                price = _to_float(row.get("current_price"))
-                if price is not None:
-                    return price, "real_positions_display_current_price"
+        raw_bars = list((getattr(bars, "data", {}) or {}).get(tk) or [])
     except Exception:
-        pass
-    try:
-        broker = real_api._get_real_broker()
-        if broker is not None:
-            try:
-                latest = _to_float(broker.get_current_price(tk))
-                if latest is not None:
-                    return latest, "alpaca_latest_trade"
-            except Exception:
-                pass
-            try:
-                pos = broker.trading.get_open_position(tk)
-                price = _to_float(getattr(pos, "current_price", None))
-                if price is not None:
-                    return price, "alpaca_trading_position_current_price"
-            except Exception:
-                pass
-    except Exception:
-        pass
-    return None, "none"
-
-
-def _append_live_tail_for_holding(ticker: str, interval: str, candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    if str(interval or "").strip() != "1m":
-        return candles
-    price, source = _holding_current_price(ticker)
-    if price is None:
-        return candles
-    out = [dict(row) for row in candles if isinstance(row, dict)]
-    now_minute = int(time.time() // 60 * 60)
-    if out:
-        last = out[-1]
+        raw_bars = []
+    out: list[dict[str, Any]] = []
+    for bar in raw_bars:
         try:
-            last_time = int(float(last.get("time")))
+            ts = getattr(bar, "timestamp", None)
+            if isinstance(ts, datetime):
+                epoch = int(ts.astimezone(timezone.utc).timestamp())
+            else:
+                epoch = int(float(ts))
+            o = _to_float(getattr(bar, "open", None))
+            h = _to_float(getattr(bar, "high", None))
+            l = _to_float(getattr(bar, "low", None))
+            c = _to_float(getattr(bar, "close", None))
+            if o is None or h is None or l is None or c is None:
+                continue
+            high = max(o, h, l, c)
+            low = min(o, h, l, c)
+            out.append({
+                "time": epoch,
+                "open": round(o, 4),
+                "high": round(high, 4),
+                "low": round(low, 4),
+                "close": round(c, 4),
+                "volume": int(float(getattr(bar, "volume", 0) or 0)),
+                "trade_count": int(float(getattr(bar, "trade_count", 0) or 0)),
+                "vwap": round(float(getattr(bar, "vwap", 0) or 0), 4) if getattr(bar, "vwap", None) is not None else None,
+                "source": "alpaca_iex_1m_bar",
+            })
         except Exception:
-            last_time = 0
-        if last_time >= now_minute:
-            last["close"] = round(price, 4)
-            last["high"] = round(max(_to_float(last.get("high")) or price, price), 4)
-            last["low"] = round(min(_to_float(last.get("low")) or price, price), 4)
-            last["live_tail"] = True
-            last["live_tail_source"] = source
-            return out
-        # Do not backfill every missing minute; add one live mark candle so the
-        # chart visibly follows the current held-position mark without inventing
-        # a full bar sequence.
-        prev_close = _to_float(last.get("close")) or price
-        open_price = prev_close if last_time and now_minute - last_time <= 3600 else price
-    else:
-        open_price = price
-    out.append({
-        "time": now_minute,
-        "open": round(open_price, 4),
-        "high": round(max(open_price, price), 4),
-        "low": round(min(open_price, price), 4),
-        "close": round(price, 4),
-        "volume": 0,
-        "live_tail": True,
-        "live_tail_source": source,
-    })
+            continue
+    # De-duplicate by time while preserving newest value for each minute.
+    by_time: dict[int, dict[str, Any]] = {}
+    for row in out:
+        by_time[int(row["time"])] = row
+    out = [by_time[k] for k in sorted(by_time)]
+    if out:
+        _ALPACA_1M_BAR_CACHE[cache_key] = (now, [dict(x) for x in out])
     return out
 
 
@@ -127,10 +139,17 @@ def _patch_real_candles_cached() -> None:
     _ORIG_CANDLES_CACHED = real_api._real_candles_cached
 
     def patched_real_candles_cached(base_module: Any, *, ticker: str, interval: str = "1d", period: str | None = None, refresh: bool = False) -> list[dict[str, Any]]:
+        tk = str(ticker or "").upper().strip()
+        iv = str(interval or "1d").strip()
+        if iv == "1m" and _is_real_holding(tk):
+            try:
+                alpaca_bars = _alpaca_iex_1m_candles(tk, refresh=refresh)
+                if alpaca_bars:
+                    return alpaca_bars
+            except Exception:
+                pass
         data = _ORIG_CANDLES_CACHED(base_module, ticker=ticker, interval=interval, period=period, refresh=refresh)
-        if not isinstance(data, list):
-            data = []
-        return _append_live_tail_for_holding(ticker, interval, data)
+        return data if isinstance(data, list) else []
 
     real_api._real_candles_cached = patched_real_candles_cached
 
@@ -157,7 +176,7 @@ def _patch_slot_overlay_js() -> None:
   function realCandleSignature(candles){
     try{
       if(!Array.isArray(candles) || !candles.length) return '';
-      return candles.slice(-12).map(c=>[c.time,c.open,c.high,c.low,c.close,c.volume,c.live_tail?'L':''].join(':')).join('|');
+      return candles.slice(-12).map(c=>[c.time,c.open,c.high,c.low,c.close,c.volume,c.source||''].join(':')).join('|');
     }catch(e){ return String(Date.now()); }
   }
   async function refreshRealDetailCandlesPreservingRange(ticker, interval){
@@ -171,11 +190,6 @@ def _patch_slot_overlay_js() -> None:
       if(!last || last.time==null) return false;
       const sig=realCandleSignature(candles);
       const range=realVisibleRange();
-      // yfinance often backfills/revises the last few bars.  Using only
-      // series.update(last) leaves those recent bars stale until a full page
-      // refresh, making the candle shape look different after reload.  setData
-      // corrects the full visible data while the saved logical range prevents
-      // the chart from jumping back to the origin.
       if(window._lastRealDetailCandleSig!==sig){
         series.setData(candles);
         if(typeof volSeries!=='undefined' && volSeries && typeof volSeries.setData==='function'){

@@ -1,8 +1,9 @@
-"""Correct Alpaca OCO exit-order request shape.
+"""Correct Alpaca reserved exit-order request shape and TIF.
 
 Alpaca OCO exit orders require the take-profit price inside
-``take_profit.limit_price``.  The initial reserved-exit implementation put the
-limit price on the parent order, which Alpaca rejects with code 40010001.
+``take_profit.limit_price``.  Fractional stock orders must also use DAY
+``time_in_force``; CE and other real holdings can be fractional, so the reserved
+exit submitter and state recorder force DAY for dashboard-created exit orders.
 """
 from __future__ import annotations
 
@@ -14,6 +15,14 @@ from alpaca.trading.requests import LimitOrderRequest, StopLossRequest, StopOrde
 from engine.live import real_dashboard_alpaca_exit_orders_patch as exit_orders
 
 _INSTALLED = False
+
+
+def _time_in_force_day_default(value: str = "day") -> TimeInForce:
+    # Dashboard-created reserved exits are DAY orders.  This avoids Alpaca's
+    # fractional-order rejection and keeps the recorded state consistent with the
+    # actual submitted order.  Users with whole-share positions can still place
+    # GTC manually in Alpaca if they want a persistent order.
+    return TimeInForce.DAY
 
 
 def _submit_exit_order_fixed(
@@ -34,7 +43,7 @@ def _submit_exit_order_fixed(
         "symbol": tk,
         "qty": qty,
         "side": AlpacaOrderSide.SELL,
-        "time_in_force": tif,
+        "time_in_force": TimeInForce.DAY,
         "client_order_id": client_order_id,
     }
     if take_profit is not None and stop_loss is not None:
@@ -60,4 +69,5 @@ def install_real_dashboard_alpaca_exit_oco_fix() -> None:
     if _INSTALLED:
         return
     exit_orders._submit_exit_order = _submit_exit_order_fixed
+    exit_orders._time_in_force = _time_in_force_day_default
     _INSTALLED = True

@@ -50,7 +50,7 @@
             "url": "https://www.globenewswire.com/news-release/2026/07/08/3323895/0/en/ADMA-Investment-Loss-ADMA-Biologics-Investors-that-Lost-Money-after-Channel-Stuffing-Allegations-are-Notified-to-Contact-BFA-Law-about-the-Filed-Securities-Fraud-Class-Action.html"
           }
         ],
-        "cache_age_minutes": 0.019,
+        "cache_age_minutes": 29.843,
         "fetched_at": "2026-07-08T13:49:37+00:00",
         "fresh": true,
         "latest_article_time_published": "2026-07-08T10:11:32+00:00",
@@ -111,7 +111,7 @@
             "url": "https://ca.investing.com/news/stock-market-news/melius-upgrades-allegiant-travel-stock-rating-to-buy-on-sun-country-deal-93CH-4722723"
           }
         ],
-        "cache_age_minutes": 0.019,
+        "cache_age_minutes": 29.843,
         "fetched_at": "2026-07-08T13:49:37+00:00",
         "fresh": true,
         "latest_article_time_published": "2026-07-07T18:41:57+00:00",
@@ -151,7 +151,7 @@
             "url": "https://www.gurufocus.com/news/8946337/a-look-at-banco-macro-sa-bma-after-45-gain-gf-value-3318-vs-price-9434"
           }
         ],
-        "cache_age_minutes": 0.169,
+        "cache_age_minutes": 29.993,
         "fetched_at": "2026-07-08T13:49:28+00:00",
         "fresh": true,
         "latest_article_time_published": "2026-07-07T00:10:31+00:00",
@@ -212,7 +212,7 @@
             "url": "https://www.jacksonprogress-argus.com/online_features/press_releases/bmi-investors-have-opportunity-to-lead-badger-meter-inc-securities-fraud-lawsuit/article_f9bd6dd4-b543-5b14-9df4-1bd58bd209e9.html"
           }
         ],
-        "cache_age_minutes": 0.169,
+        "cache_age_minutes": 29.993,
         "fetched_at": "2026-07-08T13:49:28+00:00",
         "fresh": true,
         "latest_article_time_published": "2026-07-07T23:40:44+00:00",
@@ -273,7 +273,7 @@
             "url": "https://stockstotrade.com/news/bit-digital-inc-btbt-news-2026_07_06/"
           }
         ],
-        "cache_age_minutes": 0.135,
+        "cache_age_minutes": 29.96,
         "fetched_at": "2026-07-08T13:49:30+00:00",
         "fresh": true,
         "latest_article_time_published": "2026-07-07T21:40:55+00:00",
@@ -291,7 +291,7 @@
       "CE": {
         "article_count": 0,
         "articles": [],
-        "cache_age_minutes": 0.119,
+        "cache_age_minutes": 29.943,
         "fetched_at": "2026-07-08T13:49:31+00:00",
         "fresh": true,
         "latest_article_time_published": "",
@@ -331,7 +331,7 @@
             "url": "https://www.ad-hoc-news.de/boerse/news/ueberblick/commercial-metals-co-highlights-steel-demand-dynamics-amid-global/69708458"
           }
         ],
-        "cache_age_minutes": 0.002,
+        "cache_age_minutes": 29.826,
         "fetched_at": "2026-07-08T13:49:38+00:00",
         "fresh": true,
         "latest_article_time_published": "2026-07-06T22:08:21+00:00",
@@ -355,7 +355,7 @@
       "candidate_meta": {
         "candidate_count": 8,
         "ok": true,
-        "state_updated_at": "2026-07-08T13:48:30.564267+00:00"
+        "state_updated_at": "2026-07-08T14:19:19.435152+00:00"
       },
       "candidate_tickers": [
         "BMI",
@@ -368,7 +368,7 @@
         "CMC"
       ],
       "dry_run": false,
-      "fetched_count": 7,
+      "fetched_count": 0,
       "holding_meta": {
         "holding_count": 1,
         "ok": true
@@ -391,7 +391,7 @@
       "source": "real_focus_news_refresh",
       "state_path": "/home/g3000kkw/kingmaker/data/_system/real_dashboard_news_state.json",
       "target_count": 7,
-      "updated_at": "2026-07-08T13:49:38.126772+00:00"
+      "updated_at": "2026-07-08T14:19:27.586047+00:00"
     }
   }
 }

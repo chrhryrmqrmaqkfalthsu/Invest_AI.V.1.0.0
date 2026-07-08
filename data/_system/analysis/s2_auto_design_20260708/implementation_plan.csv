@@ -1,0 +1,11 @@
+step,phase,file_or_module,action,reason,approval_needed
+1,config,engine/live/s2_auto_config.py,create,live_auto_config.json load/validation/operator arm/kill switch gate,true
+2,exit,engine/core/exit_policy.py,modify,add take_profit_enabled toggle to support S2 no-TP,true
+3,exit,engine/live/exit_policy_adapter.py,modify,pass config.s2_take_profit_enabled into ExitExecutionConfig,true
+4,exit,engine/live/position_manager.py,modify,fail-closed legacy fallback for S2 auto live and optionally no-TP guard,true
+5,buy,engine/live/s2_auto_trader.py,create,orchestrate candidate selection/order/safety/reconciliation/state,true
+6,runner,scripts/run_s2_auto_live.py,create,daemon/one-shot entrypoint for S2 auto mode,true
+7,safety,engine/live/s2_auto_trader.py,create,broker holdings/positions/held_exclusions/pending reconciliation,true
+8,buy,engine/live/s2_auto_trader.py,create,next-open queue default and intraday immediate disabled by default,true
+9,ui,engine/live/real_dashboard_api.py,optional_modify,display live_auto status/arm/kill switch without executing orders,true
+10,test,data/_system/analysis/s2_auto_design_20260708,document,dry-run checklist and validation outputs,true

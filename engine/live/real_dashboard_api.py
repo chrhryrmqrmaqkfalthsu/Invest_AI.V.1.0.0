@@ -1048,10 +1048,52 @@ def _real_slot_overlay_js() -> str:
         <button class="quick-amt" data-amount="100" data-candidate-id="${esc(cid)}">$100</button>
         <button class="quick-amt" data-amount="250" data-candidate-id="${esc(cid)}">$250</button>
         <button class="quick-amt" data-amount="500" data-candidate-id="${esc(cid)}">$500</button>
+        <button class="slot-preview-real" data-candidate-id="${esc(cid)}" data-slot="${slot}" style="border:1px solid rgba(59,130,246,.55);background:#13233a;color:#bfdbfe;">매수 후 미리보기</button>
         <button class="slot-buy-real" data-candidate-id="${esc(cid)}" data-slot="${slot}">매수 후보 선택</button>
       </div>
       <div class="ticket-foot"><span>현재가 기준 예상 수량</span><span>실제 주문 전 최종 확인</span></div>
     </div>`;
+  }
+  async function openBuyPreviewModal(s, amount){
+    const ticker=String(s.ticker||'').toUpperCase();
+    const price=num(s.price ?? s.current_price) || 0;
+    const shares=(price>0 && amount>0)? amount/price : 0;
+    let cfg=null, news=null;
+    try{ cfg=await (await fetch(`${API}/api/real/live_auto_config`,{cache:'no-store'})).json(); }catch(e){}
+    try{ news=await (await fetch(`${API}/api/real/news`,{cache:'no-store'})).json(); }catch(e){}
+    const cash=num(cfg && cfg.status && cfg.status.account && cfg.status.account.cash_usd);
+    const k=Number(cfg && cfg.config && cfg.config.portfolio_K || 20);
+    const slotNotional=(cash!=null && k>0)? cash/k : null;
+    const entry=(news && news.sentiment && news.sentiment.entries && news.sentiment.entries[ticker]) || {};
+    let modal=document.getElementById('real-buy-preview-modal');
+    if(!modal){
+      modal=document.createElement('div');
+      modal.id='real-buy-preview-modal';
+      modal.style.cssText='position:fixed;inset:0;background:rgba(3,7,18,.72);backdrop-filter:blur(6px);z-index:100000;display:flex;align-items:center;justify-content:center;padding:22px;';
+      document.body.appendChild(modal);
+      modal.addEventListener('click',e=>{ if(e.target===modal) modal.style.display='none'; });
+    }
+    modal.innerHTML=`<div style="width:min(920px,96vw);max-height:92vh;overflow:auto;background:#0b111c;border:1px solid rgba(59,130,246,.45);border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.55);padding:18px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;"><div><div style="font-size:20px;font-weight:950;color:#e7eefb;">📦 가상 매수 후 대시보드 프리뷰</div><div style="font-size:12px;color:#93a4bd;">실제 주문 없음 · state 변경 없음 · held_exclusions 변경 없음</div></div><button id="real-buy-preview-close" style="background:#263246;color:#e7eefb;border:0;border-radius:10px;padding:8px 12px;font-weight:900;cursor:pointer;">닫기 ✕</button></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;">
+        <div class="panel" style="padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><div style="font-size:26px;font-weight:950;">${esc(ticker)}</div><div style="color:#93a4bd;font-size:12px;">가상 보유 슬롯</div></div>
+        <div class="panel" style="padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>가상 매수가</b><br><span style="font-size:22px;">$${money(price)}</span></div>
+        <div class="panel" style="padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>가상 매수금액</b><br><span style="font-size:22px;">$${money(amount)}</span></div>
+        <div class="panel" style="padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>예상 수량</b><br><span style="font-size:22px;">${shares?shares.toFixed(6):'—'}주</span></div>
+      </div>
+      <div style="margin-top:12px;padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>S2 청산 프리뷰</b><div style="color:#93a4bd;font-size:12px;margin-top:6px;">take_profit OFF(no-TP) · stop_loss ${fmt(s.stop_loss_atr,2)} ATR · trailing ${fmt(s.trailing_atr,2)} ATR · sell_omen · timeout ${esc(s.max_holding_days||'rulebook')}일</div></div>
+      <div style="margin-top:12px;padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>K/자본 프리뷰</b><div style="color:#93a4bd;font-size:12px;margin-top:6px;">현재 현금 ${cash==null?'—':'$'+money(cash)} · K=${k} · 계좌 기준 슬롯당 ${slotNotional==null?'—':'$'+money(slotNotional)}</div></div>
+      <div style="margin-top:12px;padding:14px;background:#111a2b;border:1px solid #263246;border-radius:14px;"><b>뉴스 프리뷰</b><div style="color:#93a4bd;font-size:12px;margin-top:6px;">score ${entry.score==null?'—':entry.score} · ${esc(entry.risk_label||'—')} · 기사 ${entry.article_count||0}개 · fresh ${entry.fresh===true?'true':'false'}</div></div>
+      <div style="margin-top:12px;padding:12px;background:#25131a;border:1px solid #6a2630;border-radius:12px;color:#ffd5d9;font-size:12px;">이 프리뷰는 화면 확인용 임시 기능입니다. 실제 주문, 보유 등록, 후보 제외, 상태파일 변경을 하지 않습니다.</div>
+    </div>`;
+    document.getElementById('real-buy-preview-close').onclick=()=>{ modal.style.display='none'; };
+    modal.style.display='flex';
+  }
+  function handlePreview(cid){
+    const s=byCid(cid) || {};
+    const input=document.querySelector(`.slot-buy-amount[data-candidate-id="${CSS.escape(cid)}"]`);
+    const amount=num(input && input.value) || defaultNotional();
+    openBuyPreviewModal(s, amount);
   }
   function updateShareEstimate(input){
     const amount=num(input && input.value);
@@ -1205,6 +1247,9 @@ def _real_slot_overlay_js() -> str:
       meta.textContent=`${filled}/8`;
     }
     bindOrderTicketControls();
+    document.querySelectorAll('.slot-preview-real[data-candidate-id]').forEach(btn=>{
+      btn.onclick=function(ev){ev.stopPropagation(); handlePreview(btn.dataset.candidateId);};
+    });
     document.querySelectorAll('.slot-buy-real[data-candidate-id]').forEach(btn=>{
       btn.onclick=function(ev){ev.stopPropagation(); handleBuy(btn.dataset.candidateId, Number(btn.dataset.slot||0));};
     });
@@ -1546,6 +1591,9 @@ def _real_slot_overlay_js() -> str:
     const omen=document.getElementById('sellomen-strip');
     if(omen) omen.innerHTML='';
     bindOrderTicketControls();
+    document.querySelectorAll('.slot-preview-real[data-candidate-id]').forEach(btn=>{
+      btn.onclick=function(ev){ev.stopPropagation(); handlePreview(btn.dataset.candidateId);};
+    });
     document.querySelectorAll('.slot-buy-real[data-candidate-id]').forEach(btn=>{
       btn.onclick=function(ev){ev.stopPropagation(); handleBuy(btn.dataset.candidateId, Number(btn.dataset.slot||0));};
     });
@@ -1754,7 +1802,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v14"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v15_preview_hold"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

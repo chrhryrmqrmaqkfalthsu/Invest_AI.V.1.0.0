@@ -1179,7 +1179,7 @@ def _real_slot_overlay_js() -> str:
   function previewBannerHtml(p){
     return `<div id="real-buy-preview-banner" style="background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(245,196,81,.12));border:1px solid rgba(59,130,246,.45);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
       <div><div style="font-size:15px;font-weight:950;color:#e7eefb;">📦 가상 매수 프리뷰 중 · ${esc(p.ticker||'')}</div><div style="font-size:12px;color:var(--dim);">보유 슬롯/후보 슬롯이 매수 후처럼 임시 재구성되었습니다. 실제 주문 · 후보 제외 · 상태 저장은 없습니다.</div></div>
-      <button id="clear-buy-preview" style="background:#263246;color:#e7eefb;border:0;border-radius:10px;padding:9px 12px;font-weight:900;cursor:pointer;">프리뷰 해제</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;"><button id="open-buy-preview-detail" style="background:#2563eb;color:white;border:0;border-radius:10px;padding:9px 12px;font-weight:900;cursor:pointer;">가상 보유 상세 열기</button><button id="clear-buy-preview" style="background:#263246;color:#e7eefb;border:0;border-radius:10px;padding:9px 12px;font-weight:900;cursor:pointer;">프리뷰 해제</button></div>
     </div>`;
   }
   function updateBuyPreviewBanner(){
@@ -1196,6 +1196,8 @@ def _real_slot_overlay_js() -> str:
         banner.outerHTML=previewBannerHtml(window._realBuyDashboardPreview);
         banner=document.getElementById('real-buy-preview-banner');
       }
+      const detailBtn=document.getElementById('open-buy-preview-detail');
+      if(detailBtn) detailBtn.onclick=()=>openPreviewHoldingDetail(window._realBuyDashboardPreview && window._realBuyDashboardPreview.ticker);
       const btn=document.getElementById('clear-buy-preview');
       if(btn) btn.onclick=clearBuyDashboardPreview;
     }else if(banner){
@@ -1528,9 +1530,9 @@ def _real_slot_overlay_js() -> str:
   }
   function previewExitControlHtml(s){
     const plan=previewPlanDefaults(s);
-    return `<div class="kv" style="grid-column:1/-1;display:block;background:rgba(15,23,42,.72);border-color:rgba(59,130,246,.35);">
+    return `<div id="preview-exit-panel" style="margin:12px 0;padding:14px;background:linear-gradient(135deg,rgba(15,23,42,.95),rgba(30,41,59,.82));border:1px solid rgba(59,130,246,.55);border-radius:14px;box-shadow:0 10px 28px rgba(37,99,235,.12);">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-        <b style="color:#e7eefb;">차트 손절/익절 참고선</b>
+        <b style="color:#e7eefb;font-size:15px;">차트 손절/익절 참고선</b>
         <span style="font-size:11px;color:#fbbf24;">프리뷰 전용 · 저장 없음 · S2 자동익절 OFF</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">
@@ -1590,13 +1592,12 @@ def _real_slot_overlay_js() -> str:
         <div class="kv"><span>최대 보유</span><span>${esc(s.max_holding_days||'—')}일</span></div>
         <div class="kv"><span>후보 score</span><span style="color:var(--up)">${fmt(s.final_score,3)}</span></div>
         <div class="kv"><span>뉴스 위험</span><span>${s.news_score==null?'—':fmt(s.news_score,3)} · ${esc(s.news_risk_label||'—')} · 기사 ${esc(s.news_article_count||0)}개</span></div>
-        <div class="kv"><span>candidate</span><span style="font-size:10px;word-break:break-all">${esc(s.candidate_id||'')}</span></div>
-        ${previewExitControlHtml(s)}`;
+        <div class="kv"><span>candidate</span><span style="font-size:10px;word-break:break-all">${esc(s.candidate_id||'')}</span></div>`;
     }
     const comm=document.getElementById('commentary');
     if(comm){
       const articles=(news.articles||[]).slice(0,2).map(a=>`<li>${esc(a.title||a.summary||'뉴스 제목 없음')}</li>`).join('');
-      comm.innerHTML=`<div class="comment"><b>가상 매수 후 보유 상세</b><br>${ticker}를 $${money(invested)} 매수했다고 가정한 화면입니다. 실제 주문/상태 저장은 없습니다.</div>
+      comm.innerHTML=`${previewExitControlHtml(s)}<div class="comment"><b>가상 매수 후 보유 상세</b><br>${ticker}를 $${money(invested)} 매수했다고 가정한 화면입니다. 실제 주문/상태 저장은 없습니다.</div>
         <div class="comment" style="margin-top:10px;"><b>S2 no-TP 청산</b><br>익절 target은 끄고, stop_loss · trailing · sell_omen · timeout 기준만 확인하는 보유 상태입니다.</div>
         <div class="comment" style="margin-top:10px;"><b>뉴스</b><br>score ${s.news_score==null?'—':fmt(s.news_score,3)} · ${esc(s.news_risk_label||'—')} · fresh ${s.news_fresh?'true':'false'}${articles?`<ul style="margin:8px 0 0 18px;color:var(--dim);">${articles}</ul>`:''}</div>`;
     }
@@ -1614,7 +1615,7 @@ def _real_slot_overlay_js() -> str:
     const invested=num(s.invested) || ((num(s.entry_price)||0)*(num(s.shares)||0));
     const chartId=`${prefix}-holding-chart-${ticker}`;
     const preview=!!s.preview;
-    const click=preview?`onclick="openPreviewHoldingDetail('${ticker}')"`:`onclick="openDetail('${ticker}')"`;
+    const click=preview?`data-preview-ticker="${ticker}"`:`onclick="openDetail('${ticker}')"`;
     const badge=preview?'<span class="tag" style="border-color:#3b82f6;color:#bfdbfe;margin-left:8px;">가상 PREVIEW</span>':'';
     const newsScore=s.news_score==null?'—':fmt(s.news_score,3);
     const newsLabel=s.news_risk_label||'—';
@@ -1678,6 +1679,9 @@ def _real_slot_overlay_js() -> str:
       el.style.gridTemplateColumns=gridCols;
       el.style.gap='12px';
       el.innerHTML=display.length ? display.map(s=>holdingSlotCard(s,prefix,display.length)).join('') : empty;
+      el.querySelectorAll('.real-holding-slot[data-preview-ticker]').forEach(card=>{
+        card.onclick=function(ev){ ev.stopPropagation(); openPreviewHoldingDetail(card.dataset.previewTicker); };
+      });
       if(holdings.length) setTimeout(()=>drawHoldingMiniCharts(prefix, holdings), 50);
     });
   }
@@ -2126,7 +2130,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v19_preview_exit_lines"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v20_preview_exit_panel_fix"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

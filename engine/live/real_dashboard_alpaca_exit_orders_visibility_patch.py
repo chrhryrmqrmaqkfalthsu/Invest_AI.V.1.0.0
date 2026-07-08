@@ -4,8 +4,8 @@ The first Alpaca exit-order patch appended its UI JavaScript after the generated
 real dashboard overlay IIFE.  Most helper functions used by the holding TP/SL
 panel are local to that IIFE, so the appended code could not hook the panel and
 the buttons were not visible.  This post-processor moves that injected code back
-inside the same IIFE and also makes the frontend submit DAY TIF, which Alpaca
-requires for fractional stock orders.
+inside the same IIFE and makes the frontend submit DAY TIF, which Alpaca requires
+for fractional stock orders.
 """
 from __future__ import annotations
 
@@ -23,7 +23,26 @@ def _patch_fractional_tif(js: str) -> str:
     # Fractional exit orders are rejected by Alpaca unless time_in_force=day.
     js = js.replace("time_in_force:'gtc'", "time_in_force:'day'")
     js = js.replace("time_in_force: 'gtc'", "time_in_force: 'day'")
-    js = js.replace("기존 kingmaker 예약 주문은 취소 후 새로 겁니다.", "소수점 주식 규칙 때문에 DAY 주문으로 제출됩니다. 기존 kingmaker 예약 주문은 취소 후 새로 겁니다.")
+    old = """const kind=(p.take_profit_price&&p.stop_loss_price)?'OCO':(p.take_profit_price?'지정가 매도':'스탑 매도');
+    const msg=`${ticker} ${kind} 예약 주문을 Alpaca LIVE에 제출할까요?\\n\\n수량: ${Number(p.shares||0).toFixed(6)}주\\n익절: ${kmExitMoney(p.take_profit_price)}\\n손절: ${kmExitMoney(p.stop_loss_price)}\\n\\n기존 kingmaker 예약 주문은 취소 후 새로 겁니다.`;"""
+    new = """const kind=(p.take_profit_price&&p.stop_loss_price)?'OCO':(p.take_profit_price?'지정가 매도':'스탑 매도');
+    const rawShares=Number(p.shares||0);
+    const wholeShares=Math.floor(rawShares+1e-6);
+    const fracShares=Math.max(0, rawShares-wholeShares);
+    const fractionalOco=!!(p.take_profit_price&&p.stop_loss_price&&fracShares>1e-6);
+    const submitShares=fractionalOco?wholeShares:rawShares;
+    if(fractionalOco && wholeShares<=0){ kmSetAlpacaExitStatus('1주 미만 소수점 보유는 Alpaca OCO 불가 · 익절만 또는 손절만 선택하세요', 'bad'); return; }
+    const fracNote=fractionalOco?`\\n주의: Alpaca는 소수점 OCO를 허용하지 않아 ${wholeShares}주만 OCO 예약하고 ${fracShares.toFixed(6)}주는 예약 제외됩니다.`:'';
+    const msg=`${ticker} ${kind} 예약 주문을 Alpaca LIVE에 제출할까요?\\n\\n수량: ${Number(submitShares||0).toFixed(6)}주${fracNote}\\n익절: ${kmExitMoney(p.take_profit_price)}\\n손절: ${kmExitMoney(p.stop_loss_price)}\\n\\n소수점 주식 규칙 때문에 DAY 주문으로 제출됩니다. 기존 kingmaker 예약 주문은 취소 후 새로 겁니다.`;"""
+    js = js.replace(old, new)
+    js = js.replace(
+        "kmSetAlpacaExitStatus(`Alpaca ${st.order_kind||'예약'} 제출 완료 · ${st.client_order_id||''}`, 'good');",
+        "kmSetAlpacaExitStatus(d.warning || `Alpaca ${st.order_kind||'예약'} 제출 완료 · ${st.client_order_id||''}`, d.warning?'warn':'good');",
+    )
+    js = js.replace(
+        "if(typeof toast==='function') toast('Alpaca 예약 주문 완료', `${ticker} · ${st.order_kind||kind} · TP ${kmExitMoney(p.take_profit_price)} · SL ${kmExitMoney(p.stop_loss_price)}`, 'good');",
+        "if(typeof toast==='function') toast('Alpaca 예약 주문 완료', d.warning || `${ticker} · ${st.order_kind||kind} · TP ${kmExitMoney(p.take_profit_price)} · SL ${kmExitMoney(p.stop_loss_price)}`, d.warning?'warn':'good');",
+    )
     return js
 
 

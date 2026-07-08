@@ -1479,6 +1479,7 @@ def _real_slot_overlay_js() -> str:
     if(typeof _activeChart !== 'undefined') _activeChart = {type:'preview_holding', ticker:tk, interval:'1m'};
     renderPreviewHoldingDetail(s);
   }
+  window.openPreviewHoldingDetail = openPreviewHoldingDetail;
   function renderPreviewHoldingDetail(s){
     const ticker=String(s.ticker||'').toUpperCase();
     const invested=num(s.invested) || ((num(s.entry_price)||0)*(num(s.shares)||0));
@@ -1513,7 +1514,7 @@ def _real_slot_overlay_js() -> str:
     const omen=document.getElementById('sellomen-strip');
     if(omen) omen.innerHTML=`<div class="sellomen-metrics"><div class="rb-stat"><div class="v">${fmt(s.win_rate,1)}%</div><div class="l">후보 승률</div></div><div class="rb-stat"><div class="v">${fmt(s.expectancy_pct,2)}%</div><div class="l">기대값</div></div><div class="rb-stat"><div class="v">${fmt(s.mdd_pct,2)}%</div><div class="l">MDD</div></div><div class="rb-stat"><div class="v">${s.news_score==null?'—':fmt(s.news_score,3)}</div><div class="l">뉴스위험</div></div></div>`;
   }
-  function holdingSlotCard(s, prefix){
+  function holdingSlotCard(s, prefix, totalCount=1){
     if(!s || s.empty) return holdingEmptyCard((s&&s.slot)||'');
     const ticker=esc(String(s.ticker||'').toUpperCase());
     const pnl=num(s.pnl_pct);
@@ -1527,17 +1528,27 @@ def _real_slot_overlay_js() -> str:
     const newsScore=s.news_score==null?'—':fmt(s.news_score,3);
     const newsLabel=s.news_risk_label||'—';
     const ring=preview?'border-color:rgba(59,130,246,.62);box-shadow:0 0 0 1px rgba(59,130,246,.24) inset,0 12px 34px rgba(37,99,235,.12);':'';
-    return `<div class="mslot real-holding-slot" ${click} style="min-height:325px;padding:14px;display:flex;flex-direction:column;gap:10px;${ring}">
-      <div class="mslot-top"><span class="mslot-tk">${ticker}${badge}</span><span class="mslot-pnl" style="color:${pnlColor}">${pnlTxt}</span></div>
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;">
-        <div class="rb-stat"><div class="v">$${money(num(s.entry_price)||0)}</div><div class="l">매수가</div></div>
-        <div class="rb-stat"><div class="v">${fmt(s.shares,4)}</div><div class="l">수량</div></div>
-        <div class="rb-stat"><div class="v">$${money(invested)}</div><div class="l">투입</div></div>
+    const wide=Number(totalCount||1)<=1;
+    const layout=wide?'display:grid;grid-template-columns:minmax(300px,42%) minmax(0,1fr);align-items:stretch;':'display:flex;flex-direction:column;';
+    const chartHeight=wide?'245px':'155px';
+    return `<div class="mslot real-holding-slot" ${click} style="min-height:${wide?'310':'325'}px;padding:14px;${layout}gap:14px;${ring}">
+      <div style="display:flex;flex-direction:column;gap:10px;min-width:0;">
+        <div class="mslot-top"><span class="mslot-tk">${ticker}${badge}</span><span class="mslot-pnl" style="color:${pnlColor}">${pnlTxt}</span></div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;">
+          <div class="rb-stat"><div class="v">$${money(num(s.entry_price)||0)}</div><div class="l">매수가</div></div>
+          <div class="rb-stat"><div class="v">${fmt(s.shares,4)}</div><div class="l">수량</div></div>
+          <div class="rb-stat"><div class="v">$${money(invested)}</div><div class="l">투입</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;">
+          <div class="rb-stat"><div class="v" style="color:#fbbf24;">no-TP</div><div class="l">S2 익절</div></div>
+          <div class="rb-stat"><div class="v">${esc(s.max_holding_days||'—')}일</div><div class="l">최대 보유</div></div>
+          <div class="rb-stat"><div class="v">${newsScore}</div><div class="l">뉴스위험</div></div>
+          <div class="rb-stat"><div class="v">${fmt(s.final_score,2)}</div><div class="l">후보점수</div></div>
+        </div>
+        <div class="mslot-sub" style="line-height:1.7;">${esc(s.stage||'')} · ${esc(s.vol_group||'')} · ${esc(s.exit_strategy_name||s.exit_strategy||'')}<br>뉴스 ${newsScore} · ${esc(newsLabel)} · 기사 ${esc(s.news_article_count||0)}개</div>
+        <div class="mslot-sub" style="margin-top:auto;color:var(--accent);font-weight:900;">클릭 → ${preview?'가상 보유 상세':'보유 상세'}</div>
       </div>
-      <div class="mslot-sub" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;"><span>S2 no-TP · ${esc(s.exit_strategy_name||s.exit_strategy||'')}</span><span>최대 ${esc(s.max_holding_days||'—')}일</span></div>
-      <div class="mslot-sub" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;"><span>뉴스 ${newsScore} · ${esc(newsLabel)}</span><span>기사 ${esc(s.news_article_count||0)}개</span></div>
-      <div id="${chartId}" class="real-holding-mini-chart" style="height:155px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0b1019;"></div>
-      <div class="mslot-sub" style="margin-top:auto;color:var(--accent);font-weight:900;">클릭 → ${preview?'가상 보유 상세':'보유 상세'}</div>
+      <div id="${chartId}" class="real-holding-mini-chart" style="height:${chartHeight};border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0b1019;min-width:0;"></div>
     </div>`;
   }
   async function drawHoldingMiniCharts(prefix, holdings){
@@ -1565,12 +1576,9 @@ def _real_slot_overlay_js() -> str:
     arrangeRealHome();
     updateBuyPreviewBanner();
     const holdings=(window.slotData||[]).filter(s=>s && !s.empty);
-    const previewMode=!!window._realBuyDashboardPreview;
     let display=holdings.slice();
-    if(previewMode){
-      for(let i=display.length+1;i<=8;i++) display.push({empty:true,slot:i,preview_empty:true});
-    }
-    const gridCols='repeat(auto-fit, minmax(255px, 1fr))';
+    const n=display.length;
+    const gridCols=n<=1?'1fr':(n===2?'repeat(2, minmax(0, 1fr))':'repeat(auto-fit, minmax(280px, 1fr))');
     const empty='<div class="panel" style="padding:26px;text-align:center;color:var(--dim);">현재 보유 슬롯 없음<br><span style="font-size:11px;">빈 슬롯 8칸은 표시하지 않습니다.</span></div>';
     [['mini-slots','home'],['slots-full','full']].forEach(([id,prefix])=>{
       const el=document.getElementById(id);
@@ -1578,7 +1586,7 @@ def _real_slot_overlay_js() -> str:
       el.style.display='grid';
       el.style.gridTemplateColumns=gridCols;
       el.style.gap='12px';
-      el.innerHTML=display.length ? display.map(s=>holdingSlotCard(s,prefix)).join('') : empty;
+      el.innerHTML=display.length ? display.map(s=>holdingSlotCard(s,prefix,display.length)).join('') : empty;
       if(holdings.length) setTimeout(()=>drawHoldingMiniCharts(prefix, holdings), 50);
     });
   }
@@ -2019,7 +2027,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v17_holding_preview_detail"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v18_holding_click_layout"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

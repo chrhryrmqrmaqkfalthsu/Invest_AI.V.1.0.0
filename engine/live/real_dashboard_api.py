@@ -1463,6 +1463,93 @@ def _real_slot_overlay_js() -> str:
       <div style="font-size:12px;color:var(--dim);">프리뷰용 빈 칸</div>
     </div>`;
   }
+  function clearPreviewExitLines(){
+    try{
+      if(window._previewExitLines && typeof series!=='undefined'){
+        for(const line of window._previewExitLines){ try{ series.removePriceLine(line); }catch(e){} }
+      }
+    }catch(e){}
+    window._previewExitLines=[];
+  }
+  function previewPlanDefaults(s){
+    if(!s._previewExitPlan){
+      const entry=num(s.entry_price)||num(s.current_price)||0;
+      const stopPct=3.0;
+      const takePct=5.0;
+      s._previewExitPlan={
+        stop_loss_pct: stopPct,
+        take_profit_pct: takePct,
+        stop_loss_price: entry>0 ? entry*(1-stopPct/100) : null,
+        take_profit_price: entry>0 ? entry*(1+takePct/100) : null,
+      };
+    }
+    return s._previewExitPlan;
+  }
+  function drawPreviewExitLines(s){
+    clearPreviewExitLines();
+    if(!s || typeof series==='undefined') return;
+    const plan=previewPlanDefaults(s);
+    const entry=num(s.entry_price);
+    const current=num(s.current_price);
+    const stop=num(plan.stop_loss_price);
+    const take=num(plan.take_profit_price);
+    window._previewExitLines=[];
+    const add=(title, price, color, width=1, style=2)=>{
+      if(price==null || price<=0) return;
+      try{ window._previewExitLines.push(series.createPriceLine({price:Number(price),color,lineWidth:width,lineStyle:style,axisLabelVisible:true,title})); }catch(e){}
+    };
+    add('진입', entry, '#3b82f6', 2, 0);
+    add('현재', current, '#c9d4e5', 1, 0);
+    add('손절', stop, '#ff4d6a', 2, 2);
+    add('익절 참고(no-TP)', take, '#26d07c', 2, 2);
+  }
+  function syncPreviewExitInputs(s, changed){
+    const entry=num(s.entry_price)||0;
+    const plan=previewPlanDefaults(s);
+    const stopPriceEl=document.getElementById('preview-stop-price');
+    const stopPctEl=document.getElementById('preview-stop-pct');
+    const takePriceEl=document.getElementById('preview-take-price');
+    const takePctEl=document.getElementById('preview-take-pct');
+    if(!entry || !stopPriceEl || !stopPctEl || !takePriceEl || !takePctEl) return;
+    if(changed==='stop_price'){
+      const v=num(stopPriceEl.value); if(v!=null){ plan.stop_loss_price=v; plan.stop_loss_pct=Math.max(0,(1-v/entry)*100); }
+    }else if(changed==='stop_pct'){
+      const v=num(stopPctEl.value); if(v!=null){ plan.stop_loss_pct=Math.abs(v); plan.stop_loss_price=entry*(1-Math.abs(v)/100); }
+    }else if(changed==='take_price'){
+      const v=num(takePriceEl.value); if(v!=null){ plan.take_profit_price=v; plan.take_profit_pct=(v/entry-1)*100; }
+    }else if(changed==='take_pct'){
+      const v=num(takePctEl.value); if(v!=null){ plan.take_profit_pct=Math.abs(v); plan.take_profit_price=entry*(1+Math.abs(v)/100); }
+    }
+    stopPriceEl.value=plan.stop_loss_price==null?'':Number(plan.stop_loss_price).toFixed(2);
+    stopPctEl.value=plan.stop_loss_pct==null?'':Number(plan.stop_loss_pct).toFixed(2);
+    takePriceEl.value=plan.take_profit_price==null?'':Number(plan.take_profit_price).toFixed(2);
+    takePctEl.value=plan.take_profit_pct==null?'':Number(plan.take_profit_pct).toFixed(2);
+    drawPreviewExitLines(s);
+  }
+  function previewExitControlHtml(s){
+    const plan=previewPlanDefaults(s);
+    return `<div class="kv" style="grid-column:1/-1;display:block;background:rgba(15,23,42,.72);border-color:rgba(59,130,246,.35);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <b style="color:#e7eefb;">차트 손절/익절 참고선</b>
+        <span style="font-size:11px;color:#fbbf24;">프리뷰 전용 · 저장 없음 · S2 자동익절 OFF</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">
+        <label style="font-size:11px;color:var(--dim);">손절가<br><input id="preview-stop-price" type="number" step="0.01" value="${plan.stop_loss_price==null?'':Number(plan.stop_loss_price).toFixed(2)}" style="width:100%;background:#0d1524;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;"></label>
+        <label style="font-size:11px;color:var(--dim);">손절 %<br><input id="preview-stop-pct" type="number" step="0.01" value="${plan.stop_loss_pct==null?'':Number(plan.stop_loss_pct).toFixed(2)}" style="width:100%;background:#0d1524;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;"></label>
+        <label style="font-size:11px;color:var(--dim);">익절가 참고선<br><input id="preview-take-price" type="number" step="0.01" value="${plan.take_profit_price==null?'':Number(plan.take_profit_price).toFixed(2)}" style="width:100%;background:#0d1524;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;"></label>
+        <label style="font-size:11px;color:var(--dim);">익절 % 참고선<br><input id="preview-take-pct" type="number" step="0.01" value="${plan.take_profit_pct==null?'':Number(plan.take_profit_pct).toFixed(2)}" style="width:100%;background:#0d1524;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;"></label>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-top:8px;line-height:1.6;">가격이나 %를 바꾸면 서로 자동 환산되고 차트 선이 즉시 다시 그려집니다. 익절선은 S2 no-TP 상태에서 참고용입니다.</div>
+    </div>`;
+  }
+  function bindPreviewExitControls(s){
+    const bind=(id, kind)=>{ const el=document.getElementById(id); if(el) el.oninput=()=>syncPreviewExitInputs(s, kind); };
+    bind('preview-stop-price','stop_price');
+    bind('preview-stop-pct','stop_pct');
+    bind('preview-take-price','take_price');
+    bind('preview-take-pct','take_pct');
+    syncPreviewExitInputs(s, 'init');
+  }
   async function openPreviewHoldingDetail(ticker){
     const s=previewHoldingByTicker(ticker);
     if(!s) return;
@@ -1475,6 +1562,7 @@ def _real_slot_overlay_js() -> str:
     document.getElementById('slot-detail-view').style.display='block';
     if(window.chart) chart.resize(document.getElementById('chart').clientWidth, 440);
     window._activeRealCandidate=null;
+    window._activePreviewHolding=s;
     if(typeof window.drawChart==='function') await window.drawChart(tk, '1m');
     if(typeof _activeChart !== 'undefined') _activeChart = {type:'preview_holding', ticker:tk, interval:'1m'};
     renderPreviewHoldingDetail(s);
@@ -1502,7 +1590,8 @@ def _real_slot_overlay_js() -> str:
         <div class="kv"><span>최대 보유</span><span>${esc(s.max_holding_days||'—')}일</span></div>
         <div class="kv"><span>후보 score</span><span style="color:var(--up)">${fmt(s.final_score,3)}</span></div>
         <div class="kv"><span>뉴스 위험</span><span>${s.news_score==null?'—':fmt(s.news_score,3)} · ${esc(s.news_risk_label||'—')} · 기사 ${esc(s.news_article_count||0)}개</span></div>
-        <div class="kv"><span>candidate</span><span style="font-size:10px;word-break:break-all">${esc(s.candidate_id||'')}</span></div>`;
+        <div class="kv"><span>candidate</span><span style="font-size:10px;word-break:break-all">${esc(s.candidate_id||'')}</span></div>
+        ${previewExitControlHtml(s)}`;
     }
     const comm=document.getElementById('commentary');
     if(comm){
@@ -1513,6 +1602,8 @@ def _real_slot_overlay_js() -> str:
     }
     const omen=document.getElementById('sellomen-strip');
     if(omen) omen.innerHTML=`<div class="sellomen-metrics"><div class="rb-stat"><div class="v">${fmt(s.win_rate,1)}%</div><div class="l">후보 승률</div></div><div class="rb-stat"><div class="v">${fmt(s.expectancy_pct,2)}%</div><div class="l">기대값</div></div><div class="rb-stat"><div class="v">${fmt(s.mdd_pct,2)}%</div><div class="l">MDD</div></div><div class="rb-stat"><div class="v">${s.news_score==null?'—':fmt(s.news_score,3)}</div><div class="l">뉴스위험</div></div></div>`;
+    bindPreviewExitControls(s);
+    setTimeout(()=>drawPreviewExitLines(s),80);
   }
   function holdingSlotCard(s, prefix, totalCount=1){
     if(!s || s.empty) return holdingEmptyCard((s&&s.slot)||'');
@@ -1754,10 +1845,16 @@ def _real_slot_overlay_js() -> str:
     window.drawChart = async function(ticker, interval, opts){
       const out = await _realOldDrawChart(ticker, interval, opts);
       if(window._activeRealCandidate && String(window._activeRealCandidate.ticker||'').toUpperCase()===String(ticker||'').toUpperCase()){
+        clearPreviewExitLines();
         await applyRealCandidateDetailSignal(ticker, interval);
         if(typeof _activeChart !== 'undefined') _activeChart = {type:'real_candidate', ticker, interval};
+      }else if(window._activePreviewHolding && String(window._activePreviewHolding.ticker||'').toUpperCase()===String(ticker||'').toUpperCase()){
+        clearRealDetailSignalOverlay();
+        if(typeof _activeChart !== 'undefined') _activeChart = {type:'preview_holding', ticker, interval};
+        setTimeout(()=>drawPreviewExitLines(window._activePreviewHolding),80);
       }else{
         clearRealDetailSignalOverlay();
+        clearPreviewExitLines();
       }
       return out;
     };
@@ -1828,7 +1925,9 @@ def _real_slot_overlay_js() -> str:
     window.KM_REAL_CLOSEDETAIL_WRAPPED=true;
     window.closeDetail=function(){
       window._activeRealCandidate=null;
+      window._activePreviewHolding=null;
       clearRealDetailSignalOverlay();
+      clearPreviewExitLines();
       try{ series.setMarkers([]); }catch(e){}
       return _realOldCloseDetail();
     };
@@ -2027,7 +2126,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v18_holding_click_layout"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v19_preview_exit_lines"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

@@ -1,0 +1,94 @@
+ticker,candidate_id,stage,bucket,name,rulebook_has_sector_name,rulebook_sector_name,detected_sector_name,detect_reason,sector_strength_weight,market_score_weight,market_adjustment_strength
+CAPR,stage3:CAPR:a51d615a0ff1,stage3,A_core,Capricor Therapeutics Inc,False,,tech,default_fallback_to_tech,0.16776638979114683,-0.3708203144308721,0.29479248410308323
+CDE,stage3:CDE:ceb9fe0512dc,stage3,A_core,Coeur Mining Inc,False,,tech,default_fallback_to_tech,0.2596616904359823,0.8385905624111898,0.72564732358922
+BBIO,stage3:BBIO:82c4a7aa36a9,stage3,A_core,BridgeBio Pharma Inc,False,,healthcare,explicit_healthcare_keyword,-0.6422644695014252,-0.2739081453840282,1.0
+CSIQ,stage3:CSIQ:030ce2015af8,stage3,A_core,Canadian Solar Inc,False,,tech,default_fallback_to_tech,0.059568492764859704,0.7683136406200035,0.33648166769851806
+BOIL,stage3:BOIL:9044dc2c67a3,stage3,A_core,ProShares Ultra Bloomberg Natural Gas 2x Shares,False,,tech,default_fallback_to_tech,-0.5439897145330602,0.8283914998996856,0.7608617272119501
+ANET,stage3:ANET:fe220620802b,stage3,A_core,Arista Networks Inc,False,,tech,default_fallback_to_tech,0.017806401332763233,-0.38002235153479513,0.5274642035018973
+AMD,stage3:AMD:a01b055a1d13,stage3,A_core,Advanced Micro Devices Inc,False,,tech,default_fallback_to_tech,-0.28735045190095165,-0.4202689621564865,0.9507335204456673
+CAN,stage3:CAN:dd27c77ca4dc,stage3,A_core,Canaan Inc,False,,tech,default_fallback_to_tech,0.8288039671415096,-0.2323235417034485,0.6538973025552747
+CAMT,stage3:CAMT:bd5f11c548d5,stage3,A_core,Camtek Ltd,False,,tech,default_fallback_to_tech,-0.028757424398368148,0.2299905666763069,0.5248644578570784
+FIX,stage2:FIX:cab7d458767d,stage2,A_core,Comfort Systems USA Inc,False,,tech,default_fallback_to_tech,1.0,0.3518547462982013,0.4027345855702504
+ALGT,stage2:ALGT:402f72d48c3c,stage2,A_core,Allegiant Travel,False,,tech,default_fallback_to_tech,0.8642383261204772,0.29010420291152,0.9367116722494253
+CMC,stage2:CMC:4f6ee2739add,stage2,A_core,Commercial Metals Company,False,,tech,default_fallback_to_tech,0.39130546292146495,-0.7506609530761108,0.1349538908800039
+AEVA,stage3:AEVA:3c4e598fa5c7,stage3,watch,Aeva Technologies Inc,False,,tech,explicit_tech_keyword,-0.2261241422713205,-1.0,0.17936402878286573
+AAOI,stage3:AAOI:5fa4b9dea9eb,stage3,watch,Applied Optoelectronics Inc,False,,tech,default_fallback_to_tech,-0.4046662414476454,0.21650506106715667,0.10514007202599804
+BE,stage3:BE:b07b2e49fef8,stage3,B_stable,Bloom Energy Corp - Class A,False,,energy,explicit_energy_keyword,-1.0,0.917548152143959,0.661966024914923
+CENX,stage3:CENX:53d7b0caa6a3,stage3,B_stable,Century Aluminum Company,False,,tech,default_fallback_to_tech,-1.0,0.13425658387907619,0.5444138059705865
+AVAV,stage3:AVAV:3d66945d7c65,stage3,C_momentum,AeroVironment Inc,False,,tech,default_fallback_to_tech,-1.0,-0.42267128006220694,0.543479689017021
+CRMD,stage3:CRMD:1a48a9a1b768,stage3,B_stable,CorMedix Inc,False,,tech,default_fallback_to_tech,0.13172609332667262,0.7567987599415307,1.0
+AMSC,stage3:AMSC:57bf3f342f43,stage3,C_momentum,American Superconductor Corp,False,,tech,default_fallback_to_tech,-0.277190156745331,0.5752469022865583,0.3181166440838705
+CLS,stage3:CLS:78777565b183,stage3,watch,Celestica Inc,False,,tech,default_fallback_to_tech,0.3568698225266257,1.0,0.3013705900526917
+CRK,stage3:CRK:997177aa687b,stage3,C_momentum,Comstock Resources Inc,False,,tech,default_fallback_to_tech,-0.06564004720858135,-0.4620425769259667,0.8249640163963188
+CAR,stage3:CAR:ce44ff6acbb5,stage3,C_momentum,Avis Budget Group Inc,False,,tech,default_fallback_to_tech,0.8323426496048285,0.7876319822223017,0.26726114658464256
+AGQ,stage3:AGQ:6d10e70f54ee,stage3,B_stable,ProShares Ultra Silver 2x Shares,False,,tech,default_fallback_to_tech,-0.5754636386660723,0.603383749121863,0.5426590543357791
+AXON,stage3:AXON:25b116de3cd4,stage3,C_momentum,Axon Enterprise Inc,False,,tech,default_fallback_to_tech,-0.9051365140749132,-1.0,1.0
+BKSY,stage3:BKSY:f1bcc8efea02,stage3,watch,BlackSky Technology Inc - Class A,False,,tech,explicit_tech_keyword,1.0,0.38202236591677385,0.8737523835778197
+CIEN,stage3:CIEN:2ed675d30868,stage3,C_momentum,CIENA Corp,False,,tech,default_fallback_to_tech,0.5271378653806593,-0.04765260890224429,0.10109941352094165
+CGC,stage3:CGC:650b7578c8c7,stage3,watch,Canopy Growth Corporation,False,,tech,default_fallback_to_tech,-0.27634662363244544,0.8457679872014021,1.0
+AVGO,stage3:AVGO:e4fd3cee2402,stage3,C_momentum,Broadcom Inc,False,,tech,default_fallback_to_tech,1.0,0.42722466570193357,0.6923257296538712
+CCL,stage3:CCL:82d5bafb7e78,stage3,C_momentum,Carnival Corporation Ltd (Paired Stock),False,,tech,default_fallback_to_tech,0.3965998254047654,-0.7700889040380197,0.2041996830055036
+ARKW,stage3:ARKW:296c057b4ef7,stage3,watch,ARK NEXT GENERATION INTERNET ETF ,False,,tech,default_fallback_to_tech,-0.9157437328789978,-0.7036707933093163,0.3448784991618167
+CRS,stage3:CRS:8695c9ce3320,stage3,watch,Carpenter Technology Corp,False,,tech,explicit_tech_keyword,-0.041497642809305055,-0.3342660607984012,0.13152898967369853
+COHR,stage3:COHR:10ef1bf6b0d1,stage3,watch,Coherent Corp,False,,tech,default_fallback_to_tech,-0.8282431989117633,-1.0,0.20806539986491324
+BTE,stage3:BTE:4ba9af200f79,stage3,watch,Baytex Energy Corp,False,,energy,explicit_energy_keyword,-0.8380703696569978,-0.5532879122772305,0.35053234927927757
+AMBA,stage3:AMBA:5e057e3cfc2d,stage3,watch,Ambarella Inc,False,,tech,default_fallback_to_tech,-0.17471439453977639,1.0,0.17522507110763635
+CLDX,stage3:CLDX:99264f63b69d,stage3,watch,Celldex Therapeutics Inc,False,,tech,default_fallback_to_tech,0.4185606050162438,-0.6953558078433071,1.0
+BMA,stage3:BMA:0c978464f9dd,stage3,C_momentum,Banco Macro S.A.,False,,tech,default_fallback_to_tech,1.0,-0.2633634448515037,1.0
+BELFB,stage3:BELFB:b031f5add884,stage3,watch,Bel Fuse Inc - Class B,False,,tech,default_fallback_to_tech,-0.08012321086744811,-0.25477039127149603,0.4860508420612276
+CRWD,stage3:CRWD:a1e78fe5f62e,stage3,B_stable,Crowdstrike Holdings Inc - Class A,False,,tech,default_fallback_to_tech,0.01524739368440109,0.40792414852398595,0.10221180349997472
+CC,stage3:CC:520ee91feeea,stage3,watch,Chemours Company,False,,tech,default_fallback_to_tech,-0.9213109959307134,0.11204710329636525,0.7937516504475642
+APH,stage3:APH:c7885deba35c,stage3,B_stable,Amphenol Corp - Class A,False,,tech,default_fallback_to_tech,-0.47901882375424154,-0.16906538517017938,0.024042544509697616
+BCS,stage3:BCS:5e7da5a74b01,stage3,B_stable,Barclays plc,False,,tech,default_fallback_to_tech,-0.11669958715869821,0.8279429794076392,0.9781276960250274
+BIDU,stage3:BIDU:926c6f7918c9,stage3,C_momentum,Baidu Inc,False,,tech,default_fallback_to_tech,1.0,-0.7419368223726365,0.8374210947241124
+BNTX,stage3:BNTX:d667608bc166,stage3,watch,BioNTech SE,False,,tech,explicit_tech_keyword,-0.8522262998581083,1.0,0.6044968528645716
+BMI,stage3:BMI:07d4ee0f7841,stage3,C_momentum,Badger Meter Inc,False,,tech,default_fallback_to_tech,1.0,-0.545734915507515,0.6884691051202052
+BTU,stage3:BTU:ecfcb41f1be2,stage3,C_momentum,Peabody Energy Corp New,False,,energy,explicit_energy_keyword,-1.0,0.4843792795434988,0.9932411942428646
+ALGT,stage3:ALGT:aec5dd5b1dc1,stage3,watch,Allegiant Travel,False,,tech,default_fallback_to_tech,0.9533400859794929,1.0,0.5165610482161287
+CLF,stage3:CLF:869ed9e90afb,stage3,watch,Cleveland-Cliffs Inc,False,,tech,default_fallback_to_tech,-1.0,0.4287497028166507,0.10821783296322579
+ACLS,stage3:ACLS:91f65753d85d,stage3,watch,Axcelis Technologies Inc,False,,tech,explicit_tech_keyword,0.2756754513467685,-0.7175107589667395,0.8044095047932269
+AEIS,stage3:AEIS:6e26f08a7c6d,stage3,B_stable,Advanced Energy Industries Inc,False,,energy,explicit_energy_keyword,-0.8781445100558691,0.8998485571467445,0.5311787254064213
+ADPT,stage3:ADPT:78c31f1ca209,stage3,watch,Adaptive Biotechnologies Corp,False,,tech,explicit_tech_keyword,0.6436009559070764,0.7507581180253187,1.0
+APA,stage3:APA:692dd6626ba8,stage3,watch,APA Corporation,False,,tech,default_fallback_to_tech,-1.0,-0.7806467730043378,0.22747440206029945
+AAP,stage3:AAP:71dcdeb19ec0,stage3,watch,Advance Auto Parts Inc,False,,tech,default_fallback_to_tech,0.04412221358510715,-0.8552478337400471,0.7527324519141705
+BWXT,stage3:BWXT:f195725cb792,stage3,watch,BWX Technologies Inc,False,,tech,explicit_tech_keyword,-0.22064267950012728,1.0,0.1859107467549177
+BB,stage3:BB:f1bdfe7f8ad9,stage3,watch,BlackBerry Ltd,False,,tech,default_fallback_to_tech,1.0,0.22878639932685874,0.37335056920303733
+AA,stage3:AA:9bf08eb287d2,stage3,watch,Alcoa Corp,False,,tech,default_fallback_to_tech,-0.14818377306294267,-0.19486087588515622,0.8063369451176999
+BGC,stage3:BGC:d8c39420992c,stage3,C_momentum,BGC Group Inc - Class A,False,,tech,default_fallback_to_tech,-0.002820670246926643,1.0,0.96298963732025
+CE,stage3:CE:998b0b638c66,stage3,B_stable,Celanese Corp - Series A,False,,tech,default_fallback_to_tech,-0.6208615991099308,0.008840218406678813,0.10684213221952549
+CRNX,stage3:CRNX:6710d2e7617c,stage3,C_momentum,Crinetics Pharmaceuticals Inc,False,,tech,default_fallback_to_tech,0.11178676303252905,-0.2890689034068097,0.17865492756870327
+ADMA,stage3:ADMA:42437a3ee595,stage3,watch,Adma Biologics Inc,False,,healthcare,explicit_healthcare_keyword,0.865772275145924,0.413245104424753,0.48179595531924446
+CACI,stage3:CACI:067d6d4fc9fe,stage3,B_stable,Caci International Inc,False,,tech,default_fallback_to_tech,-0.017335881668717135,0.9642185058014063,0.4490654847333777
+AES,stage3:AES:2bd518bc9a7e,stage3,C_momentum,AES Corp,False,,tech,default_fallback_to_tech,-1.0,-1.0,1.0
+AX,stage3:AX:6ec8dba59cc1,stage3,B_stable,Axos Financial Inc,False,,tech,default_fallback_to_tech,-0.34547526317052085,-0.8304140504892294,0.284382363286675
+BTBT,stage3:BTBT:363898884d44,stage3,watch,Bit Digital Inc,False,,tech,explicit_tech_keyword,0.5053851532734794,-0.6237850504671709,0.20397033226075303
+ABEV,stage3:ABEV:9121d29b2b80,stage3,watch,Ambev S.A.,False,,tech,default_fallback_to_tech,-1.0,-0.3868628845564175,1.0
+CBRL,stage3:CBRL:677767a0b6a9,stage3,watch,Cracker Barrel Old Country Store Inc,False,,tech,default_fallback_to_tech,0.2025208567931418,-0.3007489659191368,0.163757565948221
+ARKK,stage3:ARKK:94bceb67f6a4,stage3,C_momentum,ARK INNOVATION ETF ,False,,tech,default_fallback_to_tech,-0.3172796775948238,0.35107769833859875,0.312143469900626
+BILL,stage3:BILL:eb2fe6599396,stage3,watch,BILL Holdings Inc,False,,tech,default_fallback_to_tech,0.5104309517744545,0.23714080928693804,0.44364111419968405
+AMZN,stage3:AMZN:bdc7a3a74814,stage3,watch,Amazon.com Inc,False,,tech,default_fallback_to_tech,1.0,-0.9187127404233555,0.618511089695458
+CBRE,stage3:CBRE:30fdb7f6db1e,stage3,C_momentum,CBRE Group Inc - Class A,False,,tech,default_fallback_to_tech,0.48105333208646023,0.5675377209337491,0.3329350535512372
+ARKG,stage3:ARKG:50b05b8de94f,stage3,watch,ARK GENOMIC REVOLUTION ETF ,False,,tech,default_fallback_to_tech,1.0,0.0975090689203249,0.5845073543335957
+CSW,stage3:CSW:cd3afccd3aea,stage3,watch,CSW Industrials Inc,False,,industrials,explicit_industrials_keyword,-0.2210531058999626,1.0,0.29885528741397066
+ACMR,stage3:ACMR:44c1e02681c4,stage3,watch,ACM Research Inc - Class A,False,,tech,default_fallback_to_tech,0.7323385918112904,-0.4147101794895187,0.17224943280473293
+BN,stage3:BN:d264957fe5f6,stage3,C_momentum,Brookfield Corporation - Class A,False,,tech,default_fallback_to_tech,0.15968897498797552,-0.7214185597100036,0.6487097837592535
+CAT,stage3:CAT:404813e11894,stage3,B_stable,Caterpillar Inc,False,,tech,default_fallback_to_tech,0.6842981071761796,-0.4446810955673133,0.42955534091951875
+C,stage3:C:8d6430f3dfbc,stage3,B_stable,Citigroup Inc,False,,tech,explicit_tech_keyword,-0.5673436330970129,0.38619275324080465,0.7002141169510362
+CIGI,stage3:CIGI:2067519c6762,stage3,C_momentum,Colliers International Group Inc,False,,tech,default_fallback_to_tech,0.8701239814619992,-1.0,0.13144429352346712
+AIR,stage3:AIR:eca20527ca80,stage3,watch,AAR Corp,False,,tech,default_fallback_to_tech,-0.6701903886766407,-0.09237683356266824,0.4343805079811895
+CHWY,stage3:CHWY:a46752a05345,stage3,watch,Chewy Inc - Class A,False,,tech,default_fallback_to_tech,-0.07190185903171495,0.42340217157796245,0.16963035346503244
+CALX,stage3:CALX:0979a3ee35ee,stage3,watch,Calix Inc,False,,tech,default_fallback_to_tech,-0.7950001462870533,0.9150403791288201,0.806912613119402
+AGX,stage3:AGX:35fe3ac7dd2c,stage3,watch,Argan Inc,False,,tech,default_fallback_to_tech,-1.0,0.2707554043386763,1.0
+AZZ,stage3:AZZ:abfc9c937b7e,stage3,B_stable,AZZ Inc,False,,tech,default_fallback_to_tech,0.4294915703936551,1.0,0.21350771455762427
+AMP,stage3:AMP:7652abdd1325,stage3,C_momentum,Ameriprise Financial Inc,False,,tech,default_fallback_to_tech,0.1076940958832746,-0.469109478794209,0.8104213263303174
+CARR,stage3:CARR:91ed85bfb4a5,stage3,B_stable,Carrier Global Corp,False,,tech,default_fallback_to_tech,-0.39973556478226224,0.30701465553394225,1.0
+PLXS,stage2:PLXS:c33a9dcf246c,stage2,watch,Plexus Corp,False,,tech,default_fallback_to_tech,1.0,0.6471397888473499,0.4680507793721365
+STM,stage2:STM:3ec231118ff2,stage2,B_stable,ST Microelectronics,False,,tech,default_fallback_to_tech,-0.9812326717622045,0.39952949666567583,0.30051772210012195
+AGI,stage2:AGI:202bb1a936de,stage2,C_momentum,Alamos Gold Inc - Class A,False,,tech,default_fallback_to_tech,-0.7426625414542362,-0.911115641428315,0.5829314857080413
+HCC,stage2:HCC:2154d17783f3,stage2,watch,Warrior Met Coal Inc,False,,tech,default_fallback_to_tech,-0.5495841656704541,0.1836220729902761,0.4361964806139878
+CEF,stage2:CEF:fe84c0ad85d8,stage2,watch,Sprott Physical Gold and Silver Trust,False,,tech,default_fallback_to_tech,0.5900402441061972,0.4189125812762312,0.11013699437485672
+IRM,stage2:IRM:82b37d075f9d,stage2,watch,Iron Mountain Inc,False,,tech,default_fallback_to_tech,0.4766611633971727,-0.2661966754384668,0.42886458505435293
+POWI,stage2:POWI:6c2e3e5c874b,stage2,watch,Power Integrations Inc,False,,tech,default_fallback_to_tech,-0.8236076710045503,-0.8680117552620932,0.6892321763052714
+STLD,stage2:STLD:b51ac2b4451d,stage2,watch,Steel Dynamics Inc,False,,tech,default_fallback_to_tech,-0.15620083973457818,-0.8436745831860817,0.96564807803753
+MPC,stage2:MPC:8107accddd2c,stage2,watch,Marathon Petroleum Corp,False,,tech,default_fallback_to_tech,0.45717187572600915,1.0,0.5760985728488255
+CAT,stage2:CAT:a752666ee858,stage2,watch,Caterpillar Inc,False,,tech,default_fallback_to_tech,0.5676157095980665,-0.08591281801346859,0.3439362584890129

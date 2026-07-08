@@ -6,8 +6,9 @@ HTML/JS generator does not need invasive edits.  It fixes real-trading UI issues
 1. Held-position detail pages should open/refresh the 1m chart, not silently stay
    on the base dashboard's default daily chart.
 2. For held tickers, yfinance 1m bars can lag or skip minutes.  Append a display
-   candle from Alpaca's current position price so the held-position chart reflects
-   the live account mark while waiting for the next public 1m bar.
+   candle from the same display price used by the real positions panel so the
+   held-position chart reflects the dashboard mark while waiting for the next
+   public 1m bar.
 3. Automatic refresh must not reset the user's zoom/scroll range.  The detail
    refresh updates only the newest candle/volume point when possible and restores
    the existing visible range on fallback redraws.
@@ -36,37 +37,51 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
-def _holding_current_price(ticker: str) -> float | None:
+def _holding_current_price(ticker: str) -> tuple[float | None, str]:
+    """Return the display price used for a held ticker and its source.
+
+    The real positions panel uses ``_real_positions_payload()`` which, through
+    AlpacaBroker.get_holdings(), already prefers yfinance pre/post display price
+    and then Alpaca latest trade.  The live-tail candle must use the same path;
+    otherwise held-position charts can feel delayed or inconsistent versus the
+    position card.
+    """
     tk = str(ticker or "").upper().strip()
     if not tk:
-        return None
-    try:
-        broker = real_api._get_real_broker()
-        if broker is not None:
-            try:
-                pos = broker.trading.get_open_position(tk)
-                price = _to_float(getattr(pos, "current_price", None))
-                if price is not None:
-                    return price
-            except Exception:
-                pass
-    except Exception:
-        pass
+        return None, "none"
     try:
         for row in real_api._real_positions_payload():
             if str(row.get("ticker") or "").upper().strip() == tk:
                 price = _to_float(row.get("current_price"))
                 if price is not None:
-                    return price
+                    return price, "real_positions_display_current_price"
     except Exception:
         pass
-    return None
+    try:
+        broker = real_api._get_real_broker()
+        if broker is not None:
+            try:
+                latest = _to_float(broker.get_current_price(tk))
+                if latest is not None:
+                    return latest, "alpaca_latest_trade"
+            except Exception:
+                pass
+            try:
+                pos = broker.trading.get_open_position(tk)
+                price = _to_float(getattr(pos, "current_price", None))
+                if price is not None:
+                    return price, "alpaca_trading_position_current_price"
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return None, "none"
 
 
 def _append_live_tail_for_holding(ticker: str, interval: str, candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if str(interval or "").strip() != "1m":
         return candles
-    price = _holding_current_price(ticker)
+    price, source = _holding_current_price(ticker)
     if price is None:
         return candles
     out = [dict(row) for row in candles if isinstance(row, dict)]
@@ -82,7 +97,7 @@ def _append_live_tail_for_holding(ticker: str, interval: str, candles: list[dict
             last["high"] = round(max(_to_float(last.get("high")) or price, price), 4)
             last["low"] = round(min(_to_float(last.get("low")) or price, price), 4)
             last["live_tail"] = True
-            last["live_tail_source"] = "alpaca_position_current_price"
+            last["live_tail_source"] = source
             return out
         # Do not backfill every missing minute; add one live mark candle so the
         # chart visibly follows the current held-position mark without inventing
@@ -99,7 +114,7 @@ def _append_live_tail_for_holding(ticker: str, interval: str, candles: list[dict
         "close": round(price, 4),
         "volume": 0,
         "live_tail": True,
-        "live_tail_source": "alpaca_position_current_price",
+        "live_tail_source": source,
     })
     return out
 

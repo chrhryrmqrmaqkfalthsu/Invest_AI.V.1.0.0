@@ -16,6 +16,7 @@ from engine.live.holding_news_queue import (
 
 DEFAULT_CANDIDATE_NEWS_CACHE_MAX_MINUTES = 180
 DEFAULT_CANDIDATE_NEWS_FETCH_BUDGET = 8
+CANDIDATE_NEWS_GUARD_FETCH_ENV = "CANDIDATE_NEWS_GUARD_ALLOW_FETCH"
 
 
 def _boolish(value: Any) -> bool:
@@ -23,6 +24,18 @@ def _boolish(value: Any) -> bool:
         return value
     raw = str(value or "").strip().lower()
     return raw in {"1", "true", "yes", "y", "on"}
+
+
+def candidate_news_guard_fetch_enabled() -> bool:
+    """Return whether legacy/paper candidate news guard may spend API quota.
+
+    Default is intentionally OFF. Individual-news quota is now reserved for
+    real-trading focus refresh: live candidate slots + real broker holdings.
+    Existing next-open/paper candidate selection may still read fresh cache rows,
+    but it does not fetch new AlphaVantage ticker news unless this explicit env
+    override is enabled.
+    """
+    return _boolish(os.getenv(CANDIDATE_NEWS_GUARD_FETCH_ENV, "0"))
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -73,7 +86,7 @@ def _score_row_usable(row: Any) -> bool:
 def candidate_news_required(rulebook: dict[str, Any] | None) -> bool:
     """Return whether a learned rulebook asks for sell-omen-like candidate news guard.
 
-    This intentionally uses the learned sell_omen switch.  Rulebooks that did not
+    This intentionally uses the learned sell_omen switch. Rulebooks that did not
     learn sell_omen do not spend API budget and are not blocked by this guard.
     """
     rb = rulebook if isinstance(rulebook, dict) else {}
@@ -143,15 +156,12 @@ def check_candidate_news_guard(
     cache_max_minutes: int | None = None,
     now: Any = None,
 ) -> dict[str, Any]:
-    """Fetch/cache latest individual news risk and decide candidate exclusion.
+    """Read/cache latest individual news risk and decide candidate exclusion.
 
-    A candidate is blocked only when:
-    - its learned rulebook has sell_omen_enabled=True,
-    - a fresh candidate news score is available,
-    - score >= learned sell_omen_threshold.
-
-    Missing API keys or stale cache rows never block candidates; they are exposed
-    to diagnostics/dashboard as warning metadata instead.
+    Paper/next-open candidate selection no longer spends individual-news API
+    quota by default. It can still use a fresh cache row. New ticker fetches are
+    reserved for ``real_focus_news_refresh`` unless the explicit environment
+    override ``CANDIDATE_NEWS_GUARD_ALLOW_FETCH=1`` is set.
     """
     t = str(ticker or "").upper().strip()
     enabled = candidate_news_required(rulebook)
@@ -167,7 +177,8 @@ def check_candidate_news_guard(
         return out
 
     key = str(api_key or os.getenv("ALPHA_VANTAGE_KEY") or "").strip()
-    if allow_fetch and key:
+    legacy_fetch_allowed = bool(allow_fetch and key and candidate_news_guard_fetch_enabled())
+    if legacy_fetch_allowed:
         try:
             fetched = fetch_alpha_vantage_ticker_news_score(t, api_key=key)
             saved = save_holding_news_cache_entry(
@@ -188,8 +199,14 @@ def check_candidate_news_guard(
                 stale["cache_age_minutes"] = round(age_min, 3)
             return stale
 
-    source = "api_key_missing" if not key else "fetch_budget_exhausted"
+    if not key:
+        source = "api_key_missing"
+    elif not allow_fetch:
+        source = "fetch_budget_exhausted"
+    else:
+        source = "paper_candidate_news_fetch_disabled"
     stale = _result_from_row(t, rulebook, row, enabled=True, fresh=False, source=source)
     if row is not None and age_min is not None:
         stale["cache_age_minutes"] = round(age_min, 3)
+    stale["fetch_env"] = CANDIDATE_NEWS_GUARD_FETCH_ENV
     return stale

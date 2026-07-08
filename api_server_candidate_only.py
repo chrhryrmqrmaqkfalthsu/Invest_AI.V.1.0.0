@@ -11,9 +11,11 @@ from engine.live.live_candidate_display_routes import install_live_candidate_dis
 from engine.live.real_dashboard_alpaca_history_patch import install_real_dashboard_alpaca_history_routes
 from engine.live.real_dashboard_holding_days_patch import install_real_dashboard_holding_days_patch
 from engine.live.real_dashboard_live_chart_patch import install_real_dashboard_live_chart_patch
+from engine.live.real_dashboard_readability_patch import install_real_dashboard_readability_patch
 
 app = _aftermarket.app
 install_live_candidate_display_routes(app, _aftermarket._base, max_candidates=8)
 install_real_dashboard_holding_days_patch()
 install_real_dashboard_live_chart_patch()
+install_real_dashboard_readability_patch()
 install_real_dashboard_alpaca_history_routes(app)

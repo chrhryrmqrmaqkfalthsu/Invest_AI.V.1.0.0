@@ -936,18 +936,26 @@ def _real_slot_overlay_js() -> str:
     if(chartFetch) parts.push(`화면 ${kstTime(chartFetch)}`);
     el.textContent = parts.length ? `최근 업데이트 · ${parts.join(' · ')}` : `최근 업데이트 · ${kstTime(new Date().toISOString())}`;
   }
-  function ensureRealAutoSettingsButton(stack){
-    if(!stack) return null;
-    let bar=document.getElementById('real-auto-settings-bar');
-    if(!bar){
-      bar=document.createElement('div');
-      bar.id='real-auto-settings-bar';
-      bar.style.cssText='background:linear-gradient(135deg,rgba(245,196,81,.14),rgba(59,130,246,.10));border:1px solid rgba(245,196,81,.35);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;';
-      bar.innerHTML=`<div style="display:flex;flex-direction:column;gap:3px;"><div style="font-size:15px;font-weight:900;color:#e7eefb;">S2 자동매매 설정</div><div style="font-size:12px;color:var(--dim);">K · dry-run · 실주문 · no-TP · 자본분배 스위치 관리</div></div><a href="/dashboard-real/auto-settings" style="display:inline-flex;align-items:center;gap:8px;background:#f5c451;color:#111827;border-radius:999px;padding:10px 14px;font-size:13px;font-weight:950;text-decoration:none;box-shadow:0 8px 22px rgba(245,196,81,.18);">⚙ S2 자동매매 설정 열기</a>`;
+  function ensureRealAutoSettingsNavButton(){
+    const nav=document.querySelector('.topbar .nav');
+    if(!nav) return null;
+    let btn=document.getElementById('real-auto-settings-nav-btn');
+    if(!btn){
+      btn=document.createElement('button');
+      btn.id='real-auto-settings-nav-btn';
+      btn.type='button';
+      btn.textContent='⚙ 설정';
+      btn.title='S2 자동매매 설정';
+      btn.onclick=()=>{ window.location.href='/dashboard-real/auto-settings'; };
+      btn.style.cssText='border-color:rgba(245,196,81,.55);color:#f5c451;font-weight:900;';
     }
-    if(bar.parentElement!==stack) stack.insertBefore(bar, stack.firstChild);
-    else if(stack.firstChild!==bar) stack.insertBefore(bar, stack.firstChild);
-    return bar;
+    const buttons=[...nav.querySelectorAll('button')];
+    const historyBtn=buttons.find(b=>String(b.textContent||'').replace(/\s/g,'').includes('거래내역'));
+    const fsBtn=document.getElementById('fs-btn');
+    if(historyBtn && historyBtn.nextSibling!==btn) historyBtn.insertAdjacentElement('afterend', btn);
+    else if(fsBtn && fsBtn.previousSibling!==btn) nav.insertBefore(btn, fsBtn);
+    else if(!btn.parentElement) nav.appendChild(btn);
+    return btn;
   }
   function byCid(cid){return (window.candidateSlotData||[]).find(x=>String(x.candidate_id||'')===String(cid||''));}
   function defaultNotional(){
@@ -1233,7 +1241,7 @@ def _real_slot_overlay_js() -> str:
     const candSummary=cand.querySelector('summary span:first-child');
     if(candSummary) candSummary.textContent='🛒 매수 대기 후보 슬롯 (8)';
     cand.open=true;
-    ensureRealAutoSettingsButton(stack);
+    ensureRealAutoSettingsNavButton();
     if(hold.parentElement!==stack) stack.appendChild(hold);
     if(cand.parentElement!==stack) stack.appendChild(cand);
     if(market.parentElement!==stack) stack.appendChild(market);
@@ -1724,7 +1732,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v12"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v13"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

@@ -24,7 +24,11 @@ class MarketContext:
 
 @dataclass
 class ExitExecutionConfig:
-    """Execution-price estimation settings."""
+    """Execution-price estimation settings.
+
+    ``take_profit_enabled`` defaults to False for the S2 no-TP live path. Set it
+    to True only when intentionally running the legacy target/take-profit path.
+    """
 
     mode: str = "base"  # "base" | "stress" | "live" | "conservative_gap_fill" | "conservative_core"
     base_slippage_bps: float = 5.0
@@ -39,6 +43,7 @@ class ExitExecutionConfig:
     sell_omen_enabled: Optional[bool] = None
     sell_omen_score: Optional[float] = None
     sell_omen_threshold: Optional[float] = None
+    take_profit_enabled: bool = False
 
 
 @dataclass
@@ -117,14 +122,7 @@ def apply_hard_stop_guard(
     trigger_source: str = "hard_stop_guard",
     diagnostics_prefix: str = "live_hard_stop",
 ) -> ExitDecision:
-    """Force stop_loss when ``probe_price`` reaches the entry-time stop_price.
-
-    Live passes current price as ``probe_price``. Daily backtests pass bar low and
-    a gap-fill price. This function intentionally preserves the legacy live
-    wrapper behavior: no-hit decisions only receive diagnostics, an existing
-    stop_loss is not overridden, and any other exit reason is overridden when
-    the hard stop is hit.
-    """
+    """Force stop_loss when ``probe_price`` reaches the entry-time stop_price."""
     probe = _to_float(probe_price, 0.0)
     stop = _to_float(getattr(state, "stop_price", 0.0), 0.0)
     diagnostics = dict(decision.diagnostics or {})
@@ -338,11 +336,7 @@ def _conservative_gap_fill_basis(
     price: PriceSnapshot,
     reason: Optional[str],
 ) -> Optional[float]:
-    """Return same-bar gap-aware basis for long price-trigger exits.
-
-    Decision exits such as sell_omen/time_out intentionally return None so they
-    keep the legacy next-open fill path.
-    """
+    """Return same-bar gap-aware basis for long price-trigger exits."""
     normalized = str(reason or "").lower()
     open_value = None if price.open is None else _to_float(price.open, trigger_price)
 
@@ -437,6 +431,8 @@ def evaluate_exit(
 
     Ambiguous same-bar OHLC collisions are resolved conservatively:
     stop_loss -> breakeven_stop -> sell_omen -> trailing -> take_profit -> time_out.
+    In S2 no-TP mode, ``take_profit_enabled`` is False and target hits are
+    recorded diagnostically but do not trigger exits.
     """
     cfg = execution_config or ExitExecutionConfig()
     ctx = market_context or MarketContext()
@@ -478,6 +474,7 @@ def evaluate_exit(
 
     sell_omen_enabled, sell_omen_score, sell_omen_threshold = _resolve_sell_omen_settings(rulebook, cfg)
     sell_omen_hit = bool(sell_omen_enabled and sell_omen_score is not None and sell_omen_score >= sell_omen_threshold)
+    take_profit_enabled = bool(getattr(cfg, "take_profit_enabled", False))
 
     diagnostics: Dict[str, Any] = {
         "strategy": strategy,
@@ -505,6 +502,7 @@ def evaluate_exit(
         "sell_omen_score": sell_omen_score,
         "sell_omen_threshold": sell_omen_threshold,
         "sell_omen_hit": sell_omen_hit,
+        "take_profit_enabled": take_profit_enabled,
         "stop_price": position.stop_price,
         "target_price": position.target_price,
         "trailing_stop": decision_trailing,
@@ -512,12 +510,14 @@ def evaluate_exit(
     }
 
     stop_hit = low <= position.stop_price
-    target_hit = high >= position.target_price
+    raw_target_hit = high >= position.target_price
+    target_hit = bool(take_profit_enabled and raw_target_hit)
     trailing_hit = trailing_active and low <= decision_trailing
     timeout_hit = holding_days >= position.max_holding_days
     diagnostics.update(
         {
             "stop_hit": stop_hit,
+            "raw_target_hit": raw_target_hit,
             "target_hit": target_hit,
             "breakeven_hit": breakeven_hit,
             "sell_omen_hit": sell_omen_hit,

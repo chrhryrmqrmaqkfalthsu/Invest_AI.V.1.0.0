@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "mode": "s2_auto_live",
+  "master_enabled": false,
+  "auto_buy_enabled": false,
+  "auto_exit_enabled": false,
+  "real_orders_enabled": false,
+  "dry_run": true,
+  "entry_timing": "next_open",
+  "allow_intraday_immediate": false,
+  "display_slots": 8,
+  "portfolio_K": 20,
+  "total_capital_mode": "fixed_from_account_at_start",
+  "capital_source": "available_cash",
+  "selection": {
+    "gate_policy": "KEEP_80_DROP_BAD_MAE_13",
+    "signal_policy": "evaluate_signal_should_buy_true",
+    "priority_policy": "final_score_desc_spy_down_high_vol_deprioritize",
+    "eq_policy": "ignored_unverified"
+  },
+  "capital": {
+    "total_capital_usd": null,
+    "allocation_mode": "equal_weight_fixed_slot",
+    "cash_buffer_usd": 10.0,
+    "cash_buffer_pct": 0.02,
+    "rebalance_existing_positions": false
+  },
+  "exit": {
+    "engine": "PositionManager_ExitPolicy",
+    "require_exit_live_policy": true,
+    "allow_legacy_fallback": false,
+    "s2_take_profit_enabled": false,
+    "allow_manual_chart_exit_plan": false
+  },
+  "risk_limits": {
+    "max_order_notional_usd": 100.0,
+    "max_daily_orders": 3,
+    "max_daily_buy_notional_usd": 300.0,
+    "max_total_exposure_usd": 650.0,
+    "min_cash_buffer_usd": 10.0,
+    "one_position_per_ticker": true,
+    "min_fractional_shares": 0.0001
+  },
+  "operator_approval": {
+    "operator_armed": false,
+    "armed_until_utc": "",
+    "confirmation_phrase_required": true,
+    "confirmation_phrase": "S2_AUTO_LIVE_APPROVE"
+  },
+  "kill_switch": {
+    "path": "data/_system/live_auto_kill_switch",
+    "scope": "master_enabled_false_blocks_all_auto_actions"
+  },
+  "state_paths": {
+    "state": "data/_system/live_auto_state.json",
+    "events": "data/_system/live_auto_events.jsonl",
+    "order_intents": "data/_system/live_auto_order_intents.jsonl"
+  }
+}

@@ -936,6 +936,28 @@ def _real_slot_overlay_js() -> str:
     if(chartFetch) parts.push(`화면 ${kstTime(chartFetch)}`);
     el.textContent = parts.length ? `최근 업데이트 · ${parts.join(' · ')}` : `최근 업데이트 · ${kstTime(new Date().toISOString())}`;
   }
+  function openRealAutoSettingsModal(){
+    let modal=document.getElementById('real-auto-settings-modal');
+    if(!modal){
+      modal=document.createElement('div');
+      modal.id='real-auto-settings-modal';
+      modal.style.cssText='position:fixed;inset:0;background:rgba(3,7,18,.72);backdrop-filter:blur(6px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:22px;';
+      modal.innerHTML=`<div style="width:min(1180px,96vw);height:min(860px,92vh);background:#0b111c;border:1px solid rgba(245,196,81,.35);border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden;"><div style="height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid #263246;background:#111a2b;"><div style="font-size:14px;font-weight:950;color:#e7eefb;">⚙ S2 자동매매 설정</div><button id="real-auto-settings-close" style="background:#263246;color:#e7eefb;border:0;border-radius:10px;padding:8px 12px;font-weight:900;cursor:pointer;">닫기 ✕</button></div><iframe src="/dashboard-real/auto-settings" style="width:100%;height:100%;border:0;background:#0b111c;"></iframe></div>`;
+      modal.addEventListener('click', (e)=>{ if(e.target===modal) closeRealAutoSettingsModal(); });
+      document.body.appendChild(modal);
+      const closeBtn=document.getElementById('real-auto-settings-close');
+      if(closeBtn) closeBtn.onclick=closeRealAutoSettingsModal;
+    }
+    modal.style.display='flex';
+    document.body.style.overflow='hidden';
+    const onEsc=(e)=>{ if(e.key==='Escape'){ closeRealAutoSettingsModal(); document.removeEventListener('keydown', onEsc); } };
+    document.addEventListener('keydown', onEsc);
+  }
+  function closeRealAutoSettingsModal(){
+    const modal=document.getElementById('real-auto-settings-modal');
+    if(modal) modal.style.display='none';
+    document.body.style.overflow='';
+  }
   function ensureRealAutoSettingsNavButton(){
     const nav=document.querySelector('.topbar .nav');
     if(!nav) return null;
@@ -946,7 +968,7 @@ def _real_slot_overlay_js() -> str:
       btn.type='button';
       btn.textContent='⚙ 설정';
       btn.title='S2 자동매매 설정';
-      btn.onclick=()=>{ window.location.href='/dashboard-real/auto-settings'; };
+      btn.onclick=(e)=>{ e.preventDefault(); openRealAutoSettingsModal(); };
       btn.style.cssText='border-color:rgba(245,196,81,.55);color:#f5c451;font-weight:900;';
     }
     const buttons=[...nav.querySelectorAll('button')];
@@ -1732,7 +1754,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v13"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v14"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

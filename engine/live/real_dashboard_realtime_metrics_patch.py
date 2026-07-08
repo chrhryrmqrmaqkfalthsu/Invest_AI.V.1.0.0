@@ -139,6 +139,56 @@ def _patch_slot_overlay_js() -> None:
       return r;
     });
   }
+  function kmRealFormatMoney(n){
+    const v=Number(n);
+    if(!Number.isFinite(v)) return '—';
+    return v.toFixed(2);
+  }
+  function kmRealFormatPct(n,d=2){
+    const v=Number(n);
+    if(!Number.isFinite(v)) return '—';
+    return `${v>=0?'+':''}${v.toFixed(d)}%`;
+  }
+  function kmUpdateKvByLabel(label, html, color){
+    try{
+      const kv=document.getElementById('detail-kv');
+      if(!kv) return false;
+      const rows=[...kv.querySelectorAll('.kv')];
+      const row=rows.find(x=>String((x.children[0]&&x.children[0].textContent)||'').trim()===label);
+      if(!row || !row.children[1]) return false;
+      row.children[1].innerHTML=html;
+      if(color) row.children[1].style.color=color;
+      return true;
+    }catch(e){ return false; }
+  }
+  function kmUpdateRealHoldingDetailNumbers(s){
+    try{
+      if(!s) return;
+      const pnl=Number(s.pnl_pct);
+      const pnlColor=Number.isFinite(pnl) ? (pnl>=0?'var(--up)':'var(--down)') : 'var(--dim)';
+      kmUpdateKvByLabel('현재가', kmRealFormatMoney(s.current_price));
+      kmUpdateKvByLabel('손익률', kmRealFormatPct(s.pnl_pct), pnlColor);
+      kmUpdateKvByLabel('수량', Number(s.shares||0).toFixed(4));
+      kmUpdateKvByLabel('학습 승률', s.rulebook_win_rate==null?'—':Number(s.rulebook_win_rate).toFixed(1)+'%');
+      kmUpdateKvByLabel('기대 수익률', kmRealFormatPct(s.rulebook_expectancy_pct));
+      kmUpdateKvByLabel('백테스트 승률', s.win_rate==null?'—':Number(s.win_rate).toFixed(2)+'%');
+      kmUpdateKvByLabel('기대수익률', s.expectancy_pct==null?'—':Number(s.expectancy_pct).toFixed(2)+'%');
+      kmUpdateKvByLabel('MDD', s.mdd_pct==null?'—':Number(s.mdd_pct).toFixed(2)+'%');
+      kmUpdateKvByLabel('거래수', s.trade_count==null?'—':Number(s.trade_count).toFixed(0));
+      kmUpdateKvByLabel('fitness', s.fitness==null?'—':Number(s.fitness).toFixed(2));
+      const title=document.getElementById('detail-title');
+      if(title) title.textContent=`${String(s.ticker||'').toUpperCase()} — 보유 차트`;
+    }catch(e){}
+  }
+  function kmRefreshActiveRealHoldingObject(s){
+    if(!s) return;
+    try{ window._activeRealHolding=s; }catch(e){}
+    try{
+      const tk=String(s.ticker||'').toUpperCase();
+      const old=(window.slotData||slotData||[]).find(x=>x && String(x.ticker||'').toUpperCase()===tk);
+      if(old){ Object.assign(old, s); }
+    }catch(e){}
+  }
   async function kmRefreshRealHoldingMetricsFast(){
     if(window._kmRealHoldingMetricsBusy) return;
     window._kmRealHoldingMetricsBusy=true;
@@ -160,13 +210,16 @@ def _patch_slot_overlay_js() -> None:
         if(detail && detail.style.display==='block' && tk){
           const fresh=normalized.find(x=>x && !x.empty && String(x.ticker||'').toUpperCase()===tk);
           if(fresh){
-            window._activeRealHolding=fresh;
-            try{ if(typeof refreshDetailPanel==='function') refreshDetailPanel(tk); }catch(e){}
-            try{ if(typeof renderRealHoldingLiveEnhancements==='function') renderRealHoldingLiveEnhancements(fresh); }catch(e){}
+            kmRefreshActiveRealHoldingObject(fresh);
+            // Do not call refreshDetailPanel()/renderRealHoldingLiveEnhancements()
+            // here.  They rebuild commentary and the stop/take panel, causing
+            // the visible flicker.  Only update numeric text nodes.
+            kmUpdateRealHoldingDetailNumbers(fresh);
+            try{ updateSellOmenStrip(fresh); }catch(e){}
           }
         }
       }catch(e){}
-      try{ updateRealUpdateBadge({positionsFetch:new Date().toISOString(), chartFetch:new Date().toISOString()}); }catch(e){}
+      try{ updateRealUpdateBadge({positionsFetch:new Date().toISOString()}); }catch(e){}
     }catch(e){}
     finally{
       if(timer) clearTimeout(timer);

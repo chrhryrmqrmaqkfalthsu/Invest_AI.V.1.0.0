@@ -10,8 +10,9 @@ HTML/JS generator does not need invasive edits.  It fixes real-trading UI issues
    held-position chart reflects the dashboard mark while waiting for the next
    public 1m bar.
 3. Automatic refresh must not reset the user's zoom/scroll range.  The detail
-   refresh updates only the newest candle/volume point when possible and restores
-   the existing visible range on fallback redraws.
+   refresh now reloads the full candle dataset with the existing viewport
+   restored, so delayed yfinance backfills/revised recent bars are reflected
+   without the chart jumping back to the origin.
 """
 from __future__ import annotations
 
@@ -153,23 +154,38 @@ def _patch_slot_overlay_js() -> None:
       }
     }catch(e){}
   }
-  async function updateRealDetailLatestCandle(ticker, interval){
+  function realCandleSignature(candles){
+    try{
+      if(!Array.isArray(candles) || !candles.length) return '';
+      return candles.slice(-12).map(c=>[c.time,c.open,c.high,c.low,c.close,c.volume,c.live_tail?'L':''].join(':')).join('|');
+    }catch(e){ return String(Date.now()); }
+  }
+  async function refreshRealDetailCandlesPreservingRange(ticker, interval){
     try{
       if(interval!=='1m') return false;
-      if(typeof series==='undefined' || !series || typeof series.update!=='function') return false;
+      if(typeof series==='undefined' || !series || typeof series.setData!=='function') return false;
       const r=await fetch(`${API}/api/real/candles/${encodeURIComponent(ticker)}?interval=${encodeURIComponent(interval)}`, {cache:'no-store'});
       const candles=await r.json();
       if(!Array.isArray(candles) || !candles.length) return false;
       const last=candles[candles.length-1];
       if(!last || last.time==null) return false;
+      const sig=realCandleSignature(candles);
       const range=realVisibleRange();
-      series.update(last);
-      if(typeof volSeries!=='undefined' && volSeries && typeof volSeries.update==='function'){
-        volSeries.update({
-          time:last.time,
-          value:last.volume||0,
-          color: Number(last.close)>=Number(last.open) ? 'rgba(38,208,124,.5)' : 'rgba(255,77,106,.5)'
-        });
+      // yfinance often backfills/revises the last few bars.  Using only
+      // series.update(last) leaves those recent bars stale until a full page
+      // refresh, making the candle shape look different after reload.  setData
+      // corrects the full visible data while the saved logical range prevents
+      // the chart from jumping back to the origin.
+      if(window._lastRealDetailCandleSig!==sig){
+        series.setData(candles);
+        if(typeof volSeries!=='undefined' && volSeries && typeof volSeries.setData==='function'){
+          volSeries.setData(candles.map(c=>({
+            time:c.time,
+            value:c.volume||0,
+            color:Number(c.close)>=Number(c.open) ? 'rgba(38,208,124,.5)' : 'rgba(255,77,106,.5)'
+          })));
+        }
+        window._lastRealDetailCandleSig=sig;
       }
       restoreRealVisibleRange(range);
       window._lastRealDetailCandleTime=last.time;
@@ -177,6 +193,9 @@ def _patch_slot_overlay_js() -> None:
       updateRealUpdateBadge({chartLatest:last.time, chartFetch:new Date().toISOString()});
       return true;
     }catch(e){ return false; }
+  }
+  async function updateRealDetailLatestCandle(ticker, interval){
+    return refreshRealDetailCandlesPreservingRange(ticker, interval);
   }
   async function drawRealDetailPreservingRange(ticker, interval){
     const range=realVisibleRange();
@@ -189,6 +208,7 @@ def _patch_slot_overlay_js() -> None:
       if(!tk) return;
       document.querySelectorAll('.tf').forEach(b=>b.classList.toggle('active', b.dataset.tf==='1m'));
       if(typeof _activeChart !== 'undefined') _activeChart={type:'real_holding', ticker:tk, interval:'1m'};
+      window._lastRealDetailCandleSig='';
       if(typeof window.drawChart==='function') await window.drawChart(tk, '1m');
       updateRealUpdateBadge({chartFetch:new Date().toISOString()});
     }catch(e){}
@@ -209,7 +229,19 @@ def _patch_slot_overlay_js() -> None:
             "      let interval=String(ac.interval||'1m');\n"
             "      if(String(ac.type||'')==='real_holding') interval='1m';\n"
             "      if(!ticker || interval!=='1m') return;\n"
+            "      const updated=await refreshRealDetailCandlesPreservingRange(ticker, interval);\n"
+            "      if(!updated) await drawRealDetailPreservingRange(ticker, interval);",
+        )
+        js = js.replace(
+            "      let interval=String(ac.interval||'1m');\n"
+            "      if(String(ac.type||'')==='real_holding') interval='1m';\n"
+            "      if(!ticker || interval!=='1m') return;\n"
             "      const updated=await updateRealDetailLatestCandle(ticker, interval);\n"
+            "      if(!updated) await drawRealDetailPreservingRange(ticker, interval);",
+            "      let interval=String(ac.interval||'1m');\n"
+            "      if(String(ac.type||'')==='real_holding') interval='1m';\n"
+            "      if(!ticker || interval!=='1m') return;\n"
+            "      const updated=await refreshRealDetailCandlesPreservingRange(ticker, interval);\n"
             "      if(!updated) await drawRealDetailPreservingRange(ticker, interval);",
         )
         js = js.replace(
@@ -220,7 +252,7 @@ def _patch_slot_overlay_js() -> None:
             "      let interval=String(ac.interval||'1m');\n"
             "      if(String(ac.type||'')==='real_holding') interval='1m';\n"
             "      if(!ticker || interval!=='1m') return;\n"
-            "      const updated=await updateRealDetailLatestCandle(ticker, interval);\n"
+            "      const updated=await refreshRealDetailCandlesPreservingRange(ticker, interval);\n"
             "      if(!updated) await drawRealDetailPreservingRange(ticker, interval);",
         )
         js = js.replace(

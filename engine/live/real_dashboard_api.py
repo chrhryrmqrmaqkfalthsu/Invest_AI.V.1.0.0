@@ -1050,8 +1050,11 @@ def _real_slot_overlay_js() -> str:
     if(el) return el;
     el=document.createElement('span');
     el.id='real-update-badge';
-    el.style.cssText='border:1px solid rgba(59,130,246,.35);background:rgba(59,130,246,.12);color:#bfdbfe;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900;font-variant-numeric:tabular-nums;white-space:nowrap;';
-    const host=document.querySelector('.topbar .regime') || document.querySelector('.topbar') || document.body;
+    el.title='실거래 대시보드 최근 업데이트 로그';
+    el.style.cssText='border:1px solid rgba(59,130,246,.35);background:rgba(59,130,246,.12);color:#bfdbfe;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900;font-variant-numeric:tabular-nums;white-space:nowrap;display:inline-block;flex:0 0 360px;width:360px;max-width:360px;overflow:hidden;text-overflow:ellipsis;text-align:right;';
+    const top=document.querySelector('.topbar');
+    const host=document.querySelector('.topbar .regime') || top || document.body;
+    try{ if(top){ top.style.gap='14px'; } if(host && host.classList && host.classList.contains('regime')){ host.style.marginLeft='auto'; host.style.minWidth='560px'; host.style.justifyContent='flex-end'; host.style.overflow='hidden'; } }catch(e){}
     host.appendChild(el);
     return el;
   }
@@ -1065,6 +1068,7 @@ def _real_slot_overlay_js() -> str:
     if(chartLatest) parts.push(`1m봉 ${kstTime(chartLatest)} (${kstAgeText(chartLatest)})`);
     if(chartFetch) parts.push(`화면 ${kstTime(chartFetch)}`);
     el.textContent = parts.length ? `최근 업데이트 · ${parts.join(' · ')}` : `최근 업데이트 · ${kstTime(new Date().toISOString())}`;
+    el.title = el.textContent;
   }
   function openRealAutoSettingsModal(){
     let modal=document.getElementById('real-auto-settings-modal');
@@ -1160,7 +1164,22 @@ def _real_slot_overlay_js() -> str:
     .real-candidate-chart-meta{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;display:flex;justify-content:space-between;gap:8px;}
     .real-signal-vline{position:absolute;top:0;bottom:0;width:2px;background:#f5c451;box-shadow:0 0 10px rgba(245,196,81,.75);z-index:18;pointer-events:none;}
     .real-signal-label{position:absolute;top:8px;transform:translateX(-50%);z-index:19;background:rgba(245,196,81,.16);border:1px solid rgba(245,196,81,.65);color:#fde68a;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:900;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums;}
-    @media(max-width:900px){.real-candidate-row{grid-template-columns:1fr!important}.real-candidate-chart-wrap{min-height:260px}.real-candidate-mini-chart{min-height:236px}.real-order-ticket .ticket-row{grid-template-columns:minmax(120px,1fr) repeat(3,56px);}.real-order-ticket .slot-buy-real{grid-column:1/-1;}}
+    .topbar{gap:14px;}
+    .topbar .nav{flex:0 0 auto;}
+    .topbar .regime{margin-left:auto;min-width:560px;justify-content:flex-end;overflow:hidden;}
+    #real-update-badge{display:inline-block;flex:0 0 360px;width:360px;max-width:360px;overflow:hidden;text-overflow:ellipsis;text-align:right;}
+    #real-home-stack{gap:24px!important;}
+    .km-real-section{position:relative;border-radius:18px!important;padding:16px!important;box-shadow:0 16px 44px rgba(0,0,0,.18);}
+    .km-hold-section{border:1px solid rgba(59,130,246,.45)!important;background:linear-gradient(180deg,rgba(59,130,246,.095),rgba(17,23,34,.96))!important;}
+    .km-candidate-section{border:1px solid rgba(245,196,81,.48)!important;background:linear-gradient(180deg,rgba(245,196,81,.075),rgba(17,23,34,.96))!important;margin-top:10px;}
+    .km-section-label{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-2px 0 14px;padding:10px 12px;border-radius:12px;font-size:13px;font-weight:950;letter-spacing:.2px;}
+    .km-hold-section .km-section-label{background:rgba(59,130,246,.14);border:1px solid rgba(59,130,246,.28);color:#bfdbfe;}
+    .km-candidate-section .km-section-label{background:rgba(245,196,81,.12);border:1px solid rgba(245,196,81,.28);color:#fde68a;}
+    .km-section-count{font-size:12px;color:var(--dim);font-weight:900;font-variant-numeric:tabular-nums;}
+    .km-section-separator{height:16px;position:relative;margin:-2px 0 -2px;}
+    .km-section-separator:before{content:'';position:absolute;left:24px;right:24px;top:50%;border-top:1px dashed rgba(148,163,184,.28);}
+    .km-section-separator:after{content:'보유 영역 / 매수 후보 영역 분리';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#0a0e17;border:1px solid rgba(148,163,184,.22);border-radius:999px;padding:3px 10px;color:var(--dim);font-size:10px;font-weight:900;letter-spacing:.5px;}
+    @media(max-width:900px){.topbar .regime{min-width:0;width:100%;}.topbar .nav{flex:1 1 100%;}#real-update-badge{width:100%;max-width:100%;flex:1 1 100%;text-align:left;}.real-candidate-row{grid-template-columns:1fr!important}.real-candidate-chart-wrap{min-height:260px}.real-candidate-mini-chart{min-height:236px}.real-order-ticket .ticket-row{grid-template-columns:minmax(120px,1fr) repeat(3,56px);}.real-order-ticket .slot-buy-real{grid-column:1/-1;}}
     `;
     const el=document.createElement('style'); el.id='real-candidate-ticket-style'; el.textContent=css; document.head.appendChild(el);
   }
@@ -1458,20 +1477,32 @@ def _real_slot_overlay_js() -> str:
       stack.id='real-home-stack';
       stack.style.display='flex';
       stack.style.flexDirection='column';
-      stack.style.gap='16px';
+      stack.style.gap='24px';
       stack.style.marginTop='0';
       const equity=document.getElementById('equity-chart');
       const equityPanel=equity ? equity.closest('.panel') : null;
       if(equityPanel && equityPanel.parentElement) equityPanel.parentElement.insertBefore(stack, equityPanel.nextSibling);
       else home.appendChild(stack);
-    }
+    }else{ stack.style.gap='24px'; }
+    hold.classList.add('km-real-section','km-hold-section');
+    cand.classList.add('km-real-section','km-candidate-section');
+    const holdingCount=(window.slotData||[]).filter(x=>x && !x.empty).length;
+    const candidateCount=(window.candidateSlotData||[]).filter(x=>x && !x.empty).length;
+    let holdLabel=hold.querySelector(':scope > .km-section-label');
+    if(!holdLabel){ holdLabel=document.createElement('div'); holdLabel.className='km-section-label'; hold.insertBefore(holdLabel, hold.firstChild); }
+    holdLabel.innerHTML=`<span>📦 보유 슬롯 / 가상 보유</span><span class="km-section-count">${holdingCount}개</span>`;
     const holdTitle=hold.querySelector('h3');
-    if(holdTitle) holdTitle.textContent='📦 보유 슬롯';
+    if(holdTitle){ holdTitle.textContent='보유 종목'; holdTitle.style.display='none'; }
     const candSummary=cand.querySelector('summary span:first-child');
     if(candSummary) candSummary.textContent='🛒 매수 대기 후보 슬롯 (8)';
+    const candMeta=document.getElementById('real-candidate-meta');
+    if(candMeta && !candMeta.textContent) candMeta.textContent=`${candidateCount}/8`;
+    let separator=document.getElementById('km-hold-candidate-separator');
+    if(!separator){ separator=document.createElement('div'); separator.id='km-hold-candidate-separator'; separator.className='km-section-separator'; }
     cand.open=true;
     ensureRealAutoSettingsNavButton();
     if(hold.parentElement!==stack) stack.appendChild(hold);
+    if(separator.parentElement!==stack) stack.appendChild(separator);
     if(cand.parentElement!==stack) stack.appendChild(cand);
     if(market.parentElement!==stack) stack.appendChild(market);
     if(grid && grid.parentElement) grid.remove();
@@ -2361,7 +2392,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v25_multi_preview_backtest"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v26_section_update_fixed"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

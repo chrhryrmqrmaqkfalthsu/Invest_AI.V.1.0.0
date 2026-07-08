@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import time
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +71,7 @@ _real_broker_error: str = ""
 _real_broker_error_logged = False
 _real_broker_config_cache: dict[str, Any] | None = None
 _real_candle_cache: dict[tuple[str, str, str], tuple[float, list[dict[str, Any]]]] = {}
+_lightweight_charts_js_cache: tuple[float, bytes] | None = None
 _REAL_CANDLE_TTL_SEC = {
     "1m": 25,
     "2m": 35,
@@ -1270,7 +1272,7 @@ def _real_slot_overlay_js() -> str:
     if(typeof toast==='function') toast('가상 매수 프리뷰 추가', `${p.ticker} · 누적 ${mergedPreview.length}개 · 실제 주문 없음`, 'good');
   }
   async function handlePreview(cid){
-    const input=document.querySelector(`.slot-buy-amount[data-candidate-id="${CSS.escape(cid)}"]`);
+    const input=firstCandidateNode('.slot-buy-amount[data-candidate-id]', cid);
     const amount=num(input && input.value) || defaultNotional();
     try{ await applyBuyDashboardPreview(cid, amount); }
     catch(e){ if(typeof toast==='function') toast('프리뷰 실패', String(e.message||e), 'warn'); else alert(String(e.message||e)); }
@@ -1283,13 +1285,27 @@ def _real_slot_overlay_js() -> str:
     if(amount==null || price==null || price<=0){ el.textContent='예상 —'; return; }
     el.textContent=`예상 ${(amount/price).toFixed(3)}주`;
   }
+  function candidateNodes(selector, cid, root=document){
+    return [...root.querySelectorAll(selector)].filter(el=>String(el.dataset.candidateId||'')===String(cid||''));
+  }
+  function firstCandidateNode(selector, cid, root=document){
+    return candidateNodes(selector, cid, root)[0] || null;
+  }
+  function chartLibReady(){ return !!(window.LightweightCharts && typeof window.LightweightCharts.createChart==='function'); }
+  function markChartLibWaiting(scope=document){
+    try{
+      scope.querySelectorAll('.real-candidate-mini-chart,.real-holding-mini-chart').forEach(el=>{
+        if(el && !el.dataset.chartWaitMarked){ el.dataset.chartWaitMarked='1'; el.innerHTML='<div class="loading">차트 라이브러리 대기</div>'; }
+      });
+    }catch(e){}
+  }
   function bindOrderTicketControls(){
     document.querySelectorAll('.slot-buy-amount[data-est-id]').forEach(input=>{
       if(input.dataset.boundEst==='1') return;
       input.dataset.boundEst='1';
       input.addEventListener('input',()=>updateShareEstimate(input));
       input.addEventListener('click',ev=>ev.stopPropagation());
-      input.addEventListener('keydown',ev=>{ ev.stopPropagation(); if(ev.key==='Enter'){ const cid=input.dataset.candidateId; const btn=document.querySelector(`.slot-buy-real[data-candidate-id="${CSS.escape(cid)}"]`); if(btn) btn.click(); } });
+      input.addEventListener('keydown',ev=>{ ev.stopPropagation(); if(ev.key==='Enter'){ const cid=input.dataset.candidateId; const btn=firstCandidateNode('.slot-buy-real[data-candidate-id]', cid); if(btn) btn.click(); } });
       updateShareEstimate(input);
     });
     document.querySelectorAll('.quick-amt[data-candidate-id]').forEach(btn=>{
@@ -1299,7 +1315,7 @@ def _real_slot_overlay_js() -> str:
         ev.stopPropagation();
         const cid=btn.dataset.candidateId;
         const scope=btn.closest('.real-order-ticket') || document;
-        const input=scope.querySelector(`.slot-buy-amount[data-candidate-id="${CSS.escape(cid)}"]`);
+        const input=firstCandidateNode('.slot-buy-amount[data-candidate-id]', cid, scope);
         if(input){ input.value=btn.dataset.amount; updateShareEstimate(input); input.focus(); }
       };
     });
@@ -1405,7 +1421,8 @@ def _real_slot_overlay_js() -> str:
         const meta=document.getElementById(`cand-${scope}-chart-meta-${safeCid}`);
         const s=byId.get(cid);
         const ticker=String((s && s.ticker) || el.dataset.ticker || '').toUpperCase();
-        if(!s || !ticker || !window.LightweightCharts) continue;
+        if(!s || !ticker) continue;
+        if(!chartLibReady()){ if(meta) meta.innerHTML='<span>차트 라이브러리 대기</span><span>CDN 확인</span>'; el.innerHTML='<div class="loading">차트 라이브러리 대기</div>'; continue; }
         const box=realChartBox(el, 180, 180);
         if(!box){
           if(meta) meta.innerHTML='<span>차트 영역 계산 중</span><span>대기</span>';
@@ -1985,7 +2002,8 @@ def _real_slot_overlay_js() -> str:
       activeIds.add(id);
       const el=document.getElementById(id);
       const metaId=`${id}-meta`;
-      if(!el || !window.LightweightCharts) continue;
+      if(!el) continue;
+      if(!chartLibReady()){ realSetChartMeta(metaId, '<span>차트 라이브러리 대기</span><span>CDN 확인</span>'); el.innerHTML='<div class="loading">차트 라이브러리 대기</div>'; continue; }
       if(!realIsVisible(el)) continue;
       const box=realChartBox(el, 180, 120);
       if(!box){
@@ -2083,7 +2101,7 @@ def _real_slot_overlay_js() -> str:
   }
   async function handleBuy(cid, slot){
     const s=byCid(cid) || {};
-    const input=document.getElementById('real-slot-buy-amount') || document.querySelector(`.slot-buy-amount[data-candidate-id="${CSS.escape(cid)}"]`);
+    const input=document.getElementById('real-slot-buy-amount') || firstCandidateNode('.slot-buy-amount[data-candidate-id]', cid);
     const amount=num(input && input.value);
     if(amount==null || amount<=0){
       if(typeof toast==='function') toast('매수 금액 필요', '얼마치 살지 달러 금액을 입력하세요', 'warn'); else alert('매수 금액을 입력하세요');
@@ -2092,7 +2110,7 @@ def _real_slot_overlay_js() -> str:
     }
     const ticker=s.ticker||cid;
     if(!confirm(`${ticker} 후보를 $${money(amount)} 매수 대상으로 선택하고 후보 슬롯에서 제외할까요?\n\n이 버튼은 후보 상태 기록/제외용입니다. 실제 주문은 사용하는 매매 화면/브로커에서 별도로 확인하세요.`)) return;
-    document.querySelectorAll(`.slot-buy-real[data-candidate-id="${CSS.escape(cid)}"]`).forEach(b=>{b.disabled=true; b.textContent='처리 중…';});
+    candidateNodes('.slot-buy-real[data-candidate-id]', cid).forEach(b=>{b.disabled=true; b.textContent='처리 중…';});
     try{
       await markSlotBuy(cid, amount, slot);
       if(typeof toast==='function') toast('매수 후보 선택 완료', `${ticker} · $${money(amount)} · 후보 슬롯 재갱신`, 'good');
@@ -2100,7 +2118,7 @@ def _real_slot_overlay_js() -> str:
       if(typeof closeDetail==='function') closeDetail();
     }catch(e){
       if(typeof toast==='function') toast('매수 후보 처리 실패', String(e.message||e), 'warn'); else alert(String(e.message||e));
-      document.querySelectorAll(`.slot-buy-real[data-candidate-id="${CSS.escape(cid)}"]`).forEach(b=>{b.disabled=false; b.textContent='매수 선택';});
+      candidateNodes('.slot-buy-real[data-candidate-id]', cid).forEach(b=>{b.disabled=false; b.textContent='매수 선택';});
     }
   }
   function candidateSignalEpochSec(s){
@@ -2325,6 +2343,7 @@ def _real_slot_overlay_js() -> str:
   if(typeof oldLoadSlots === 'function'){
     window.loadSlots = async function(){ if(window._realBuyDashboardPreview) return; await oldLoadSlots(); await loadCandidateSlots(); };
   }
+  if(!chartLibReady()) setTimeout(()=>{ if(!chartLibReady()) markChartLibWaiting(document); }, 3500);
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', loadCandidateSlots, {once:true}); else loadCandidateSlots();
   if(!window._realCandidateSlotsInterval) window._realCandidateSlotsInterval=setInterval(loadCandidateSlots, 30000);
   if(!window._realCandidateChartInterval) window._realCandidateChartInterval=setInterval(()=>scheduleCandidateMiniChartDraw(false, 0), 30000);
@@ -2451,11 +2470,39 @@ def _real_candle_cache_status() -> dict[str, Any]:
     return {"cache_size": len(rows), "items": rows, "ttl_policy_sec": dict(_REAL_CANDLE_TTL_SEC)}
 
 
+def _lightweight_charts_js() -> bytes:
+    """Serve Lightweight Charts from same origin so browser does not block on CDN."""
+    global _lightweight_charts_js_cache
+    now = time.time()
+    if _lightweight_charts_js_cache and now - _lightweight_charts_js_cache[0] < 86400:
+        return _lightweight_charts_js_cache[1]
+    url = "https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = resp.read()
+        if len(data) < 50000:
+            raise RuntimeError(f"unexpected lightweight charts size: {len(data)}")
+        _lightweight_charts_js_cache = (now, data)
+        return data
+    except Exception as exc:
+        if _lightweight_charts_js_cache:
+            return _lightweight_charts_js_cache[1]
+        fallback = (
+            b"console.error('LightweightCharts unavailable from server CDN proxy');"
+            b"window.LightweightCharts=window.LightweightCharts||null;"
+        )
+        return fallback
+
+
 def _real_dashboard_html(base_module: Any) -> HTMLResponse:
     path = base_module.DASHBOARD_MAIN_PATH
     if not path.exists():
         raise HTTPException(status_code=500, detail=f"dashboard file missing: {path}")
     html = path.read_text(encoding="utf-8")
+    html = html.replace(
+        'https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js',
+        '/real-assets/lightweight-charts.standalone.production.js',
+    )
     # dashboard_home.html declares slotData with let, which is not exposed on window.
     # The real-slot overlay is injected as a later script, so it needs slotData to be
     # a window property to re-render /api/real/slots as buy-candidate cards.
@@ -2514,10 +2561,10 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v28_loop_guard_chart_opt"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v30_local_chart_proxy"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
-    return HTMLResponse(content=html, media_type="text/html")
+    return HTMLResponse(content=html, media_type="text/html", headers={"Cache-Control":"no-store, max-age=0", "Pragma":"no-cache"})
 
 
 def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
@@ -2537,9 +2584,17 @@ def install_real_dashboard_routes(app: Any, base_module: Any) -> None:
     def real_buy_amount_overlay_js():
         return Response(content=_real_buy_amount_overlay_js(), media_type="application/javascript; charset=utf-8")
 
+    @app.get("/real-assets/lightweight-charts.standalone.production.js", include_in_schema=False)
+    def real_lightweight_charts_js():
+        return Response(
+            content=_lightweight_charts_js(),
+            media_type="application/javascript; charset=utf-8",
+            headers={"Cache-Control":"public, max-age=86400"},
+        )
+
     @app.get("/real-slot-overlay.js", include_in_schema=False)
     def real_slot_overlay_js():
-        return Response(content=_real_slot_overlay_js(), media_type="application/javascript; charset=utf-8")
+        return Response(content=_real_slot_overlay_js(), media_type="application/javascript; charset=utf-8", headers={"Cache-Control":"no-store, max-age=0", "Pragma":"no-cache"})
 
     @app.get("/api/real/connection")
     def real_connection(refresh: bool = False, account_check: bool = True):

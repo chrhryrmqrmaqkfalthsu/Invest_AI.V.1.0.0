@@ -1472,20 +1472,57 @@ def _real_slot_overlay_js() -> str:
       }
     }catch(e){}
     window._previewExitLines=[];
+    document.querySelectorAll('.preview-exit-zone,.preview-exit-zone-label').forEach(el=>el.remove());
+  }
+  function previewPlanKey(s){
+    return `km_real_preview_exit_plan_${String((s&&s.candidate_id)||'')}_${String((s&&s.ticker)||'').toUpperCase()}`;
   }
   function previewPlanDefaults(s){
     if(!s._previewExitPlan){
       const entry=num(s.entry_price)||num(s.current_price)||0;
       const stopPct=3.0;
       const takePct=5.0;
+      let saved=null;
+      try{ saved=JSON.parse(localStorage.getItem(previewPlanKey(s))||'null'); }catch(e){ saved=null; }
       s._previewExitPlan={
-        stop_loss_pct: stopPct,
-        take_profit_pct: takePct,
-        stop_loss_price: entry>0 ? entry*(1-stopPct/100) : null,
-        take_profit_price: entry>0 ? entry*(1+takePct/100) : null,
+        stop_enabled: saved && saved.stop_enabled!==undefined ? !!saved.stop_enabled : true,
+        take_enabled: saved && saved.take_enabled!==undefined ? !!saved.take_enabled : true,
+        stop_loss_pct: saved && saved.stop_loss_pct!=null ? Number(saved.stop_loss_pct) : stopPct,
+        take_profit_pct: saved && saved.take_profit_pct!=null ? Number(saved.take_profit_pct) : takePct,
+        stop_loss_price: saved && saved.stop_loss_price!=null ? Number(saved.stop_loss_price) : (entry>0 ? entry*(1-stopPct/100) : null),
+        take_profit_price: saved && saved.take_profit_price!=null ? Number(saved.take_profit_price) : (entry>0 ? entry*(1+takePct/100) : null),
+        saved_at: saved && saved.saved_at || '',
       };
     }
     return s._previewExitPlan;
+  }
+  function drawPreviewExitZones(s){
+    document.querySelectorAll('.preview-exit-zone,.preview-exit-zone-label').forEach(el=>el.remove());
+    if(!s || typeof series==='undefined' || typeof series.priceToCoordinate!=='function') return;
+    const wrap=document.getElementById('chart');
+    if(!wrap) return;
+    try{ wrap.style.position='relative'; }catch(e){}
+    const plan=previewPlanDefaults(s);
+    const entry=num(s.entry_price), stop=num(plan.stop_loss_price), take=num(plan.take_profit_price);
+    const h=wrap.clientHeight||440;
+    const clamp=y=>Math.max(0,Math.min(h,Number(y)));
+    const addZone=(kind, a, b, label)=>{
+      const yA=series.priceToCoordinate(a), yB=series.priceToCoordinate(b);
+      if(yA==null || yB==null || !Number.isFinite(yA) || !Number.isFinite(yB)) return;
+      const top=clamp(Math.min(yA,yB)), bottom=clamp(Math.max(yA,yB));
+      const height=Math.max(4,bottom-top);
+      const zone=document.createElement('div');
+      zone.className=`preview-exit-zone ${kind}`;
+      zone.style.cssText=`position:absolute;left:0;right:0;top:${top}px;height:${height}px;z-index:15;pointer-events:none;border-top:1px solid ${kind==='profit'?'rgba(38,208,124,.48)':'rgba(255,77,106,.48)'};border-bottom:1px solid ${kind==='profit'?'rgba(38,208,124,.25)':'rgba(255,77,106,.25)'};background:${kind==='profit'?'linear-gradient(180deg,rgba(38,208,124,.16),rgba(38,208,124,.04))':'linear-gradient(180deg,rgba(255,77,106,.04),rgba(255,77,106,.16))'};`;
+      wrap.appendChild(zone);
+      const tag=document.createElement('div');
+      tag.className=`preview-exit-zone-label ${kind}`;
+      tag.textContent=label;
+      tag.style.cssText=`position:absolute;right:10px;top:${Math.max(4,top+6)}px;z-index:16;pointer-events:none;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:900;background:${kind==='profit'?'rgba(38,208,124,.16)':'rgba(255,77,106,.16)'};border:1px solid ${kind==='profit'?'rgba(38,208,124,.45)':'rgba(255,77,106,.45)'};color:${kind==='profit'?'#86efac':'#fecdd3'};`;
+      wrap.appendChild(tag);
+    };
+    if(plan.take_enabled && entry>0 && take>entry) addZone('profit', take, entry, `익절 영역 +${((take/entry-1)*100).toFixed(2)}%`);
+    if(plan.stop_enabled && entry>0 && stop>0 && stop<entry) addZone('stop', entry, stop, `손절 영역 -${((1-stop/entry)*100).toFixed(2)}%`);
   }
   function drawPreviewExitLines(s){
     clearPreviewExitLines();
@@ -1502,8 +1539,19 @@ def _real_slot_overlay_js() -> str:
     };
     add('진입', entry, '#3b82f6', 2, 0);
     add('현재', current, '#c9d4e5', 1, 0);
-    add('손절', stop, '#ff4d6a', 2, 2);
-    add('익절 참고(no-TP)', take, '#26d07c', 2, 2);
+    if(plan.stop_enabled) add('손절', stop, '#ff4d6a', 2, 2);
+    if(plan.take_enabled) add('익절 참고(no-TP)', take, '#26d07c', 2, 2);
+    setTimeout(()=>drawPreviewExitZones(s), 30);
+  }
+  function markPreviewPlanDirty(){
+    const st=document.getElementById('preview-exit-save-state');
+    if(st){ st.textContent='미저장 변경'; st.style.color='#fbbf24'; }
+  }
+  function updatePreviewExitDisabled(plan){
+    [['preview-stop-price','stop_enabled'],['preview-stop-pct','stop_enabled'],['preview-take-price','take_enabled'],['preview-take-pct','take_enabled']].forEach(([id,key])=>{
+      const el=document.getElementById(id);
+      if(el){ el.disabled=!plan[key]; el.style.opacity=plan[key]?1:.45; }
+    });
   }
   function syncPreviewExitInputs(s, changed){
     const entry=num(s.entry_price)||0;
@@ -1512,44 +1560,90 @@ def _real_slot_overlay_js() -> str:
     const stopPctEl=document.getElementById('preview-stop-pct');
     const takePriceEl=document.getElementById('preview-take-price');
     const takePctEl=document.getElementById('preview-take-pct');
+    const stopOn=document.getElementById('preview-stop-enabled');
+    const takeOn=document.getElementById('preview-take-enabled');
     if(!entry || !stopPriceEl || !stopPctEl || !takePriceEl || !takePctEl) return;
+    if(stopOn) plan.stop_enabled=!!stopOn.checked;
+    if(takeOn) plan.take_enabled=!!takeOn.checked;
     if(changed==='stop_price'){
-      const v=num(stopPriceEl.value); if(v!=null){ plan.stop_loss_price=v; plan.stop_loss_pct=Math.max(0,(1-v/entry)*100); }
+      const v=num(stopPriceEl.value); if(v!=null){ plan.stop_loss_price=v; plan.stop_loss_pct=Math.max(0,(1-v/entry)*100); stopPctEl.value=Number(plan.stop_loss_pct).toFixed(2); }
     }else if(changed==='stop_pct'){
-      const v=num(stopPctEl.value); if(v!=null){ plan.stop_loss_pct=Math.abs(v); plan.stop_loss_price=entry*(1-Math.abs(v)/100); }
+      const v=num(stopPctEl.value); if(v!=null){ plan.stop_loss_pct=Math.abs(v); plan.stop_loss_price=entry*(1-Math.abs(v)/100); stopPriceEl.value=Number(plan.stop_loss_price).toFixed(2); }
     }else if(changed==='take_price'){
-      const v=num(takePriceEl.value); if(v!=null){ plan.take_profit_price=v; plan.take_profit_pct=(v/entry-1)*100; }
+      const v=num(takePriceEl.value); if(v!=null){ plan.take_profit_price=v; plan.take_profit_pct=(v/entry-1)*100; takePctEl.value=Number(plan.take_profit_pct).toFixed(2); }
     }else if(changed==='take_pct'){
-      const v=num(takePctEl.value); if(v!=null){ plan.take_profit_pct=Math.abs(v); plan.take_profit_price=entry*(1+Math.abs(v)/100); }
+      const v=num(takePctEl.value); if(v!=null){ plan.take_profit_pct=Math.abs(v); plan.take_profit_price=entry*(1+Math.abs(v)/100); takePriceEl.value=Number(plan.take_profit_price).toFixed(2); }
+    }else if(changed==='init'){
+      stopPriceEl.value=plan.stop_loss_price==null?'':Number(plan.stop_loss_price).toFixed(2);
+      stopPctEl.value=plan.stop_loss_pct==null?'':Number(plan.stop_loss_pct).toFixed(2);
+      takePriceEl.value=plan.take_profit_price==null?'':Number(plan.take_profit_price).toFixed(2);
+      takePctEl.value=plan.take_profit_pct==null?'':Number(plan.take_profit_pct).toFixed(2);
+      if(stopOn) stopOn.checked=!!plan.stop_enabled;
+      if(takeOn) takeOn.checked=!!plan.take_enabled;
     }
-    stopPriceEl.value=plan.stop_loss_price==null?'':Number(plan.stop_loss_price).toFixed(2);
-    stopPctEl.value=plan.stop_loss_pct==null?'':Number(plan.stop_loss_pct).toFixed(2);
-    takePriceEl.value=plan.take_profit_price==null?'':Number(plan.take_profit_price).toFixed(2);
-    takePctEl.value=plan.take_profit_pct==null?'':Number(plan.take_profit_pct).toFixed(2);
+    updatePreviewExitDisabled(plan);
     drawPreviewExitLines(s);
+    if(changed && changed!=='init') markPreviewPlanDirty();
+  }
+  function savePreviewExitPlan(s){
+    syncPreviewExitInputs(s, 'save');
+    const plan=previewPlanDefaults(s);
+    plan.saved_at=new Date().toISOString();
+    try{ localStorage.setItem(previewPlanKey(s), JSON.stringify(plan)); }catch(e){}
+    const st=document.getElementById('preview-exit-save-state');
+    if(st){ st.textContent=`저장됨 ${new Date().toLocaleTimeString()}`; st.style.color='#86efac'; }
+    drawPreviewExitLines(s);
+  }
+  function resetPreviewExitPlan(s){
+    try{ localStorage.removeItem(previewPlanKey(s)); }catch(e){}
+    s._previewExitPlan=null;
+    syncPreviewExitInputs(s, 'init');
+    const st=document.getElementById('preview-exit-save-state');
+    if(st){ st.textContent='기본값 복원'; st.style.color='#bfdbfe'; }
   }
   function previewExitControlHtml(s){
     const plan=previewPlanDefaults(s);
-    return `<div id="preview-exit-panel" style="margin:12px 0;padding:14px;background:linear-gradient(135deg,rgba(15,23,42,.95),rgba(30,41,59,.82));border:1px solid rgba(59,130,246,.55);border-radius:14px;box-shadow:0 10px 28px rgba(37,99,235,.12);">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-        <b style="color:#e7eefb;font-size:15px;">차트 손절/익절 참고선</b>
-        <span style="font-size:11px;color:#fbbf24;">프리뷰 전용 · 저장 없음 · S2 자동익절 OFF</span>
+    const inputStyle='width:100%;height:44px;background:#0b1220;color:#e7eefb;border:1px solid rgba(148,163,184,.28);border-radius:12px;padding:0 12px;font-size:17px;font-weight:900;font-variant-numeric:tabular-nums;outline:none;';
+    const toggle=(id,on,label,color)=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:900;color:${color};user-select:none;"><input id="${id}" type="checkbox" ${on?'checked':''} style="width:18px;height:18px;accent-color:${color};">${label}</label>`;
+    return `<div id="preview-exit-panel" style="margin:12px 0;padding:16px;background:linear-gradient(135deg,rgba(15,23,42,.98),rgba(30,41,59,.88));border:1px solid rgba(59,130,246,.62);border-radius:16px;box-shadow:0 10px 30px rgba(37,99,235,.16);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        <div><b style="color:#e7eefb;font-size:16px;">차트 손절/익절 설정</b><div style="font-size:11px;color:var(--dim);margin-top:3px;">가격/% 입력 · ON/OFF · 저장 · 차트 영역 표시</div></div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">${toggle('preview-stop-enabled',plan.stop_enabled,'손절 ON','#ff8a9a')}${toggle('preview-take-enabled',plan.take_enabled,'익절 참고 ON','#86efac')}</div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">
-        <label style="font-size:11px;color:var(--dim);">손절가<br><input id="preview-stop-price" type="number" step="0.01" value="${plan.stop_loss_price==null?'':Number(plan.stop_loss_price).toFixed(2)}" style="width:100%;background:#0d1524;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;"></label>
-        <label style="font-size:11px;color:var(--dim);">손절 %<br><input id="preview-stop-pct" type="number" step="0.01" value="${plan.stop_loss_pct==null?'':Number(plan.stop_loss_pct).toFixed(2)}" style="width:100%;background:#0d1524;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;"></label>
-        <label style="font-size:11px;color:var(--dim);">익절가 참고선<br><input id="preview-take-price" type="number" step="0.01" value="${plan.take_profit_price==null?'':Number(plan.take_profit_price).toFixed(2)}" style="width:100%;background:#0d1524;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;"></label>
-        <label style="font-size:11px;color:var(--dim);">익절 % 참고선<br><input id="preview-take-pct" type="number" step="0.01" value="${plan.take_profit_pct==null?'':Number(plan.take_profit_pct).toFixed(2)}" style="width:100%;background:#0d1524;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;"></label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;">
+        <label style="font-size:12px;color:#fecdd3;font-weight:900;">손절가<input id="preview-stop-price" type="text" inputmode="decimal" value="${plan.stop_loss_price==null?'':Number(plan.stop_loss_price).toFixed(2)}" style="${inputStyle}"></label>
+        <label style="font-size:12px;color:#fecdd3;font-weight:900;">손절 %<input id="preview-stop-pct" type="text" inputmode="decimal" value="${plan.stop_loss_pct==null?'':Number(plan.stop_loss_pct).toFixed(2)}" style="${inputStyle}"></label>
+        <label style="font-size:12px;color:#bbf7d0;font-weight:900;">익절가 참고선<input id="preview-take-price" type="text" inputmode="decimal" value="${plan.take_profit_price==null?'':Number(plan.take_profit_price).toFixed(2)}" style="${inputStyle}"></label>
+        <label style="font-size:12px;color:#bbf7d0;font-weight:900;">익절 % 참고선<input id="preview-take-pct" type="text" inputmode="decimal" value="${plan.take_profit_pct==null?'':Number(plan.take_profit_pct).toFixed(2)}" style="${inputStyle}"></label>
       </div>
-      <div style="font-size:11px;color:var(--dim);margin-top:8px;line-height:1.6;">가격이나 %를 바꾸면 서로 자동 환산되고 차트 선이 즉시 다시 그려집니다. 익절선은 S2 no-TP 상태에서 참고용입니다.</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;">
+        <div id="preview-exit-save-state" style="font-size:12px;color:${plan.saved_at?'#86efac':'#fbbf24'};font-weight:900;">${plan.saved_at?'저장됨':'미저장'}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button id="preview-exit-save" style="background:#2563eb;color:white;border:0;border-radius:12px;padding:10px 15px;font-weight:950;cursor:pointer;">저장</button><button id="preview-exit-reset" style="background:#263246;color:#e7eefb;border:0;border-radius:12px;padding:10px 15px;font-weight:900;cursor:pointer;">초기화</button></div>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-top:8px;line-height:1.6;">손절/익절 ON이면 차트에 선과 영역이 표시됩니다. 익절은 S2 no-TP 상태에서는 참고선이며 실제 자동익절을 켜지 않습니다.</div>
     </div>`;
   }
   function bindPreviewExitControls(s){
-    const bind=(id, kind)=>{ const el=document.getElementById(id); if(el) el.oninput=()=>syncPreviewExitInputs(s, kind); };
-    bind('preview-stop-price','stop_price');
-    bind('preview-stop-pct','stop_pct');
-    bind('preview-take-price','take_price');
-    bind('preview-take-pct','take_pct');
+    const stopKeys=ev=>{ ev.stopPropagation(); };
+    const bindInput=(id, kind)=>{
+      const el=document.getElementById(id);
+      if(!el) return;
+      ['keydown','keyup','keypress','click','mousedown','pointerdown','touchstart','wheel'].forEach(evt=>el.addEventListener(evt, stopKeys));
+      el.addEventListener('input',()=>syncPreviewExitInputs(s, kind));
+      el.addEventListener('change',()=>syncPreviewExitInputs(s, kind));
+    };
+    bindInput('preview-stop-price','stop_price');
+    bindInput('preview-stop-pct','stop_pct');
+    bindInput('preview-take-price','take_price');
+    bindInput('preview-take-pct','take_pct');
+    ['preview-stop-enabled','preview-take-enabled'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){ el.addEventListener('click',stopKeys); el.addEventListener('change',()=>syncPreviewExitInputs(s,'toggle')); }
+    });
+    const save=document.getElementById('preview-exit-save');
+    if(save) save.onclick=(ev)=>{ ev.stopPropagation(); savePreviewExitPlan(s); };
+    const reset=document.getElementById('preview-exit-reset');
+    if(reset) reset.onclick=(ev)=>{ ev.stopPropagation(); resetPreviewExitPlan(s); };
     syncPreviewExitInputs(s, 'init');
   }
   async function openPreviewHoldingDetail(ticker){
@@ -2130,7 +2224,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v20_preview_exit_panel_fix"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v21_preview_exit_save_area"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

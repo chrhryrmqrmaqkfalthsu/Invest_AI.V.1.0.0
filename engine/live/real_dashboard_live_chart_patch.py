@@ -5,130 +5,41 @@ HTML/JS generator does not need invasive edits.  It fixes real-trading UI issues
 
 1. Held-position detail pages should open/refresh the 1m chart, not silently stay
    on the base dashboard's default daily chart.
-2. Held-position 1m candles must be stable and truthful.  The earlier live-tail
-   display candle used position/current-price marks on top of yfinance bars; that
-   made candle bodies/wicks differ after a full refresh.  For actually held
-   symbols, use Alpaca IEX 1m OHLCV bars first and do not invent missing bars.
+2. 1m candles must be one-minute candles on the dashboard.  Alpaca IEX bars are
+   actual OHLCV bars, but for CE they can be sparse because IEX has no print in
+   many minutes.  The dashboard therefore uses the existing public 1m candle
+   loader for chart continuity, while avoiding synthetic live-tail candles.
 3. Automatic refresh must not reset the user's zoom/scroll range.  The detail
    refresh reloads the full candle dataset with the existing viewport restored,
-   so delayed/revised recent bars are reflected without the chart jumping.
+   so revised recent bars are reflected without the chart jumping.
 """
 from __future__ import annotations
 
-import time
-from datetime import datetime, timedelta, timezone
 from typing import Any
-
-from alpaca.data.enums import Adjustment, DataFeed
-from alpaca.data.requests import StockBarsRequest
-from alpaca.data.timeframe import TimeFrame
 
 from engine.live import real_dashboard_api as real_api
 
 _INSTALLED = False
 _ORIG_CANDLES_CACHED = None
 _ORIG_SLOT_OVERLAY_JS = None
-_ALPACA_1M_BAR_CACHE: dict[tuple[str, str], tuple[float, list[dict[str, Any]]]] = {}
-_ALPACA_1M_BAR_TTL_SEC = 8.0
 
 
-def _to_float(value: Any) -> float | None:
-    try:
-        if value in (None, ""):
-            return None
-        out = float(value)
-        if out != out or out <= 0.0:
-            return None
-        return out
-    except Exception:
-        return None
+def _mark_public_1m_source(ticker: str, interval: str, candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Tag real-dashboard 1m candles with their continuity source.
 
-
-def _is_real_holding(ticker: str) -> bool:
-    tk = str(ticker or "").upper().strip()
-    if not tk:
-        return False
-    try:
-        for row in real_api._real_positions_payload():
-            if str(row.get("ticker") or "").upper().strip() == tk and _to_float(row.get("shares")):
-                return True
-    except Exception:
-        pass
-    return False
-
-
-def _alpaca_iex_1m_candles(ticker: str, *, refresh: bool = False) -> list[dict[str, Any]]:
-    """Return actual Alpaca IEX 1m OHLCV bars for a held ticker.
-
-    We intentionally do not fill missing minutes and do not append a synthetic
-    current-price candle.  Missing bars mean there was no IEX print for that
-    minute; fabricating OHLC values creates fake wicks/bodies and is exactly what
-    made the chart look different after refresh.
+    Do not append or alter OHLC values here.  The earlier synthetic live-tail
+    candle made candle bodies/wicks differ from a full reload.  This function only
+    copies rows and records the source for diagnostics.
     """
-    tk = str(ticker or "").upper().strip()
-    if not tk:
-        return []
-    cache_key = (tk, "1m:alpaca_iex")
-    now = time.time()
-    if not refresh:
-        hit = _ALPACA_1M_BAR_CACHE.get(cache_key)
-        if hit and now - hit[0] <= _ALPACA_1M_BAR_TTL_SEC:
-            return [dict(x) for x in hit[1]]
-    broker = real_api._get_real_broker()
-    if broker is None or getattr(broker, "data", None) is None:
-        return []
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(days=5)
-    req = StockBarsRequest(
-        symbol_or_symbols=tk,
-        timeframe=TimeFrame.Minute,
-        start=start,
-        end=end,
-        adjustment=Adjustment.RAW,
-        feed=DataFeed.IEX,
-    )
-    bars = broker.data.get_stock_bars(req)
-    raw_bars = []
-    try:
-        raw_bars = list((getattr(bars, "data", {}) or {}).get(tk) or [])
-    except Exception:
-        raw_bars = []
+    if str(interval or "").strip() != "1m":
+        return candles
     out: list[dict[str, Any]] = []
-    for bar in raw_bars:
-        try:
-            ts = getattr(bar, "timestamp", None)
-            if isinstance(ts, datetime):
-                epoch = int(ts.astimezone(timezone.utc).timestamp())
-            else:
-                epoch = int(float(ts))
-            o = _to_float(getattr(bar, "open", None))
-            h = _to_float(getattr(bar, "high", None))
-            l = _to_float(getattr(bar, "low", None))
-            c = _to_float(getattr(bar, "close", None))
-            if o is None or h is None or l is None or c is None:
-                continue
-            high = max(o, h, l, c)
-            low = min(o, h, l, c)
-            out.append({
-                "time": epoch,
-                "open": round(o, 4),
-                "high": round(high, 4),
-                "low": round(low, 4),
-                "close": round(c, 4),
-                "volume": int(float(getattr(bar, "volume", 0) or 0)),
-                "trade_count": int(float(getattr(bar, "trade_count", 0) or 0)),
-                "vwap": round(float(getattr(bar, "vwap", 0) or 0), 4) if getattr(bar, "vwap", None) is not None else None,
-                "source": "alpaca_iex_1m_bar",
-            })
-        except Exception:
+    for row in candles or []:
+        if not isinstance(row, dict):
             continue
-    # De-duplicate by time while preserving newest value for each minute.
-    by_time: dict[int, dict[str, Any]] = {}
-    for row in out:
-        by_time[int(row["time"])] = row
-    out = [by_time[k] for k in sorted(by_time)]
-    if out:
-        _ALPACA_1M_BAR_CACHE[cache_key] = (now, [dict(x) for x in out])
+        copied = dict(row)
+        copied.setdefault("source", "public_1m_candle_loader")
+        out.append(copied)
     return out
 
 
@@ -139,17 +50,10 @@ def _patch_real_candles_cached() -> None:
     _ORIG_CANDLES_CACHED = real_api._real_candles_cached
 
     def patched_real_candles_cached(base_module: Any, *, ticker: str, interval: str = "1d", period: str | None = None, refresh: bool = False) -> list[dict[str, Any]]:
-        tk = str(ticker or "").upper().strip()
-        iv = str(interval or "1d").strip()
-        if iv == "1m" and _is_real_holding(tk):
-            try:
-                alpaca_bars = _alpaca_iex_1m_candles(tk, refresh=refresh)
-                if alpaca_bars:
-                    return alpaca_bars
-            except Exception:
-                pass
         data = _ORIG_CANDLES_CACHED(base_module, ticker=ticker, interval=interval, period=period, refresh=refresh)
-        return data if isinstance(data, list) else []
+        if not isinstance(data, list):
+            return []
+        return _mark_public_1m_source(ticker, interval, data)
 
     real_api._real_candles_cached = patched_real_candles_cached
 
@@ -176,14 +80,14 @@ def _patch_slot_overlay_js() -> None:
   function realCandleSignature(candles){
     try{
       if(!Array.isArray(candles) || !candles.length) return '';
-      return candles.slice(-12).map(c=>[c.time,c.open,c.high,c.low,c.close,c.volume,c.source||''].join(':')).join('|');
+      return candles.slice(-20).map(c=>[c.time,c.open,c.high,c.low,c.close,c.volume,c.source||''].join(':')).join('|');
     }catch(e){ return String(Date.now()); }
   }
   async function refreshRealDetailCandlesPreservingRange(ticker, interval){
     try{
       if(interval!=='1m') return false;
       if(typeof series==='undefined' || !series || typeof series.setData!=='function') return false;
-      const r=await fetch(`${API}/api/real/candles/${encodeURIComponent(ticker)}?interval=${encodeURIComponent(interval)}`, {cache:'no-store'});
+      const r=await fetch(`${API}/api/real/candles/${encodeURIComponent(ticker)}?interval=${encodeURIComponent(interval)}&refresh=true`, {cache:'no-store'});
       const candles=await r.json();
       if(!Array.isArray(candles) || !candles.length) return false;
       const last=candles[candles.length-1];

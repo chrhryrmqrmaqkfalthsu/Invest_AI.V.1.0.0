@@ -1504,25 +1504,44 @@ def _real_slot_overlay_js() -> str:
     try{ wrap.style.position='relative'; }catch(e){}
     const plan=previewPlanDefaults(s);
     const entry=num(s.entry_price), stop=num(plan.stop_loss_price), take=num(plan.take_profit_price);
+    if(!(entry>0)) return;
+    const entryY=series.priceToCoordinate(entry);
+    if(entryY==null || !Number.isFinite(entryY)) return;
     const h=wrap.clientHeight||440;
+    const visible=y=>y!=null && Number.isFinite(y) && y>=0 && y<=h;
     const clamp=y=>Math.max(0,Math.min(h,Number(y)));
-    const addZone=(kind, a, b, label)=>{
-      const yA=series.priceToCoordinate(a), yB=series.priceToCoordinate(b);
-      if(yA==null || yB==null || !Number.isFinite(yA) || !Number.isFinite(yB)) return;
-      const top=clamp(Math.min(yA,yB)), bottom=clamp(Math.max(yA,yB));
-      const height=Math.max(4,bottom-top);
+    const addEntrySplitLabel=()=>{
+      const y=clamp(entryY);
+      const tag=document.createElement('div');
+      tag.className='preview-exit-zone-label entry';
+      tag.textContent='진입가 기준선';
+      tag.style.cssText=`position:absolute;left:10px;top:${Math.max(4,y-14)}px;z-index:16;pointer-events:none;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:950;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.45);color:#bfdbfe;`;
+      wrap.appendChild(tag);
+    };
+    const addZone=(kind, boundaryPrice, label)=>{
+      const boundaryY=series.priceToCoordinate(boundaryPrice);
+      // Only color the actual bounded band between entry and TP/SL.
+      // If either boundary is outside the visible chart, do not flood the rest
+      // of the chart from the edge; wait until both lines are visible.
+      if(!visible(entryY) || !visible(boundaryY)) return;
+      const top=Math.min(entryY,boundaryY);
+      const bottom=Math.max(entryY,boundaryY);
+      const height=bottom-top;
+      if(height<3) return;
+      const isProfit=kind==='profit';
       const zone=document.createElement('div');
       zone.className=`preview-exit-zone ${kind}`;
-      zone.style.cssText=`position:absolute;left:0;right:0;top:${top}px;height:${height}px;z-index:15;pointer-events:none;border-top:1px solid ${kind==='profit'?'rgba(38,208,124,.48)':'rgba(255,77,106,.48)'};border-bottom:1px solid ${kind==='profit'?'rgba(38,208,124,.25)':'rgba(255,77,106,.25)'};background:${kind==='profit'?'linear-gradient(180deg,rgba(38,208,124,.16),rgba(38,208,124,.04))':'linear-gradient(180deg,rgba(255,77,106,.04),rgba(255,77,106,.16))'};`;
+      zone.style.cssText=`position:absolute;left:0;right:0;top:${top}px;height:${height}px;z-index:14;pointer-events:none;border-top:1px solid ${isProfit?'rgba(38,208,124,.46)':'rgba(255,77,106,.20)'};border-bottom:1px solid ${isProfit?'rgba(38,208,124,.20)':'rgba(255,77,106,.46)'};background:${isProfit?'rgba(38,208,124,.135)':'rgba(255,77,106,.135)'};`;
       wrap.appendChild(zone);
       const tag=document.createElement('div');
       tag.className=`preview-exit-zone-label ${kind}`;
       tag.textContent=label;
-      tag.style.cssText=`position:absolute;right:10px;top:${Math.max(4,top+6)}px;z-index:16;pointer-events:none;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:900;background:${kind==='profit'?'rgba(38,208,124,.16)':'rgba(255,77,106,.16)'};border:1px solid ${kind==='profit'?'rgba(38,208,124,.45)':'rgba(255,77,106,.45)'};color:${kind==='profit'?'#86efac':'#fecdd3'};`;
+      tag.style.cssText=`position:absolute;right:10px;top:${Math.max(4,top+Math.min(12,Math.max(2,height/2-8)))}px;z-index:16;pointer-events:none;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:950;background:${isProfit?'rgba(38,208,124,.16)':'rgba(255,77,106,.16)'};border:1px solid ${isProfit?'rgba(38,208,124,.45)':'rgba(255,77,106,.45)'};color:${isProfit?'#86efac':'#fecdd3'};`;
       wrap.appendChild(tag);
     };
-    if(plan.take_enabled && entry>0 && take>entry) addZone('profit', take, entry, `익절 영역 +${((take/entry-1)*100).toFixed(2)}%`);
-    if(plan.stop_enabled && entry>0 && stop>0 && stop<entry) addZone('stop', entry, stop, `손절 영역 -${((1-stop/entry)*100).toFixed(2)}%`);
+    addEntrySplitLabel();
+    if(plan.take_enabled && take>entry) addZone('profit', take, `익절 영역 · 진입가 위 +${((take/entry-1)*100).toFixed(2)}%`);
+    if(plan.stop_enabled && stop>0 && stop<entry) addZone('stop', stop, `손절 영역 · 진입가 아래 -${((1-stop/entry)*100).toFixed(2)}%`);
   }
   function drawPreviewExitLines(s){
     clearPreviewExitLines();
@@ -2224,7 +2243,7 @@ def _real_dashboard_html(base_module: Any) -> HTMLResponse:
         "실제 매도 주문이 들어가며 되돌릴 수 없습니다.",
         "실거래용 별도 청산 요청이 기록됩니다. 직접 주문 환경변수가 켜져 있으면 실제 Alpaca live 주문이 제출될 수 있습니다.",
     )
-    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v21_preview_exit_save_area"></script>\n'
+    snippet = '<script src="/real-slot-overlay.js?v=real_slots_v22_entry_split_zones"></script>\n'
     if "real-slot-overlay.js" not in html:
         html = html.replace("</body>", snippet + "</body>")
     return HTMLResponse(content=html, media_type="text/html")

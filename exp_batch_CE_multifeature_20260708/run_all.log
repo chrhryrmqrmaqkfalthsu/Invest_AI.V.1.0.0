@@ -1260,3 +1260,36 @@ INJECT_OK
   },
   "readout": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/comparison_readout.md"
 }
+[feat/intraday-reversal-ga 6997107] CE 멀티피처 격리 재학습 로그와 3자 비교 결과 저장
+ 29 files changed, 26010 insertions(+)
+ create mode 100644 exp_batch_CE_multifeature_20260708/comparison.csv
+ create mode 100644 exp_batch_CE_multifeature_20260708/comparison_readout.md
+ create mode 100644 exp_batch_CE_multifeature_20260708/run_all.log
+ create mode 100644 exp_batch_CE_multifeature_20260708/run_status.json
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage2/config.json
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage2/early_cut_log.csv
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage2/ga_history.csv
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage2/period_metrics_all.csv
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage2/rl_replay_trades.jsonl
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage2/rulebooks_all.jsonl
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage2/run.log
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage2/summary.json
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage2/survivors.jsonl
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage2/trades.jsonl
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/README.md
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/entry_rejected_overlap.json
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/entry_result.json
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/entry_rulebooks.jsonl
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/exit_result.json
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/exit_trades.jsonl
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/final_rulebooks.jsonl
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/last_run_summary.json
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/manifest.json
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/qualify_result.json
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/rl_replay_trades.jsonl
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/stage3_ineligible.jsonl
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/stage3_profile_catalog.jsonl
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/validate_result.json
+ create mode 100644 exp_batch_CE_multifeature_20260708/tickers/CE/stage3/validation_results.jsonl
+To https://github.com/chrhryrmqrmaqkfalthsu/Invest_AI.V.1.0.0.git
+   e5dc844..6997107  feat/intraday-reversal-ga -> feat/intraday-reversal-ga

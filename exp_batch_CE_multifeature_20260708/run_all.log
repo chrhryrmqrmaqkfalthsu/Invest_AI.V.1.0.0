@@ -1,0 +1,1262 @@
+[32m2026-07-08 23:14:04[0m | [1mINFO    [0m | [36mengine.adapters.factory[0m:[36mget_adapter[0m:[36m63[0m | [1madapter created: CE → USStockAdapter[0m
+[32m2026-07-08 23:14:05[0m | [1mINFO    [0m | [36mengine.core.data_loader[0m:[36mload_ohlcv[0m:[36m157[0m | [1mloaded CE: 1526 rows (2020-06-09 ~ 2026-07-07)[0m
+[32m2026-07-08 23:14:05[0m | [1mINFO    [0m | [36mengine.adapters.base[0m:[36mload_history[0m:[36m119[0m | [1mCE: history loaded (1526 rows, 28 cols)[0m
+INJECT_OK
+{
+  "base_market_history": "/home/g3000kkw/kingmaker/data/_system/market_history.csv",
+  "base_rulebook_sector_name": "materials",
+  "cache_root": "/home/g3000kkw/kingmaker/data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache",
+  "check_end": "2026-06-12",
+  "check_rows": 1526,
+  "check_start": "2020-05-18",
+  "feature_checks": {
+    "cost_oil": {
+      "exists": true,
+      "latest": 65.4516404734777,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 828
+    },
+    "macro_ind": {
+      "exists": true,
+      "latest": 83.29701079957981,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 1089
+    },
+    "peer_DD": {
+      "exists": true,
+      "latest": 98.4090718356046,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1466,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 816
+    },
+    "peer_EMN": {
+      "exists": true,
+      "latest": 95.78433625931834,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 737
+    },
+    "peer_LYB": {
+      "exists": true,
+      "latest": 0.0,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 779
+    },
+    "peer_WLK": {
+      "exists": true,
+      "latest": 0.0,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1466,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 551
+    },
+    "sector_materials": {
+      "exists": true,
+      "latest": 88.16007423552026,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1466,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 1172
+    }
+  },
+  "feature_columns": [
+    "sector_materials",
+    "peer_EMN",
+    "peer_DD",
+    "peer_LYB",
+    "peer_WLK",
+    "macro_ind",
+    "cost_oil"
+  ],
+  "feature_weight_fields": [
+    "mf_weight_sector_materials",
+    "mf_weight_peer_EMN",
+    "mf_weight_peer_DD",
+    "mf_weight_peer_LYB",
+    "mf_weight_peer_WLK",
+    "mf_weight_macro_ind",
+    "mf_weight_cost_oil"
+  ],
+  "ok_feature_columns": true,
+  "ok_no_missing": true,
+  "ok_sector_name": true,
+  "ok_weight_fields": true,
+  "patched_market_history": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/inputs/market_history_with_ce_multifeatures.csv",
+  "run_root": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708",
+  "sector_name": "materials",
+  "status": "INJECT_OK",
+  "ticker": "CE"
+}
+[32m2026-07-08 23:14:05[0m | [1mINFO    [0m | [36mengine.adapters.base[0m:[36mload_history[0m:[36m119[0m | [1mCE: history loaded (1526 rows, 28 cols)[0m
+INJECT_OK
+{
+  "base_market_history": "/home/g3000kkw/kingmaker/data/_system/market_history.csv",
+  "base_rulebook_sector_name": "materials",
+  "cache_root": "/home/g3000kkw/kingmaker/data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache",
+  "check_end": "2026-06-12",
+  "check_rows": 1526,
+  "check_start": "2020-05-18",
+  "feature_checks": {
+    "cost_oil": {
+      "exists": true,
+      "latest": 65.4516404734777,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 828
+    },
+    "macro_ind": {
+      "exists": true,
+      "latest": 83.29701079957981,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 1089
+    },
+    "peer_DD": {
+      "exists": true,
+      "latest": 98.4090718356046,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1466,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 816
+    },
+    "peer_EMN": {
+      "exists": true,
+      "latest": 95.78433625931834,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 737
+    },
+    "peer_LYB": {
+      "exists": true,
+      "latest": 0.0,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 779
+    },
+    "peer_WLK": {
+      "exists": true,
+      "latest": 0.0,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1466,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 551
+    },
+    "sector_materials": {
+      "exists": true,
+      "latest": 88.16007423552026,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1466,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 1172
+    }
+  },
+  "feature_columns": [
+    "sector_materials",
+    "peer_EMN",
+    "peer_DD",
+    "peer_LYB",
+    "peer_WLK",
+    "macro_ind",
+    "cost_oil"
+  ],
+  "feature_weight_fields": [
+    "mf_weight_sector_materials",
+    "mf_weight_peer_EMN",
+    "mf_weight_peer_DD",
+    "mf_weight_peer_LYB",
+    "mf_weight_peer_WLK",
+    "mf_weight_macro_ind",
+    "mf_weight_cost_oil"
+  ],
+  "ok_feature_columns": true,
+  "ok_no_missing": true,
+  "ok_sector_name": true,
+  "ok_weight_fields": true,
+  "patched_market_history": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/inputs/market_history_with_ce_multifeatures.csv",
+  "run_root": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708",
+  "sector_name": "materials",
+  "status": "INJECT_OK",
+  "ticker": "CE"
+}
+2026-07-08 23:14:05,721 INFO stage2 start ticker=CE out_dir=/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2 seed_base=2026061505 parallel=False
+[32m2026-07-08 23:14:05[0m | [1mINFO    [0m | [36mengine.adapters.base[0m:[36mload_history[0m:[36m119[0m | [1mCE: history loaded (1526 rows, 28 cols)[0m
+2026-07-08 23:14:05,780 INFO training mode=sequential train_splits=3
+2026-07-08 23:14:05,780 INFO train start label=train_1
+[32m2026-07-08 23:14:05[0m | [1mINFO    [0m | [36mengine.adapters.base[0m:[36mload_history[0m:[36m119[0m | [1mCE: history loaded (1526 rows, 28 cols)[0m
+[32m2026-07-08 23:14:22[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  1: best=63.950, avg=-44.090[0m
+[32m2026-07-08 23:14:34[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  2: best=80.258, avg=-0.700[0m
+[32m2026-07-08 23:14:47[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  3: best=105.361, avg=9.678[0m
+[32m2026-07-08 23:14:59[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  4: best=105.361, avg=10.925[0m
+[32m2026-07-08 23:15:11[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  5: best=106.090, avg=24.349[0m
+[32m2026-07-08 23:15:24[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  6: best=106.090, avg=23.259[0m
+[32m2026-07-08 23:15:36[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  7: best=106.090, avg=24.793[0m
+[32m2026-07-08 23:15:49[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  8: best=109.903, avg=33.082[0m
+[32m2026-07-08 23:16:01[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  9: best=109.903, avg=31.611[0m
+[32m2026-07-08 23:16:14[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 10: best=127.145, avg=44.584[0m
+[32m2026-07-08 23:16:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 11: best=127.145, avg=40.347[0m
+[32m2026-07-08 23:16:40[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 12: best=127.145, avg=46.384[0m
+[32m2026-07-08 23:16:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 13: best=127.145, avg=46.098[0m
+[32m2026-07-08 23:17:05[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 14: best=127.145, avg=45.125[0m
+[32m2026-07-08 23:17:18[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 15: best=127.145, avg=44.757[0m
+[32m2026-07-08 23:17:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 16: best=127.145, avg=48.375[0m
+[32m2026-07-08 23:17:43[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 17: best=127.145, avg=45.409[0m
+[32m2026-07-08 23:17:57[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 18: best=127.145, avg=48.810[0m
+[32m2026-07-08 23:18:10[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 19: best=127.145, avg=52.977[0m
+[32m2026-07-08 23:18:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 20: best=127.145, avg=56.498[0m
+[32m2026-07-08 23:18:36[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 21: best=127.145, avg=57.521[0m
+[32m2026-07-08 23:18:50[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 22: best=127.145, avg=54.941[0m
+[32m2026-07-08 23:19:04[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 23: best=127.145, avg=66.809[0m
+[32m2026-07-08 23:19:17[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 24: best=127.145, avg=70.043[0m
+2026-07-08 23:19:30,791 INFO train done label=train_1 pid=152485 generations=25 early_stop=True rows=100 elapsed=325.0s
+[32m2026-07-08 23:19:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 25: best=127.145, avg=66.877[0m
+2026-07-08 23:19:30,792 INFO train start label=train_2
+[32m2026-07-08 23:19:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m278[0m | [1mearly stop at gen 25 (no improvement for 15)[0m
+[32m2026-07-08 23:19:30[0m | [1mINFO    [0m | [36mengine.core.data_loader[0m:[36mload_ohlcv[0m:[36m157[0m | [1mloaded CE: 1526 rows (2020-06-09 ~ 2026-07-07)[0m
+[32m2026-07-08 23:19:30[0m | [1mINFO    [0m | [36mengine.adapters.base[0m:[36mload_history[0m:[36m119[0m | [1mCE: history loaded (1526 rows, 28 cols)[0m
+[32m2026-07-08 23:19:48[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  1: best=61.879, avg=-38.643[0m
+[32m2026-07-08 23:20:01[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  2: best=66.518, avg=-11.601[0m
+[32m2026-07-08 23:20:15[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  3: best=94.018, avg=-2.735[0m
+[32m2026-07-08 23:20:28[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  4: best=94.018, avg=4.312[0m
+[32m2026-07-08 23:20:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  5: best=94.018, avg=3.503[0m
+[32m2026-07-08 23:20:54[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  6: best=94.018, avg=15.898[0m
+[32m2026-07-08 23:21:07[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  7: best=104.353, avg=37.545[0m
+[32m2026-07-08 23:21:20[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  8: best=104.353, avg=28.929[0m
+[32m2026-07-08 23:21:33[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  9: best=104.353, avg=37.545[0m
+[32m2026-07-08 23:21:46[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 10: best=108.131, avg=38.480[0m
+[32m2026-07-08 23:21:59[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 11: best=108.131, avg=44.118[0m
+[32m2026-07-08 23:22:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 12: best=109.334, avg=43.788[0m
+[32m2026-07-08 23:22:25[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 13: best=109.334, avg=42.394[0m
+[32m2026-07-08 23:22:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 14: best=109.334, avg=46.429[0m
+[32m2026-07-08 23:22:51[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 15: best=109.334, avg=49.333[0m
+[32m2026-07-08 23:23:04[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 16: best=109.334, avg=45.669[0m
+[32m2026-07-08 23:23:16[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 17: best=109.334, avg=56.434[0m
+[32m2026-07-08 23:23:29[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 18: best=109.334, avg=39.552[0m
+[32m2026-07-08 23:23:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 19: best=109.848, avg=55.974[0m
+[32m2026-07-08 23:23:54[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 20: best=109.848, avg=57.578[0m
+[32m2026-07-08 23:24:06[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 21: best=109.848, avg=64.363[0m
+[32m2026-07-08 23:24:19[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 22: best=109.848, avg=57.485[0m
+[32m2026-07-08 23:24:31[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 23: best=109.848, avg=64.679[0m
+[32m2026-07-08 23:24:44[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 24: best=109.848, avg=60.454[0m
+[32m2026-07-08 23:24:56[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 25: best=109.848, avg=64.405[0m
+[32m2026-07-08 23:25:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 26: best=109.848, avg=66.201[0m
+[32m2026-07-08 23:25:21[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 27: best=109.848, avg=67.228[0m
+[32m2026-07-08 23:25:33[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 28: best=109.848, avg=65.746[0m
+[32m2026-07-08 23:25:46[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 29: best=109.901, avg=65.150[0m
+[32m2026-07-08 23:25:58[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 30: best=109.901, avg=70.625[0m
+[32m2026-07-08 23:26:10[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 31: best=109.901, avg=73.542[0m
+[32m2026-07-08 23:26:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 32: best=109.901, avg=70.139[0m
+[32m2026-07-08 23:26:35[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 33: best=109.901, avg=78.704[0m
+[32m2026-07-08 23:26:47[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 34: best=109.901, avg=83.562[0m
+[32m2026-07-08 23:27:00[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 35: best=109.901, avg=77.981[0m
+[32m2026-07-08 23:27:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 36: best=109.901, avg=76.251[0m
+[32m2026-07-08 23:27:24[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 37: best=109.901, avg=84.566[0m
+[32m2026-07-08 23:27:36[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 38: best=109.901, avg=86.041[0m
+[32m2026-07-08 23:27:48[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 39: best=109.901, avg=87.121[0m
+[32m2026-07-08 23:28:00[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 40: best=109.901, avg=87.125[0m
+[32m2026-07-08 23:28:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 41: best=109.901, avg=86.507[0m
+[32m2026-07-08 23:28:24[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 42: best=109.901, avg=77.100[0m
+[32m2026-07-08 23:28:36[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 43: best=109.901, avg=70.838[0m
+2026-07-08 23:28:48,504 INFO train done label=train_2 pid=152485 generations=44 early_stop=True rows=100 elapsed=557.7s
+2026-07-08 23:28:48,504 INFO train start label=train_3
+[32m2026-07-08 23:28:48[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 44: best=109.901, avg=79.591[0m
+[32m2026-07-08 23:28:48[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m278[0m | [1mearly stop at gen 44 (no improvement for 15)[0m
+[32m2026-07-08 23:28:48[0m | [1mINFO    [0m | [36mengine.core.data_loader[0m:[36mload_ohlcv[0m:[36m157[0m | [1mloaded CE: 1526 rows (2020-06-09 ~ 2026-07-07)[0m
+[32m2026-07-08 23:28:48[0m | [1mINFO    [0m | [36mengine.adapters.base[0m:[36mload_history[0m:[36m119[0m | [1mCE: history loaded (1526 rows, 28 cols)[0m
+[32m2026-07-08 23:29:06[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  1: best=55.757, avg=-81.922[0m
+[32m2026-07-08 23:29:22[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  2: best=106.340, avg=-42.992[0m
+[32m2026-07-08 23:29:37[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  3: best=108.386, avg=-20.298[0m
+[32m2026-07-08 23:29:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  4: best=108.386, avg=-1.640[0m
+[32m2026-07-08 23:30:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  5: best=110.491, avg=13.807[0m
+[32m2026-07-08 23:30:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  6: best=110.491, avg=28.406[0m
+[32m2026-07-08 23:30:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  7: best=110.491, avg=33.515[0m
+[32m2026-07-08 23:30:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  8: best=111.074, avg=40.891[0m
+[32m2026-07-08 23:31:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  9: best=111.074, avg=58.674[0m
+[32m2026-07-08 23:31:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 10: best=111.074, avg=63.325[0m
+[32m2026-07-08 23:31:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 11: best=111.217, avg=65.685[0m
+[32m2026-07-08 23:31:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 12: best=111.217, avg=77.202[0m
+[32m2026-07-08 23:32:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 13: best=111.258, avg=87.587[0m
+[32m2026-07-08 23:32:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 14: best=111.258, avg=88.265[0m
+[32m2026-07-08 23:32:39[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 15: best=129.360, avg=91.835[0m
+[32m2026-07-08 23:32:54[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 16: best=129.360, avg=90.501[0m
+[32m2026-07-08 23:33:10[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 17: best=129.360, avg=93.287[0m
+[32m2026-07-08 23:33:25[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 18: best=129.360, avg=92.970[0m
+[32m2026-07-08 23:33:40[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 19: best=129.360, avg=93.827[0m
+[32m2026-07-08 23:33:56[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 20: best=129.360, avg=97.034[0m
+[32m2026-07-08 23:34:11[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 21: best=129.360, avg=93.036[0m
+[32m2026-07-08 23:34:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 22: best=129.360, avg=94.945[0m
+[32m2026-07-08 23:34:42[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 23: best=129.360, avg=97.918[0m
+[32m2026-07-08 23:34:57[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 24: best=129.360, avg=99.813[0m
+[32m2026-07-08 23:35:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 25: best=129.360, avg=95.042[0m
+[32m2026-07-08 23:35:28[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 26: best=129.360, avg=106.311[0m
+[32m2026-07-08 23:35:42[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 27: best=129.360, avg=98.513[0m
+[32m2026-07-08 23:35:57[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 28: best=129.360, avg=102.335[0m
+[32m2026-07-08 23:36:13[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 29: best=129.360, avg=94.298[0m
+2026-07-08 23:36:28,222 INFO train done label=train_3 pid=152485 generations=30 early_stop=True rows=100 elapsed=459.7s
+[32m2026-07-08 23:36:28[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 30: best=129.360, avg=102.607[0m
+[32m2026-07-08 23:36:28[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m278[0m | [1mearly stop at gen 30 (no improvement for 15)[0m
+2026-07-08 23:36:28,268 INFO eval start period=stress_pre_2022h1 reached=300
+2026-07-08 23:37:31,952 INFO eval done period=stress_pre_2022h1 pass=3
+2026-07-08 23:37:31,953 INFO eval start period=train_3_eval reached=3
+2026-07-08 23:37:32,613 INFO eval done period=train_3_eval pass=1
+2026-07-08 23:37:32,614 INFO eval start period=train_2_eval reached=1
+2026-07-08 23:37:32,814 INFO eval done period=train_2_eval pass=1
+2026-07-08 23:37:32,814 INFO eval start period=train_1_eval reached=1
+2026-07-08 23:37:33,007 INFO eval done period=train_1_eval pass=1
+2026-07-08 23:37:33,007 INFO eval start period=oos_2025h2 reached=1
+2026-07-08 23:37:33,224 INFO eval done period=oos_2025h2 pass=0
+2026-07-08 23:37:34,615 INFO stage2 rl_replay_trades written path=/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/rl_replay_trades.jsonl rows=5695 missing_field_counts={'entry_rulebook_hash': 5695, 'exit_rank': 5695, 'final_rulebook_hash': 5695} critical_null_counts={}
+2026-07-08 23:37:34,617 INFO stage2 done ticker=CE survivors=0 elapsed=1408.9s
+{
+  "actual_eval_ratio": 0.204,
+  "actual_period_evaluations": 306,
+  "elapsed_sec": 1408.8986639976501,
+  "fail_counts_by_first_failed_period": {
+    "oos_2025h2": 1,
+    "stress_pre_2022h1": 297,
+    "train_3_eval": 2
+  },
+  "fitness_cache": {
+    "enabled": false,
+    "hit_rate": 0.0,
+    "hits": 0,
+    "misses": 0,
+    "unique_keys": 0
+  },
+  "fitness_cache_by_train": {
+    "train_1": {
+      "enabled": false,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 0,
+      "unique_keys": 0
+    },
+    "train_2": {
+      "enabled": false,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 0,
+      "unique_keys": 0
+    },
+    "train_3": {
+      "enabled": false,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 0,
+      "unique_keys": 0
+    }
+  },
+  "ga_average_generations_run": 33.0,
+  "ga_early_stop_triggered_by_train": {
+    "train_1": true,
+    "train_2": true,
+    "train_3": true
+  },
+  "ga_early_stop_triggered_count": 3,
+  "ga_generations_run_by_train": {
+    "train_1": 25,
+    "train_2": 44,
+    "train_3": 30
+  },
+  "generated_rulebook_rows": 300,
+  "max_period_evaluations": 1500,
+  "outputs": {
+    "config": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/config.json",
+    "early_cut_log": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/early_cut_log.csv",
+    "ga_history": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/ga_history.csv",
+    "period_metrics_all": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/period_metrics_all.csv",
+    "rulebooks_all": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/rulebooks_all.jsonl",
+    "run_log": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/run.log",
+    "summary": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/summary.json",
+    "survivors": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/survivors.jsonl",
+    "trades": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/trades.jsonl"
+  },
+  "parallel": {
+    "enabled": false,
+    "live_runner_reserved_cores": 1,
+    "note": "Parallel mode runs independent train splits in separate processes; GA engine has no internal worker parameter.",
+    "system_cpu": 8,
+    "train_splits_parallel": 1
+  },
+  "period_eval_saved_ratio": 0.796,
+  "survivor_count": 0,
+  "survivor_hashes": [],
+  "ticker": "CE",
+  "unique_rulebook_hashes": 300
+}
+[32m2026-07-08 23:37:34[0m | [1mINFO    [0m | [36mengine.core.data_loader[0m:[36mload_ohlcv[0m:[36m157[0m | [1mloaded CE: 1526 rows (2020-06-09 ~ 2026-07-07)[0m
+[32m2026-07-08 23:37:34[0m | [1mINFO    [0m | [36mengine.adapters.base[0m:[36mload_history[0m:[36m119[0m | [1mCE: history loaded (1526 rows, 28 cols)[0m
+INJECT_OK
+{
+  "base_market_history": "/home/g3000kkw/kingmaker/data/_system/market_history.csv",
+  "base_rulebook_sector_name": "materials",
+  "cache_root": "/home/g3000kkw/kingmaker/data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache",
+  "check_end": "2026-06-12",
+  "check_rows": 1526,
+  "check_start": "2020-05-18",
+  "feature_checks": {
+    "cost_oil": {
+      "exists": true,
+      "latest": 65.4516404734777,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 828
+    },
+    "macro_ind": {
+      "exists": true,
+      "latest": 83.29701079957981,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 1089
+    },
+    "peer_DD": {
+      "exists": true,
+      "latest": 98.4090718356046,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1466,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 816
+    },
+    "peer_EMN": {
+      "exists": true,
+      "latest": 95.78433625931834,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 737
+    },
+    "peer_LYB": {
+      "exists": true,
+      "latest": 0.0,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1465,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 779
+    },
+    "peer_WLK": {
+      "exists": true,
+      "latest": 0.0,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1466,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 551
+    },
+    "sector_materials": {
+      "exists": true,
+      "latest": 88.16007423552026,
+      "max": 100.0,
+      "min": 0.0,
+      "non_neutral_count": 1466,
+      "null_count": 0,
+      "ok": true,
+      "unique_count": 1172
+    }
+  },
+  "feature_columns": [
+    "sector_materials",
+    "peer_EMN",
+    "peer_DD",
+    "peer_LYB",
+    "peer_WLK",
+    "macro_ind",
+    "cost_oil"
+  ],
+  "feature_weight_fields": [
+    "mf_weight_sector_materials",
+    "mf_weight_peer_EMN",
+    "mf_weight_peer_DD",
+    "mf_weight_peer_LYB",
+    "mf_weight_peer_WLK",
+    "mf_weight_macro_ind",
+    "mf_weight_cost_oil"
+  ],
+  "ok_feature_columns": true,
+  "ok_no_missing": true,
+  "ok_sector_name": true,
+  "ok_weight_fields": true,
+  "patched_market_history": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/inputs/market_history_with_ce_multifeatures.csv",
+  "run_root": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708",
+  "sector_name": "materials",
+  "status": "INJECT_OK",
+  "ticker": "CE"
+}
+{"event": "stage3_start", "ticker": "CE", "stage": "all", "out_dir": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage3", "seed_base": 2026061505}
+[32m2026-07-08 23:37:34[0m | [1mINFO    [0m | [36mengine.adapters.base[0m:[36mload_history[0m:[36m119[0m | [1mCE: history loaded (1526 rows, 28 cols)[0m
+{"event": "stage3_qualify_ga_start", "ticker": "CE", "split": "train_1", "seed": 2026061506}
+[32m2026-07-08 23:37:55[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  1: best=63.950, avg=-44.090[0m
+[32m2026-07-08 23:38:11[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  2: best=80.258, avg=-0.700[0m
+[32m2026-07-08 23:38:26[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  3: best=105.361, avg=9.678[0m
+[32m2026-07-08 23:38:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  4: best=105.361, avg=10.925[0m
+[32m2026-07-08 23:38:57[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  5: best=106.090, avg=24.349[0m
+[32m2026-07-08 23:39:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  6: best=106.090, avg=23.259[0m
+[32m2026-07-08 23:39:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  7: best=106.090, avg=24.793[0m
+[32m2026-07-08 23:39:43[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  8: best=109.903, avg=33.082[0m
+[32m2026-07-08 23:39:59[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  9: best=109.903, avg=31.611[0m
+[32m2026-07-08 23:40:14[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 10: best=127.145, avg=44.584[0m
+[32m2026-07-08 23:40:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 11: best=127.145, avg=40.347[0m
+[32m2026-07-08 23:40:46[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 12: best=127.145, avg=46.384[0m
+[32m2026-07-08 23:41:03[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 13: best=127.145, avg=46.098[0m
+[32m2026-07-08 23:41:18[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 14: best=127.145, avg=45.125[0m
+[32m2026-07-08 23:41:34[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 15: best=127.145, avg=44.757[0m
+[32m2026-07-08 23:41:49[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 16: best=127.145, avg=48.375[0m
+[32m2026-07-08 23:42:06[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 17: best=127.145, avg=45.409[0m
+[32m2026-07-08 23:42:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 18: best=127.145, avg=48.810[0m
+[32m2026-07-08 23:42:39[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 19: best=127.145, avg=52.977[0m
+[32m2026-07-08 23:42:56[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 20: best=127.145, avg=56.498[0m
+[32m2026-07-08 23:43:13[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 21: best=127.145, avg=57.521[0m
+[32m2026-07-08 23:43:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 22: best=127.145, avg=54.941[0m
+[32m2026-07-08 23:43:47[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 23: best=127.145, avg=66.809[0m
+[32m2026-07-08 23:44:04[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 24: best=127.145, avg=70.043[0m
+[32m2026-07-08 23:44:21[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 25: best=127.145, avg=66.877[0m
+[32m2026-07-08 23:44:39[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 26: best=127.145, avg=65.492[0m
+[32m2026-07-08 23:44:57[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 27: best=127.145, avg=67.685[0m
+[32m2026-07-08 23:45:15[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 28: best=127.145, avg=71.174[0m
+[32m2026-07-08 23:45:33[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 29: best=127.145, avg=63.335[0m
+[32m2026-07-08 23:45:51[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 30: best=127.145, avg=66.443[0m
+[32m2026-07-08 23:46:09[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 31: best=127.145, avg=68.753[0m
+[32m2026-07-08 23:46:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 32: best=127.145, avg=68.715[0m
+[32m2026-07-08 23:46:44[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 33: best=127.145, avg=66.754[0m
+[32m2026-07-08 23:47:01[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 34: best=127.145, avg=70.152[0m
+[32m2026-07-08 23:47:18[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 35: best=127.145, avg=74.292[0m
+[32m2026-07-08 23:47:36[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 36: best=127.145, avg=63.814[0m
+[32m2026-07-08 23:47:54[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 37: best=127.145, avg=64.987[0m
+[32m2026-07-08 23:48:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 38: best=127.145, avg=67.183[0m
+[32m2026-07-08 23:48:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 39: best=127.145, avg=68.865[0m
+[32m2026-07-08 23:48:47[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 40: best=127.145, avg=66.074[0m
+{"event": "stage3_qualify_ga_done", "ticker": "CE", "split": "train_1", "top_count": 100}
+{"event": "stage3_qualify_ga_start", "ticker": "CE", "split": "train_2", "seed": 2026061507}
+[32m2026-07-08 23:49:25[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  1: best=61.879, avg=-38.643[0m
+[32m2026-07-08 23:49:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  2: best=66.518, avg=-11.601[0m
+[32m2026-07-08 23:49:58[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  3: best=94.018, avg=-2.735[0m
+[32m2026-07-08 23:50:14[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  4: best=94.018, avg=4.312[0m
+[32m2026-07-08 23:50:31[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  5: best=94.018, avg=3.503[0m
+[32m2026-07-08 23:50:46[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  6: best=94.018, avg=15.898[0m
+[32m2026-07-08 23:51:02[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  7: best=104.353, avg=37.545[0m
+[32m2026-07-08 23:51:18[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  8: best=104.353, avg=28.929[0m
+[32m2026-07-08 23:51:34[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  9: best=104.353, avg=37.545[0m
+[32m2026-07-08 23:51:50[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 10: best=108.131, avg=38.480[0m
+[32m2026-07-08 23:52:06[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 11: best=108.131, avg=44.118[0m
+[32m2026-07-08 23:52:22[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 12: best=109.334, avg=43.788[0m
+[32m2026-07-08 23:52:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 13: best=109.334, avg=42.394[0m
+[32m2026-07-08 23:52:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 14: best=109.334, avg=46.429[0m
+[32m2026-07-08 23:53:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 15: best=109.334, avg=49.333[0m
+[32m2026-07-08 23:53:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 16: best=109.334, avg=45.669[0m
+[32m2026-07-08 23:53:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 17: best=109.334, avg=56.434[0m
+[32m2026-07-08 23:53:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 18: best=109.334, avg=39.552[0m
+[32m2026-07-08 23:54:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 19: best=109.848, avg=55.974[0m
+[32m2026-07-08 23:54:23[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 20: best=109.848, avg=57.578[0m
+[32m2026-07-08 23:54:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 21: best=109.848, avg=64.363[0m
+[32m2026-07-08 23:54:52[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 22: best=109.848, avg=57.485[0m
+[32m2026-07-08 23:55:07[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 23: best=109.848, avg=64.679[0m
+[32m2026-07-08 23:55:21[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 24: best=109.848, avg=60.454[0m
+[32m2026-07-08 23:55:36[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 25: best=109.848, avg=64.405[0m
+[32m2026-07-08 23:55:51[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 26: best=109.848, avg=66.201[0m
+[32m2026-07-08 23:56:06[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 27: best=109.848, avg=67.228[0m
+[32m2026-07-08 23:56:20[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 28: best=109.848, avg=65.746[0m
+[32m2026-07-08 23:56:35[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 29: best=109.901, avg=65.150[0m
+[32m2026-07-08 23:56:50[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 30: best=109.901, avg=70.625[0m
+[32m2026-07-08 23:57:04[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 31: best=109.901, avg=73.542[0m
+[32m2026-07-08 23:57:19[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 32: best=109.901, avg=70.139[0m
+[32m2026-07-08 23:57:33[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 33: best=109.901, avg=78.704[0m
+[32m2026-07-08 23:57:48[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 34: best=109.901, avg=83.562[0m
+[32m2026-07-08 23:58:02[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 35: best=109.901, avg=77.981[0m
+[32m2026-07-08 23:58:16[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 36: best=109.901, avg=76.251[0m
+[32m2026-07-08 23:58:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 37: best=109.901, avg=84.566[0m
+[32m2026-07-08 23:58:44[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 38: best=109.901, avg=86.041[0m
+[32m2026-07-08 23:58:58[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 39: best=109.901, avg=87.121[0m
+[32m2026-07-08 23:59:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 40: best=109.901, avg=87.125[0m
+{"event": "stage3_qualify_ga_done", "ticker": "CE", "split": "train_2", "top_count": 100}
+{"event": "stage3_qualify_ga_start", "ticker": "CE", "split": "train_3", "seed": 2026061508}
+[32m2026-07-08 23:59:49[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  1: best=55.757, avg=-81.922[0m
+[32m2026-07-09 00:00:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  2: best=106.340, avg=-42.992[0m
+[32m2026-07-09 00:00:29[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  3: best=108.386, avg=-20.298[0m
+[32m2026-07-09 00:00:49[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  4: best=108.386, avg=-1.640[0m
+[32m2026-07-09 00:01:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  5: best=110.491, avg=13.807[0m
+[32m2026-07-09 00:01:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  6: best=110.491, avg=28.406[0m
+[32m2026-07-09 00:01:45[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  7: best=110.491, avg=33.515[0m
+[32m2026-07-09 00:02:03[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  8: best=111.074, avg=40.891[0m
+[32m2026-07-09 00:02:21[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  9: best=111.074, avg=58.674[0m
+[32m2026-07-09 00:02:40[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 10: best=111.074, avg=63.325[0m
+[32m2026-07-09 00:02:58[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 11: best=111.217, avg=65.685[0m
+[32m2026-07-09 00:03:16[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 12: best=111.217, avg=77.202[0m
+[32m2026-07-09 00:03:35[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 13: best=111.258, avg=87.587[0m
+[32m2026-07-09 00:03:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 14: best=111.258, avg=88.265[0m
+[32m2026-07-09 00:04:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 15: best=129.360, avg=91.835[0m
+[32m2026-07-09 00:04:31[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 16: best=129.360, avg=90.501[0m
+[32m2026-07-09 00:04:49[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 17: best=129.360, avg=93.287[0m
+[32m2026-07-09 00:05:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 18: best=129.360, avg=92.970[0m
+[32m2026-07-09 00:05:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 19: best=129.360, avg=93.827[0m
+[32m2026-07-09 00:05:45[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 20: best=129.360, avg=97.034[0m
+[32m2026-07-09 00:06:04[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 21: best=129.360, avg=93.036[0m
+[32m2026-07-09 00:06:22[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 22: best=129.360, avg=94.945[0m
+[32m2026-07-09 00:06:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 23: best=129.360, avg=97.918[0m
+[32m2026-07-09 00:07:00[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 24: best=129.360, avg=99.813[0m
+[32m2026-07-09 00:07:19[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 25: best=129.360, avg=95.042[0m
+[32m2026-07-09 00:07:37[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 26: best=129.360, avg=106.311[0m
+[32m2026-07-09 00:07:56[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 27: best=129.360, avg=98.513[0m
+[32m2026-07-09 00:08:15[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 28: best=129.360, avg=102.335[0m
+[32m2026-07-09 00:08:34[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 29: best=129.360, avg=94.298[0m
+[32m2026-07-09 00:08:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 30: best=129.360, avg=102.607[0m
+[32m2026-07-09 00:09:12[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 31: best=129.360, avg=102.682[0m
+[32m2026-07-09 00:09:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 32: best=129.360, avg=99.723[0m
+[32m2026-07-09 00:09:49[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 33: best=129.360, avg=107.377[0m
+[32m2026-07-09 00:10:07[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 34: best=129.360, avg=103.146[0m
+[32m2026-07-09 00:10:26[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 35: best=129.360, avg=95.741[0m
+[32m2026-07-09 00:10:45[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 36: best=129.360, avg=99.341[0m
+[32m2026-07-09 00:11:03[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 37: best=129.360, avg=99.163[0m
+[32m2026-07-09 00:11:22[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 38: best=129.360, avg=102.156[0m
+[32m2026-07-09 00:11:41[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 39: best=129.360, avg=106.968[0m
+[32m2026-07-09 00:12:00[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 40: best=129.360, avg=101.219[0m
+{"event": "stage3_qualify_ga_done", "ticker": "CE", "split": "train_3", "top_count": 100}
+{"event": "stage3_qualify_eval_start", "ticker": "CE", "split": "train_1", "candidate_count": 300}
+{"event": "stage3_qualify_eval_done", "ticker": "CE", "split": "train_1", "pass_count": 67}
+{"event": "stage3_qualify_eval_start", "ticker": "CE", "split": "train_2", "candidate_count": 300}
+{"event": "stage3_qualify_eval_done", "ticker": "CE", "split": "train_2", "pass_count": 109}
+{"event": "stage3_qualify_eval_start", "ticker": "CE", "split": "train_3", "candidate_count": 300}
+{"event": "stage3_qualify_eval_done", "ticker": "CE", "split": "train_3", "pass_count": 156}
+[32m2026-07-09 00:15:57[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  1: best=53.059, avg=-93.520[0m
+[32m2026-07-09 00:16:16[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  2: best=91.853, avg=-53.512[0m
+[32m2026-07-09 00:16:34[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  3: best=102.203, avg=-34.253[0m
+[32m2026-07-09 00:16:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  4: best=107.052, avg=-13.395[0m
+[32m2026-07-09 00:17:13[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  5: best=110.285, avg=14.452[0m
+[32m2026-07-09 00:17:31[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  6: best=110.285, avg=15.501[0m
+[32m2026-07-09 00:17:49[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  7: best=110.285, avg=29.017[0m
+[32m2026-07-09 00:18:07[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  8: best=110.285, avg=27.216[0m
+[32m2026-07-09 00:18:25[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen  9: best=110.285, avg=45.156[0m
+[32m2026-07-09 00:18:44[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 10: best=112.793, avg=50.945[0m
+[32m2026-07-09 00:19:03[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 11: best=112.793, avg=57.847[0m
+[32m2026-07-09 00:19:22[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 12: best=112.793, avg=58.124[0m
+[32m2026-07-09 00:19:40[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 13: best=112.793, avg=60.096[0m
+[32m2026-07-09 00:19:59[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 14: best=112.793, avg=56.373[0m
+[32m2026-07-09 00:20:18[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 15: best=112.793, avg=57.414[0m
+[32m2026-07-09 00:20:36[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 16: best=112.793, avg=60.529[0m
+[32m2026-07-09 00:20:54[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 17: best=112.793, avg=57.850[0m
+[32m2026-07-09 00:21:13[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 18: best=112.793, avg=70.197[0m
+[32m2026-07-09 00:21:31[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 19: best=112.793, avg=63.524[0m
+[32m2026-07-09 00:21:50[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 20: best=112.793, avg=70.805[0m
+[32m2026-07-09 00:22:08[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 21: best=112.793, avg=81.735[0m
+[32m2026-07-09 00:22:27[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 22: best=112.793, avg=79.408[0m
+[32m2026-07-09 00:22:45[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 23: best=112.793, avg=83.561[0m
+[32m2026-07-09 00:23:04[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 24: best=112.793, avg=83.501[0m
+[32m2026-07-09 00:23:22[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 25: best=112.793, avg=74.867[0m
+[32m2026-07-09 00:23:40[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 26: best=112.793, avg=83.499[0m
+[32m2026-07-09 00:23:58[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 27: best=112.793, avg=79.138[0m
+[32m2026-07-09 00:24:17[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 28: best=112.793, avg=65.553[0m
+[32m2026-07-09 00:24:35[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 29: best=116.602, avg=82.942[0m
+[32m2026-07-09 00:24:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 30: best=116.602, avg=68.531[0m
+[32m2026-07-09 00:25:11[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 31: best=116.602, avg=72.123[0m
+[32m2026-07-09 00:25:30[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 32: best=116.602, avg=66.515[0m
+[32m2026-07-09 00:25:49[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 33: best=116.602, avg=78.181[0m
+[32m2026-07-09 00:26:07[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 34: best=116.602, avg=66.374[0m
+[32m2026-07-09 00:26:25[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 35: best=116.602, avg=69.277[0m
+[32m2026-07-09 00:26:43[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 36: best=116.602, avg=73.917[0m
+[32m2026-07-09 00:27:02[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 37: best=116.602, avg=78.596[0m
+[32m2026-07-09 00:27:20[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 38: best=116.602, avg=83.942[0m
+[32m2026-07-09 00:27:38[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 39: best=116.602, avg=72.313[0m
+[32m2026-07-09 00:27:56[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 40: best=116.602, avg=72.854[0m
+[32m2026-07-09 00:28:14[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 41: best=116.602, avg=80.070[0m
+[32m2026-07-09 00:28:32[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 42: best=116.602, avg=77.286[0m
+[32m2026-07-09 00:28:50[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 43: best=116.602, avg=85.442[0m
+[32m2026-07-09 00:29:07[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 44: best=116.602, avg=68.152[0m
+[32m2026-07-09 00:29:25[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 45: best=116.602, avg=76.758[0m
+[32m2026-07-09 00:29:43[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 46: best=116.602, avg=73.189[0m
+[32m2026-07-09 00:30:00[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 47: best=116.602, avg=66.722[0m
+[32m2026-07-09 00:30:18[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 48: best=116.602, avg=81.323[0m
+[32m2026-07-09 00:30:36[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 49: best=116.602, avg=79.308[0m
+[32m2026-07-09 00:30:53[0m | [1mINFO    [0m | [36mengine.learning.genetic[0m:[36mrun_ga[0m:[36m268[0m | [1mGen 50: best=116.602, avg=71.721[0m
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 0, "best": -0.318192, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 1, "best": -0.318192, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 2, "best": 0.883997, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 3, "best": 0.883997, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 4, "best": 0.883997, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 5, "best": 0.883997, "cache_size": 299}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 6, "best": 0.883997, "cache_size": 347}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 7, "best": 1.584236, "cache_size": 395}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 8, "best": 1.584236, "cache_size": 443}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 9, "best": 1.584236, "cache_size": 491}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 10, "best": 1.584236, "cache_size": 539}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 11, "best": 2.110038, "cache_size": 587}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 12, "best": 2.110038, "cache_size": 635}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 13, "best": 2.110038, "cache_size": 683}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 14, "best": 2.110038, "cache_size": 731}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 15, "best": 2.110038, "cache_size": 779}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 16, "best": 2.183433, "cache_size": 827}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 17, "best": 2.183433, "cache_size": 875}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 18, "best": 2.220368, "cache_size": 923}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 19, "best": 2.286993, "cache_size": 971}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 20, "best": 2.320357, "cache_size": 1019}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 21, "best": 3.019541, "cache_size": 1067}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 22, "best": 3.019541, "cache_size": 1115}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 23, "best": 3.019541, "cache_size": 1163}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 24, "best": 3.620741, "cache_size": 1211}
+{"event": "stage3_exit_ga_gen", "entry_hash": "59a4c2d6e540ae5f394b5d51a4e10b0177630af4dcfb3cf5952fc8a4cc2a8cc7", "generation": 25, "best": 3.620741, "cache_size": 1259}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 0, "best": 0.962107, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 1, "best": 0.962107, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 2, "best": 0.962107, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 3, "best": 1.406397, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 4, "best": 1.406397, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 5, "best": 1.673423, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 6, "best": 1.673423, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 7, "best": 1.673423, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 8, "best": 2.30012, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 9, "best": 3.277002, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 10, "best": 3.277002, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 11, "best": 3.277002, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 12, "best": 3.621232, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 13, "best": 4.457017, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 14, "best": 4.457017, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 15, "best": 4.457017, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 16, "best": 4.457017, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 17, "best": 4.457017, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 18, "best": 4.457017, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 19, "best": 4.457017, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 20, "best": 4.534397, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 21, "best": 4.534397, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 22, "best": 4.709962, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 23, "best": 4.709962, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 24, "best": 5.02264, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "26983d4f53c6ecfe553e1897d890811ddcbfe39fb030ea2133b0254117096f8a", "generation": 25, "best": 5.02264, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 0, "best": 1.019103, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 1, "best": 2.437373, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 2, "best": 2.437373, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 3, "best": 2.437373, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 4, "best": 2.437373, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 5, "best": 2.437373, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 6, "best": 3.70918, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 7, "best": 3.831462, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 8, "best": 3.831462, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 9, "best": 3.831462, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 10, "best": 3.864932, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 11, "best": 4.018977, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 12, "best": 4.315084, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 13, "best": 4.439595, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 14, "best": 4.648785, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 15, "best": 4.692735, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 16, "best": 4.692735, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 17, "best": 4.692735, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 18, "best": 4.775319, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 19, "best": 4.775319, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 20, "best": 4.775319, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 21, "best": 4.839691, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 22, "best": 4.839691, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 23, "best": 4.839691, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 24, "best": 4.944001, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "15d01c665ab1cfe420797517f2b01d0d01506c1b28c5f99cdcb8c6365135cdac", "generation": 25, "best": 4.944001, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 0, "best": 2.293897, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 1, "best": 2.293897, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 2, "best": 3.296918, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 3, "best": 3.296918, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 4, "best": 3.363342, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 5, "best": 3.363342, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 6, "best": 3.566942, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 7, "best": 4.107717, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 8, "best": 4.909342, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 9, "best": 5.208168, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 10, "best": 5.649062, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 11, "best": 5.796054, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 12, "best": 5.796054, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 13, "best": 5.796054, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 14, "best": 5.859249, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 15, "best": 5.859249, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 16, "best": 5.960008, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 17, "best": 5.960008, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 18, "best": 5.960008, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 19, "best": 6.0667, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 20, "best": 6.0667, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 21, "best": 6.0667, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 22, "best": 6.0667, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 23, "best": 6.107257, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 24, "best": 6.107257, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "01d07dd3d6b445b2bc10933affad50fc569920fff71c6a5f1febd54409769f26", "generation": 25, "best": 6.107257, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 0, "best": 2.523901, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 1, "best": 2.523901, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 2, "best": 3.092564, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 3, "best": 3.092564, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 4, "best": 3.70086, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 5, "best": 4.267919, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 6, "best": 4.267919, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 7, "best": 4.307012, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 8, "best": 4.49728, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 9, "best": 4.759075, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 10, "best": 4.759075, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 11, "best": 4.857871, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 12, "best": 4.857871, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 13, "best": 4.857871, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 14, "best": 4.857871, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 15, "best": 4.914383, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 16, "best": 4.914383, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 17, "best": 4.914383, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 18, "best": 4.914383, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 19, "best": 4.914383, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 20, "best": 4.925512, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 21, "best": 5.099731, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 22, "best": 5.099731, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 23, "best": 5.099731, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 24, "best": 5.099731, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a30b8173de57d793cb4840ff639af1bda2f0adc208ebed9867b2839a3fcf353f", "generation": 25, "best": 5.099731, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 0, "best": 2.431516, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 1, "best": 3.141739, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 2, "best": 3.141739, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 3, "best": 4.947809, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 4, "best": 6.369863, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 5, "best": 6.369863, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 6, "best": 6.369863, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 7, "best": 6.369863, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 8, "best": 6.369863, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 9, "best": 6.431793, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 10, "best": 6.431793, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 11, "best": 6.431793, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 12, "best": 6.431793, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 13, "best": 6.453893, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 14, "best": 6.453893, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 15, "best": 6.453893, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 16, "best": 6.453893, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 17, "best": 6.453893, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 18, "best": 6.481496, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 19, "best": 6.481496, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 20, "best": 6.481496, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 21, "best": 6.481496, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 22, "best": 6.481496, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 23, "best": 6.481496, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 24, "best": 6.503597, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "c26c6e70825c1fa8c0d1d247b2aef9aaa81870be31727bda16dc135094e54a57", "generation": 25, "best": 6.503597, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 0, "best": 4.178609, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 1, "best": 4.178609, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 2, "best": 4.20112, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 3, "best": 4.755542, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 4, "best": 4.755542, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 5, "best": 4.755542, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 6, "best": 4.755542, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 7, "best": 4.765267, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 8, "best": 4.858814, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 9, "best": 4.858814, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 10, "best": 4.911696, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 11, "best": 4.911696, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 12, "best": 4.911696, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 13, "best": 4.911696, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 14, "best": 5.026515, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 15, "best": 5.10835, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 16, "best": 5.10835, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 17, "best": 5.10835, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 18, "best": 5.10835, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 19, "best": 5.10835, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 20, "best": 5.13086, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 21, "best": 5.238735, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 22, "best": 5.238735, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 23, "best": 5.238735, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 24, "best": 5.238735, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "932bc6b20fc8ebcb77be9c0dc6484160b690daea3aa69ed0f0ea18b009ea93df", "generation": 25, "best": 5.306356, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 0, "best": 2.757379, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 1, "best": 3.350794, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 2, "best": 3.352731, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 3, "best": 3.352731, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 4, "best": 3.910802, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 5, "best": 3.910802, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 6, "best": 4.221713, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 7, "best": 4.616112, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 8, "best": 4.833815, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 9, "best": 4.833815, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 10, "best": 4.833815, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 11, "best": 4.833815, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 12, "best": 4.925206, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 13, "best": 4.925206, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 14, "best": 5.027194, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 15, "best": 5.17621, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 16, "best": 5.17621, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 17, "best": 5.17621, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 18, "best": 5.17621, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 19, "best": 5.17621, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 20, "best": 5.17621, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 21, "best": 5.17621, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 22, "best": 5.17621, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 23, "best": 5.22295, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 24, "best": 5.22295, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1a9f81bbf26d0b43d516ea45f00175cbc24440cd9683138e3dc9f4d27a1ba032", "generation": 25, "best": 5.22295, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 0, "best": 2.095297, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 1, "best": 2.095297, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 2, "best": 2.600927, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 3, "best": 2.865115, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 4, "best": 2.865115, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 5, "best": 2.865115, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 6, "best": 3.459443, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 7, "best": 3.459443, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 8, "best": 3.459443, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 9, "best": 3.459443, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 10, "best": 3.459443, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 11, "best": 3.459443, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 12, "best": 3.708671, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 13, "best": 4.639961, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 14, "best": 4.663655, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 15, "best": 4.712589, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 16, "best": 4.786488, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 17, "best": 4.78932, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 18, "best": 4.915857, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 19, "best": 4.915857, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 20, "best": 5.030629, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 21, "best": 5.030629, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 22, "best": 5.07189, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 23, "best": 5.07189, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 24, "best": 5.07189, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "5ac888355da0c24447650ded33f77dc74bcc978faca6e0b3c91346f41717df20", "generation": 25, "best": 5.07189, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 0, "best": 3.584734, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 1, "best": 3.584734, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 2, "best": 3.855298, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 3, "best": 3.901276, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 4, "best": 4.095602, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 5, "best": 4.923444, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 6, "best": 5.120178, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 7, "best": 5.120178, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 8, "best": 5.120178, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 9, "best": 5.120178, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 10, "best": 5.473072, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 11, "best": 5.769083, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 12, "best": 5.769083, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 13, "best": 5.769083, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 14, "best": 5.769083, "cache_size": 731}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 15, "best": 5.769083, "cache_size": 779}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 16, "best": 6.125515, "cache_size": 827}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 17, "best": 6.125515, "cache_size": 875}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 18, "best": 6.125515, "cache_size": 923}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 19, "best": 6.199517, "cache_size": 971}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 20, "best": 6.350886, "cache_size": 1019}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 21, "best": 6.350886, "cache_size": 1067}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 22, "best": 6.350886, "cache_size": 1115}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 23, "best": 6.350886, "cache_size": 1163}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 24, "best": 6.470319, "cache_size": 1211}
+{"event": "stage3_exit_ga_gen", "entry_hash": "1dbf47728dbdd0f4171786705746794cbe059280e9b7067733e0cb2d70f8c2cb", "generation": 25, "best": 6.470319, "cache_size": 1259}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 0, "best": 2.74898, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 1, "best": 4.284314, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 2, "best": 4.284314, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 3, "best": 4.284314, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 4, "best": 4.284314, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 5, "best": 4.690266, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 6, "best": 4.690266, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 7, "best": 5.627327, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 8, "best": 5.627327, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 9, "best": 5.627327, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 10, "best": 5.824693, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 11, "best": 6.028996, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 12, "best": 6.084481, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 13, "best": 6.084481, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 14, "best": 6.163506, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 15, "best": 6.163506, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 16, "best": 6.163506, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 17, "best": 6.163506, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 18, "best": 6.240608, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 19, "best": 6.279269, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 20, "best": 6.573498, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 21, "best": 6.620373, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 22, "best": 6.652399, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 23, "best": 6.826203, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 24, "best": 6.886427, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "077f86c3622dbbadac8e399ae5fb2b80fe3d3e54da08f554ea92c1d7a3cecff0", "generation": 25, "best": 6.886427, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 0, "best": 2.964205, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 1, "best": 2.964205, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 2, "best": 3.233621, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 3, "best": 3.233621, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 4, "best": 3.233621, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 5, "best": 3.233621, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 6, "best": 3.332143, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 7, "best": 3.332143, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 8, "best": 3.660745, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 9, "best": 3.660745, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 10, "best": 3.660745, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 11, "best": 3.816907, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 12, "best": 3.816907, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 13, "best": 3.816907, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 14, "best": 3.816907, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 15, "best": 3.888213, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 16, "best": 3.888213, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 17, "best": 3.963206, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 18, "best": 3.963206, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 19, "best": 3.963206, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 20, "best": 4.113779, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 21, "best": 4.113779, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 22, "best": 4.113779, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 23, "best": 4.113779, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 24, "best": 4.968843, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "f69c7d32892549c9ed5c7f9d8c5963ade21df465795b14af4c11f666c9ccdb57", "generation": 25, "best": 4.968843, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 0, "best": 2.834073, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 1, "best": 3.987975, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 2, "best": 3.987975, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 3, "best": 3.987975, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 4, "best": 3.987975, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 5, "best": 4.32758, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 6, "best": 5.635572, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 7, "best": 6.044808, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 8, "best": 6.06167, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 9, "best": 6.06167, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 10, "best": 6.525303, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 11, "best": 6.525303, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 12, "best": 7.161354, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 13, "best": 7.315516, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 14, "best": 7.315516, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 15, "best": 7.315516, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 16, "best": 7.315516, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 17, "best": 7.342387, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 18, "best": 7.342387, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 19, "best": 7.342387, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 20, "best": 7.35246, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 21, "best": 7.463635, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 22, "best": 7.463635, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 23, "best": 7.463635, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 24, "best": 7.463635, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "403e799ebc8aff89ce1aea3063febb2b64f1e514c475c9c358b1bfb24cf7b8cb", "generation": 25, "best": 7.463635, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 0, "best": 2.24477, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 1, "best": 3.433293, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 2, "best": 4.146155, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 3, "best": 4.161501, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 4, "best": 4.82546, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 5, "best": 4.82546, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 6, "best": 4.82546, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 7, "best": 5.17876, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 8, "best": 5.263282, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 9, "best": 5.293354, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 10, "best": 5.398165, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 11, "best": 5.496404, "cache_size": 587}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 12, "best": 5.496404, "cache_size": 635}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 13, "best": 5.533241, "cache_size": 683}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 14, "best": 5.533241, "cache_size": 731}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 15, "best": 5.580399, "cache_size": 779}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 16, "best": 5.580399, "cache_size": 827}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 17, "best": 5.648011, "cache_size": 875}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 18, "best": 5.648011, "cache_size": 923}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 19, "best": 5.648403, "cache_size": 971}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 20, "best": 5.648403, "cache_size": 1019}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 21, "best": 5.789982, "cache_size": 1067}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 22, "best": 5.789982, "cache_size": 1115}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 23, "best": 5.789982, "cache_size": 1163}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 24, "best": 5.81531, "cache_size": 1211}
+{"event": "stage3_exit_ga_gen", "entry_hash": "94e06fcad4a4e227c35dd500f6acf3ae50e64b56a5d0cb1c7dbadc96438562a5", "generation": 25, "best": 5.828363, "cache_size": 1259}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 0, "best": 4.521161, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 1, "best": 4.521161, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 2, "best": 4.521161, "cache_size": 155}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 3, "best": 4.521161, "cache_size": 203}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 4, "best": 4.521161, "cache_size": 251}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 5, "best": 4.521161, "cache_size": 299}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 6, "best": 5.774374, "cache_size": 347}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 7, "best": 5.774374, "cache_size": 395}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 8, "best": 5.774374, "cache_size": 443}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 9, "best": 5.774374, "cache_size": 491}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 10, "best": 5.774374, "cache_size": 539}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 11, "best": 5.774374, "cache_size": 587}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 12, "best": 5.774374, "cache_size": 635}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 13, "best": 6.141916, "cache_size": 683}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 14, "best": 6.141916, "cache_size": 731}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 15, "best": 6.141916, "cache_size": 779}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 16, "best": 6.141916, "cache_size": 827}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 17, "best": 6.141916, "cache_size": 875}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 18, "best": 6.141916, "cache_size": 923}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 19, "best": 6.141916, "cache_size": 971}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 20, "best": 6.373553, "cache_size": 1019}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 21, "best": 6.373553, "cache_size": 1067}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 22, "best": 6.373553, "cache_size": 1115}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 23, "best": 6.578375, "cache_size": 1163}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 24, "best": 6.578375, "cache_size": 1211}
+{"event": "stage3_exit_ga_gen", "entry_hash": "a5895603a6baa3dcde28feef6fce317967b58f7d393e0bf2e079afb60203309b", "generation": 25, "best": 6.578375, "cache_size": 1259}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 0, "best": 0.122799, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 1, "best": 2.355805, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 2, "best": 2.47644, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 3, "best": 2.685685, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 4, "best": 3.713768, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 5, "best": 3.713768, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 6, "best": 3.738052, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 7, "best": 4.145672, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 8, "best": 4.145672, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 9, "best": 4.145672, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 10, "best": 4.529001, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 11, "best": 4.596841, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 12, "best": 4.596841, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 13, "best": 4.596841, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 14, "best": 4.596841, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 15, "best": 4.596841, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 16, "best": 4.596841, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 17, "best": 4.68524, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 18, "best": 4.68524, "cache_size": 923}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 19, "best": 4.68524, "cache_size": 971}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 20, "best": 4.68524, "cache_size": 1019}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 21, "best": 4.68524, "cache_size": 1067}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 22, "best": 4.68524, "cache_size": 1115}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 23, "best": 4.68524, "cache_size": 1163}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 24, "best": 4.964589, "cache_size": 1211}
+{"event": "stage3_exit_ga_gen", "entry_hash": "204d970fc01615b20ecef2aeec3702051f92213d3d5f6d1ef0b47e52b7cfb4c0", "generation": 25, "best": 4.964589, "cache_size": 1259}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 0, "best": 2.793787, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 1, "best": 2.888561, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 2, "best": 2.888561, "cache_size": 155}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 3, "best": 3.18684, "cache_size": 203}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 4, "best": 3.18684, "cache_size": 251}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 5, "best": 3.402771, "cache_size": 299}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 6, "best": 3.402771, "cache_size": 347}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 7, "best": 3.467094, "cache_size": 395}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 8, "best": 3.600751, "cache_size": 443}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 9, "best": 4.055746, "cache_size": 491}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 10, "best": 4.055746, "cache_size": 539}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 11, "best": 4.27998, "cache_size": 587}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 12, "best": 4.27998, "cache_size": 635}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 13, "best": 4.27998, "cache_size": 683}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 14, "best": 4.491314, "cache_size": 731}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 15, "best": 4.65657, "cache_size": 779}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 16, "best": 4.65657, "cache_size": 827}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 17, "best": 4.65657, "cache_size": 875}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 18, "best": 4.65657, "cache_size": 923}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 19, "best": 4.65657, "cache_size": 971}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 20, "best": 4.675925, "cache_size": 1019}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 21, "best": 4.727122, "cache_size": 1067}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 22, "best": 4.727122, "cache_size": 1115}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 23, "best": 4.836197, "cache_size": 1163}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 24, "best": 4.882511, "cache_size": 1211}
+{"event": "stage3_exit_ga_gen", "entry_hash": "e22d80ab3c00388d31334e15c62db7ce71498450a1c192ee28d407b08ffe5c49", "generation": 25, "best": 4.882511, "cache_size": 1259}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 0, "best": 2.059599, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 1, "best": 3.455088, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 2, "best": 3.455088, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 3, "best": 3.455088, "cache_size": 203}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 4, "best": 3.977805, "cache_size": 251}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 5, "best": 3.977805, "cache_size": 299}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 6, "best": 3.977805, "cache_size": 346}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 7, "best": 4.061773, "cache_size": 394}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 8, "best": 4.587537, "cache_size": 442}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 9, "best": 5.319838, "cache_size": 490}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 10, "best": 5.682005, "cache_size": 538}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 11, "best": 6.285516, "cache_size": 586}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 12, "best": 6.346923, "cache_size": 634}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 13, "best": 6.346923, "cache_size": 682}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 14, "best": 6.37116, "cache_size": 730}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 15, "best": 6.37116, "cache_size": 778}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 16, "best": 6.491521, "cache_size": 826}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 17, "best": 6.605341, "cache_size": 874}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 18, "best": 6.605341, "cache_size": 922}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 19, "best": 6.605341, "cache_size": 970}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 20, "best": 6.605341, "cache_size": 1018}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 21, "best": 6.605341, "cache_size": 1066}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 22, "best": 6.605341, "cache_size": 1114}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 23, "best": 6.605341, "cache_size": 1162}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 24, "best": 6.605341, "cache_size": 1210}
+{"event": "stage3_exit_ga_gen", "entry_hash": "623035486aa9c07a5537c0018a916ba21353c6f963fa1ee963b347637371ddd0", "generation": 25, "best": 6.605341, "cache_size": 1258}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 0, "best": 0.999103, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 1, "best": 1.669198, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 2, "best": 1.669198, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 3, "best": 3.270506, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 4, "best": 3.270506, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 5, "best": 3.270506, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 6, "best": 3.270506, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 7, "best": 3.270506, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 8, "best": 3.270506, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 9, "best": 3.270506, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 10, "best": 3.338215, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 11, "best": 3.398758, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 12, "best": 3.432448, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 13, "best": 3.501863, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 14, "best": 3.501863, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 15, "best": 3.507462, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 16, "best": 3.622869, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 17, "best": 3.622869, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 18, "best": 3.622869, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 19, "best": 3.622869, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 20, "best": 3.622869, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 21, "best": 3.622869, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 22, "best": 3.622869, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 23, "best": 3.68767, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 24, "best": 3.68767, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "34b5b4fa61881863b1d4d5592f42f79f6d9bfa17d4d68e42a8dc2b0918a94cb1", "generation": 25, "best": 3.68767, "cache_size": 1260}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 0, "best": 2.517253, "cache_size": 60}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 1, "best": 2.532447, "cache_size": 108}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 2, "best": 2.862315, "cache_size": 156}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 3, "best": 2.862315, "cache_size": 204}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 4, "best": 3.137082, "cache_size": 252}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 5, "best": 3.137082, "cache_size": 300}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 6, "best": 4.083075, "cache_size": 348}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 7, "best": 5.670216, "cache_size": 396}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 8, "best": 5.670216, "cache_size": 444}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 9, "best": 5.670216, "cache_size": 492}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 10, "best": 5.670216, "cache_size": 540}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 11, "best": 5.728883, "cache_size": 588}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 12, "best": 5.728883, "cache_size": 636}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 13, "best": 5.880048, "cache_size": 684}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 14, "best": 5.880048, "cache_size": 732}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 15, "best": 6.067225, "cache_size": 780}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 16, "best": 6.067225, "cache_size": 828}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 17, "best": 6.081513, "cache_size": 876}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 18, "best": 6.144045, "cache_size": 924}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 19, "best": 6.213507, "cache_size": 972}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 20, "best": 6.248559, "cache_size": 1020}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 21, "best": 6.248559, "cache_size": 1068}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 22, "best": 6.248559, "cache_size": 1116}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 23, "best": 6.248559, "cache_size": 1164}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 24, "best": 6.248559, "cache_size": 1212}
+{"event": "stage3_exit_ga_gen", "entry_hash": "466c0e0e2bfd90a73e5897edafb954d3200da1bb0ced0c67c065d9c5c9ba118a", "generation": 25, "best": 6.248559, "cache_size": 1260}
+{"event": "stage3_validate_exit_trades_written", "ticker": "CE", "path": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage3/exit_trades.jsonl", "trade_count": 4604, "missing_field_counts": {}}
+{"event": "stage3_validate_rl_replay_trades_written", "ticker": "CE", "path": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage3/rl_replay_trades.jsonl", "trade_count": 4604, "missing_field_counts": {}, "critical_null_counts": {}}
+{"event": "stage3_done", "ticker": "CE", "stage": "all", "out_dir": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage3", "summary_count": 4}
+{
+  "csv": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/comparison.csv",
+  "judgments": {
+    "stage2_multifeature": "SECTOR_MATTERS_MUCH",
+    "stage2_xlb_single": "SECTOR_MATTERS_LITTLE",
+    "stage3_multifeature": "OVERFIT",
+    "stage3_xlb_single": "OVERFIT"
+  },
+  "readout": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/comparison_readout.md"
+}
+{
+  "csv": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/comparison.csv",
+  "judgments": {
+    "stage2_multifeature": "SECTOR_MATTERS_MUCH",
+    "stage2_xlb_single": "SECTOR_MATTERS_LITTLE",
+    "stage3_multifeature": "OVERFIT",
+    "stage3_xlb_single": "OVERFIT"
+  },
+  "readout": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/comparison_readout.md"
+}

@@ -1,0 +1,59 @@
+{
+  "candidate_count": 60,
+  "elapsed_seconds": 45.88087177276611,
+  "eligible_count": 0,
+  "exit_check_period": {
+    "end": "2022-06-30",
+    "label": "stress_pre_2022h1",
+    "role": "exit_check",
+    "start": null
+  },
+  "ineligible_count": 60,
+  "ineligible_reason_counts": {
+    "recent_1y|expectancy_pct": 44,
+    "train_1|expectancy_pct": 44,
+    "train_2|expectancy_pct": 53
+  },
+  "label_distribution": {
+    "composite_tag": {},
+    "holding_class": {},
+    "return_class": {},
+    "risk_class": {}
+  },
+  "mode": "basic_eligibility_plus_profile_catalog",
+  "note": "Stage 4 checks only minimum pure-OOS expectancy eligibility. MDD and holding days are profile labels for later investment-style selection.",
+  "outputs": {
+    "all_validation_rows": "validation_results.jsonl",
+    "ineligible_rows": "stage3_ineligible.jsonl",
+    "legacy_validated_survivors": "not_created; existing stale file is preserved as validated_survivors.jsonl.deprecated",
+    "profile_catalog": "stage3_profile_catalog.jsonl"
+  },
+  "profile_config": {
+    "eligibility_min_expectancy_pct": 1.0,
+    "high_exp_floor_pct": 4.0,
+    "holding_mid_max_days": 14.0,
+    "holding_ultra_short_max_days": 7.0,
+    "low_mdd_floor_pct": -10.0,
+    "mid_exp_floor_pct": 2.0,
+    "mid_mdd_floor_pct": -20.0
+  },
+  "pure_oos_validation_periods": [
+    {
+      "end": "2023-06-30",
+      "label": "train_1",
+      "start": "2022-07-01"
+    },
+    {
+      "end": "2024-06-30",
+      "label": "train_2",
+      "start": "2023-07-01"
+    },
+    {
+      "end": "2026-07-07",
+      "label": "recent_1y",
+      "start": "2025-07-01"
+    }
+  ],
+  "stage": "validate",
+  "ticker": "CE"
+}

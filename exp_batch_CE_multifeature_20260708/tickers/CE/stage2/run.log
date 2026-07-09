@@ -1,0 +1,20 @@
+2026-07-08 23:14:05,721 INFO stage2 start ticker=CE out_dir=/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2 seed_base=2026061505 parallel=False
+2026-07-08 23:14:05,780 INFO training mode=sequential train_splits=3
+2026-07-08 23:14:05,780 INFO train start label=train_1
+2026-07-08 23:19:30,791 INFO train done label=train_1 pid=152485 generations=25 early_stop=True rows=100 elapsed=325.0s
+2026-07-08 23:19:30,792 INFO train start label=train_2
+2026-07-08 23:28:48,504 INFO train done label=train_2 pid=152485 generations=44 early_stop=True rows=100 elapsed=557.7s
+2026-07-08 23:28:48,504 INFO train start label=train_3
+2026-07-08 23:36:28,222 INFO train done label=train_3 pid=152485 generations=30 early_stop=True rows=100 elapsed=459.7s
+2026-07-08 23:36:28,268 INFO eval start period=stress_pre_2022h1 reached=300
+2026-07-08 23:37:31,952 INFO eval done period=stress_pre_2022h1 pass=3
+2026-07-08 23:37:31,953 INFO eval start period=train_3_eval reached=3
+2026-07-08 23:37:32,613 INFO eval done period=train_3_eval pass=1
+2026-07-08 23:37:32,614 INFO eval start period=train_2_eval reached=1
+2026-07-08 23:37:32,814 INFO eval done period=train_2_eval pass=1
+2026-07-08 23:37:32,814 INFO eval start period=train_1_eval reached=1
+2026-07-08 23:37:33,007 INFO eval done period=train_1_eval pass=1
+2026-07-08 23:37:33,007 INFO eval start period=oos_2025h2 reached=1
+2026-07-08 23:37:33,224 INFO eval done period=oos_2025h2 pass=0
+2026-07-08 23:37:34,615 INFO stage2 rl_replay_trades written path=/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/rl_replay_trades.jsonl rows=5695 missing_field_counts={'entry_rulebook_hash': 5695, 'exit_rank': 5695, 'final_rulebook_hash': 5695} critical_null_counts={}
+2026-07-08 23:37:34,617 INFO stage2 done ticker=CE survivors=0 elapsed=1408.9s

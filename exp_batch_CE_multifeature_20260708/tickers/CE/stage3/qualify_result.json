@@ -1,0 +1,141 @@
+{
+  "all3_pass_count": 5,
+  "all3_pass_hash_samples": [
+    "4a287211519b63cefdf014580590e95fee598bcc584f12ca1adbbdb2eb934a81",
+    "4c47be71deef41eb81fdf8ca7f7e6716716901e4a9faf550509974a9ad982a7b",
+    "8efeaf3728fa573072907b6f6e9aebccea01946a413b3224d3d48148dcbed92f",
+    "d3221ec0238ae3a84fbf4fc4bd1d8066e202a7cda6d07dd366b04490dfe74881",
+    "de417fc838ec81695bfff9dd895a131df824f9ceab950b3932c08e252b51d46d"
+  ],
+  "config": {
+    "min_member_score": 10.0,
+    "min_trades": 5,
+    "qualify_min_expectancy_pct": 2.0,
+    "qualify_years": 3
+  },
+  "data_end": "2026-07-07",
+  "data_start": "2020-06-09",
+  "early_stop_reason": null,
+  "early_stopped": false,
+  "elapsed_seconds": 2279.2150740623474,
+  "fail_reason_metric_counts": {
+    "expectancy_pct": 556,
+    "member_score": 78,
+    "qualify_pass_count": 295,
+    "trade_count": 45
+  },
+  "fitness_cache": {
+    "enabled": false,
+    "hit_rate": 0.0,
+    "hits": 0,
+    "misses": 0,
+    "unique_keys": 0
+  },
+  "ga_summaries": [
+    {
+      "best_fitness": 127.14526521242898,
+      "best_hash": "cc3684f5d0836f4bdd37912518ead4ce6be18f3f0e14c27fd55aa4681c0fd64b",
+      "fitness_cache": {
+        "enabled": false,
+        "hit_rate": 0.0,
+        "hits": 0,
+        "misses": 0,
+        "unique_keys": 0
+      },
+      "generations_run": 40,
+      "seed": 2026061506,
+      "split": {
+        "end": "2023-06-30",
+        "label": "train_1",
+        "start": "2022-07-01"
+      },
+      "top_count": 100
+    },
+    {
+      "best_fitness": 109.90147386076647,
+      "best_hash": "5c4ac550f611a65b421dc1bbd5727d1aaf511b35c6c04acba712a0e064b578d7",
+      "fitness_cache": {
+        "enabled": false,
+        "hit_rate": 0.0,
+        "hits": 0,
+        "misses": 0,
+        "unique_keys": 0
+      },
+      "generations_run": 40,
+      "seed": 2026061507,
+      "split": {
+        "end": "2024-06-30",
+        "label": "train_2",
+        "start": "2023-07-01"
+      },
+      "top_count": 100
+    },
+    {
+      "best_fitness": 129.36003080681442,
+      "best_hash": "08b2f25d52de7b641db231bfca341f684f49c2d1adde32dae9df69411ce9bb85",
+      "fitness_cache": {
+        "enabled": false,
+        "hit_rate": 0.0,
+        "hits": 0,
+        "misses": 0,
+        "unique_keys": 0
+      },
+      "generations_run": 40,
+      "seed": 2026061508,
+      "split": {
+        "end": "2025-06-30",
+        "label": "train_3",
+        "start": "2024-07-01"
+      },
+      "top_count": 100
+    }
+  ],
+  "member_score_stats": {
+    "train_1": {
+      "count": 300,
+      "max": 98.61204,
+      "mean": 50.00000000333331,
+      "min": 0.234114
+    },
+    "train_2": {
+      "count": 300,
+      "max": 96.170569,
+      "mean": 49.99999998666673,
+      "min": 1.003344
+    },
+    "train_3": {
+      "count": 300,
+      "max": 95.9699,
+      "mean": 49.999999979999984,
+      "min": 0.735786
+    }
+  },
+  "note": "qualification rulebooks are intentionally discarded; only summary counts are persisted",
+  "periods": [
+    {
+      "end": "2023-06-30",
+      "label": "train_1",
+      "start": "2022-07-01"
+    },
+    {
+      "end": "2024-06-30",
+      "label": "train_2",
+      "start": "2023-07-01"
+    },
+    {
+      "end": "2025-06-30",
+      "label": "train_3",
+      "start": "2024-07-01"
+    }
+  ],
+  "qualified": true,
+  "seed_base": 2026061505,
+  "stage": "qualify",
+  "ticker": "CE",
+  "unique_candidate_count": 300,
+  "year_pass_counts": {
+    "train_1": 67,
+    "train_2": 109,
+    "train_3": 156
+  }
+}

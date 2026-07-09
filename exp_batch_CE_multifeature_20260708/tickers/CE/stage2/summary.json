@@ -1,0 +1,77 @@
+{
+  "actual_eval_ratio": 0.204,
+  "actual_period_evaluations": 306,
+  "elapsed_sec": 1408.8986639976501,
+  "fail_counts_by_first_failed_period": {
+    "oos_2025h2": 1,
+    "stress_pre_2022h1": 297,
+    "train_3_eval": 2
+  },
+  "fitness_cache": {
+    "enabled": false,
+    "hit_rate": 0.0,
+    "hits": 0,
+    "misses": 0,
+    "unique_keys": 0
+  },
+  "fitness_cache_by_train": {
+    "train_1": {
+      "enabled": false,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 0,
+      "unique_keys": 0
+    },
+    "train_2": {
+      "enabled": false,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 0,
+      "unique_keys": 0
+    },
+    "train_3": {
+      "enabled": false,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 0,
+      "unique_keys": 0
+    }
+  },
+  "ga_average_generations_run": 33.0,
+  "ga_early_stop_triggered_by_train": {
+    "train_1": true,
+    "train_2": true,
+    "train_3": true
+  },
+  "ga_early_stop_triggered_count": 3,
+  "ga_generations_run_by_train": {
+    "train_1": 25,
+    "train_2": 44,
+    "train_3": 30
+  },
+  "generated_rulebook_rows": 300,
+  "max_period_evaluations": 1500,
+  "outputs": {
+    "config": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/config.json",
+    "early_cut_log": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/early_cut_log.csv",
+    "ga_history": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/ga_history.csv",
+    "period_metrics_all": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/period_metrics_all.csv",
+    "rulebooks_all": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/rulebooks_all.jsonl",
+    "run_log": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/run.log",
+    "summary": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/summary.json",
+    "survivors": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/survivors.jsonl",
+    "trades": "/home/g3000kkw/kingmaker/exp_batch_CE_multifeature_20260708/tickers/CE/stage2/trades.jsonl"
+  },
+  "parallel": {
+    "enabled": false,
+    "live_runner_reserved_cores": 1,
+    "note": "Parallel mode runs independent train splits in separate processes; GA engine has no internal worker parameter.",
+    "system_cpu": 8,
+    "train_splits_parallel": 1
+  },
+  "period_eval_saved_ratio": 0.796,
+  "survivor_count": 0,
+  "survivor_hashes": [],
+  "ticker": "CE",
+  "unique_rulebook_hashes": 300
+}

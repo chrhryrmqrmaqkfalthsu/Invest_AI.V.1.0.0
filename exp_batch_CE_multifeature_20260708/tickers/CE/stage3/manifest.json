@@ -1,0 +1,85 @@
+{
+  "description": "Stage 3 aggressive pipeline output; validate creates a profile catalog for eligible candidates instead of hard-killing by holding/MDD labels.",
+  "entry_selection_config": {
+    "entry_min_expectancy_pct": 2.0,
+    "entry_overlap_threshold": 0.7,
+    "max_entry_candidates": 20
+  },
+  "last_requested_stage": "all",
+  "periods": {
+    "bull_period": {
+      "end": "2025-06-30",
+      "label": "train_3",
+      "start": "2024-07-01"
+    },
+    "exit_check_period": {
+      "end": "2022-06-30",
+      "label": "stress_pre_2022h1",
+      "role": "exit_check",
+      "start": null
+    },
+    "pure_oos_validation_periods": [
+      {
+        "end": "2023-06-30",
+        "label": "train_1",
+        "start": "2022-07-01"
+      },
+      {
+        "end": "2024-06-30",
+        "label": "train_2",
+        "start": "2023-07-01"
+      },
+      {
+        "end": null,
+        "label": "recent_1y",
+        "start": "2025-07-01"
+      }
+    ],
+    "stress_period": {
+      "end": "2022-06-30",
+      "label": "stress_pre_2022h1",
+      "start": null
+    },
+    "train_splits": [
+      {
+        "end": "2023-06-30",
+        "label": "train_1",
+        "start": "2022-07-01"
+      },
+      {
+        "end": "2024-06-30",
+        "label": "train_2",
+        "start": "2023-07-01"
+      },
+      {
+        "end": "2025-06-30",
+        "label": "train_3",
+        "start": "2024-07-01"
+      }
+    ]
+  },
+  "runner": "scripts/research/run_stage3_aggressive.py",
+  "seed_base": 2026061505,
+  "stage3_final_oos_periods": [
+    "train_1",
+    "train_2",
+    "recent_1y"
+  ],
+  "stage3_profile_config": {
+    "eligibility_min_expectancy_pct": 1.0,
+    "high_exp_floor_pct": 4.0,
+    "holding_mid_max_days": 14.0,
+    "holding_ultra_short_max_days": 7.0,
+    "low_mdd_floor_pct": -10.0,
+    "mid_exp_floor_pct": 2.0,
+    "mid_mdd_floor_pct": -20.0
+  },
+  "stage3_qualify_config": {
+    "min_member_score": 10.0,
+    "min_trades": 5,
+    "qualify_min_expectancy_pct": 2.0,
+    "qualify_years": 3
+  },
+  "ticker": "CE",
+  "updated_at": "2026-07-08T23:37:34"
+}

@@ -1,0 +1,31 @@
+diff --git a/scripts/export_real_dashboard_buy_candidates.py b/scripts/export_real_dashboard_buy_candidates.py
+new file mode 100755
+index 0000000..ac30c6f
+--- /dev/null
++++ b/scripts/export_real_dashboard_buy_candidates.py
+@@ implementation summary @@
++ 신규 스크립트 scripts/export_real_dashboard_buy_candidates.py 추가.
++ 기본 실행은 temp 생성 + 검증만 수행하며 canonical data/_system/real_dashboard_buy_candidates.json은 교체하지 않는다.
++ --write 플래그를 명시한 경우에만 temp 검증 통과 후 os.replace로 정규 파일을 원자 교체한다.
++ live_slots_state compact row를 정규 후보로 직접 복사하지 않는다.
++ live slot candidate_id를 build_elite_shadow_report(stage2_limit=60, stage3_limit=80, include_trades=False) 결과와 매칭한다.
++ final_rulebooks.jsonl/survivors source에서 full rulebook을 _load_rulebook_for_candidate()로 재조회한다.
++ full rulebook은 len>=50 및 signal_threshold/rsi_low/rsi_high/event_response_war/vix_sensitivity/stop_loss_atr/take_profit_atr/trailing_atr/max_holding_days 핵심 필드를 검증한다.
++ evaluate_candidate(full_candidate, ctx=get_market_context())로 should_buy를 재검증한다.
++ should_buy=True, full rulebook 검증 통과 후보만 candidate_source=real_dashboard_buy_candidates_export, real_candidate_fallback=False로 export한다.
++ selected_rulebook과 rulebook에는 full rulebook dict를 동일하게 저장한다.
++ temp JSON write → read-back → schema/full rulebook/SAFETY compatibility 검증을 통과해야 성공한다.
++ 기존 운영 코드(engine/live/real_dashboard_api.py, SAFETY guard, live_candidate_slots, 청산 로직)는 수정하지 않았다.
++
++ git diff --stat:
++ scripts/export_real_dashboard_buy_candidates.py | 632 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++ 1 file changed, 632 insertions(+)
++
++ 주요 검증 결과:
++ PY_COMPILE_OK
++ dry-run RC=0
++ exported_count=8
++ skipped_count=0
++ validation_ok=True
++ canonical_output_replaced=False
++ regular-path FakeBroker test: EXPORT_SCHEMA_AND_REGULAR_PATH_TEST_OK

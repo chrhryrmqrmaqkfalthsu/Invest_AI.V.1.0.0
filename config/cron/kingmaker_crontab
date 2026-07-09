@@ -3,3 +3,7 @@
 * * * * * /usr/bin/flock -n /tmp/kingmaker_dashboard_guard.lock /home/g3000kkw/kingmaker/scripts/dashboard_guard.sh
 @reboot /usr/bin/flock -n /tmp/kingmaker_dashboard_guard.lock /home/g3000kkw/kingmaker/scripts/dashboard_guard.sh
 # KINGMAKER_DASHBOARD_GUARD_END
+# KINGMAKER_LIVE_CANDIDATE_SLOTS_GUARD_BEGIN
+* * * * * /usr/bin/flock -n /tmp/kingmaker_live_candidate_slots_guard.lock /home/g3000kkw/kingmaker/scripts/live_candidate_slots_guard.sh
+@reboot /usr/bin/flock -n /tmp/kingmaker_live_candidate_slots_guard.lock /home/g3000kkw/kingmaker/scripts/live_candidate_slots_guard.sh
+# KINGMAKER_LIVE_CANDIDATE_SLOTS_GUARD_END

@@ -1,0 +1,29 @@
+{
+  "absolute_pass_count": 95,
+  "best_fitness": 111.48464259078244,
+  "best_hash": "3c506e160238df562432410ae785469dbca0cbc70742f3a6a88dbda939260c18",
+  "elapsed_seconds": 485.6833744049072,
+  "fitness_cache": {
+    "enabled": false,
+    "hit_rate": 0.0,
+    "hits": 0,
+    "misses": 0,
+    "unique_keys": 0
+  },
+  "overlap_rejected_count": 71,
+  "pool_count": 100,
+  "seed": 2026061605,
+  "selected_count": 20,
+  "selection_config": {
+    "entry_min_expectancy_pct": 2.0,
+    "entry_overlap_threshold": 0.7,
+    "max_entry_candidates": 20
+  },
+  "stage": "entry",
+  "ticker": "CE",
+  "train_period": {
+    "end": "2025-06-30",
+    "label": "train_3",
+    "start": "2024-07-01"
+  }
+}

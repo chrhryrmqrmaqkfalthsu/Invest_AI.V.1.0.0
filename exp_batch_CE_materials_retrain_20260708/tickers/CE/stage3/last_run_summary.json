@@ -1,0 +1,254 @@
+{
+  "out_dir": "/home/g3000kkw/kingmaker/exp_batch_CE_materials_retrain_20260708/tickers/CE/stage3",
+  "stage": "all",
+  "summaries": [
+    {
+      "all3_pass_count": 3,
+      "all3_pass_hash_samples": [
+        "689dcd3270d1d72c7e1e8188a09c2a926f8a07210b955692c8a91ef6c19e1991",
+        "7896fe39270d7c65b23dc81ba4eae75fb2203b0d2318855b4a64aa994604138d",
+        "a6205e10f5b5c46af4a9c40af76ce527f0be50fbd3ec05514ac6f050a8abb18e"
+      ],
+      "config": {
+        "min_member_score": 10.0,
+        "min_trades": 5,
+        "qualify_min_expectancy_pct": 2.0,
+        "qualify_years": 3
+      },
+      "data_end": "2026-07-07",
+      "data_start": "2020-06-09",
+      "early_stop_reason": null,
+      "early_stopped": false,
+      "elapsed_seconds": 1206.2707560062408,
+      "fail_reason_metric_counts": {
+        "expectancy_pct": 554,
+        "member_score": 85,
+        "qualify_pass_count": 297,
+        "trade_count": 3
+      },
+      "fitness_cache": {
+        "enabled": false,
+        "hit_rate": 0.0,
+        "hits": 0,
+        "misses": 0,
+        "unique_keys": 0
+      },
+      "ga_summaries": [
+        {
+          "best_fitness": 149.9466221380105,
+          "best_hash": "57958b8a32bbbf36a6e458f153d7c900893c567c618e5faf4ff022d6e3e16258",
+          "fitness_cache": {
+            "enabled": false,
+            "hit_rate": 0.0,
+            "hits": 0,
+            "misses": 0,
+            "unique_keys": 0
+          },
+          "generations_run": 40,
+          "seed": 2026061506,
+          "split": {
+            "end": "2023-06-30",
+            "label": "train_1",
+            "start": "2022-07-01"
+          },
+          "top_count": 100
+        },
+        {
+          "best_fitness": 109.24140839254902,
+          "best_hash": "2921f1d4590a34dd53a7c54e15bcb803eb187a210b1543a3e6252a4235b5fec7",
+          "fitness_cache": {
+            "enabled": false,
+            "hit_rate": 0.0,
+            "hits": 0,
+            "misses": 0,
+            "unique_keys": 0
+          },
+          "generations_run": 40,
+          "seed": 2026061507,
+          "split": {
+            "end": "2024-06-30",
+            "label": "train_2",
+            "start": "2023-07-01"
+          },
+          "top_count": 100
+        },
+        {
+          "best_fitness": 111.27006141401107,
+          "best_hash": "97563a2f45aa8883e84ec2136c6b9461943dedead8381b9b56a4c68f1c1a6e40",
+          "fitness_cache": {
+            "enabled": false,
+            "hit_rate": 0.0,
+            "hits": 0,
+            "misses": 0,
+            "unique_keys": 0
+          },
+          "generations_run": 40,
+          "seed": 2026061508,
+          "split": {
+            "end": "2025-06-30",
+            "label": "train_3",
+            "start": "2024-07-01"
+          },
+          "top_count": 100
+        }
+      ],
+      "member_score_stats": {
+        "train_1": {
+          "count": 300,
+          "max": 96.488294,
+          "mean": 50.000000003333355,
+          "min": 0.735786
+        },
+        "train_2": {
+          "count": 300,
+          "max": 97.424749,
+          "mean": 50.000000006666674,
+          "min": 0.234114
+        },
+        "train_3": {
+          "count": 300,
+          "max": 92.876254,
+          "mean": 50.000000089999986,
+          "min": 0.367893
+        }
+      },
+      "note": "qualification rulebooks are intentionally discarded; only summary counts are persisted",
+      "periods": [
+        {
+          "end": "2023-06-30",
+          "label": "train_1",
+          "start": "2022-07-01"
+        },
+        {
+          "end": "2024-06-30",
+          "label": "train_2",
+          "start": "2023-07-01"
+        },
+        {
+          "end": "2025-06-30",
+          "label": "train_3",
+          "start": "2024-07-01"
+        }
+      ],
+      "qualified": true,
+      "seed_base": 2026061505,
+      "stage": "qualify",
+      "ticker": "CE",
+      "unique_candidate_count": 300,
+      "year_pass_counts": {
+        "train_1": 102,
+        "train_2": 94,
+        "train_3": 148
+      }
+    },
+    {
+      "absolute_pass_count": 95,
+      "best_fitness": 111.48464259078244,
+      "best_hash": "3c506e160238df562432410ae785469dbca0cbc70742f3a6a88dbda939260c18",
+      "elapsed_seconds": 485.6833744049072,
+      "fitness_cache": {
+        "enabled": false,
+        "hit_rate": 0.0,
+        "hits": 0,
+        "misses": 0,
+        "unique_keys": 0
+      },
+      "overlap_rejected_count": 71,
+      "pool_count": 100,
+      "seed": 2026061605,
+      "selected_count": 20,
+      "selection_config": {
+        "entry_min_expectancy_pct": 2.0,
+        "entry_overlap_threshold": 0.7,
+        "max_entry_candidates": 20
+      },
+      "stage": "entry",
+      "ticker": "CE",
+      "train_period": {
+        "end": "2025-06-30",
+        "label": "train_3",
+        "start": "2024-07-01"
+      }
+    },
+    {
+      "best_composite_fitness": 8.140232576156858,
+      "best_hash": "e524fb7e4f8ccf210f2170b4bc47f6d0dd6dfcd79c678690cbc1cf38ee2a338e",
+      "elapsed_seconds": 6406.601280927658,
+      "entry_count": 20,
+      "final_rulebook_count": 60,
+      "stage": "exit",
+      "ticker": "CE",
+      "weights": {
+        "bull_floor": 1.0,
+        "deep_stop_threshold_pct": 10.0,
+        "holding_soft_cap": 7.0,
+        "w_bull_floor_penalty": 3.0,
+        "w_deep_stop": 0.0,
+        "w_downside": 2.0,
+        "w_holding": 0.1,
+        "w_stress_mdd": 0.2,
+        "w_timeout_loss": 0.0
+      }
+    },
+    {
+      "candidate_count": 60,
+      "elapsed_seconds": 30.466148853302002,
+      "eligible_count": 0,
+      "exit_check_period": {
+        "end": "2022-06-30",
+        "label": "stress_pre_2022h1",
+        "role": "exit_check",
+        "start": null
+      },
+      "ineligible_count": 60,
+      "ineligible_reason_counts": {
+        "recent_1y|expectancy_pct": 51,
+        "train_1|expectancy_pct": 47,
+        "train_2|expectancy_pct": 44
+      },
+      "label_distribution": {
+        "composite_tag": {},
+        "holding_class": {},
+        "return_class": {},
+        "risk_class": {}
+      },
+      "mode": "basic_eligibility_plus_profile_catalog",
+      "note": "Stage 4 checks only minimum pure-OOS expectancy eligibility. MDD and holding days are profile labels for later investment-style selection.",
+      "outputs": {
+        "all_validation_rows": "validation_results.jsonl",
+        "ineligible_rows": "stage3_ineligible.jsonl",
+        "legacy_validated_survivors": "not_created; existing stale file is preserved as validated_survivors.jsonl.deprecated",
+        "profile_catalog": "stage3_profile_catalog.jsonl"
+      },
+      "profile_config": {
+        "eligibility_min_expectancy_pct": 1.0,
+        "high_exp_floor_pct": 4.0,
+        "holding_mid_max_days": 14.0,
+        "holding_ultra_short_max_days": 7.0,
+        "low_mdd_floor_pct": -10.0,
+        "mid_exp_floor_pct": 2.0,
+        "mid_mdd_floor_pct": -20.0
+      },
+      "pure_oos_validation_periods": [
+        {
+          "end": "2023-06-30",
+          "label": "train_1",
+          "start": "2022-07-01"
+        },
+        {
+          "end": "2024-06-30",
+          "label": "train_2",
+          "start": "2023-07-01"
+        },
+        {
+          "end": "2026-07-07",
+          "label": "recent_1y",
+          "start": "2025-07-01"
+        }
+      ],
+      "stage": "validate",
+      "ticker": "CE"
+    }
+  ],
+  "ticker": "CE"
+}

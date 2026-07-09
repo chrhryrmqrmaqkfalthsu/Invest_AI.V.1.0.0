@@ -6,6 +6,8 @@ LOG="$BASE/logs/dashboard_guard.log"
 ROUTE_SCRIPT="$BASE/scripts/ensure_caddy_dashboard_route.py"
 PY="$BASE/venv/bin/python"
 UVICORN="$BASE/venv/bin/uvicorn"
+DIRECT_ORDER_ENV="KINGMAKER_REAL_DASHBOARD_ALLOW_DIRECT_ORDERS"
+DIRECT_ORDER_VALUE="1"
 
 mkdir -p "$BASE/logs"
 cd "$BASE" || exit 1
@@ -20,10 +22,10 @@ health_ok() {
 }
 
 start_dashboard() {
-  log "dashboard health failed; restarting api_server_candidate_only on 8001"
+  log "dashboard health failed; restarting api_server_candidate_only on 8001 with ${DIRECT_ORDER_ENV}=${DIRECT_ORDER_VALUE}"
   pkill -f 'uvicorn api_server_candidate_only:app --host 0.0.0.0 --port 8001' 2>/dev/null || true
   sleep 2
-  PYTHONPATH="$BASE" nohup "$UVICORN" api_server_candidate_only:app --host 0.0.0.0 --port 8001 \
+  env "PYTHONPATH=$BASE" "${DIRECT_ORDER_ENV}=${DIRECT_ORDER_VALUE}" nohup "$UVICORN" api_server_candidate_only:app --host 0.0.0.0 --port 8001 \
     >> "$BASE/logs/api_server_candidate_only_8001_guard.log" \
     2>> "$BASE/logs/api_server_candidate_only_8001_guard.err.log" &
   sleep 5

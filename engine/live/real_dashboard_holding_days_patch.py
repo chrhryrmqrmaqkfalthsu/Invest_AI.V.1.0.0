@@ -5,6 +5,7 @@ string.  This small patch keeps the large module untouched and adds/fixes:
 
 - holding-day fields in candidate/holding detail panes,
 - live-slot candidate fallback for real buy submission,
+- direct real-buy reconciliation wiring for full-rulebook regular candidates,
 - order-ticket amount selection so the clicked ticket's input is used,
 - front-end success handling after a submitted real buy,
 - faster real-dashboard 1m candle refresh cadence.
@@ -21,6 +22,7 @@ _ORIG_SLOT_TO_DASHBOARD = None
 _ORIG_ENRICH_POSITION = None
 _ORIG_SLOT_OVERLAY_JS = None
 _ORIG_CANDIDATE_FOR_REAL = None
+_ORIG_CREATE_REAL_BUY_INTENT = None
 
 _HOLDING_DAY_KEYS = (
     "holding_days",
@@ -169,6 +171,336 @@ def _patch_candidate_lookup_for_real_buy() -> None:
         return out
 
     real_api._candidate_for_real = patched_candidate_for_real
+
+
+def _order_status_value(order: Any) -> str:
+    value = getattr(order, "status", "")
+    value = getattr(value, "value", value)
+    return str(value or "").strip().lower()
+
+
+def _is_fallback_candidate(candidate: dict[str, Any]) -> bool:
+    return bool(candidate.get("real_candidate_fallback")) or str(candidate.get("candidate_source") or "") == "live_slots_state_fallback"
+
+
+def _entry_market_context_from_candidate(candidate: dict[str, Any], selected_rulebook: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "market_score": real_api._safe_float(candidate.get("market_score"), None),
+        "vix_level": real_api._safe_float(candidate.get("vix_level"), None),
+        "sector_score": real_api._safe_float(candidate.get("sector_score"), None),
+        "sector_name": str(selected_rulebook.get("sector_name") or candidate.get("sector_name") or ""),
+        "source": "dashboard_real_candidate_snapshot",
+        "candidate_id": str(candidate.get("candidate_id") or ""),
+        "rulebook_hash": str(candidate.get("selected_rulebook_hash") or candidate.get("rulebook_hash") or ""),
+    }
+
+
+def _full_rulebook_dict(candidate: dict[str, Any]) -> dict[str, Any] | None:
+    selected = candidate.get("selected_rulebook")
+    if not isinstance(selected, dict) or not selected:
+        return None
+    return dict(selected)
+
+
+def _selected_rulebook_hash(candidate: dict[str, Any], selected_rulebook: dict[str, Any]) -> str:
+    value = str(candidate.get("selected_rulebook_hash") or candidate.get("rulebook_hash") or "").strip()
+    if value:
+        return value
+    try:
+        from engine.core.metadata import compute_member_hash
+
+        return compute_member_hash(dict(selected_rulebook))
+    except Exception:
+        return ""
+
+
+def _real_buy_preflight_metadata(candidate: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
+    selected_rulebook = _full_rulebook_dict(candidate)
+    if selected_rulebook is None:
+        return None, "REJECTED: regular candidate has no valid selected_rulebook — order blocked for exit safety"
+    atr = real_api._safe_float(candidate.get("preflight_atr") or candidate.get("atr"), 0.0) or 0.0
+    if atr <= 0.0:
+        return None, "REJECTED: regular candidate has no valid ATR — order blocked for exit safety"
+    try:
+        from engine.strategies.rulebook import Rulebook
+
+        Rulebook.from_dict(dict(selected_rulebook))
+    except Exception as exc:
+        return None, f"REJECTED: regular candidate selected_rulebook cannot be restored — order blocked for exit safety: {type(exc).__name__}: {exc}"
+    selected_hash = _selected_rulebook_hash(candidate, selected_rulebook)
+    metadata = {
+        "selected_rulebook": dict(selected_rulebook),
+        "selected_rulebook_hash": selected_hash,
+        "rulebook": dict(selected_rulebook),
+        "preflight_atr": float(atr),
+        "atr": float(atr),
+        "entry_market_context": _entry_market_context_from_candidate(candidate, selected_rulebook),
+        "candidate_id": str(candidate.get("candidate_id") or ""),
+        "ticker": str(candidate.get("ticker") or "").upper().strip(),
+        "candidate_source": str(candidate.get("candidate_source") or ""),
+        "real_candidate_fallback": bool(candidate.get("real_candidate_fallback")),
+        "source_file": str(candidate.get("source_file") or ""),
+        "rulebook_hash": str(candidate.get("rulebook_hash") or selected_hash),
+        "reason": "dashboard_real_direct_entry",
+    }
+    return metadata, ""
+
+
+def _reject_real_buy_intent(
+    *,
+    row: dict[str, Any],
+    intents: dict[str, Any],
+    data: dict[str, Any],
+    intent_id: str,
+    candidate_id: str,
+    ticker: str,
+    candidate: dict[str, Any],
+    reason: str,
+    execution_mode: str,
+) -> dict[str, Any]:
+    row.update(
+        {
+            "status": "rejected",
+            "rejected_at": real_api.utc_now_iso(),
+            "rejection_reason": reason,
+            "execution_mode": execution_mode,
+            "order_blocked": True,
+            "broker_order": None,
+            "position_registered": False,
+            "pending_order_tracked": False,
+            "reconciliation_status": "blocked_before_order",
+        }
+    )
+    real_api._append_live_slot_event(
+        {
+            "event": "DASHBOARD_REAL_BUY_REJECTED",
+            "time": row.get("rejected_at"),
+            "candidate_id": candidate_id,
+            "ticker": ticker,
+            "source": row.get("source"),
+            "execution_mode": row.get("execution_mode"),
+            "status": row.get("status"),
+            "reason": reason,
+            "candidate_source": candidate.get("candidate_source"),
+            "real_candidate_fallback": bool(candidate.get("real_candidate_fallback")),
+        }
+    )
+    intents[intent_id] = row
+    real_api._write_intent_state(real_api.REAL_BUY_INTENT_PATH, data)
+    return row
+
+
+def _position_snapshot_for_row(position: Any) -> dict[str, Any]:
+    if position is None:
+        return {}
+    return {
+        "position_ticker": getattr(position, "ticker", ""),
+        "position_entry_price": getattr(position, "entry_price", None),
+        "position_shares": getattr(position, "shares", None),
+        "position_member_hash": getattr(position, "member_hash", ""),
+        "position_stop_price": getattr(position, "stop_price", None),
+        "position_target_price": getattr(position, "target_price", None),
+        "position_trailing_stop": getattr(position, "trailing_stop", None),
+        "position_trailing_distance": getattr(position, "trailing_distance", None),
+        "position_max_holding_days": getattr(position, "max_holding_days", None),
+        "position_exit_strategy": getattr(position, "exit_strategy", ""),
+        "position_rulebook_snapshot_len": len(getattr(position, "rulebook_snapshot", {}) or {}),
+    }
+
+
+def _wire_real_buy_reconciliation(
+    *,
+    broker: Any,
+    order: Any,
+    candidate: dict[str, Any],
+    metadata: dict[str, Any],
+    row: dict[str, Any],
+) -> dict[str, Any]:
+    status = _order_status_value(order)
+    if status == "filled":
+        from engine.live.buy_reconciliation import BuyPreflight, BuyReconciliationService
+        from engine.live.position_manager import PositionManager
+        from engine.strategies.rulebook import Rulebook
+
+        position_manager = PositionManager()
+        ticker = str(candidate.get("ticker") or getattr(order, "ticker", "") or "").upper().strip()
+        existing = position_manager.get(ticker) if hasattr(position_manager, "get") else None
+        rulebook = Rulebook.from_dict(dict(metadata["selected_rulebook"]))
+        preflight = BuyPreflight(
+            atr=float(metadata["preflight_atr"]),
+            rulebook=rulebook,
+            entry_market_context=dict(metadata.get("entry_market_context") or {}),
+        )
+        service = BuyReconciliationService(
+            broker=broker,
+            rulebook_provider=None,
+            position_manager=position_manager,
+            pending_manager=None,
+        )
+        position = service.reconcile(order, purpose="entry", preflight=preflight)
+        existing_returned = existing is not None and position is existing
+        row.update(
+            {
+                "position_registered": bool(position is not None and not existing_returned),
+                "existing_position_returned": bool(existing_returned),
+                "pending_order_tracked": False,
+                "reconciliation_status": "existing_position_returned" if existing_returned else "registered",
+                "reconciliation_at": real_api.utc_now_iso(),
+            }
+        )
+        row.update(_position_snapshot_for_row(position))
+        return row
+
+    if status in {"pending", "partial", "submitted", "accepted", "new", "pending_new"}:
+        from engine.live.pending_order_manager import PendingOrderManager
+
+        pending_manager = PendingOrderManager(broker)
+        record = pending_manager.track_order(order, purpose="entry", metadata=dict(metadata))
+        row.update(
+            {
+                "position_registered": False,
+                "pending_order_tracked": record is not None,
+                "pending_order_tracked_at": real_api.utc_now_iso(),
+                "pending_order_id": getattr(record, "order_id", "") if record is not None else "",
+                "pending_order_client_order_id": getattr(record, "client_order_id", "") if record is not None else "",
+                "pending_order_state": getattr(record, "state", "") if record is not None else "",
+                "reconciliation_deferred": True,
+                "reconciliation_status": "pending_order_tracked" if record is not None else "pending_order_not_tracked",
+            }
+        )
+        return row
+
+    row.update(
+        {
+            "position_registered": False,
+            "pending_order_tracked": False,
+            "reconciliation_status": f"terminal_no_fill:{status or 'unknown'}",
+            "reconciliation_deferred": False,
+        }
+    )
+    return row
+
+
+def _patch_direct_buy_reconciliation_wiring() -> None:
+    """Wire regular full-rulebook dashboard-real buys to entry reconciliation.
+
+    This intentionally leaves the SAFETY fallback guard in front of the broker call.
+    Fallback/compact candidates are rejected before this reconciliation plumbing can
+    run.  Regular candidates must carry selected_rulebook and positive ATR before
+    a live order is allowed, preventing orphan buys without exit metadata.
+    """
+    global _ORIG_CREATE_REAL_BUY_INTENT
+    if _ORIG_CREATE_REAL_BUY_INTENT is not None:
+        return
+    _ORIG_CREATE_REAL_BUY_INTENT = real_api._create_real_buy_intent
+
+    def patched_create_real_buy_intent(req: Any) -> dict[str, Any]:
+        candidate = real_api._candidate_for_real(req.candidate_id)
+        candidate_id = str(req.candidate_id or "").strip()
+        ticker = str(candidate.get("ticker") or "").upper().strip()
+        if not ticker:
+            raise ValueError("real candidate ticker missing")
+        default_notional = real_api._safe_float(candidate.get("notional"), 0.0) or 0.0
+        notional = real_api._positive_float(req.notional if req.notional is not None else default_notional, name="notional")
+        trade_date = str(candidate.get("trade_date") or candidate.get("execution_session") or "")
+        data = real_api._intent_state(real_api.REAL_BUY_INTENT_PATH, default_trade_date=trade_date)
+        intents = data.setdefault("intents", {})
+        now = real_api.utc_now_iso()
+        intent_id = f"real-buy:{candidate_id}"
+        row = dict(intents.get(intent_id) or {})
+        row.update(
+            {
+                "intent_id": intent_id,
+                "candidate_id": candidate_id,
+                "trade_date": trade_date,
+                "status": "pending",
+                "source": req.source or "real_dashboard",
+                "ticker": ticker,
+                "entity_id": candidate.get("entity_id"),
+                "notional": notional,
+                "candidate_notional": default_notional,
+                "price": real_api._safe_float(candidate.get("price"), 0.0) or 0.0,
+                "created_at": row.get("created_at") or now,
+                "updated_at": now,
+                "execution_mode": "real_intent_only",
+                "direct_orders_enabled": real_api._direct_orders_enabled(),
+                "candidate_state_path": str(real_api.REAL_BUY_CANDIDATES_PATH),
+                "candidate_snapshot": candidate,
+                "connection": real_api._public_connection_config(),
+                "note": "real dashboard isolated candidate/intents; no paper/live state touched",
+            }
+        )
+        if real_api._direct_orders_enabled():
+            if _is_fallback_candidate(candidate):
+                return _reject_real_buy_intent(
+                    row=row,
+                    intents=intents,
+                    data=data,
+                    intent_id=intent_id,
+                    candidate_id=candidate_id,
+                    ticker=ticker,
+                    candidate=candidate,
+                    reason="REJECTED: fallback candidate has no verified full rulebook — order blocked for safety",
+                    execution_mode="blocked_fallback_candidate_no_verified_full_rulebook",
+                )
+            metadata, rejection_reason = _real_buy_preflight_metadata(candidate)
+            if metadata is None:
+                return _reject_real_buy_intent(
+                    row=row,
+                    intents=intents,
+                    data=data,
+                    intent_id=intent_id,
+                    candidate_id=candidate_id,
+                    ticker=ticker,
+                    candidate=candidate,
+                    reason=rejection_reason,
+                    execution_mode="blocked_regular_candidate_missing_exit_metadata",
+                )
+            row["entry_preflight_metadata"] = metadata
+            broker = real_api._get_real_broker()
+            if broker is None:
+                raise ValueError(f"real broker unavailable: {real_api._real_broker_error}")
+            price = real_api._safe_float(broker.get_current_price(ticker)) or real_api._safe_float(candidate.get("price"))
+            if price is None or price <= 0.0:
+                raise ValueError(f"current price unavailable for {ticker}")
+            shares = notional / price
+            order = broker.place_buy(ticker, shares, order_type=real_api.OrderType.MARKET, price=0.0, client_order_id=f"km-real-buy-{int(real_api.time.time())}-{ticker}")
+            row.update(
+                {
+                    "status": "submitted",
+                    "submitted_at": real_api.utc_now_iso(),
+                    "shares_requested": shares,
+                    "execution_mode": "direct_alpaca_live_market_order",
+                    "broker_order": real_api._order_dict(order),
+                }
+            )
+            try:
+                _wire_real_buy_reconciliation(broker=broker, order=order, candidate=candidate, metadata=metadata, row=row)
+            except Exception as exc:
+                row.update(
+                    {
+                        "position_registered": False,
+                        "pending_order_tracked": False,
+                        "reconciliation_status": "failed",
+                        "reconciliation_error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+                real_api._append_live_slot_event(
+                    {
+                        "event": "DASHBOARD_REAL_BUY_RECONCILIATION_FAILED",
+                        "time": real_api.utc_now_iso(),
+                        "candidate_id": candidate_id,
+                        "ticker": ticker,
+                        "status": row.get("status"),
+                        "execution_mode": row.get("execution_mode"),
+                        "reason": row.get("reconciliation_error"),
+                    }
+                )
+        intents[intent_id] = row
+        real_api._write_intent_state(real_api.REAL_BUY_INTENT_PATH, data)
+        return row
+
+    real_api._create_real_buy_intent = patched_create_real_buy_intent
 
 
 def _patch_real_position_enrichment() -> None:
@@ -337,6 +669,7 @@ def install_real_dashboard_holding_days_patch() -> None:
     _patch_candle_refresh_policy()
     _patch_candidate_slot_to_dashboard()
     _patch_candidate_lookup_for_real_buy()
+    _patch_direct_buy_reconciliation_wiring()
     _patch_real_position_enrichment()
     _patch_slot_overlay_js()
     _INSTALLED = True

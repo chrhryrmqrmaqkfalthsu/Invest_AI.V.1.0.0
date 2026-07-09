@@ -1,0 +1,36 @@
+diff --git a/engine/live/real_dashboard_holding_days_patch.py b/engine/live/real_dashboard_holding_days_patch.py
+index 556d0c2..a6af987 100644
+--- a/engine/live/real_dashboard_holding_days_patch.py
++++ b/engine/live/real_dashboard_holding_days_patch.py
+@@ summary @@
++ Added runtime patch for direct real-buy reconciliation wiring while leaving engine/live/real_dashboard_api.py unchanged.
++ Added _ORIG_CREATE_REAL_BUY_INTENT guard.
++ Added _patch_direct_buy_reconciliation_wiring() and installed it from install_real_dashboard_holding_days_patch().
++ Added selected_rulebook/ATR preflight validation before broker.place_buy for regular candidates.
++ Preserved fallback SAFETY guard: real_candidate_fallback=True or candidate_source=live_slots_state_fallback returns rejected before broker/place_buy/reconcile/track.
++ Added metadata builder:
++   selected_rulebook, rulebook, selected_rulebook_hash, preflight_atr, atr, entry_market_context, candidate_id, ticker, candidate_source, real_candidate_fallback, source_file, rulebook_hash, reason.
++ Added entry_market_context mapping:
++   market_score, vix_level, sector_score, sector_name, source=dashboard_real_candidate_snapshot, candidate_id, rulebook_hash.
++ Added FILLED path:
++   BuyReconciliationService.reconcile(order, purpose='entry', preflight=BuyPreflight(...))
++   -> PositionManager.register_entry() indirectly.
++ Added PENDING/PARTIAL/SUBMITTED/ACCEPTED/NEW/PENDING_NEW path:
++   PendingOrderManager.track_order(order, purpose='entry', metadata=metadata).
++ Added terminal no-fill path:
++   no register_entry, no track_order, reconciliation_status=terminal_no_fill:<status>.
++ Added intent row fields:
++   entry_preflight_metadata, position_registered, existing_position_returned, pending_order_tracked, pending_order_id, pending_order_state, reconciliation_status, reconciliation_error, position_stop/target/trailing/max_holding_days fields.
++
++git diff --stat:
++ engine/live/real_dashboard_holding_days_patch.py | 333 +++++++++++++++++++++++
++ 1 file changed, 333 insertions(+)
++
++Unchanged by this implementation:
++ engine/live/real_dashboard_api.py
++ scripts/export_real_dashboard_buy_candidates.py
++ data/_system/ops/live_candidate_slots.py
++ SAFETY fallback guard semantics
++ BuyReconciliationService internals
++ PositionManager internals
++ PendingOrderManager internals

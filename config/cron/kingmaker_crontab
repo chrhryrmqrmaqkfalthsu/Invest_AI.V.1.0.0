@@ -1,0 +1,5 @@
+0 10 * * * cd /home/g3000kkw/kingmaker && PYTHONPATH=. /home/g3000kkw/kingmaker/venv/bin/python3 scripts/build_sentiment_history.py >> /tmp/sentiment_cron.log 2>&1
+# KINGMAKER_DASHBOARD_GUARD_BEGIN
+* * * * * /usr/bin/flock -n /tmp/kingmaker_dashboard_guard.lock /home/g3000kkw/kingmaker/scripts/dashboard_guard.sh
+@reboot /usr/bin/flock -n /tmp/kingmaker_dashboard_guard.lock /home/g3000kkw/kingmaker/scripts/dashboard_guard.sh
+# KINGMAKER_DASHBOARD_GUARD_END

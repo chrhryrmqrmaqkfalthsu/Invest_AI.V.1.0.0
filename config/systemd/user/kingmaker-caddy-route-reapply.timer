@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically reapply KINGMAKER dashboard Caddy route split
+
+[Timer]
+OnBootSec=20sec
+OnUnitActiveSec=1min
+AccuracySec=10sec
+Persistent=true
+Unit=kingmaker-caddy-route-reapply.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Reapply KINGMAKER dashboard Caddy runtime route split
+After=network-online.target kingmaker-dashboard.service
+Wants=network-online.target kingmaker-dashboard.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/g3000kkw/kingmaker
+Environment=PYTHONPATH=/home/g3000kkw/kingmaker
+ExecStart=/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/scripts/ensure_caddy_dashboard_route.py
+StandardOutput=append:/home/g3000kkw/kingmaker/logs/caddy_dashboard_route_reapply.log
+StandardError=append:/home/g3000kkw/kingmaker/logs/caddy_dashboard_route_reapply.err.log
+
+[Install]
+WantedBy=default.target

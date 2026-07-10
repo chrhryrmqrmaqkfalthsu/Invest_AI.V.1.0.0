@@ -1,0 +1,24 @@
+{
+  "mode": "delete",
+  "csv_rows": 4,
+  "csv_files": 6,
+  "csv_bytes": 4098465,
+  "deletable_rows": 4,
+  "deletable_files": 6,
+  "deletable_bytes": 4098465,
+  "skipped_rows": 0,
+  "git_tracked_files": 0,
+  "active_code_references": [],
+  "run_live_processes": [],
+  "stage3_mix_on_processes": [],
+  "relevant_processes": [
+    "325259       1    04:44:25 /home/g3000kkw/kingmaker/venv/bin/python3 /home/g3000kkw/kingmaker/venv/bin/uvicorn api_server_candidate_only:app --host 0.0.0.0 --port 8001",
+    "337946       1    02:03:37 /home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60"
+  ],
+  "open_target_files": [],
+  "deleted_rows": 4,
+  "deleted_files": 6,
+  "deleted_bytes": 4098465,
+  "remaining_files": 0,
+  "status": "COMPLETE"
+}

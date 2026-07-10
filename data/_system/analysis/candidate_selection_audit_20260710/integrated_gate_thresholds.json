@@ -81,7 +81,26 @@
     "avg_pnl_lt_0": "BLOCK",
     "win_lt_p10": "MONITOR",
     "boil": "MONITOR",
-    "ce": "MONITOR"
+    "ce": "MONITOR",
+    "threshold_reachability_p99": "BLOCK"
   },
-  "history_validation_table": "data/_system/analysis/candidate_selection_audit_20260710/integrated_gate_history_validation.csv"
+  "history_validation_table": "data/_system/analysis/candidate_selection_audit_20260710/integrated_gate_history_validation.csv",
+  "threshold_reachability_p99": {
+    "policy_version": "integrated-gate-v2-p99-reachability-block",
+    "enforcement": "BLOCK",
+    "active_weight_gt": 0.0,
+    "eligible_forms": [
+      "ONE_SIDED_GE",
+      "ONE_SIDED_LE"
+    ],
+    "ge_near_unreachable": "threshold > p99",
+    "ge_unreachable": "threshold > max",
+    "le_near_unreachable": "threshold < p01 (activation-tail p99 equivalent)",
+    "le_unreachable": "threshold < min",
+    "event_forms": "EXCLUDED",
+    "band_forms": "EXCLUDED_BY_ONE_SIDED_ONLY_SCOPE",
+    "dry_run_fail_count": 3967,
+    "dry_run_pass_count": 13104,
+    "operational_implementation": false
+  }
 }

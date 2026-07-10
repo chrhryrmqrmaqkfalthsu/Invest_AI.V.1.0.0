@@ -5,3 +5,4 @@ history_avg_pnl_negative,BLOCK,BLOCK,economic break-even 0%; current complete po
 history_low_win,BLOCK,MONITOR,Stage3 low-win group holdout PnL 6.32% vs pass 3.43%; blocking not validated
 boil_high_vol_zero_weight,BLOCK,MONITOR,"live93 linkage negative, but full-origin proxy cohort holdout direction conflicts; need exact volatility coverage/OOS validation"
 ce_ratio_top2,BLOCK,MONITOR,9dd8e02 Gate A/B and combination OOS_DEGRADED or neutral
+one_sided_threshold_p99_reachability,BLOCK,BLOCK,"stored one-sided active threshold beyond training activation-tail p99; dry-run FAIL 3,967/17,071; events and RSI band excluded"

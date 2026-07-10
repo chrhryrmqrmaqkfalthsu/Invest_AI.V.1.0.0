@@ -623,3 +623,7 @@ MONITOR:
   - `finalize_integrated_gate_simulation.py`
 
 운영 코드·주문·원본 룰풀·학습 프로세스에는 변경을 가하지 않았다.
+
+## 14. 확정 추가 — 단방향 임계 p99 도달가능성 BLOCK
+
+정책 버전 `integrated-gate-v2-p99-reachability-block`에서 `one_sided_threshold_p99_reachability`를 STATIC BLOCK으로 확정했다. 활성 가중치가 양수인 단방향 `>=` 임계는 학습 p99 초과, 단방향 `<=` 임계는 학습 p01 미만을 같은 activation-tail p99 초과로 판정한다. MA/MACD 이벤트형과 RSI 밴드형은 이 checker에서 제외한다. 운영 구현은 이번 작업 범위에 포함되지 않았으며 상세 dry-run은 `threshold_p99_block_readout.md`를 기준으로 한다.

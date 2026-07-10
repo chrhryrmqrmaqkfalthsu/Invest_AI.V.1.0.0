@@ -88,27 +88,47 @@ def technical_components(rb: Rulebook, df: pd.DataFrame, idx: int) -> dict[str, 
     }
 
 
-def otsu_log_threshold(values: np.ndarray) -> dict[str, float]:
+def otsu_log_threshold(values: np.ndarray) -> float:
     positive = np.asarray(values, dtype=float)
     positive = positive[np.isfinite(positive) & (positive > 0)]
     if positive.size < 2:
-        return {"threshold": math.nan, "log10_threshold": math.nan, "between_variance": math.nan, "n": int(positive.size)}
+        return math.nan
     x = np.sort(np.log10(positive))
     cumulative = np.cumsum(x)
     total = cumulative[-1]
     left_n = np.arange(1, x.size)
     right_n = x.size - left_n
-    left_mean = cumulative[:-1] / left_n
-    right_mean = (total - cumulative[:-1]) / right_n
-    between = left_n * right_n * (left_mean - right_mean) ** 2
+    between = left_n * right_n * (cumulative[:-1] / left_n - (total - cumulative[:-1]) / right_n) ** 2
     between = np.where(x[1:] > x[:-1], between, -np.inf)
     best = int(np.argmax(between))
-    threshold_log = float((x[best] + x[best + 1]) / 2.0)
+    return float(10.0 ** ((x[best] + x[best + 1]) / 2.0))
+
+
+def negligible_cutoff(values: np.ndarray) -> dict[str, float]:
+    positive = np.asarray(values, dtype=float)
+    positive = positive[np.isfinite(positive) & (positive > 0)]
+    if positive.size == 0:
+        return {
+            "threshold": 0.0,
+            "positive_n": 0,
+            "q1": math.nan,
+            "q3": math.nan,
+            "iqr": math.nan,
+            "raw_lower_fence": math.nan,
+            "exploratory_otsu_threshold": math.nan,
+        }
+    q1, q3 = np.quantile(positive, [0.25, 0.75])
+    iqr = q3 - q1
+    raw_lower_fence = float(q1 - 1.5 * iqr)
+    threshold = max(0.0, raw_lower_fence)
     return {
-        "threshold": float(10.0**threshold_log),
-        "log10_threshold": threshold_log,
-        "between_variance": float(between[best]),
-        "n": int(x.size),
+        "threshold": float(threshold),
+        "positive_n": int(positive.size),
+        "q1": float(q1),
+        "q3": float(q3),
+        "iqr": float(iqr),
+        "raw_lower_fence": raw_lower_fence,
+        "exploratory_otsu_threshold": otsu_log_threshold(positive),
     }
 
 
@@ -225,8 +245,8 @@ def main() -> int:
     output_rows: list[dict[str, Any]] = []
     parity_diffs: list[float] = []
     rng = np.random.default_rng(SEED)
-
     grouped = list(trades.groupby("candidate_id", sort=True))
+
     for candidate_no, (candidate_id, group) in enumerate(grouped, start=1):
         candidate = candidate_map[candidate_id]
         ticker = str(candidate["ticker"]).upper()
@@ -273,10 +293,10 @@ def main() -> int:
         is_df[f"final_share_{key}"].to_numpy(float)[is_df[f"final_share_{key}"].to_numpy(float) > 0]
         for key in CORE_COMPONENTS
     ])
-    cutoff_meta = otsu_log_threshold(positive_shares)
+    cutoff_meta = negligible_cutoff(positive_shares)
     cutoff = float(cutoff_meta["threshold"])
     share_columns = [f"final_share_{key}" for key in CORE_COMPONENTS]
-    signal_df["effective_indicator_count"] = (signal_df[share_columns] >= cutoff).sum(axis=1).astype(int)
+    signal_df["effective_indicator_count"] = (signal_df[share_columns] > cutoff).sum(axis=1).astype(int)
 
     performance_rows = []
     for split in ("IS", "OOS"):
@@ -333,7 +353,7 @@ def main() -> int:
         },
         "effective_indicator_definition": {
             "component_share": "max(core_component * logged_market_adjustment, 0) / logged_final_score",
-            "negligible_cutoff_method": "Otsu threshold on log10 positive component shares in IS only",
+            "negligible_cutoff_method": "IS positive-share Tukey lower fence; if fence <= 0, only exact-zero contributions are excluded",
             **cutoff_meta,
         },
         "boundary_selection": {

@@ -1,0 +1,9 @@
+defect_family,scenario,sparse_rule,defect_count,captured_count,missed_count,capture_rate_pct
+BOIL,neutral,N1,444,112,332,25.225225225225223
+BOIL,neutral,N2_OR_LESS,444,437,7,98.42342342342343
+BOIL,market_cap,N1,444,254,190,57.20720720720721
+BOIL,market_cap,N2_OR_LESS,444,440,4,99.09909909909909
+CE,neutral,N1,7,0,7,0.0
+CE,neutral,N2_OR_LESS,7,6,1,85.71428571428571
+CE,market_cap,N1,7,1,6,14.285714285714285
+CE,market_cap,N2_OR_LESS,7,7,0,100.0

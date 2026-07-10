@@ -1,7 +1,8 @@
 {
   "_comment": "Live candidate generation deny-list. Original final_rulebooks/survivors are preserved; entries are filtered only when building elite shadow candidates.",
-  "version": 1,
+  "version": 2,
   "created_at": "2026-07-10T00:00:00+09:00",
+  "updated_at": "2026-07-10T00:00:00+09:00",
   "source": "live93_three_symptom_scan_20260710",
   "match_policy": "candidate_id exact OR ticker/stage constrained rule_hash match. Do not use raw rule_hash-only match across unrelated tickers.",
   "entries": [
@@ -44,6 +45,76 @@
       "rule_hash_short": "9044dc2c67a3",
       "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|HIGH_VOL_VOLUME_WEIGHT_ZERO_TAIL_RISK",
       "reason": "live26 2-symptom hit plus HIGH_VOL volume_surge_ratio=2.5 with weight_volume_surge=0 and tail-risk; block new entries only"
+    },
+    {
+      "active": true,
+      "ticker": "CENX",
+      "stage": "stage3",
+      "candidate_id": "stage3:CENX:53d7b0caa6a3",
+      "rule_hash": "53d7b0caa6a321410f8fdbec061b327aa226b52517f6e1f52e7036e0692d70f2",
+      "rule_hash_short": "53d7b0caa6a3",
+      "reason_label": "THREE_SYMPTOM_MATCH",
+      "reason": "LOW_RATIO_LT_1_25 + TOP2_CONCENTRATION_GE_90 + WEAK_EXIT_HISTORY in live93_three_symptom_scan; batch exclude for new entries only"
+    },
+    {
+      "active": true,
+      "ticker": "CRMD",
+      "stage": "stage3",
+      "candidate_id": "stage3:CRMD:1a48a9a1b768",
+      "rule_hash": "1a48a9a1b768496205b1a73550702d1c1800c43b9f7b1f19b3fc1b0123bb904c",
+      "rule_hash_short": "1a48a9a1b768",
+      "reason_label": "THREE_SYMPTOM_MATCH",
+      "reason": "LOW_RATIO_LT_1_25 + TOP2_CONCENTRATION_GE_90 + WEAK_EXIT_HISTORY in live93_three_symptom_scan; batch exclude for new entries only"
+    },
+    {
+      "active": true,
+      "ticker": "CAR",
+      "stage": "stage3",
+      "candidate_id": "stage3:CAR:ce44ff6acbb5",
+      "rule_hash": "ce44ff6acbb5b04e863cb58225fefd3ae22547aacc513fe3c91df6085c4f2ad6",
+      "rule_hash_short": "ce44ff6acbb5",
+      "reason_label": "THREE_SYMPTOM_MATCH",
+      "reason": "LOW_RATIO_LT_1_25 + TOP2_CONCENTRATION_GE_90 + WEAK_EXIT_HISTORY in live93_three_symptom_scan; batch exclude for new entries only"
+    },
+    {
+      "active": true,
+      "ticker": "AMBA",
+      "stage": "stage3",
+      "candidate_id": "stage3:AMBA:5e057e3cfc2d",
+      "rule_hash": "5e057e3cfc2df98fbb87ebe52f32c9aafde092b1f0cbcfc81836cdbf4520a41e",
+      "rule_hash_short": "5e057e3cfc2d",
+      "reason_label": "THREE_SYMPTOM_MATCH",
+      "reason": "LOW_RATIO_LT_1_25 + TOP2_CONCENTRATION_GE_90 + WEAK_EXIT_HISTORY in live93_three_symptom_scan; batch exclude for new entries only"
+    },
+    {
+      "active": true,
+      "ticker": "APH",
+      "stage": "stage3",
+      "candidate_id": "stage3:APH:c7885deba35c",
+      "rule_hash": "c7885deba35cae43987baff9a497a3ecf1064d3396679bf09cac2b78ee691ff8",
+      "rule_hash_short": "c7885deba35c",
+      "reason_label": "THREE_SYMPTOM_MATCH",
+      "reason": "LOW_RATIO_LT_1_25 + TOP2_CONCENTRATION_GE_90 + WEAK_EXIT_HISTORY in live93_three_symptom_scan; batch exclude for new entries only"
+    },
+    {
+      "active": true,
+      "ticker": "ARKG",
+      "stage": "stage3",
+      "candidate_id": "stage3:ARKG:50b05b8de94f",
+      "rule_hash": "50b05b8de94fb41aa249a5dfba005c5bd54a4c3524896d1729f852013aa4b4ac",
+      "rule_hash_short": "50b05b8de94f",
+      "reason_label": "THREE_SYMPTOM_MATCH",
+      "reason": "LOW_RATIO_LT_1_25 + TOP2_CONCENTRATION_GE_90 + WEAK_EXIT_HISTORY in live93_three_symptom_scan; batch exclude for new entries only"
+    },
+    {
+      "active": true,
+      "ticker": "HCC",
+      "stage": "stage2",
+      "candidate_id": "stage2:HCC:2154d17783f3",
+      "rule_hash": "2154d17783f315e2f23f440d5a501739f59e19f60e6f8227671e689ceed22264",
+      "rule_hash_short": "2154d17783f3",
+      "reason_label": "THREE_SYMPTOM_MATCH",
+      "reason": "LOW_RATIO_LT_1_25 + TOP2_CONCENTRATION_GE_90 + WEAK_EXIT_HISTORY in live93_three_symptom_scan; batch exclude for new entries only"
     }
   ]
 }

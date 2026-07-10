@@ -1,0 +1,15 @@
+{
+  "mode": "delete",
+  "csv_rows": 1082,
+  "csv_files": 3507,
+  "csv_bytes": 1795116467,
+  "deletable_rows": 1082,
+  "deletable_files": 3507,
+  "deletable_bytes": 1795116467,
+  "skipped_rows": 0,
+  "git_tracked_files": 121,
+  "deleted_rows": 1082,
+  "deleted_files": 3507,
+  "deleted_bytes": 1795116467,
+  "status": "COMPLETE"
+}

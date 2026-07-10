@@ -1,0 +1,85 @@
+{
+  "created_at": "2026-07-10T18:20:33.284040+00:00",
+  "verdict": "PARTIAL",
+  "origin_count": 17071,
+  "stage_coverage": {
+    "stage2": {
+      "origin_candidate_n": 1162,
+      "canonical_history_candidate_n": 1162,
+      "historical_full_ce_candidate_n": 1162,
+      "historical_full_ce_entry_n": 71271,
+      "any_full_decomposed_snapshot_candidate_n": 1162
+    },
+    "stage3": {
+      "origin_candidate_n": 15909,
+      "canonical_history_candidate_n": 15909,
+      "historical_full_ce_candidate_n": 0,
+      "historical_full_ce_entry_n": 0,
+      "any_full_decomposed_snapshot_candidate_n": 80
+    }
+  },
+  "source_count": 18,
+  "ce7": {
+    "total": 7,
+    "live93_full_point_snapshot_n": 7,
+    "historical_full_ce_backtestable_n": 0,
+    "dynamic_only_total": 4,
+    "dynamic_only_historical_full_ce_backtestable_n": 0,
+    "dynamic_only_ids": [
+      "stage3:ANET:fe220620802b",
+      "stage3:BB:f1bdfe7f8ad9",
+      "stage3:CDE:ceb9fe0512dc",
+      "stage3:CE:998b0b638c66"
+    ]
+  },
+  "backtestable_scope": {
+    "stage2": "YES: canonical trades contain entry score, threshold, realized components and same-entry outcome",
+    "stage3": "NO: canonical exit_trades contain outcomes but omit entry score/components",
+    "live93": "diagnostic only: one current evaluation per candidate, not repeated entry snapshots",
+    "shadow": "ratio/outcome only: no realized component decomposition, so Top2 cannot be computed"
+  },
+  "threshold_conclusion": "ratio<1.25 and Top2>=90 can be tested on Stage2 historical entries, but cannot be system-wide or CE7/Stage3 validated from existing durable snapshots",
+  "arbitrary_threshold_risk": "HIGH_FOR_STAGE3_AND_CE7",
+  "observation_only_logging_feasibility": {
+    "verdict": "REALISTIC_LOW_COMPLEXITY",
+    "reason": "evaluate_signal already returns score/raw_score/threshold/market_adjustment/components; several callers persist score/threshold but omit components",
+    "minimum_fields": [
+      "timestamp",
+      "candidate_id",
+      "stage",
+      "ticker",
+      "rulebook_hash",
+      "should_buy",
+      "score",
+      "raw_score",
+      "threshold",
+      "market_adjustment",
+      "components",
+      "market_score",
+      "sector_score",
+      "vix_level",
+      "news_sentiment",
+      "event_flags",
+      "decision_id_or_position_id",
+      "later_outcome_join_key"
+    ],
+    "mode": "append-only observation; no blocking",
+    "implementation_performed": false
+  },
+  "no_design_change": true,
+  "operational_implementation": false,
+  "source_rule_mutation": false,
+  "live_change": false,
+  "retraining": false,
+  "order": false,
+  "delete": false,
+  "inventory_addendum": {
+    "elite_shadow_open_state_records": 16,
+    "elite_shadow_open_state_origin_candidates": 16,
+    "live_slots_event_records": 2849,
+    "live_slots_event_candidate_ids": 8,
+    "runtime_evaluator_has_components": true,
+    "runtime_evaluator_persistence_is_caller_dependent": true,
+    "structured_application_log_snapshot_found": false
+  }
+}

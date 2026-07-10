@@ -1,6 +1,6 @@
 {
   "design_status": "DESIGN_ONLY_NOT_IMPLEMENTED",
-  "policy_version_proposal": "integrated-gate-v2-p99-reachability-block",
+  "policy_version_proposal": "integrated-gate-v3-p99-reachability-block-weightless",
   "overall_semantics": {
     "blocking": "any enabled checker FAIL => FAIL",
     "hold": "no FAIL and any HOLD/ERROR => HOLD; not published",
@@ -99,14 +99,15 @@
       "note": "interface included, but blocking disabled because prior frozen OOS result was OOS_DEGRADED"
     },
     {
-      "name": "one_sided_threshold_p99_reachability",
+      "name": "one_sided_threshold_p99_reachability_weightless",
       "version": "1",
       "phase": "STATIC",
       "enforcement": "BLOCK",
       "criteria": {
-        "active_weight": "weight > 0",
+        "scope": "all stored one-sided thresholds regardless of weight",
+        "inactive_weight": "record weight <= 0 but do not exclude",
         "ONE_SIDED_GE": "threshold > training p99 => FAIL; > max => UNREACHABLE",
-        "ONE_SIDED_LE": "threshold < training p01 => FAIL; < min => UNREACHABLE; equivalent activation-tail p99 comparison",
+        "ONE_SIDED_LE": "threshold < training p01 => FAIL; < min => UNREACHABLE",
         "fail_labels": [
           "NEAR_UNREACHABLE",
           "UNREACHABLE"
@@ -114,15 +115,15 @@
         "excluded_forms": {
           "BOOLEAN_EVENT": "MA excluded",
           "BOOLEAN_CROSS_EVENT": "MACD excluded",
-          "BAND_INCLUSIVE": "RSI excluded by one-sided-only policy scope"
+          "BAND_INCLUSIVE": "RSI excluded"
         }
       },
       "source": [
-        "stored candidate rulebook thresholds/weights",
+        "stored candidate rulebook thresholds and weights",
         "training-window OHLCV indicator distributions",
-        "threshold_p99_block_indicator_labels.csv.gz"
+        "threshold_p99_weightless_block_indicator_labels.csv.gz"
       ],
-      "note": "confirmed design-only BLOCK; operational implementation remains prohibited in this task"
+      "note": "design-only v3 BLOCK; operational implementation false"
     }
   ],
   "flow": [
@@ -220,8 +221,18 @@
   },
   "strict_requested_policy": "all four checker FAIL values block; provided only as sensitivity scenario, not recommended",
   "confirmed_static_block_policy": {
-    "checker": "one_sided_threshold_p99_reachability",
-    "dry_run_summary": "data/_system/analysis/candidate_selection_audit_20260710/threshold_p99_block_summary.json",
+    "checker": "one_sided_threshold_p99_reachability_weightless",
+    "policy_version": "integrated-gate-v3-p99-reachability-block-weightless",
+    "dry_run_summary": "data/_system/analysis/candidate_selection_audit_20260710/threshold_p99_weightless_block_summary.json",
     "operational_implementation": false
-  }
+  },
+  "policy_history": [
+    {
+      "policy_version": "integrated-gate-v2-p99-reachability-block",
+      "checker": "one_sided_threshold_p99_reachability",
+      "status": "SUPERSEDED_BY_V3_WEIGHTLESS_SCOPE",
+      "dry_run_fail_count": 3967,
+      "operational_implementation": false
+    }
+  ]
 }

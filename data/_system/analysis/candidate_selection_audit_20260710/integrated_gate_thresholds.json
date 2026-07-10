@@ -82,7 +82,8 @@
     "win_lt_p10": "MONITOR",
     "boil": "MONITOR",
     "ce": "MONITOR",
-    "threshold_reachability_p99": "BLOCK"
+    "threshold_reachability_p99": "SUPERSEDED",
+    "threshold_reachability_p99_weightless": "BLOCK"
   },
   "history_validation_table": "data/_system/analysis/candidate_selection_audit_20260710/integrated_gate_history_validation.csv",
   "threshold_reachability_p99": {
@@ -101,6 +102,27 @@
     "band_forms": "EXCLUDED_BY_ONE_SIDED_ONLY_SCOPE",
     "dry_run_fail_count": 3967,
     "dry_run_pass_count": 13104,
+    "operational_implementation": false,
+    "status": "SUPERSEDED_BY_WEIGHTLESS_V3"
+  },
+  "threshold_reachability_p99_weightless": {
+    "policy_version": "integrated-gate-v3-p99-reachability-block-weightless",
+    "enforcement": "BLOCK",
+    "scope": "all stored one-sided thresholds regardless of weight",
+    "inactive_weight": "INCLUDED_AND_RECORDED",
+    "eligible_forms": [
+      "ONE_SIDED_GE",
+      "ONE_SIDED_LE"
+    ],
+    "ge_near_unreachable": "threshold > p99",
+    "ge_unreachable": "threshold > max",
+    "le_near_unreachable": "threshold < p01",
+    "le_unreachable": "threshold < min",
+    "event_forms": "EXCLUDED",
+    "band_forms": "EXCLUDED",
+    "dry_run_fail_count": 4491,
+    "dry_run_pass_count": 12580,
+    "newly_captured_vs_v2": 524,
     "operational_implementation": false
   }
 }

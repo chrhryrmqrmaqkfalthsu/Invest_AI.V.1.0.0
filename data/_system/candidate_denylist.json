@@ -1,0 +1,49 @@
+{
+  "_comment": "Live candidate generation deny-list. Original final_rulebooks/survivors are preserved; entries are filtered only when building elite shadow candidates.",
+  "version": 1,
+  "created_at": "2026-07-10T00:00:00+09:00",
+  "source": "live93_three_symptom_scan_20260710",
+  "match_policy": "candidate_id exact OR ticker/stage constrained rule_hash match. Do not use raw rule_hash-only match across unrelated tickers.",
+  "entries": [
+    {
+      "active": true,
+      "ticker": "CE",
+      "stage": "stage3",
+      "candidate_id": "stage3:CE:998b0b638c66",
+      "rule_hash": "998b0b638c6649fe10d3dff0fc74f890d9891ef9caa7ed61a2bae1e340288b78",
+      "rule_hash_short": "998b0b638c66",
+      "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|WEAK_EXIT_HISTORY",
+      "reason": "live26 3-symptom hit; avg PnL negative, win<45, stop+timeout>80; block new entries only"
+    },
+    {
+      "active": true,
+      "ticker": "CDE",
+      "stage": "stage3",
+      "candidate_id": "stage3:CDE:ceb9fe0512dc",
+      "rule_hash": "ceb9fe0512dc780e9aed7e8625bd67d935f1376a5a1bc01b97e146ce6142d000",
+      "rule_hash_short": "ceb9fe0512dc",
+      "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|WEAK_EXIT_HISTORY",
+      "reason": "live26 3-symptom hit; stop+timeout>80; block new entries only"
+    },
+    {
+      "active": true,
+      "ticker": "BKSY",
+      "stage": "stage3",
+      "candidate_id": "stage3:BKSY:f1bcc8efea02",
+      "rule_hash": "f1bcc8efea02d63490f0c6ee1dbe7507416a85e2197551cf16a96db9054d9afc",
+      "rule_hash_short": "f1bcc8efea02",
+      "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|WEAK_EXIT_HISTORY",
+      "reason": "live26 3-symptom hit; win<45 and stop+timeout>80; block new entries only"
+    },
+    {
+      "active": true,
+      "ticker": "BOIL",
+      "stage": "stage3",
+      "candidate_id": "stage3:BOIL:9044dc2c67a3",
+      "rule_hash": "9044dc2c67a3d3bc0c5d93cece5f266c162c4f0ecf3ed5bc8ded1edbafb4bd67",
+      "rule_hash_short": "9044dc2c67a3",
+      "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|HIGH_VOL_VOLUME_WEIGHT_ZERO_TAIL_RISK",
+      "reason": "live26 2-symptom hit plus HIGH_VOL volume_surge_ratio=2.5 with weight_volume_surge=0 and tail-risk; block new entries only"
+    }
+  ]
+}

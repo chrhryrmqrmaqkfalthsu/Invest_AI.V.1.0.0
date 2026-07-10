@@ -1,0 +1,11 @@
+check_item,expected,actual,result,notes
+entry_point,filter at build_elite_shadow_report after stage2+stage3 combine,implemented in engine/live/elite_shadow_report.py apply_candidate_denylist,PASS,refresh_slots and export both call build_elite_shadow_report so regenerated candidates are filtered
+source_files_preserved,final_rulebooks and exit_trades unchanged,sha256 and mtime identical for CE/CDE/BKSY/BOIL final_rulebooks and exit_trades,PASS,original rule pools were not edited or deleted
+denylist_entries,4 active entries,4 active entries in data/_system/candidate_denylist.json,PASS,candidate_id exact plus ticker/stage constrained rule_hash match
+build_report_denied_absent,CE CDE BKSY BOIL absent from generated report,absent from report candidates; blocked_count=4,PASS,report candidate_count 93->89
+live_pool_denied_absent,CE CDE BKSY BOIL absent from candidate_pool,absent from live_slots_state candidate_pool,PASS,actual candidate_pool count=18
+live_pool_count,old 26 minus 4 equals 22 if all else stable,actual current regeneration count=18,INFO_NOT_FAILURE,current market/news context changed should_buy; same-context no-deny baseline was 20 and with deny was 18
+same_context_delta,deny-list should reduce currently-buyable pool by denied buy signals,same-context no-deny 20 -> with-deny 18,PASS,CDE and BOIL were currently should_buy; CE and BKSY were in 93 but not current should_buy under refreshed context
+export_denied_absent,CE CDE BKSY BOIL absent from canonical export,absent from real_dashboard_buy_candidates.json,PASS,exported_count=18
+export_rulebooks_present,remaining candidates include full selected_rulebook/rulebook,missing_rulebook=[],PASS,full rulebook verification passed
+orders_safety,no broker order/direct order state change,no order path invoked; .env untouched,PASS,only refresh/export candidate generation commands were run

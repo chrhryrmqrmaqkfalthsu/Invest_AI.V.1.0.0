@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 from collections import Counter
 from pathlib import Path
@@ -21,6 +22,8 @@ from typing import Any
 ROOT = Path("exp_batch_stage123_2009_20260616_full")
 CENTRAL_INDEX = ROOT / "central_index.jsonl"
 TICKERS_ROOT = ROOT / "tickers"
+DENYLIST_PATH = Path("data/_system/candidate_denylist.json")
+log = logging.getLogger(__name__)
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -74,6 +77,119 @@ def _load_source_row(rel_path: str | None, one_based_index: int) -> dict[str, An
             except Exception:
                 return None
     return None
+
+
+def _truthy(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() not in {"0", "false", "no", "off", "inactive", "disabled"}
+
+
+def load_candidate_denylist(path: Path = DENYLIST_PATH) -> dict[str, Any]:
+    """Load candidate generation deny-list.
+
+    Match policy intentionally avoids raw rule_hash-only blocking across unrelated tickers:
+    - candidate_id exact match, OR
+    - rule_hash match with optional ticker/stage constraints satisfied.
+    """
+    payload = {
+        "enabled": False,
+        "path": str(path),
+        "version": None,
+        "entries": [],
+        "error": None,
+    }
+    if not path.exists():
+        return payload
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        payload["error"] = f"read_failed:{type(exc).__name__}:{exc}"
+        log.warning("candidate deny-list read failed: %s", payload["error"])
+        return payload
+    entries = data.get("entries") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        payload["error"] = "entries_not_list"
+        log.warning("candidate deny-list invalid: entries_not_list path=%s", path)
+        return payload
+    payload.update(
+        {
+            "enabled": True,
+            "version": data.get("version"),
+            "entries": [e for e in entries if isinstance(e, dict)],
+            "source": data.get("source"),
+            "match_policy": data.get("match_policy"),
+        }
+    )
+    return payload
+
+
+def _denylist_entry_matches(candidate: dict[str, Any], entry: dict[str, Any]) -> bool:
+    if not _truthy(entry.get("active"), default=True):
+        return False
+    cid = str(candidate.get("candidate_id") or "")
+    entry_cid = str(entry.get("candidate_id") or "")
+    if entry_cid and entry_cid == cid:
+        return True
+
+    entry_hash = str(entry.get("rule_hash") or entry.get("rulebook_hash") or "")
+    candidate_hash = str(candidate.get("rulebook_hash") or "")
+    if not entry_hash or not candidate_hash or entry_hash != candidate_hash:
+        return False
+
+    entry_ticker = str(entry.get("ticker") or "").upper().strip()
+    candidate_ticker = str(candidate.get("ticker") or "").upper().strip()
+    if entry_ticker and entry_ticker != candidate_ticker:
+        return False
+    entry_stage = str(entry.get("stage") or "").strip()
+    candidate_stage = str(candidate.get("stage") or "").strip()
+    if entry_stage and entry_stage != candidate_stage:
+        return False
+    return True
+
+
+def apply_candidate_denylist(candidates: list[dict[str, Any]], *, path: Path = DENYLIST_PATH) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    deny = load_candidate_denylist(path)
+    entries = list(deny.get("entries") or [])
+    summary = {
+        "enabled": bool(deny.get("enabled")),
+        "path": str(path),
+        "version": deny.get("version"),
+        "source": deny.get("source"),
+        "match_policy": deny.get("match_policy"),
+        "entry_count": len(entries),
+        "blocked_count": 0,
+        "blocked": [],
+        "error": deny.get("error"),
+    }
+    if not summary["enabled"] or not entries:
+        return candidates, summary
+
+    out: list[dict[str, Any]] = []
+    for candidate in candidates:
+        matched_entry = next((entry for entry in entries if _denylist_entry_matches(candidate, entry)), None)
+        if matched_entry is None:
+            out.append(candidate)
+            continue
+        blocked = {
+            "candidate_id": candidate.get("candidate_id"),
+            "ticker": candidate.get("ticker"),
+            "stage": candidate.get("stage"),
+            "rulebook_hash_short": str(candidate.get("rulebook_hash") or "")[:12],
+            "reason_label": matched_entry.get("reason_label") or matched_entry.get("reason") or "candidate_denylist",
+        }
+        summary["blocked"].append(blocked)
+        log.info(
+            "candidate deny-list blocked ticker=%s candidate_id=%s rule_hash=%s reason=%s",
+            blocked.get("ticker"),
+            blocked.get("candidate_id"),
+            blocked.get("rulebook_hash_short"),
+            blocked.get("reason_label"),
+        )
+    summary["blocked_count"] = len(summary["blocked"])
+    return out, summary
 
 
 def _metrics_summary(metrics: dict[str, Any]) -> dict[str, Any]:
@@ -457,6 +573,7 @@ def build_elite_shadow_report(*, stage2_limit: int = 60, stage3_limit: int = 80,
     stage2, skip2 = collect_stage2_elite(max_unique=stage2_limit)
     stage3, skip3 = collect_stage3_elite(max_unique=stage3_limit)
     candidates = stage2 + stage3
+    candidates, denylist_summary = apply_candidate_denylist(candidates)
     candidates.sort(key=lambda item: (item.get("bucket") != "A_core", -float(item.get("elite_score") or 0.0)))
     if include_trades:
         attach_trades(candidates)
@@ -465,6 +582,7 @@ def build_elite_shadow_report(*, stage2_limit: int = 60, stage3_limit: int = 80,
     return {
         "_comment": "Read-only elite shadow report. This is not broker/paper trading; it reconstructs historical trades from batch artifacts and ranks candidates for shadow promotion.",
         "source_root": str(ROOT),
+        "candidate_denylist": denylist_summary,
         "filters": {
             "oos_expectancy_pct_min": 2.7,
             "stage2_oos_fitness_min": 70.0,
@@ -476,6 +594,7 @@ def build_elite_shadow_report(*, stage2_limit: int = 60, stage3_limit: int = 80,
             "max_holding_days_lte": 24,
             "fixed_exit_max_holding_days_lte": 19,
             "market_adjustment_exception": "market_adj >= 0.05 OR win>=90 fitness>=95 worstDD>-8",
+            "candidate_denylist": "data/_system/candidate_denylist.json; candidate_id exact OR ticker/stage constrained rule_hash match",
         },
         "summary": {
             "candidate_count": len(candidates),
@@ -483,6 +602,8 @@ def build_elite_shadow_report(*, stage2_limit: int = 60, stage3_limit: int = 80,
             "bucket_counts": dict(buckets),
             "stage2_skip_top": skip2.most_common(12),
             "stage3_skip_top": skip3.most_common(12),
+            "denylist_blocked_count": denylist_summary.get("blocked_count", 0),
+            "denylist_blocked": denylist_summary.get("blocked", []),
         },
         "candidates": candidates,
     }

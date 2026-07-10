@@ -1,0 +1,12 @@
+check,status,expected,actual,evidence
+csv_safe_rows,PASS,45,45,"orphan_file_candidates.csv risk=SAFE_TO_DELETE"
+expanded_file_count,PASS,343,343,"all directory descendants expanded before deletion"
+deleted_bytes,PASS,5150150,5150150,"pre-delete filesystem size matched CSV exactly"
+protected_overlap,PASS,0,0,"absolute-preservation guards checked every expanded file"
+live_dependency_overlap,PASS,0,0,"live_dependency_tree.csv 148-file set checked before deletion"
+live_dependency_files_exist,PASS,148,148,"post-delete existence check"
+python_entrypoint_imports,PASS,11,11,"Stage2 Stage3 candidate generation live execution API and scheduled modules imported with PYTHONDONTWRITEBYTECODE=1"
+stage3_dynamic_body,PASS,1,1,"dynamic body exists and wrapper exposes main"
+shell_entrypoint_syntax,PASS,2,2,"dashboard_guard.sh and live_candidate_slots_guard.sh bash -n"
+remaining_safe_targets,PASS,0,0,"all 45 SAFE row paths absent after smoke check"
+git_tracked_safe_targets,INFO,0,0,"all deleted targets were ignored or untracked; deletion is recorded by committed audit manifest and readout"

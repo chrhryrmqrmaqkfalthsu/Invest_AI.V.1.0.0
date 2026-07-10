@@ -1,0 +1,13 @@
+dimension,Stage2,Stage3,conclusion
+signal evaluator,engine.strategies.evaluator.evaluate_signal,engine.strategies.evaluator.evaluate_signal,same calculation object
+full in-memory fields,"score raw_score threshold market_adjustment components news/topic/event/market context","score raw_score threshold market_adjustment components news/topic/event/market context",same before persistence
+backtest enrichment,engine/learning/backtest.py adds entry_* fields to trade dict,engine/learning/backtest.py also adds same entry_* fields to trade dict,same upstream enrichment
+final persistence writer,Stage2 trades.jsonl keeps enriched trade dict,Stage3 _compact_exit_trade projects only EXIT_TRADE_OUTPUT_FIELDS,different persistence layer
+historical score,stored in entry_signal_score,absent in exit_trades,Stage3 dropped
+historical raw_score,stored in entry_signal_raw_score,absent in exit_trades,Stage3 dropped
+historical threshold,stored in entry_signal_threshold,absent in exit_trades,Stage3 dropped
+historical market_adjustment,stored in entry_market_adjustment,absent in exit_trades,Stage3 dropped
+historical components,stored in entry_signal_components,absent in exit_trades,Stage3 dropped
+historical news/topic/event,stored,absent in exit_trades,Stage3 dropped
+historical outcome,stored,stored,both have outcome
+CE backtestability,YES,NO from canonical exits,Stage3 needs new durable logging or writer expansion

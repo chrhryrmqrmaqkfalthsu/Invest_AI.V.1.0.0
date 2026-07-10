@@ -1,0 +1,10 @@
+scenario,candidate_count,stage2_count,stage3_count,confirmed_pass_count,unjudged_count,zero_candidate_risk,note
+origin_all,17071,1162,15909,5,2851,False,all origin candidates
+origin_confirmed_pass,5,2,3,5,0,False,all five conditions judged and passed
+origin_unjudged,2851,1048,1803,0,2851,False,no known fail; CE unavailable
+origin_fail,14215,112,14103,0,0,False,one or more BLOCK conditions failed
+ce_judged_origin,34,2,32,5,0,False,historical CE coverage
+coverage_aware_ranked,93,13,80,4,89,False,known FAIL removed; PASS+UNJUDGED ranked
+judged_only_ranked,5,2,3,5,0,False,only CE-judged confirmed PASS
+unjudged_fail_closed_ranked,5,2,3,5,0,False,only confirmed PASS published
+sample_below_p10_also_fail_closed_origin,5,2,3,5,0,False,sensitivity only; not listed as BLOCK

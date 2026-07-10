@@ -1,0 +1,152 @@
+{
+  "created_at": "2026-07-10T16:22:48.292816+00:00",
+  "source_rows": 17071,
+  "source_stage_counts": {
+    "stage3": 15909,
+    "stage2": 1162
+  },
+  "condition_fail_counts": {
+    "COMPLETENESS": 13897,
+    "AVG_PNL_LT_0": 992,
+    "WIN_RATE_LT_STAGE_CUTOFF": 3568,
+    "HIGH_VOL_VOLUME_WEIGHT_NEAR_ZERO": 444,
+    "CE_RATIO_LT_1_25_AND_TOP2_GE_90": 7
+  },
+  "condition_hit_rows": 18908,
+  "final_status_counts": {
+    "FAIL": 14215,
+    "UNJUDGED": 2851,
+    "PASS": 5
+  },
+  "ce_coverage_counts": {
+    "UNJUDGED": 17037,
+    "PASS": 27,
+    "FAIL": 7
+  },
+  "sample_warning_counts": {
+    "all": 886,
+    "stage2": 103,
+    "stage3": 783
+  },
+  "coverage_aware_final_count": 93,
+  "coverage_aware_final_status_counts": {
+    "UNJUDGED": 89,
+    "PASS": 4
+  },
+  "coverage_aware_stage_counts": {
+    "stage3": 80,
+    "stage2": 13
+  },
+  "judged_only_final_count": 5,
+  "judged_only_stage_counts": {
+    "stage3": 3,
+    "stage2": 2
+  },
+  "fail_closed_final_count": 5,
+  "fail_closed_stage_counts": {
+    "stage3": 3,
+    "stage2": 2
+  },
+  "fail_closed_candidate_ids": [
+    "stage2:ALGT:402f72d48c3c",
+    "stage2:CMC:4f6ee2739add",
+    "stage3:CRS:8695c9ce3320",
+    "stage3:BMA:0c978464f9dd",
+    "stage3:CW:81ce9154b422"
+  ],
+  "scenarios": [
+    {
+      "scenario": "origin_all",
+      "candidate_count": 17071,
+      "stage2_count": 1162,
+      "stage3_count": 15909,
+      "confirmed_pass_count": 5,
+      "unjudged_count": 2851,
+      "zero_candidate_risk": false,
+      "note": "all origin candidates"
+    },
+    {
+      "scenario": "origin_confirmed_pass",
+      "candidate_count": 5,
+      "stage2_count": 2,
+      "stage3_count": 3,
+      "confirmed_pass_count": 5,
+      "unjudged_count": 0,
+      "zero_candidate_risk": false,
+      "note": "all five conditions judged and passed"
+    },
+    {
+      "scenario": "origin_unjudged",
+      "candidate_count": 2851,
+      "stage2_count": 1048,
+      "stage3_count": 1803,
+      "confirmed_pass_count": 0,
+      "unjudged_count": 2851,
+      "zero_candidate_risk": false,
+      "note": "no known fail; CE unavailable"
+    },
+    {
+      "scenario": "origin_fail",
+      "candidate_count": 14215,
+      "stage2_count": 112,
+      "stage3_count": 14103,
+      "confirmed_pass_count": 0,
+      "unjudged_count": 0,
+      "zero_candidate_risk": false,
+      "note": "one or more BLOCK conditions failed"
+    },
+    {
+      "scenario": "ce_judged_origin",
+      "candidate_count": 34,
+      "stage2_count": 2,
+      "stage3_count": 32,
+      "confirmed_pass_count": 5,
+      "unjudged_count": 0,
+      "zero_candidate_risk": false,
+      "note": "historical CE coverage"
+    },
+    {
+      "scenario": "coverage_aware_ranked",
+      "candidate_count": 93,
+      "stage2_count": 13,
+      "stage3_count": 80,
+      "confirmed_pass_count": 4,
+      "unjudged_count": 89,
+      "zero_candidate_risk": false,
+      "note": "known FAIL removed; PASS+UNJUDGED ranked"
+    },
+    {
+      "scenario": "judged_only_ranked",
+      "candidate_count": 5,
+      "stage2_count": 2,
+      "stage3_count": 3,
+      "confirmed_pass_count": 5,
+      "unjudged_count": 0,
+      "zero_candidate_risk": false,
+      "note": "only CE-judged confirmed PASS"
+    },
+    {
+      "scenario": "unjudged_fail_closed_ranked",
+      "candidate_count": 5,
+      "stage2_count": 2,
+      "stage3_count": 3,
+      "confirmed_pass_count": 5,
+      "unjudged_count": 0,
+      "zero_candidate_risk": false,
+      "note": "only confirmed PASS published"
+    },
+    {
+      "scenario": "sample_below_p10_also_fail_closed_origin",
+      "candidate_count": 5,
+      "stage2_count": 2,
+      "stage3_count": 3,
+      "confirmed_pass_count": 5,
+      "unjudged_count": 0,
+      "zero_candidate_risk": false,
+      "note": "sensitivity only; not listed as BLOCK"
+    }
+  ],
+  "no_source_mutation": true,
+  "no_live_candidate_file_change": true,
+  "no_order": true
+}

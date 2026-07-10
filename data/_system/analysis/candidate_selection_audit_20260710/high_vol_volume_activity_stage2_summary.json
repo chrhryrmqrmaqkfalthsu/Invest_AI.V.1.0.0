@@ -1,0 +1,87 @@
+{
+  "created_at": "2026-07-10T17:03:37.422100+00:00",
+  "stage1_risk_count": 3036,
+  "high_vol_count": 3084,
+  "origin_count": 17071,
+  "activity_data": {
+    "reused_a73118d": 3033,
+    "recomputed_missing_retry_sources": 3,
+    "deduplicated_identical_source_rows": 1,
+    "unjudged": 0,
+    "label_counts": {
+      "ACTIVE": 2235,
+      "RARELY_ACTIVE": 717,
+      "NEVER_FIRED": 84
+    },
+    "definition": {
+      "NEVER_FIRED": "count==0",
+      "RARELY_ACTIVE": "count 1..4 OR rate<1%",
+      "ACTIVE": "count>=5 AND rate>=1%"
+    }
+  },
+  "strict": {
+    "count": 84,
+    "pct_stage1": 2.766798418972332,
+    "pct_high_vol": 2.7237354085603114,
+    "pct_origin": 0.49206256224005623,
+    "stage_counts": {
+      "stage3": 84
+    }
+  },
+  "relaxed": {
+    "count": 801,
+    "pct_stage1": 26.383399209486164,
+    "pct_high_vol": 25.9727626459144,
+    "pct_origin": 4.692168004217679,
+    "stage_counts": {
+      "stage3": 789,
+      "stage2": 12
+    }
+  },
+  "boil_parity": {
+    "high_vol_boil_count": 404,
+    "strict_captured": 15,
+    "relaxed_captured": 103,
+    "named_boil": {
+      "candidate_id": "stage3:BOIL:9044dc2c67a3",
+      "eligible_days": 250,
+      "fired_count": 0,
+      "fired_rate_pct": 0.0,
+      "label": "NEVER_FIRED",
+      "strict_captured": true,
+      "relaxed_captured": true
+    }
+  },
+  "no_source_mutation": true,
+  "no_live_change": true,
+  "no_training": true,
+  "no_order": true,
+  "no_delete": true,
+  "performance_reference_complete_high_vol": {
+    "STRICT": {
+      "risk_candidates": 2,
+      "remainder_candidates": 315,
+      "risk_holdout_candidates": 2,
+      "remainder_holdout_candidates": 315,
+      "risk_holdout_trades": 10,
+      "remainder_holdout_trades": 4456,
+      "risk_holdout_avg_pnl_pct": 7.01224488513135,
+      "remainder_holdout_avg_pnl_pct": 6.216288831326419,
+      "risk_holdout_win_rate_pct": 80.0,
+      "remainder_holdout_win_rate_pct": 60.83001992959847
+    },
+    "RELAXED": {
+      "risk_candidates": 68,
+      "remainder_candidates": 249,
+      "risk_holdout_candidates": 68,
+      "remainder_holdout_candidates": 249,
+      "risk_holdout_trades": 946,
+      "remainder_holdout_trades": 3520,
+      "risk_holdout_avg_pnl_pct": 3.918262600869909,
+      "remainder_holdout_avg_pnl_pct": 6.850255481039883,
+      "risk_holdout_win_rate_pct": 62.242931808675756,
+      "remainder_holdout_win_rate_pct": 60.598140220215136
+    }
+  },
+  "performance_note": "descriptive only; blocking is structural; candidate selection/training overlap may remain"
+}

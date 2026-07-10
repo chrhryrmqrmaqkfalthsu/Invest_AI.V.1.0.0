@@ -1,0 +1,5 @@
+threshold_pct,live18_blocked_count,live18_blocked_tickers,ANET_blocked,AEIS_blocked,oos_trade_count,oos_blocked_count,oos_blocked_pct,oos_pass_count,note
+5,2,"ANET,AEIS",True,True,12915,302,2.338366,12613,OOS proxy uses signal_date Close -> D+1 entry_price gap; not an optimized threshold
+8,1,ANET,True,False,12915,93,0.720093,12822,OOS proxy uses signal_date Close -> D+1 entry_price gap; not an optimized threshold
+10,1,ANET,True,False,12915,55,0.425861,12860,OOS proxy uses signal_date Close -> D+1 entry_price gap; not an optimized threshold
+15,0,NONE,False,False,12915,21,0.162602,12894,OOS proxy uses signal_date Close -> D+1 entry_price gap; not an optimized threshold

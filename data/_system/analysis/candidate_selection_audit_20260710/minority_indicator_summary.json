@@ -1,0 +1,128 @@
+{
+  "created_at": "2026-07-10T21:59:45.475424+00:00",
+  "verdict": "NO_SIGNAL",
+  "definition_scope": "stored rule weights; not realized entry-time components",
+  "cut_family": {
+    "ACTIVE_EXACT_LE2": "active_exact_count <= 2",
+    "ACTIVE_MATERIAL_LE2": "active_material_count <= 2",
+    "TOP2_GE80": "top2_weight_share_pct >= 80",
+    "TOP2_GE90": "top2_weight_share_pct >= 90",
+    "ACTIVE_EXACT_LE3_AND_TOP2_GE80": "active_exact_count <= 3 and top2_weight_share_pct >= 80",
+    "ACTIVE_EXACT_LE3_AND_TOP2_GE90": "active_exact_count <= 3 and top2_weight_share_pct >= 90",
+    "ACTIVE_MATERIAL_LE2_AND_TOP2_GE80": "active_material_count <= 2 and top2_weight_share_pct >= 80",
+    "ACTIVE_MATERIAL_LE2_AND_TOP2_GE90": "active_material_count <= 2 and top2_weight_share_pct >= 90"
+  },
+  "material_weight_epsilon": 0.05,
+  "metrics": [
+    "avg_pnl_pct",
+    "win_rate_pct",
+    "p05_pnl_pct",
+    "tail10_mean_pnl_pct",
+    "worst_mae_pct"
+  ],
+  "method": {
+    "discovery": "canonical non-holdout Stage2/Stage3 trades, rule-level aggregation",
+    "internal_holdout": "Stage2 oos_2025h2 / Stage3 recent_1y, diagnostic only",
+    "validation": "frozen OOS trades, untouched during cut definition",
+    "stage_separated": true,
+    "minimum_trades_per_rule": 8,
+    "effect": "unweighted mean of rule-level metric; sparse minus other",
+    "bootstrap": "ticker-cluster 5000 reps",
+    "p_value": "one-sided cluster-robust OLS coefficient test; sparse worse",
+    "multiple_testing": "BH FDR across 8 cuts within each stage/scope/metric family",
+    "robust_requirement": "IS avg PnL + frozen avg PnL + existing-gate incremental avg PnL all negative, bootstrap upper<0, FDR<0.05, group n>=3"
+  },
+  "source_trade_rows": {
+    "stage2_rows": 72690,
+    "stage3_rows": 975118,
+    "matched_rows": 1047808
+  },
+  "cohorts": {
+    "stage2": {
+      "rule_n": 1162,
+      "is_rule_n": 1162,
+      "frozen_rule_n": 13,
+      "incremental_frozen_rule_n": 9
+    },
+    "stage3": {
+      "rule_n": 15909,
+      "is_rule_n": 15896,
+      "frozen_rule_n": 80,
+      "incremental_frozen_rule_n": 9
+    }
+  },
+  "primary_cut_counts": {
+    "is_supported_n": 0,
+    "frozen_nominal_n": 0,
+    "frozen_fdr_supported_n": 0,
+    "robust_n": 0
+  },
+  "robust_cuts": [],
+  "anet_bb": {
+    "ANET": {
+      "candidate_id": "stage3:ANET:fe220620802b",
+      "weights": {
+        "ma_weight": 1.3148495229628994,
+        "macd_weight": 2.0,
+        "rsi_weight": 1.7102475423577514,
+        "bb_weight": 1.3451122782253937,
+        "volume_weight": 0.2530485421711657
+      },
+      "active_exact_count": 5,
+      "active_material_count": 5,
+      "top2_weight_share_pct": 56.01846714075186,
+      "top2_indicators": "macd+rsi",
+      "matched_cut_n": 0,
+      "matched_cuts": [],
+      "frozen_avg_pnl_pct": 1.7763829376846556,
+      "frozen_win_rate_pct": 61.41304347826087,
+      "structurally_sparse": false
+    },
+    "BB": {
+      "candidate_id": "stage3:BB:f1bdfe7f8ad9",
+      "weights": {
+        "ma_weight": 1.5405218465937318,
+        "macd_weight": 1.5986702627829987,
+        "rsi_weight": 1.7503816211833794,
+        "bb_weight": 0.3609789460123143,
+        "volume_weight": 1.16162064645687
+      },
+      "active_exact_count": 5,
+      "active_material_count": 5,
+      "top2_weight_share_pct": 52.22959073701693,
+      "top2_indicators": "rsi+macd",
+      "matched_cut_n": 0,
+      "matched_cuts": [],
+      "frozen_avg_pnl_pct": 8.603776344007564,
+      "frozen_win_rate_pct": 64.56692913385827,
+      "structurally_sparse": false
+    }
+  },
+  "interpretation": "저장 가중치 기준 소수지표 구조는 IS discovery, frozen OOS, 기존 gate 통과 순증군에서 일관된 성과 열위를 보이지 않았다. 내부 holdout과 단일 frozen rule에서 보인 국소 신호는 외부·순증 검증에서 재현되지 않았다.",
+  "no_design_change": true,
+  "operational_code_change": false,
+  "config_change": false,
+  "retraining": false,
+  "order": false,
+  "delete": false,
+  "all_metric_robust_cut_metric_n": 0,
+  "all_metric_robust_cut_metrics": [],
+  "secondary_findings": {
+    "stage2_internal_holdout_avg_pnl_fdr_cut_n": 8,
+    "stage2_internal_holdout_interpretation": "IS discovery와 frozen 평균 PnL에서 재현되지 않아 holdout-only artifact",
+    "stage2_frozen_win_rate_fdr_cut_n": 4,
+    "stage2_frozen_win_rate_sparse_rule_n": 1,
+    "stage2_frozen_win_rate_interpretation": "단 1개 sparse rule에 의존하고 incremental robust 조건 미충족",
+    "stage3_top2_ge80_frozen_avg_pnl_difference_pct_point": 2.84887285132504,
+    "stage3_top2_ge80_incremental_avg_pnl_difference_pct_point": 2.9491277480007563,
+    "stage3_top2_ge80_interpretation": "소수지표군이 오히려 평균 PnL 우위 방향; 열위 가설과 반대"
+  },
+  "validation_power_caveat": {
+    "frozen_stage2_rule_n": 13,
+    "frozen_stage3_rule_n": 80,
+    "incremental_stage2_rule_n": 9,
+    "incremental_stage3_rule_n": 9,
+    "note": "canonical 거래는 대규모지만 frozen external validation은 93개 rule이며 희소 구조 rule가 매우 적어 일부 cut은 검정 불가"
+  },
+  "created_at_reporting_finalized": "2026-07-10T22:02:42.760886+00:00"
+}

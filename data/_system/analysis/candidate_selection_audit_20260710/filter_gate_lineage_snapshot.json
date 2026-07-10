@@ -1,0 +1,434 @@
+{
+  "created_at": "2026-07-10T15:23:05.761805+00:00",
+  "training_counts": {
+    "stage2_dirs": 1997,
+    "stage2_totals": {
+      "generated_rulebook_rows": 599100,
+      "unique_rulebook_hashes": 599099,
+      "survivor_count": 1162
+    },
+    "stage2_first_fail": {
+      "stress_pre_2022h1": 547012,
+      "train_1_eval": 5936,
+      "train_2_eval": 17303,
+      "train_3_eval": 23419,
+      "SURVIVED": 1162,
+      "oos_2025h2": 4267
+    },
+    "stage2_flow": [
+      {
+        "label": "stress_pre_2022h1",
+        "input": 599099,
+        "failed": 547012,
+        "passed": 52087
+      },
+      {
+        "label": "train_3_eval",
+        "input": 52087,
+        "failed": 23419,
+        "passed": 28668
+      },
+      {
+        "label": "train_2_eval",
+        "input": 28668,
+        "failed": 17303,
+        "passed": 11365
+      },
+      {
+        "label": "train_1_eval",
+        "input": 11365,
+        "failed": 5936,
+        "passed": 5429
+      },
+      {
+        "label": "oos_2025h2",
+        "input": 5429,
+        "failed": 4267,
+        "passed": 1162
+      }
+    ],
+    "stage3": {
+      "qualify": {
+        "file_count": 493,
+        "unique_candidate_count": 147899,
+        "all3_pass_count": 5219,
+        "qualified_tickers": 290
+      },
+      "entry": {
+        "file_count": 287,
+        "pool_count": 28699,
+        "absolute_pass_count": 26000,
+        "overlap_rejected_count": 10988,
+        "selected_count": 5663
+      },
+      "exit": {
+        "file_count": 269,
+        "entry_count": 5303,
+        "final_rulebook_count": 15909
+      },
+      "validate": {
+        "file_count": 269,
+        "candidate_count": 15909,
+        "eligible_count": 2012,
+        "ineligible_count": 13897
+      }
+    }
+  },
+  "elite_counts": {
+    "central_index_rows": 153561,
+    "stage2_eligible_rows": 3486,
+    "stage2_static_pass_rows": 78,
+    "stage2_unique_tickers": 13,
+    "stage2_cap_count": 13,
+    "stage2_skip_counts": {
+      "oos_expectancy_lt_2.7": 2490,
+      "oos_trades_lt_15": 411,
+      "oos_fitness_lt_70": 318,
+      "worst_drawdown_lte_-18": 51,
+      "oos_win_lt_70": 90,
+      "market_adjustment_too_weak": 30,
+      "min_trades_lt_8": 15,
+      "holding_days_gt_24": 3,
+      "not_eligible": 137509,
+      "not_stage2": 12566
+    },
+    "stage3_final_rows": 15909,
+    "stage3_static_pass_rows": 4640,
+    "stage3_unique_tickers": 246,
+    "stage3_cap_count": 80,
+    "stage3_skip_counts": {
+      "holding_days_gt_24": 2049,
+      "fixed_exit_long_holding": 1993,
+      "drawdown_lte_-18": 743,
+      "market_adjustment_too_weak": 1080,
+      "fitness_lt_45": 481,
+      "win_lt_70": 3690,
+      "expectancy_lt_2.7": 888,
+      "trades_lt_8": 345
+    },
+    "pre_deny_count": 93,
+    "post_deny_count": 82,
+    "post_deny_stage_counts": {
+      "stage2": 12,
+      "stage3": 70
+    },
+    "denylist": {
+      "enabled": true,
+      "path": "data/_system/candidate_denylist.json",
+      "version": 2,
+      "source": "live93_three_symptom_scan_20260710",
+      "match_policy": "candidate_id exact OR ticker/stage constrained rule_hash match. Do not use raw rule_hash-only match across unrelated tickers.",
+      "entry_count": 11,
+      "blocked_count": 11,
+      "blocked": [
+        {
+          "candidate_id": "stage2:HCC:2154d17783f3",
+          "ticker": "HCC",
+          "stage": "stage2",
+          "rulebook_hash_short": "2154d17783f3",
+          "reason_label": "THREE_SYMPTOM_MATCH"
+        },
+        {
+          "candidate_id": "stage3:CENX:53d7b0caa6a3",
+          "ticker": "CENX",
+          "stage": "stage3",
+          "rulebook_hash_short": "53d7b0caa6a3",
+          "reason_label": "THREE_SYMPTOM_MATCH"
+        },
+        {
+          "candidate_id": "stage3:CRMD:1a48a9a1b768",
+          "ticker": "CRMD",
+          "stage": "stage3",
+          "rulebook_hash_short": "1a48a9a1b768",
+          "reason_label": "THREE_SYMPTOM_MATCH"
+        },
+        {
+          "candidate_id": "stage3:CAR:ce44ff6acbb5",
+          "ticker": "CAR",
+          "stage": "stage3",
+          "rulebook_hash_short": "ce44ff6acbb5",
+          "reason_label": "THREE_SYMPTOM_MATCH"
+        },
+        {
+          "candidate_id": "stage3:BKSY:f1bcc8efea02",
+          "ticker": "BKSY",
+          "stage": "stage3",
+          "rulebook_hash_short": "f1bcc8efea02",
+          "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|WEAK_EXIT_HISTORY"
+        },
+        {
+          "candidate_id": "stage3:CDE:ceb9fe0512dc",
+          "ticker": "CDE",
+          "stage": "stage3",
+          "rulebook_hash_short": "ceb9fe0512dc",
+          "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|WEAK_EXIT_HISTORY"
+        },
+        {
+          "candidate_id": "stage3:AMBA:5e057e3cfc2d",
+          "ticker": "AMBA",
+          "stage": "stage3",
+          "rulebook_hash_short": "5e057e3cfc2d",
+          "reason_label": "THREE_SYMPTOM_MATCH"
+        },
+        {
+          "candidate_id": "stage3:APH:c7885deba35c",
+          "ticker": "APH",
+          "stage": "stage3",
+          "rulebook_hash_short": "c7885deba35c",
+          "reason_label": "THREE_SYMPTOM_MATCH"
+        },
+        {
+          "candidate_id": "stage3:BOIL:9044dc2c67a3",
+          "ticker": "BOIL",
+          "stage": "stage3",
+          "rulebook_hash_short": "9044dc2c67a3",
+          "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|HIGH_VOL_VOLUME_WEIGHT_ZERO_TAIL_RISK"
+        },
+        {
+          "candidate_id": "stage3:CE:998b0b638c66",
+          "ticker": "CE",
+          "stage": "stage3",
+          "rulebook_hash_short": "998b0b638c66",
+          "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|WEAK_EXIT_HISTORY"
+        },
+        {
+          "candidate_id": "stage3:ARKG:50b05b8de94f",
+          "ticker": "ARKG",
+          "stage": "stage3",
+          "rulebook_hash_short": "50b05b8de94f",
+          "reason_label": "THREE_SYMPTOM_MATCH"
+        }
+      ],
+      "error": null
+    },
+    "stage3_live_profile_overlap": 9,
+    "stage3_live_not_in_profile": 61,
+    "stage3_live_pool_overlap": 0,
+    "stage3_live_pool_filtered_overlap": 0,
+    "profile_key_count": 2012
+  },
+  "current_state": {
+    "slots": {
+      "updated_at": "2026-07-10T15:22:35.064479+00:00",
+      "candidate_pool": 17,
+      "slots": 8,
+      "waitlist": 9,
+      "held_exclusions": 1,
+      "last_refresh": {
+        "blocked_summary": {
+          "DROP_BAD_MAE_CAPTURE": 10,
+          "gate_missing": 9,
+          "not_buy_signal": 46
+        },
+        "buy_signal_count": 17,
+        "candidate_count": 82,
+        "elapsed_sec": 6.838,
+        "eligible_pool_count": 17,
+        "errors": [],
+        "evaluated": 63,
+        "force_evaluate": false,
+        "time": "2026-07-10T15:22:35.064123+00:00"
+      },
+      "decision_gate": {
+        "allow_decision": true,
+        "is_regular_hours": true,
+        "now_et": "2026-07-10T11:22:28.236053-04:00",
+        "now_utc": "2026-07-10T15:22:28.236053+00:00",
+        "reason": "regular_session",
+        "regular_end": "16:00",
+        "regular_start": "09:30",
+        "timezone": "America/New_York"
+      }
+    },
+    "dashboard": {
+      "updated_at": "2026-07-10T10:01:09.313612+00:00",
+      "candidate_count": 18,
+      "export_meta": {
+        "consumer_field_map": [
+          {
+            "consumer": "_real_candidate_state: candidates[cid] must be dict",
+            "export_field": "candidates.<candidate_id>",
+            "export_source": "validated candidate row dict",
+            "required": true
+          },
+          {
+            "consumer": "_candidate_for_real: status in {'pending','manual_requested'}",
+            "export_field": "status",
+            "export_source": "constant 'pending'",
+            "required": true
+          },
+          {
+            "consumer": "_candidate_for_real: manual_buy_enabled is not False",
+            "export_field": "manual_buy_enabled",
+            "export_source": "constant True",
+            "required": true
+          },
+          {
+            "consumer": "_create_real_buy_intent: ticker required",
+            "export_field": "ticker",
+            "export_source": "evaluate_candidate/full candidate ticker",
+            "required": true
+          },
+          {
+            "consumer": "_create_real_buy_intent: default_notional from candidate.notional",
+            "export_field": "notional",
+            "export_source": "live row notional if present else 0.0",
+            "required": false
+          },
+          {
+            "consumer": "_create_real_buy_intent: trade_date or execution_session",
+            "export_field": "trade_date",
+            "export_source": "live state updated_at date/export date",
+            "required": false
+          },
+          {
+            "consumer": "_create_real_buy_intent: entity_id metadata",
+            "export_field": "entity_id",
+            "export_source": "full candidate entity_id if present",
+            "required": false
+          },
+          {
+            "consumer": "_create_real_buy_intent: price metadata and broker price fallback",
+            "export_field": "price",
+            "export_source": "evaluate_candidate price",
+            "required": true
+          },
+          {
+            "consumer": "_create_real_buy_intent: candidate_snapshot stores whole row",
+            "export_field": "selected_rulebook/rulebook/source_file/full_rulebook_verified",
+            "export_source": "final_rulebooks/survivor full row and validation metadata",
+            "required": true
+          },
+          {
+            "consumer": "SAFETY guard: candidate_source must not be live_slots_state_fallback",
+            "export_field": "candidate_source",
+            "export_source": "constant real_dashboard_buy_candidates_export",
+            "required": true
+          },
+          {
+            "consumer": "SAFETY guard: real_candidate_fallback must not be True",
+            "export_field": "real_candidate_fallback",
+            "export_source": "constant False",
+            "required": true
+          }
+        ],
+        "exported_at": "2026-07-10T10:01:09.313612+00:00",
+        "exported_candidate_ids": [
+          "stage3:BMA:0c978464f9dd",
+          "stage3:ADMA:42437a3ee595",
+          "stage3:BTBT:363898884d44",
+          "stage3:BMI:07d4ee0f7841",
+          "stage3:BCS:5e7da5a74b01",
+          "stage3:ALGT:aec5dd5b1dc1",
+          "stage2:CMC:4f6ee2739add",
+          "stage3:BN:d264957fe5f6",
+          "stage3:BGC:d8c39420992c",
+          "stage3:ACMR:44c1e02681c4",
+          "stage3:CRS:8695c9ce3320",
+          "stage3:BTE:4ba9af200f79",
+          "stage3:BB:f1bdfe7f8ad9",
+          "stage3:BWXT:f195725cb792",
+          "stage3:ANET:fe220620802b",
+          "stage3:ARKW:296c057b4ef7",
+          "stage3:CBRL:677767a0b6a9",
+          "stage3:AEIS:6e26f08a7c6d"
+        ],
+        "exported_count": 18,
+        "exporter": "scripts/export_real_dashboard_buy_candidates.py",
+        "limit": 26,
+        "live_candidate_ids": [
+          "stage3:BMA:0c978464f9dd",
+          "stage3:ADMA:42437a3ee595",
+          "stage3:BTBT:363898884d44",
+          "stage3:BMI:07d4ee0f7841",
+          "stage3:BCS:5e7da5a74b01",
+          "stage3:ALGT:aec5dd5b1dc1",
+          "stage2:CMC:4f6ee2739add",
+          "stage3:BN:d264957fe5f6",
+          "stage3:BGC:d8c39420992c",
+          "stage3:ACMR:44c1e02681c4",
+          "stage3:CRS:8695c9ce3320",
+          "stage3:BTE:4ba9af200f79",
+          "stage3:BB:f1bdfe7f8ad9",
+          "stage3:BWXT:f195725cb792",
+          "stage3:ANET:fe220620802b",
+          "stage3:ARKW:296c057b4ef7",
+          "stage3:CBRL:677767a0b6a9",
+          "stage3:AEIS:6e26f08a7c6d"
+        ],
+        "live_slot_count": 18,
+        "matched_count": 18,
+        "replacement_requested": true,
+        "report_candidate_count": 82,
+        "skipped": [],
+        "skipped_count": 0,
+        "skipped_summary": {},
+        "source_section": "candidate_pool",
+        "state_path": "data/_system/live_slots_state.json",
+        "state_updated_at": "2026-07-10T10:01:08.342008+00:00"
+      },
+      "current_pool_overlap": 17,
+      "dashboard_only": [
+        "stage3:BTE:4ba9af200f79"
+      ],
+      "pool_only": []
+    },
+    "live_gate_list": {
+      "created_at": "2026-07-07T20:38:48.466406+00:00",
+      "candidate_count": 93,
+      "summary": {
+        "drop": 13,
+        "keep": 80,
+        "source": "data/_system/analysis/entry_quality_stops_regime_20260707/entry_filter_candidates.csv",
+        "total": 93,
+        "vol_source": "data/_system/analysis/vol_perstock_mae_mfe_20260707/per_candidate_summary.csv"
+      },
+      "gate_rule": "DROP if IS worst_mae is bottom 20% AND IS avg_mfe_capture <= median; otherwise KEEP"
+    },
+    "denylist": {
+      "version": 2,
+      "entry_count": 11,
+      "match_policy": "candidate_id exact OR ticker/stage constrained rule_hash match. Do not use raw rule_hash-only match across unrelated tickers."
+    }
+  },
+  "output_verdict_counts": {
+    "REGEN_OK": 6,
+    "ACTIVE_LIVE": 6,
+    "STALE_OUTPUT": 4,
+    "REVIEW": 1
+  },
+  "key_conflicts": [
+    "central_index contains exactly three identical eligible Stage2 index rows for every survivor (3,486 rows for 1,162 unique sources).",
+    "Stage3 validate catalog is bypassed by active elite; 61 of current 70 Stage3 candidates are not in profile catalog.",
+    "candidate_denylist is applied after per-ticker top1, so denied ticker has no fallback selection.",
+    "live MAE/MFE gate list was built for historical 93 candidates; current report has 9 candidate IDs missing and blocks them as gate_missing.",
+    "real_dashboard_buy_candidates is actively consumed but older than live_slots_state and contains one stale BTE candidate.",
+    "stage3_live_pool and filtered pool are old snapshots from different source sizes and are not current active inputs."
+  ],
+  "recommended_gate_points": [
+    {
+      "rank": 1,
+      "point": "after loading Stage2 survivors and Stage3 final_rulebooks, before elite_score ticker dedup/cap and before denylist",
+      "reason": "no GA retraining; full candidate fallback remains available; one unified auditable gate can replace stale 93-ID join and avoid Stage3 validate bypass"
+    },
+    {
+      "rank": 2,
+      "point": "Stage3 final_rulebooks -> run_validate/profile catalog boundary",
+      "reason": "best for pure-OOS historical gate; active elite must then be changed to consume the new catalog or gate output"
+    },
+    {
+      "rank": 3,
+      "point": "after evaluate_candidate should_buy and before slot top8",
+      "reason": "best only for real-time market/regime constraints; too late for historical quality filtering"
+    }
+  ],
+  "central_index_stage2_duplicates": {
+    "eligible_stage2_rows": 3486,
+    "unique_survivor_sources": 1162,
+    "duplicate_rows": 2324,
+    "multiplicity_distribution": {
+      "3": 1162
+    },
+    "finding": "Every one of the 1,162 Stage2 survivor source rows is indexed exactly three times."
+  }
+}

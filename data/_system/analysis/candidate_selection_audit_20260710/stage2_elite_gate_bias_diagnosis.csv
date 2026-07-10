@@ -1,0 +1,14 @@
+record_type,scenario_or_reason,stage2_value,stage3_value,stage2_pre_elite_n,stage3_pre_elite_n,stage2_rate_pct,stage3_rate_pct,stage2_candidate_n,stage2_unique_ticker_n_after_deny,holdout_candidate_avg_pnl_pct,holdout_trade_weighted_pnl_pct,holdout_candidate_win_rate_pct,interpretation
+funnel,pre_elite_pool,796,1330,796,1330,100.000000,100.000000,,,,,,after completeness sample PnL and v3
+funnel,current_elite_pass,22,381,796,1330,2.763819,28.646617,22,10,3.825542,3.842913,82.197990,Stage2 elite is the dominant bottleneck
+common_quality,oos_expectancy_lt_2.7,580,35,796,1330,72.864322,2.631579,,,,,,same numeric threshold; Stage2 median is below the cutoff
+common_quality,oos_expectancy_median,1.990852,6.183708,796,1330,,,,,,,,existing metric distributions differ sharply
+common_quality,oos_fitness_median,44.112318,102.689922,796,1330,,,,,,,,existing metric distributions differ sharply
+common_quality,oos_win_rate_median,68.750000,76.923077,796,1330,,,,,,,,Stage2 median is below common 70% elite cutoff
+common_quality,oos_trade_count_median,12,13,796,1330,,,,,,,,trade medians are similar despite asymmetric 15 vs 8 thresholds
+counterfactual,stage3_numeric_thresholds_on_stage2,,,796,,, ,59,32,4.137472,4.085050,82.043451,Stage2 would rise from 22 to 59 candidates and from 10 to 32 unique tickers
+counterfactual,incremental_vs_current,,,796,,,,37,25,4.322945,4.303578,81.951563,recovered candidates have stronger holdout PnL than current Stage2 elite pass cohort
+asymmetric_first_fail,oos_trade_count_15_vs_8,25,,,,,,,,,,,25 of the 37 recovered candidates fail the Stage2 15-trade threshold
+asymmetric_first_fail,oos_fitness_70_vs_45,8,,,,,,,,,,,8 of the 37 recovered candidates fail the Stage2 fitness 70 threshold
+asymmetric_first_fail,min_trade_count_8_stage2_only,4,,,,,,,,,,,4 of the 37 recovered candidates fail the Stage2 cross-period minimum trade threshold
+verdict,MIXED,,,,,,,,,,,,primary quality-driven at common expectancy threshold; secondary over-filter at asymmetric Stage2 elite thresholds

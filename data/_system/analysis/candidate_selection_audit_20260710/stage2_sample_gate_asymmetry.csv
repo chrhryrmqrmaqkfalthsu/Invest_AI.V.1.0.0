@@ -1,0 +1,9 @@
+analysis_type,scenario,stage2_threshold,stage2_candidate_n,stage2_rate_pct,stage2_holdout_trade_n,stage2_holdout_candidate_avg_pnl_pct,stage2_holdout_trade_weighted_pnl_pct,stage2_holdout_candidate_win_rate_pct,stage2_final_candidate_n,stage3_threshold,stage3_candidate_n,stage3_rate_pct,stage3_holdout_trade_n,stage3_holdout_candidate_avg_pnl_pct,stage3_holdout_trade_weighted_pnl_pct,stage3_holdout_candidate_win_rate_pct,stage3_final_candidate_n,interpretation
+threshold_hit,stage_specific,35,103,8.864028,,,,,10,24,188,9.343936,,,,,75,stage-specific P10 removes nearly equal shares; Stage2 is not more heavily hit
+threshold_hit,common_24,24,1,0.086059,,,,,10,24,188,9.343936,,,,,75,using 24 for both would almost eliminate Stage2 sample HOLD but does not change Stage2 final count
+threshold_hit,common_35,35,103,8.864028,,,,,10,35,737,36.630219,,,,,67,using 35 for both would heavily penalize Stage3 rather than reveal Stage2 bias
+holdout,below_stage_threshold,35,103,8.864028,1023,3.217741,2.863877,67.131133,,24,188,9.343936,1566,4.947864,4.835259,66.237334,,low-sample cohorts are not low-return cohorts; threshold is a reliability HOLD rather than quality proof
+holdout,meets_stage_threshold,35,1059,91.135972,13706,2.310168,2.281701,68.868184,,24,1824,90.656064,25653,3.558438,3.466830,64.624132,,sufficient-sample reference cohorts
+final_sensitivity,no_sample_gate,0,,,,,,,10,0,,,,,,,77,removing sample gate changes Stage2 10->10 and Stage3 75->77
+final_sensitivity,threshold_24,24,,,,,,,10,24,,,,,,,75,Stage2 24-trade counterfactual still ends at 10
+final_sensitivity,threshold_35,35,,,,,,,10,35,,,,,,,67,Stage3 would fall under the Stage2 numeric threshold

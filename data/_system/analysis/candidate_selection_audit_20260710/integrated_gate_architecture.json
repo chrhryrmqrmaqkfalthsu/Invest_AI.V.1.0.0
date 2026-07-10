@@ -226,6 +226,44 @@
     "dry_run_summary": "data/_system/analysis/candidate_selection_audit_20260710/threshold_p99_weightless_block_summary.json",
     "operational_implementation": false
   },
+  "confirmed_parallel_gate_structure": {
+    "status": "CONFIRMED",
+    "design_record": "data/_system/analysis/candidate_selection_audit_20260710/integrated_gate_parallel_structure_confirmed.json",
+    "operational_implementation": false,
+    "aggregation": "parallel independent responsibilities; none substitutes another",
+    "gates": [
+      {
+        "name": "one_sided_threshold_p99_reachability_weightless",
+        "phase": "STATIC",
+        "responsibility": "검증표본 없는 도달불가 임계",
+        "evidence": "v3 captures 54 of 410 HIGH_VOL exact-zero cases; 356 remain BOIL-only"
+      },
+      {
+        "name": "high_vol_volume_weight_zero",
+        "phase": "STATIC",
+        "responsibility": "위험구간 거래량 무시 구조",
+        "evidence": "410 exact-zero cases, 356 outside v3 because stored thresholds remain within p99"
+      },
+      {
+        "name": "ce_margin_concentration",
+        "phase": "DYNAMIC",
+        "execution_point": "evaluate_candidate",
+        "responsibility": "진입 시점 점수여유·소수지표 집중",
+        "evidence": "v3 captures 3 of 7 CE failures; ANET, BB, CDE, CE remain dynamic-only"
+      }
+    ],
+    "enforcement_change_in_this_task": false
+  },
+  "stage2_bias_diagnosis": {
+    "status": "CONFIRMED_READ_ONLY_DIAGNOSIS",
+    "classification": "MIXED",
+    "primary": "QUALITY_DRIVEN_WITHIN_EXISTING_ELITE_METRICS",
+    "secondary": "GATE_OVER_FILTER_AT_STAGE2_ELITE_TRADE_FITNESS_MIN_TRADE_THRESHOLDS",
+    "sample_gate_primary_cause": false,
+    "stage_cap_binding": false,
+    "source": "data/_system/analysis/candidate_selection_audit_20260710/stage2_bias_gate_structure_summary.json",
+    "operational_implementation": false
+  },
   "policy_history": [
     {
       "policy_version": "integrated-gate-v2-p99-reachability-block",

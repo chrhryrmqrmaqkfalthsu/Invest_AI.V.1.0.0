@@ -1,0 +1,126 @@
+{
+  "created_at_kst": "2026-07-11",
+  "analysis_mode": "READ_ONLY",
+  "origin_counts": {
+    "stage2": 1162,
+    "stage3": 15909
+  },
+  "final_counts": {
+    "stage2": 10,
+    "stage3": 75,
+    "total": 85
+  },
+  "stage_cap": {
+    "stage2_cap": 60,
+    "stage2_pre_cap": 10,
+    "stage2_binding": false,
+    "stage3_cap": 80,
+    "stage3_pre_cap": 75,
+    "stage3_binding": false
+  },
+  "dominant_attrition": {
+    "stage2": {
+      "step": "elite_filter",
+      "before": 796,
+      "after": 22,
+      "removed": 774,
+      "removed_rate_pct": 97.23618090452261
+    },
+    "stage3": {
+      "step": "artifact_completeness",
+      "before": 15909,
+      "after": 2012,
+      "removed": 13897,
+      "removed_rate_pct": 87.35307058897479
+    }
+  },
+  "sample_gate": {
+    "stage2_threshold": 35,
+    "stage2_removed": 103,
+    "stage2_removed_rate_pct": 8.864027538726333,
+    "stage3_threshold": 24,
+    "stage3_removed": 188,
+    "stage3_removed_rate_pct": 9.343936381709742,
+    "stage2_final_with_current_threshold": 10,
+    "stage2_final_with_threshold_24": 10,
+    "stage2_final_without_sample_gate": 10,
+    "conclusion": "NOT_PRIMARY_CAUSE"
+  },
+  "v3_gate": {
+    "stage2_removed_after_history": 263,
+    "stage2_removed_rate_pct": 24.834749763928237,
+    "stage3_removed_after_history": 494,
+    "stage3_removed_rate_pct": 27.083333333333332,
+    "conclusion": "NOT_STAGE2_BIASED"
+  },
+  "elite_gate": {
+    "stage2_pre_elite": 796,
+    "stage2_pass": 22,
+    "stage2_pass_rate_pct": 2.763819095477387,
+    "stage3_pre_elite": 1330,
+    "stage3_pass": 381,
+    "stage3_pass_rate_pct": 28.64661654135338,
+    "common_oos_expectancy_threshold": 2.7,
+    "stage2_oos_expectancy_first_fail": 580,
+    "stage3_oos_expectancy_first_fail": 35,
+    "stage2_oos_expectancy_median": 1.9908516224407813,
+    "stage3_oos_expectancy_median": 6.183708277364231,
+    "stage3_numeric_threshold_counterfactual_on_stage2": {
+      "pass_candidates": 59,
+      "unique_tickers_after_deny": 32,
+      "incremental_candidates": 37,
+      "incremental_unique_tickers": 25,
+      "incremental_first_fail_reasons": {
+        "oos_trade_count_15_vs_8": 25,
+        "oos_fitness_70_vs_45": 8,
+        "min_trade_count_8_stage2_only": 4
+      },
+      "incremental_holdout_candidate_avg_pnl_pct": 4.322944506891881,
+      "incremental_holdout_trade_weighted_pnl_pct": 4.303577760597943,
+      "current_stage2_elite_holdout_candidate_avg_pnl_pct": 3.825541800589568,
+      "current_stage2_elite_holdout_trade_weighted_pnl_pct": 3.842913385464483
+    }
+  },
+  "ticker_dedup": {
+    "stage2_before": 21,
+    "stage2_after": 10,
+    "stage2_removed_rate_pct": 52.38095238095239,
+    "stage3_before": 380,
+    "stage3_after": 75,
+    "stage3_removed_rate_pct": 80.26315789473685,
+    "conclusion": "NOT_STAGE2_BIASED_BUT_STAGE2_POOL_ALREADY_SMALL"
+  },
+  "verdict": {
+    "classification": "MIXED",
+    "primary_driver": "QUALITY_DRIVEN_WITHIN_EXISTING_ELITE_METRICS",
+    "secondary_driver": "GATE_OVER_FILTER_AT_STAGE2_ELITE_TRADE_FITNESS_MIN_TRADE_THRESHOLDS",
+    "sample_gate_over_filter": false,
+    "v3_stage_bias": false,
+    "stage_cap_cause": false,
+    "explanation": "Stage2는 공통 OOS expectancy 2.7 기준에서 실제 분포가 낮아 주로 탈락하지만, Stage2 전용 elite 임계인 거래수 15·fitness 70·기간별 최소 거래수 8은 양호한 holdout 후보 37개를 추가 제거하므로 일부 과잉 차단도 확인된다."
+  },
+  "parallel_gate_structure": {
+    "status": "CONFIRMED",
+    "v3_responsibility": "검증표본 없는 도달불가 임계",
+    "boil_responsibility": "위험구간 거래량 무시 구조",
+    "ce_responsibility": "진입 시점 점수여유·소수지표 집중",
+    "boil_exact_zero_total": 410,
+    "boil_v3_overlap": 54,
+    "boil_only": 356,
+    "ce_total": 7,
+    "ce_v3_overlap": 3,
+    "ce_dynamic_only": 4,
+    "ce_dynamic_only_ids": [
+      "stage3:ANET:fe220620802b",
+      "stage3:BB:f1bdfe7f8ad9",
+      "stage3:CDE:ceb9fe0512dc",
+      "stage3:CE:998b0b638c66"
+    ]
+  },
+  "operational_implementation": false,
+  "source_rule_mutation": false,
+  "live_change": false,
+  "retraining": false,
+  "order": false,
+  "delete": false
+}

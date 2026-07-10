@@ -1,0 +1,69 @@
+{
+  "status": "CONFIRMED",
+  "confirmed_at_kst": "2026-07-11",
+  "scope": "design fact only",
+  "operational_implementation": false,
+  "aggregation": "parallel independent responsibilities; no gate substitutes for another",
+  "gates": [
+    {
+      "name": "one_sided_threshold_p99_reachability_weightless",
+      "phase": "STATIC",
+      "current_design_enforcement": "BLOCK",
+      "responsibility": "검증표본 없는 도달불가 단방향 임계",
+      "definition": "저장 단방향 임계가 가중치와 무관하게 학습 activation-tail p99를 초과하면 FAIL",
+      "evidence": {
+        "policy_version": "integrated-gate-v3-p99-reachability-block-weightless",
+        "origin_count": 17071,
+        "fail_count": 4491,
+        "boil_exact_zero_total": 410,
+        "boil_exact_zero_overlap": 54,
+        "boil_exact_zero_not_captured": 356,
+        "ce_fail_total": 7,
+        "ce_overlap": 3,
+        "ce_not_captured": 4
+      }
+    },
+    {
+      "name": "high_vol_volume_blind_weight_zero",
+      "phase": "STATIC",
+      "current_design_enforcement": "MONITOR_UNCHANGED",
+      "responsibility": "위험구간 거래량 무시 구조",
+      "definition": "HIGH_VOL에서 거래량 없이 진입 가능하고 weight_volume_surge=0인 구조; 임계가 p99 이내여도 별도 결함 영역",
+      "evidence": {
+        "exact_zero_total": 410,
+        "v3_overlap": 54,
+        "boil_gate_only": 356,
+        "v3_capture_rate_pct": 13.170731707317072,
+        "relation_to_v3": "PARALLEL_NOT_SUPERSET"
+      }
+    },
+    {
+      "name": "ce_margin_concentration",
+      "phase": "DYNAMIC",
+      "execution_point": "evaluate_candidate",
+      "current_design_enforcement": "MONITOR_UNCHANGED",
+      "responsibility": "진입 시점 점수여유·소수지표 집중",
+      "definition": "should_buy=True AND final_score/signal_threshold<1.25 AND realized core Top2 share>=90%",
+      "evidence": {
+        "ce_fail_total": 7,
+        "v3_overlap": 3,
+        "ce_dynamic_only": 4,
+        "ce_dynamic_only_candidate_ids": [
+          "stage3:ANET:fe220620802b",
+          "stage3:BB:f1bdfe7f8ad9",
+          "stage3:CDE:ceb9fe0512dc",
+          "stage3:CE:998b0b638c66"
+        ],
+        "relation_to_v3": "PARALLEL_NOT_SUPERSET"
+      }
+    }
+  ],
+  "confirmed_conclusion": "v3 정적 도달불가, BOIL형 정적 거래량 무시, CE 동적 집중도는 담당 결함과 입력 시점이 달라 병렬 유지가 필수다.",
+  "enforcement_change_in_this_task": false,
+  "source_artifacts": [
+    "threshold_p99_weightless_block_relationship_summary.csv",
+    "threshold_p99_weightless_block_boil_ce_capture.csv",
+    "high_vol_volume_blind_risk_candidates.csv",
+    "stage2_bias_gate_structure_summary.json"
+  ]
+}

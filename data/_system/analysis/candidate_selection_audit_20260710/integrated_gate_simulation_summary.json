@@ -1,0 +1,155 @@
+{
+  "created_at": "2026-07-10T16:01:54.983627+00:00",
+  "origin_counts": {
+    "stage3": 15909,
+    "stage2": 1162
+  },
+  "static_status_counts": {
+    "FAIL": 14199,
+    "PASS": 2599,
+    "HOLD": 273
+  },
+  "selected_recommended": 93,
+  "selected_stage_counts": {
+    "stage3": 80,
+    "stage2": 13
+  },
+  "ce_selected_counts": {
+    "PENDING": 88,
+    "PASS": 5
+  },
+  "deny_before_dedup_count": 93,
+  "deny_after_dedup_count": 91,
+  "fallback_recovered_count": 2,
+  "condition_fail_reasons": {
+    "HISTORY_WIN_RATE_LT_STAGE_P10": 2772,
+    "HIGH_VOL_VOLUME_WEIGHT_NEAR_ZERO": 444,
+    "INCOMPLETE_OR_UNVALIDATED": 13897,
+    "HISTORY_AVG_PNL_LT_0": 950
+  },
+  "condition_hold_reasons": {
+    "HISTORY_SAMPLE_LT_P10": 886
+  },
+  "history_holdout_validation": [
+    {
+      "group": "stage2_A2_FAIL",
+      "candidate_n": 106,
+      "holdout_candidate_n": 106,
+      "holdout_trade_n": 1320,
+      "holdout_candidate_equal_avg_pnl_pct": 2.288600497182175,
+      "holdout_trade_weighted_avg_pnl_pct": 2.2485135535698157,
+      "holdout_candidate_equal_win_rate_pct": 60.44262529469026
+    },
+    {
+      "group": "stage2_A2_PASS",
+      "candidate_n": 953,
+      "holdout_candidate_n": 953,
+      "holdout_trade_n": 12386,
+      "holdout_candidate_equal_avg_pnl_pct": 2.3125665067120145,
+      "holdout_trade_weighted_avg_pnl_pct": 2.2852383872321917,
+      "holdout_candidate_equal_win_rate_pct": 69.80533990299021
+    },
+    {
+      "group": "stage3_A2_FAIL",
+      "candidate_n": 164,
+      "holdout_candidate_n": 164,
+      "holdout_trade_n": 2457,
+      "holdout_candidate_equal_avg_pnl_pct": 6.041147894591235,
+      "holdout_trade_weighted_avg_pnl_pct": 5.491575100005361,
+      "holdout_candidate_equal_win_rate_pct": 55.63969853783546
+    },
+    {
+      "group": "stage3_A2_PASS",
+      "candidate_n": 1660,
+      "holdout_candidate_n": 1660,
+      "holdout_trade_n": 23196,
+      "holdout_candidate_equal_avg_pnl_pct": 3.313157931110118,
+      "holdout_trade_weighted_avg_pnl_pct": 3.252361756321837,
+      "holdout_candidate_equal_win_rate_pct": 65.51175028806142
+    }
+  ],
+  "scenarios": [
+    {
+      "scenario": "origin_total",
+      "candidate_count": 17071,
+      "stage2_count": 1162,
+      "stage3_count": 15909,
+      "zero_risk": false
+    },
+    {
+      "scenario": "strict_static_all_requested",
+      "candidate_count": 2599,
+      "stage2_count": 951,
+      "stage3_count": 1648,
+      "zero_risk": false
+    },
+    {
+      "scenario": "evidence_safe_static_pass_origin",
+      "candidate_count": 2883,
+      "stage2_count": 1059,
+      "stage3_count": 1824,
+      "zero_risk": false
+    },
+    {
+      "scenario": "evidence_safe_ranked_ce_monitor",
+      "candidate_count": 93,
+      "stage2_count": 13,
+      "stage3_count": 80,
+      "zero_risk": false
+    },
+    {
+      "scenario": "strict_ce_known_only",
+      "candidate_count": 93,
+      "stage2_count": 13,
+      "stage3_count": 80,
+      "zero_risk": false
+    },
+    {
+      "scenario": "strict_ce_fail_closed",
+      "candidate_count": 5,
+      "stage2_count": 2,
+      "stage3_count": 3,
+      "zero_risk": false
+    },
+    {
+      "scenario": "deny_after_dedup_current_order",
+      "candidate_count": 91,
+      "stage2_count": 12,
+      "stage3_count": 79,
+      "zero_risk": false
+    }
+  ],
+  "notes": [
+    "CE dynamic data is inherited from live93 snapshot, not re-evaluated against current market.",
+    "CE blocking remains monitor-only recommendation because commit 9dd8e02 found OOS degradation.",
+    "No order, retraining, production candidate file or source mutation was performed."
+  ],
+  "recommended_static_status_counts": {
+    "FAIL": 13897,
+    "PASS": 2883,
+    "HOLD": 291
+  },
+  "recommended_selected_stage_counts": {
+    "stage3": 80,
+    "stage2": 13
+  },
+  "recommended_selected_count": 93,
+  "fallback_recovered_candidates": [
+    {
+      "candidate_id": "stage2:HCC:e1b25d2e778b",
+      "ticker": "HCC",
+      "stage": "stage2"
+    },
+    {
+      "candidate_id": "stage3:CDE:0d2be772e8d9",
+      "ticker": "CDE",
+      "stage": "stage3"
+    }
+  ],
+  "selected_monitor_hits": {
+    "history_win": 4,
+    "boil": 1,
+    "ce": 0,
+    "ce_pending": 88
+  }
+}

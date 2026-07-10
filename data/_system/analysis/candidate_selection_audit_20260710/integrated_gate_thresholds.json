@@ -1,0 +1,87 @@
+{
+  "stage2": {
+    "candidate_n": 1162,
+    "sample_n_p10": 35,
+    "sample_n_q25": 40.0,
+    "sample_n_median": 46.0,
+    "win_rate_p10_pct": 58.52738150023009,
+    "win_rate_legacy_45_percentile": 0.08605851979345956,
+    "avg_pnl_negative_count": 0,
+    "avg_pnl_q10_pct": 1.858486191463352,
+    "avg_pnl_median_pct": 2.4985485132043
+  },
+  "stage3": {
+    "candidate_n": 2012,
+    "sample_n_p10": 24,
+    "sample_n_q25": 31.0,
+    "sample_n_median": 38.0,
+    "win_rate_p10_pct": 50.0,
+    "win_rate_legacy_45_percentile": 3.429423459244533,
+    "avg_pnl_negative_count": 0,
+    "avg_pnl_q10_pct": 1.67057618025134,
+    "avg_pnl_median_pct": 2.8554384901018506
+  },
+  "volatility": {
+    "reference_group_median_atr_pct": {
+      "HIGH_VOL": 6.11455808208,
+      "LOW_VOL": 3.45116652873,
+      "MID_VOL": 4.93645767724
+    },
+    "high_vol_atr_boundary_pct": 5.52550787966,
+    "near_zero_weight_abs_max": 0.05
+  },
+  "ce": {
+    "ratio_lt": 1.25,
+    "top2_share_ge_pct": 90.0,
+    "logic": "should_buy AND ratio<1.25 AND top2_share>=90",
+    "enforcement_recommendation": "MONITOR_ONLY",
+    "reason": "9dd8e02 OOS_DEGRADED"
+  },
+  "history_holdout_validation": [
+    {
+      "group": "stage2_A2_FAIL",
+      "candidate_n": 106,
+      "holdout_candidate_n": 106,
+      "holdout_trade_n": 1320,
+      "holdout_candidate_equal_avg_pnl_pct": 2.288600497182175,
+      "holdout_trade_weighted_avg_pnl_pct": 2.2485135535698157,
+      "holdout_candidate_equal_win_rate_pct": 60.44262529469026
+    },
+    {
+      "group": "stage2_A2_PASS",
+      "candidate_n": 953,
+      "holdout_candidate_n": 953,
+      "holdout_trade_n": 12386,
+      "holdout_candidate_equal_avg_pnl_pct": 2.3125665067120145,
+      "holdout_trade_weighted_avg_pnl_pct": 2.2852383872321917,
+      "holdout_candidate_equal_win_rate_pct": 69.80533990299021
+    },
+    {
+      "group": "stage3_A2_FAIL",
+      "candidate_n": 164,
+      "holdout_candidate_n": 164,
+      "holdout_trade_n": 2457,
+      "holdout_candidate_equal_avg_pnl_pct": 6.041147894591235,
+      "holdout_trade_weighted_avg_pnl_pct": 5.491575100005361,
+      "holdout_candidate_equal_win_rate_pct": 55.63969853783546
+    },
+    {
+      "group": "stage3_A2_PASS",
+      "candidate_n": 1660,
+      "holdout_candidate_n": 1660,
+      "holdout_trade_n": 23196,
+      "holdout_candidate_equal_avg_pnl_pct": 3.313157931110118,
+      "holdout_trade_weighted_avg_pnl_pct": 3.252361756321837,
+      "holdout_candidate_equal_win_rate_pct": 65.51175028806142
+    }
+  ],
+  "recommended_enforcement": {
+    "completeness": "BLOCK",
+    "sample_lt_p10": "HOLD",
+    "avg_pnl_lt_0": "BLOCK",
+    "win_lt_p10": "MONITOR",
+    "boil": "MONITOR",
+    "ce": "MONITOR"
+  },
+  "history_validation_table": "data/_system/analysis/candidate_selection_audit_20260710/integrated_gate_history_validation.csv"
+}

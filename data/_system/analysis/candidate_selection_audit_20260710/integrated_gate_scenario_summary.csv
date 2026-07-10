@@ -1,0 +1,8 @@
+scenario,candidate_count,stage2_count,stage3_count,zero_risk
+origin_total,17071,1162,15909,False
+strict_static_all_requested,2599,951,1648,False
+evidence_safe_static_pass_origin,2883,1059,1824,False
+evidence_safe_ranked_ce_monitor,93,13,80,False
+strict_ce_known_only,93,13,80,False
+strict_ce_fail_closed,5,2,3,False
+deny_after_dedup_current_order,91,12,79,False

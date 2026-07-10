@@ -15,26 +15,35 @@
         "policy_version": "integrated-gate-v3-p99-reachability-block-weightless",
         "origin_count": 17071,
         "fail_count": 4491,
-        "boil_exact_zero_total": 410,
-        "boil_exact_zero_overlap": 54,
-        "boil_exact_zero_not_captured": 356,
+        "boil_near_zero_total": 425,
+        "boil_near_zero_overlap": 54,
+        "boil_near_zero_not_captured": 371,
         "ce_fail_total": 7,
         "ce_overlap": 3,
         "ce_not_captured": 4
       }
     },
     {
-      "name": "high_vol_volume_blind_weight_zero",
+      "name": "high_vol_volume_blind_near_zero_v3_exclusive",
       "phase": "STATIC",
-      "current_design_enforcement": "MONITOR_UNCHANGED",
+      "current_design_enforcement": "BLOCK",
       "responsibility": "위험구간 거래량 무시 구조",
-      "definition": "HIGH_VOL에서 거래량 없이 진입 가능하고 weight_volume_surge=0인 구조; 임계가 p99 이내여도 별도 결함 영역",
+      "definition": "HIGH_VOL에서 거래량 없이 진입 가능하고 abs(weight_volume_surge)<=0.05이며 v3 PASS인 순수 구조적 무시 케이스",
       "evidence": {
-        "exact_zero_total": 410,
-        "v3_overlap": 54,
-        "boil_gate_only": 356,
-        "v3_capture_rate_pct": 13.170731707317072,
-        "relation_to_v3": "PARALLEL_NOT_SUPERSET"
+        "near_zero_total": 425,
+        "v3_overlap_excluded": 54,
+        "boil_gate_only": 371,
+        "exact_zero_only": 356,
+        "near_nonzero_only": 15,
+        "unique_entry_rule_n": 125,
+        "holdout_avg_pnl_pct": 0.4005955366933011,
+        "normal_high_vol_avg_pnl_pct": 3.0484448685789456,
+        "entry_rule_pnl_difference_ci95": [
+          -3.469930310835617,
+          -1.9336631496930092
+        ],
+        "final_candidate_count": 84,
+        "relation_to_v3": "PARALLEL_WITH_EXPLICIT_V3_EXCLUSION"
       }
     },
     {
@@ -58,12 +67,19 @@
       }
     }
   ],
-  "confirmed_conclusion": "v3 정적 도달불가, BOIL형 정적 거래량 무시, CE 동적 집중도는 담당 결함과 입력 시점이 달라 병렬 유지가 필수다.",
-  "enforcement_change_in_this_task": false,
+  "confirmed_conclusion": "v3 정적 도달불가, BOIL형 정적 거래량 무시, CE 동적 집중도는 담당 결함과 입력 시점이 달라 병렬 유지가 필수다. BOIL형은 v3 PASS 영역에만 BLOCK으로 적용한다.",
+  "boil_enforcement_decision": {
+    "status": "CONFIRMED",
+    "decision": "BLOCK_JUSTIFIED",
+    "design_record": "integrated_gate_boil_enforcement_confirmed.json",
+    "operational_implementation": false
+  },
+  "enforcement_change_in_this_task": true,
   "source_artifacts": [
     "threshold_p99_weightless_block_relationship_summary.csv",
     "threshold_p99_weightless_block_boil_ce_capture.csv",
     "high_vol_volume_blind_risk_candidates.csv",
-    "stage2_bias_gate_structure_summary.json"
+    "boil_block_enforcement_decision.json",
+    "integrated_gate_boil_enforcement_confirmed.json"
   ]
 }

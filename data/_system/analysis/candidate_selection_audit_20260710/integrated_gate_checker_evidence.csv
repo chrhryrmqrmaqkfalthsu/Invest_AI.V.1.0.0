@@ -3,6 +3,6 @@ artifact_completeness,BLOCK,BLOCK,Stage3 profile membership removes validate byp
 history_sample,BLOCK/HOLD,HOLD,"P10 thresholds derived from development trade-count distribution; reliability guard, not return claim"
 history_avg_pnl_negative,BLOCK,BLOCK,economic break-even 0%; current complete pool has zero hits
 history_low_win,BLOCK,MONITOR,Stage3 low-win group holdout PnL 6.32% vs pass 3.43%; blocking not validated
-boil_high_vol_zero_weight,BLOCK,MONITOR,"live93 linkage negative, but full-origin proxy cohort holdout direction conflicts; need exact volatility coverage/OOS validation"
+boil_high_vol_volume_blind_near_zero,BLOCK,BLOCK,"v3-exclusive 371 candidates: avg PnL 0.4006% vs normal HIGH_VOL 3.0484%; entry-rule bootstrap difference -2.7062%p CI [-3.4699,-1.9337]; final candidates 85->84"
 ce_ratio_top2,BLOCK,MONITOR,9dd8e02 Gate A/B and combination OOS_DEGRADED or neutral
 one_sided_threshold_p99_reachability_weightless,BLOCK,BLOCK,"all stored one-sided thresholds regardless of weight; FAIL 4,491/17,071, +524 vs v2"

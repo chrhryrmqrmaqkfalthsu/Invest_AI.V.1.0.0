@@ -37,6 +37,30 @@
     "enforcement_recommendation": "MONITOR_ONLY",
     "reason": "9dd8e02 OOS_DEGRADED"
   },
+  "boil_high_vol_volume_blind": {
+    "decision": "BLOCK_JUSTIFIED",
+    "enforcement": "BLOCK",
+    "phase": "STATIC",
+    "definition": "HIGH_VOL AND entry possible without volume AND abs(weight_volume_surge)<=0.05 AND v3 reachability PASS",
+    "v3_overlap": "EXCLUDED",
+    "near_zero_weight_abs_max": 0.05,
+    "dry_run_incremental_fail_count": 371,
+    "dry_run_exact_zero_count": 356,
+    "dry_run_near_nonzero_count": 15,
+    "dry_run_unique_entry_rule_count": 125,
+    "dry_run_stage2_count": 2,
+    "dry_run_stage3_count": 369,
+    "entry_rule_pnl_difference_pct_point": -2.7061794860506043,
+    "entry_rule_pnl_difference_ci95": [
+      -3.469930310835617,
+      -1.9336631496930092
+    ],
+    "final_candidate_count": 84,
+    "final_stage2_count": 10,
+    "final_stage3_count": 74,
+    "operational_implementation": false,
+    "design_record": "data/_system/analysis/candidate_selection_audit_20260710/integrated_gate_boil_enforcement_confirmed.json"
+  },
   "history_holdout_validation": [
     {
       "group": "stage2_A2_FAIL",
@@ -80,7 +104,7 @@
     "sample_lt_p10": "HOLD",
     "avg_pnl_lt_0": "BLOCK",
     "win_lt_p10": "MONITOR",
-    "boil": "MONITOR",
+    "boil": "BLOCK",
     "ce": "MONITOR",
     "threshold_reachability_p99": "SUPERSEDED",
     "threshold_reachability_p99_weightless": "BLOCK"

@@ -77,14 +77,37 @@
       "note": "sample shortage HOLD; avg PnL<0 FAIL; win lower-tail recorded only"
     },
     {
-      "name": "high_vol_volume_weight_zero",
+      "name": "high_vol_volume_blind_near_zero_v3_exclusive",
+      "version": "1",
       "phase": "STATIC",
-      "enforcement": "MONITOR",
+      "enforcement": "BLOCK",
       "criteria": {
-        "high_vol": "reference OOS vol_group; unseen ticker uses ATR-proxy boundary from MID/HIGH medians",
-        "abs_weight_volume_surge_lte": 0.05
+        "high_vol": true,
+        "entry_possible_without_volume": true,
+        "abs_weight_volume_surge_lte": 0.05,
+        "v3_reachability_status": "PASS",
+        "v3_overlap": "EXCLUDED"
       },
-      "source": "high_vol_volume_weight_zero_*"
+      "responsibility": "위험구간 거래량 무시 구조",
+      "source": [
+        "high_vol_volume_blind_risk_candidates.csv",
+        "threshold_p99_weightless_block_candidate_decisions.csv",
+        "boil_block_exclusive_targets.csv",
+        "integrated_gate_boil_enforcement_confirmed.json"
+      ],
+      "dry_run": {
+        "incremental_fail_count": 371,
+        "exact_zero_count": 356,
+        "near_nonzero_count": 15,
+        "unique_entry_rule_count": 125,
+        "entry_rule_pnl_difference_pct_point": -2.7061794860506043,
+        "entry_rule_pnl_difference_ci95": [
+          -3.469930310835617,
+          -1.9336631496930092
+        ],
+        "final_candidate_count": 84
+      },
+      "note": "BLOCK_JUSTIFIED design decision; operational implementation false"
     },
     {
       "name": "ce_margin_concentration",
@@ -129,7 +152,9 @@
   "flow": [
     "scan immutable origins",
     "stable-file snapshot and incremental parse",
-    "static checkers",
+    "static artifact/history checkers",
+    "static v3 reachability BLOCK",
+    "static BOIL volume-blind near-zero BLOCK on v3 PASS only",
     "persist static gate catalog",
     "existing elite metrics and score",
     "denylist before per-stage ticker dedup; fallback to next candidate",
@@ -226,6 +251,14 @@
     "dry_run_summary": "data/_system/analysis/candidate_selection_audit_20260710/threshold_p99_weightless_block_summary.json",
     "operational_implementation": false
   },
+  "confirmed_boil_enforcement": {
+    "status": "CONFIRMED",
+    "decision": "BLOCK_JUSTIFIED",
+    "checker": "high_vol_volume_blind_near_zero_v3_exclusive",
+    "design_record": "data/_system/analysis/candidate_selection_audit_20260710/integrated_gate_boil_enforcement_confirmed.json",
+    "dry_run_summary": "data/_system/analysis/candidate_selection_audit_20260710/boil_block_enforcement_decision.json",
+    "operational_implementation": false
+  },
   "confirmed_parallel_gate_structure": {
     "status": "CONFIRMED",
     "design_record": "data/_system/analysis/candidate_selection_audit_20260710/integrated_gate_parallel_structure_confirmed.json",
@@ -235,24 +268,27 @@
       {
         "name": "one_sided_threshold_p99_reachability_weightless",
         "phase": "STATIC",
+        "enforcement": "BLOCK",
         "responsibility": "검증표본 없는 도달불가 임계",
-        "evidence": "v3 captures 54 of 410 HIGH_VOL exact-zero cases; 356 remain BOIL-only"
+        "evidence": "v3 captures 54 of 425 HIGH_VOL near-zero cases"
       },
       {
-        "name": "high_vol_volume_weight_zero",
+        "name": "high_vol_volume_blind_near_zero_v3_exclusive",
         "phase": "STATIC",
+        "enforcement": "BLOCK",
         "responsibility": "위험구간 거래량 무시 구조",
-        "evidence": "410 exact-zero cases, 356 outside v3 because stored thresholds remain within p99"
+        "evidence": "371 v3-exclusive near-zero cases; entry-rule PnL CI excludes zero; final candidates 84"
       },
       {
         "name": "ce_margin_concentration",
         "phase": "DYNAMIC",
         "execution_point": "evaluate_candidate",
+        "enforcement": "MONITOR",
         "responsibility": "진입 시점 점수여유·소수지표 집중",
         "evidence": "v3 captures 3 of 7 CE failures; ANET, BB, CDE, CE remain dynamic-only"
       }
     ],
-    "enforcement_change_in_this_task": false
+    "enforcement_change_in_this_task": true
   },
   "stage2_bias_diagnosis": {
     "status": "CONFIRMED_READ_ONLY_DIAGNOSIS",
@@ -270,6 +306,13 @@
       "checker": "one_sided_threshold_p99_reachability",
       "status": "SUPERSEDED_BY_V3_WEIGHTLESS_SCOPE",
       "dry_run_fail_count": 3967,
+      "operational_implementation": false
+    },
+    {
+      "checker": "high_vol_volume_blind_weight_zero",
+      "status": "SUPERSEDED_BY_HIGH_VOL_VOLUME_BLIND_NEAR_ZERO_V3_EXCLUSIVE",
+      "previous_enforcement": "MONITOR",
+      "new_enforcement": "BLOCK",
       "operational_implementation": false
     }
   ]

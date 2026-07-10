@@ -1,0 +1,13 @@
+metric,value
+v3_selected_total,85
+v3_selected_stage2,10
+v3_selected_stage3,75
+post_boil_selected_total,84
+post_boil_selected_stage2,10
+post_boil_selected_stage3,74
+old_selected_blocked,1
+old_selected_dropped,1
+fallback_added,0
+combined_static_pass,2115
+combined_static_hold,202
+combined_static_fail,14754

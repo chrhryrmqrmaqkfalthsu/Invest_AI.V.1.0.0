@@ -1,0 +1,133 @@
+{
+  "created_at": "2026-07-10T19:22:14.952061+00:00",
+  "analysis_version": "v4-clean-static-only-sample-adjusted-tail",
+  "verdict": "WEAK",
+  "target_definition": {
+    "stage2": {
+      "collapse_gap_q90_pp": 1.607134409699369,
+      "tail_worst_mae_log_n_intercept": -0.5249044311815527,
+      "tail_worst_mae_log_n_slope": -3.4659794779641033,
+      "tail_worst_mae_residual_q10_pct": -4.380145340092547,
+      "high_win_q75_pct": 76.47058823529412,
+      "worst_to_median_win_q75": 2.2411140252834434,
+      "top3_loss_share_q50": 0.9299660298948262
+    },
+    "stage3": {
+      "collapse_gap_q90_pp": 4.280544548642219,
+      "tail_worst_mae_log_n_intercept": -11.27935372900986,
+      "tail_worst_mae_log_n_slope": -0.8333090449827836,
+      "tail_worst_mae_residual_q10_pct": -8.518241740258398,
+      "high_win_q75_pct": 68.18181818181817,
+      "worst_to_median_win_q75": 2.571897606491163,
+      "top3_loss_share_q50": 0.7313979815515106
+    }
+  },
+  "method": {
+    "discovery": "internal holdout, base_avg_pnl>=0, n>=8",
+    "validation": "untouched frozen live93 OOS, base_avg_pnl>=0, n>=8",
+    "tail_adjustment": "stage OLS expected worst MAE from log1p(trade_count); bottom-decile residual",
+    "high_win_large_loss": "stage top-quartile win + top-quartile worst/median-win + median-or-higher top3 loss share",
+    "allowed_predictors": "rulebook/static stored metrics/training distribution only",
+    "forbidden_predictors": "eval_*, target_*, realized component, current market state",
+    "single_feature_n": 57,
+    "pair_n": 20,
+    "pair_limit": 2,
+    "bootstrap": "ticker-cluster 1000 reps",
+    "multiple_testing": "BH FDR on frozen single and pair families"
+  },
+  "cohorts": {
+    "discovery_n": 15363,
+    "discovery_bad_n": 3248,
+    "validation_n": 82,
+    "validation_bad_n": 42,
+    "incremental_existing_static_survivor_n": 18,
+    "incremental_bad_n": 10
+  },
+  "replication": {
+    "fdr_replicated_single_feature_n": 0,
+    "broad_fdr_replicated_pair_n": 0,
+    "robust_gate_pair_n": 0,
+    "leakage_features_excluded": [
+      "eval_worst_mae_expected_for_n_pct",
+      "eval_worst_mae_sample_adjusted_residual_pct"
+    ],
+    "nominal_single_feature_n": 1,
+    "nominal_pair_n": 2
+  },
+  "best_weak_pair": {
+    "left_feature": "stored_validation_expectancy_pct",
+    "left_direction": ">=",
+    "left_stage2_boundary": 2.368974258482032,
+    "left_stage3_boundary": 3.186211241686341,
+    "operator": "AND",
+    "right_feature": "stored_validation_fitness",
+    "right_direction": ">=",
+    "right_stage2_boundary": 58.294207817022354,
+    "right_stage3_boundary": 82.61852599169951,
+    "discovery_risk_difference": 0.145152379070577,
+    "discovery_risk_difference_ci_low": 0.0908542636004281,
+    "discovery_risk_difference_ci_high": 0.1974598329370641,
+    "validation_flagged_n": 35,
+    "validation_risk_difference": 0.252887537993921,
+    "validation_risk_difference_ci_low": 0.0328655050729969,
+    "validation_risk_difference_ci_high": 0.478738272480208,
+    "validation_fdr_q": 0.2014744945317482,
+    "incremental_validation_n": 18,
+    "incremental_validation_flagged_n": 11,
+    "incremental_validation_risk_difference": -0.0259740259740259,
+    "incremental_validation_risk_difference_ci_low": -0.5,
+    "incremental_validation_risk_difference_ci_high": 0.4666666666666667,
+    "stage2_risk_difference": null,
+    "stage2_flagged_n": 13,
+    "stage3_risk_difference": 0.3230174081237911,
+    "stage3_flagged_n": 22,
+    "ce7_capture": {
+      "total": 7,
+      "all_flagged_n": 1,
+      "frozen_available_n": 6,
+      "frozen_bad_n": 3,
+      "frozen_bad_captured_n": 1,
+      "captured_ids": [
+        "stage3:BOIL:9044dc2c67a3"
+      ]
+    },
+    "robust_static_gate_candidate": false
+  },
+  "ce7": {
+    "total": 7,
+    "all_flagged_n": 1,
+    "frozen_available_n": 6,
+    "frozen_bad_n": 3,
+    "frozen_bad_captured_n": 1,
+    "captured_ids": [
+      "stage3:BOIL:9044dc2c67a3"
+    ]
+  },
+  "conclusion": "One single feature and two two-feature combinations are nominally positive before frozen-family FDR, but no static predictor survives frozen FDR, existing-gate incremental bootstrap, and stage consistency. The result is WEAK, not a fourth static gate; dynamic observation logging remains the only robust CE validation path.",
+  "no_design_change": true,
+  "operational_implementation": false,
+  "source_rule_mutation": false,
+  "live_change": false,
+  "retraining": false,
+  "order": false,
+  "delete": false,
+  "best_weak_feature": {
+    "feature": "trailing_atr",
+    "risk_direction": ">=",
+    "raw_boundary_stage2": 2.3110028804321514,
+    "raw_boundary_stage3": 2.363506118692757,
+    "discovery_auc": 0.539139194074032,
+    "discovery_risk_difference": 0.0471405671271468,
+    "validation_auc": 0.6309523809523809,
+    "validation_risk_difference": 0.2486486486486486,
+    "validation_risk_difference_ci_low": 0.0244394419697756,
+    "validation_risk_difference_ci_high": 0.4530928669544741,
+    "validation_flag_fdr_q": 0.4754858134555206,
+    "incremental_validation_n": 18,
+    "incremental_validation_flagged_n": 8,
+    "incremental_validation_risk_difference": 0.35,
+    "incremental_validation_risk_difference_ci_low": -0.1002777777777777,
+    "incremental_validation_risk_difference_ci_high": 0.7662337662337662
+  },
+  "created_at_reporting_finalized": "2026-07-10T19:24:44.916931+00:00"
+}

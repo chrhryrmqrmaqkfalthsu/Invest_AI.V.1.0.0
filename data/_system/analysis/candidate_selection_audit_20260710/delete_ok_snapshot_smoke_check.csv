@@ -1,0 +1,13 @@
+check,status,expected,actual,evidence
+snapshot_archive_count,PASS,4,4,"backup/pre_cleanup_20260710"
+snapshot_source_file_count,PASS,4431,4431,"tar member files matched source manifests"
+snapshot_source_payload_bytes,PASS,337096609,337096609,"tar payload byte sums matched source byte sums"
+snapshot_archive_sha256,PASS,4,4,"all four archives rehashed after source deletion"
+snapshot_safe_member_paths,PASS,0,0,"no absolute path or .. member"
+deleted_source_paths,PASS,4,4,"all four source directories absent"
+live_dependency_files_exist,PASS,148,148,"live_dependency_tree.csv post-delete existence check"
+python_entrypoint_imports,PASS,11,11,"Stage2 Stage3 candidate generation execution API scheduled and live slots module"
+stage3_dynamic_body,PASS,1,1,"dynamic Stage3 body exists and wrapper exposes main"
+shell_entrypoint_syntax,PASS,2,2,"dashboard_guard.sh and live_candidate_slots_guard.sh bash -n"
+protected_overlap,PASS,0,0,"pre-snapshot scan found no protected artifact in four source paths"
+backup_directory_preserved,PASS,1,1,"existing backup content untouched; only pre_cleanup_20260710 added"

@@ -1,0 +1,6 @@
+source_path,source_file_count,source_bytes,source_mib,archive_path,archive_bytes,archive_mib,archive_sha256,tar_file_count,tar_payload_bytes,integrity,source_status
+data/_system/pipeline,4155,82632425,78.804,backup/pre_cleanup_20260710/data__system__pipeline.tar.gz,11765436,11.220,2cb035081030c21bf6d1ff9144805a00f2b917dbff04fc543b219f358b367eec,4155,82632425,PASS,DELETED
+data/_system/condition_db_sell_omen_clean,183,129892573,123.875,backup/pre_cleanup_20260710/data__system__condition_db_sell_omen_clean.tar.gz,34009969,32.435,4b09b8d80c0a0163e08f3cfd6c3d35978bb4edfa8edae7f05cd2f32a61b97906,183,129892573,PASS,DELETED
+data/_system/condition_db_sell_omen_lr8d85,85,63017369,60.098,backup/pre_cleanup_20260710/data__system__condition_db_sell_omen_lr8d85.tar.gz,17549331,16.736,cb81e2feec0e017d7f18e92c873fc29f6e6d48a965cde1225608bce4d2b62cf9,85,63017369,PASS,DELETED
+data/_system/logs,8,61554242,58.703,backup/pre_cleanup_20260710/data__system__logs.tar.gz,4079295,3.890,c9193f85ba4b33eaf102f3daa37c81d93f5ece00e0a9bcdc7c683d8fe965ea71,8,61554242,PASS,DELETED
+TOTAL,4431,337096609,321.480,backup/pre_cleanup_20260710,67404031,64.278,,4431,337096609,PASS,4_PATHS_DELETED

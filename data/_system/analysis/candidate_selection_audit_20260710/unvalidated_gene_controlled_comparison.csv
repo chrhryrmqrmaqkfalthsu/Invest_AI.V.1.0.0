@@ -1,0 +1,49 @@
+method,metric,estimate,ci_low,ci_high,candidate_n,bootstrap_valid_reps,controls,window,candidate_coverage,strata_n,strata,stratum,note
+candidate_level_ols_bootstrap,avg_pnl_pct,-0.20475952734005898,-1.0930921361645143,0.5294844647529285,93.0,9983.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,FULL_5Y,,,,,
+exact_strata,avg_pnl_pct,-0.09866128613373326,-0.605301831798556,0.37043617449118227,,,,FULL_5Y,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,win_rate_pct,-2.0569421499046157,-10.091223574308403,4.265178775370053,93.0,9984.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,FULL_5Y,,,,,
+exact_strata,win_rate_pct,-1.729249703856901,-4.663214584533709,1.0667093461431205,,,,FULL_5Y,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,avg_mae_pct,-0.3653131982706396,-1.5874510292292754,0.7487032465022284,93.0,9980.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,FULL_5Y,,,,,
+exact_strata,avg_mae_pct,-0.9988083856303067,-1.4233359094478568,-0.5591224924061867,,,,FULL_5Y,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,avg_mfe_pct,0.5183719907062825,-0.810334932781827,2.0198022060623284,93.0,9977.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,FULL_5Y,,,,,
+exact_strata,avg_mfe_pct,1.4778695849583297,0.7970062814030887,2.107513443469481,,,,FULL_5Y,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,avg_pnl_pct,0.35450542248326067,-1.9134985189639377,3.426520723111462,93.0,9983.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,FROZEN_OOS,,,,,
+exact_strata,avg_pnl_pct,0.7625730500121845,-0.007768512256067669,1.4847736861044991,,,,FROZEN_OOS,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,win_rate_pct,5.427072738064092,-3.614183969952542,14.975442992683442,93.0,9984.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,FROZEN_OOS,,,,,
+exact_strata,win_rate_pct,7.900281481829525,4.317781375872143,11.581225751300826,,,,FROZEN_OOS,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,avg_mae_pct,0.030386899928427136,-1.4196556500163782,1.4250492014599776,93.0,9980.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,FROZEN_OOS,,,,,
+exact_strata,avg_mae_pct,0.03041474677958267,-0.548346487269019,0.6367822862596126,,,,FROZEN_OOS,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,avg_mfe_pct,0.6007126344082556,-2.1097471493534727,3.7159397209138563,93.0,9977.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,FROZEN_OOS,,,,,
+exact_strata,avg_mfe_pct,1.3597363987890314,0.2428167890765263,2.4105823530111072,,,,FROZEN_OOS,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,avg_pnl_pct,1.5304639539362646,-1.3411860589783857,4.8329284287248395,93.0,9983.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,POST_GENE_TRAIN_OOS,,,,,
+exact_strata,avg_pnl_pct,1.7283527878240337,0.6346151370812734,2.6751618624415943,,,,POST_GENE_TRAIN_OOS,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,win_rate_pct,10.346003772061895,-2.408637250578857,24.404213367788966,93.0,9984.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,POST_GENE_TRAIN_OOS,,,,,
+exact_strata,win_rate_pct,11.943239193132063,7.39138010399402,16.2473877038662,,,,POST_GENE_TRAIN_OOS,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,avg_mae_pct,0.8710230982500351,-1.265180018203642,2.743108560003953,93.0,9980.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,POST_GENE_TRAIN_OOS,,,,,
+exact_strata,avg_mae_pct,0.6520233392639629,-0.19013403646349258,1.593251976095686,,,,POST_GENE_TRAIN_OOS,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+candidate_level_ols_bootstrap,avg_mfe_pct,0.4799600888930019,-2.0317383658807424,3.2237139561179524,93.0,9977.0,stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n,POST_GENE_TRAIN_OOS,,,,,
+exact_strata,avg_mfe_pct,0.8979292609465812,-0.3341925061553894,2.0484833886082607,,,,POST_GENE_TRAIN_OOS,44.0,4.0,stage|vol_group|exit_strategy|direction,,
+realized_exit_reason_descriptive,avg_pnl_pct,-0.8660591996232383,-1.8376205722716898,0.14640628998686944,,,,FROZEN_OOS,32.0,,,breakeven_stop,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,win_rate_pct,6.272071698719969,-1.2899140470200163,13.814355048519177,,,,FROZEN_OOS,32.0,,,breakeven_stop,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mae_pct,0.9937229372065728,0.5888159116001023,1.3779192815194807,,,,FROZEN_OOS,32.0,,,breakeven_stop,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mfe_pct,-1.5096238698500182,-2.4081198191597792,-0.5650063350980504,,,,FROZEN_OOS,32.0,,,breakeven_stop,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_pnl_pct,-18.29031403955126,,,,,,FROZEN_OOS,5.0,,,sell_omen,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,win_rate_pct,-54.71070148489503,,,,,,FROZEN_OOS,5.0,,,sell_omen,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mae_pct,-0.5226122818625925,,,,,,FROZEN_OOS,5.0,,,sell_omen,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mfe_pct,-15.087331012637609,,,,,,FROZEN_OOS,5.0,,,sell_omen,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_pnl_pct,-0.6287825246350103,-2.127057014726526,0.9557616251686402,,,,FROZEN_OOS,47.0,,,stop_loss,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,win_rate_pct,-1.1502154890742355,-1.898529724097882,-0.5357082257801132,,,,FROZEN_OOS,47.0,,,stop_loss,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mae_pct,-0.8705141641200207,-3.036912885911448,1.287766334339594,,,,FROZEN_OOS,47.0,,,stop_loss,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mfe_pct,0.20822596133870963,-2.5709967932726148,2.979275233113211,,,,FROZEN_OOS,47.0,,,stop_loss,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_pnl_pct,-7.351200069643676,-15.74032657548023,-1.436552126319029,,,,FROZEN_OOS,49.0,,,take_profit,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,win_rate_pct,1.3076438019976138,0.28890783366486517,2.8226302035825483,,,,FROZEN_OOS,49.0,,,take_profit,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mae_pct,-0.463601393140995,-1.4694485772345331,0.34090027058169803,,,,FROZEN_OOS,49.0,,,take_profit,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mfe_pct,-11.592734368474083,-24.862597629055788,-3.273544657374334,,,,FROZEN_OOS,49.0,,,take_profit,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_pnl_pct,-0.5913919525119389,-4.557584877537193,3.6036875213159436,,,,FROZEN_OOS,93.0,,,time_out,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,win_rate_pct,6.912970739012032,-6.567750973433833,20.42953210703644,,,,FROZEN_OOS,93.0,,,time_out,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mae_pct,0.524449831968762,-3.0032446760162608,3.0485007966514006,,,,FROZEN_OOS,93.0,,,time_out,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mfe_pct,-0.4181964449921036,-4.304971239673137,3.3947316892271924,,,,FROZEN_OOS,93.0,,,time_out,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_pnl_pct,-9.449633351544936,-22.41418794905853,0.8565413794874032,,,,FROZEN_OOS,74.0,,,trailing,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,win_rate_pct,-33.60512919315605,-57.41097615034289,-6.38717787781365,,,,FROZEN_OOS,74.0,,,trailing,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mae_pct,-4.192712846010395,-9.070879580113461,-1.019405022874993,,,,FROZEN_OOS,74.0,,,trailing,post-entry outcome stratum; not causal control
+realized_exit_reason_descriptive,avg_mfe_pct,-0.9040604579198348,-7.401657709205148,3.7495205730930934,,,,FROZEN_OOS,74.0,,,trailing,post-entry outcome stratum; not causal control

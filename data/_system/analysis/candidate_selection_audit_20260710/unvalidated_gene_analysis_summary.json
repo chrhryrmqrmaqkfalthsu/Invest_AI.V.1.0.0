@@ -1,0 +1,148 @@
+{
+  "verdict": "INCONCLUSIVE",
+  "metadata": {
+    "seed": 42,
+    "bootstrap_reps": 10000,
+    "activity_components": ["ma", "macd", "rsi", "bb", "volume_surge"],
+    "activity_thresholds": {
+      "NEVER_FIRED": "count == 0",
+      "RARELY_ACTIVE": "count 1..4 or rate < 0.01",
+      "ACTIVE": "count >= 5 and rate >= 0.01",
+      "UNVALIDATED_GENE": "any NEVER_FIRED component with abs(weight) > 1e-12",
+      "ZERO_WEIGHT_NEVER": "NEVER_FIRED and abs(weight) <= 1e-12; separated from UNVALIDATED_GENE"
+    },
+    "full_pool_sources": [
+      "exp_batch_stage123_2009_20260616_full/tickers/*/stage2/rulebooks_all.jsonl",
+      "exp_batch_stage123_2009_20260616_full/tickers/*/stage3/entry_rulebooks.jsonl"
+    ],
+    "daily_bar_source": "data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache",
+    "frozen_trade_source": "data/_system/analysis/oos_reproduce_frozen_20260707/oos_trades_frozen.csv",
+    "total_scanned_rules": 602963,
+    "scanned_tickers": 1995,
+    "missing_cache_tickers": []
+  },
+  "pool_summary": [
+    {
+      "pool_scope": "STAGE2_UPSTREAM",
+      "total_rules": 597300,
+      "unvalidated_rules": 43163,
+      "unvalidated_rate_pct": 7.2263519169596515,
+      "weakly_validated_rules": 189843,
+      "weakly_validated_rate_pct": 31.783525866398794,
+      "one_unvalidated_gene_rules": 43117,
+      "two_plus_unvalidated_gene_rules": 46
+    },
+    {
+      "pool_scope": "STAGE3_ENTRY",
+      "total_rules": 5663,
+      "unvalidated_rules": 364,
+      "unvalidated_rate_pct": 6.427688504326329,
+      "weakly_validated_rules": 1782,
+      "weakly_validated_rate_pct": 31.46742009535582,
+      "one_unvalidated_gene_rules": 364,
+      "two_plus_unvalidated_gene_rules": 0
+    }
+  ],
+  "component_concentration": {
+    "stage2_unvalidated_component_combinations": {
+      "volume_surge": 42645,
+      "ma": 464,
+      "ma|volume_surge": 46,
+      "bb": 8
+    },
+    "stage3_unvalidated_component_combinations": {
+      "volume_surge": 364
+    },
+    "stage2_volume_unvalidated_rate_pct": 7.147329650092081,
+    "stage3_volume_unvalidated_rate_pct": 6.427688504326329
+  },
+  "candidate_summary": {
+    "candidate_n": 93,
+    "unvalidated_candidate_n": 6,
+    "unvalidated_candidate_rate_pct": 6.451612903225806,
+    "weakly_validated_candidate_n": 27,
+    "unvalidated_component_counts": {"volume_surge": 6},
+    "unvalidated_candidates": ["AGI", "AGQ", "AMP", "BTE", "CRK", "STM"]
+  },
+  "boil_parity": {
+    "candidate_id": "stage3:BOIL:9044dc2c67a3",
+    "train_start": "2024-07-01",
+    "train_end": "2025-06-30",
+    "eligible_days": 250,
+    "weight_volume_surge": 0.0,
+    "volume_surge_ratio": 2.5,
+    "volume_surge_fired_count": 0,
+    "volume_surge_activity_label": "NEVER_FIRED",
+    "rule_label": "ZERO_WEIGHT_NEVER",
+    "parity_pass": true
+  },
+  "performance": {
+    "predeclared_rule": {
+      "PREDICTIVE": "FROZEN_OOS candidate-equal PnL 95% CI<0, adjusted OLS-bootstrap CI<0, and at least one of post-train/HIGH_VOL/exact-strata CI<0; n_unvalidated>=10,n_validated>=20",
+      "NOT_PREDICTIVE": "sample sufficient and both primary/adjusted lower CI > -0.5 percentage points",
+      "otherwise": "INCONCLUSIVE"
+    },
+    "full_5y_descriptive": {
+      "unvalidated_minus_validated_avg_pnl_pctp": 0.149917,
+      "bootstrap_95_ci": [-0.347417, 0.577241],
+      "note": "contains training/selection periods; descriptive only"
+    },
+    "frozen_oos_primary": {
+      "unvalidated_candidate_n": 6,
+      "validated_candidate_n": 87,
+      "unvalidated_trade_n": 636,
+      "validated_trade_n": 12279,
+      "unvalidated_avg_pnl_pct": 3.890706,
+      "validated_avg_pnl_pct": 3.045596,
+      "pnl_difference_pctp": 0.8451097063335795,
+      "pnl_bootstrap_95_ci": [-1.1365772941719512, 3.6481633345973656],
+      "win_rate_difference_pctp": 9.065032,
+      "win_rate_bootstrap_95_ci": [0.728337, 17.778819],
+      "avg_mae_difference_pctp": 0.658526,
+      "avg_mfe_difference_pctp": 0.249579
+    },
+    "adjusted_oos": {
+      "controls": "stage|vol_group|exit_strategy|direction|max_holding_days|IS_volatility|IS_ATR|log_trade_n",
+      "pnl_estimate_pctp": 0.35450542248326067,
+      "bootstrap_95_ci": [-1.9134985189639377, 3.426520723111462]
+    },
+    "exact_strata_oos": {
+      "strata": "stage|vol_group|exit_strategy|direction",
+      "candidate_coverage": 44,
+      "strata_n": 4,
+      "pnl_estimate_pctp": 0.7625730500121845,
+      "bootstrap_95_ci": [-0.007768512256067669, 1.4847736861044991]
+    },
+    "post_gene_train_oos": {
+      "trade_n": 8743,
+      "pnl_difference_pctp": 1.9902900089996722,
+      "bootstrap_95_ci": [-0.7650943566203723, 4.931057428626008],
+      "exact_strata_pnl_estimate_pctp": 1.728353,
+      "exact_strata_bootstrap_95_ci": [0.634615, 2.675162]
+    },
+    "high_vol_oos": {
+      "unvalidated_candidate_n": 1,
+      "validated_candidate_n": 30,
+      "pnl_difference_pctp": -0.3475363173618575,
+      "bootstrap_95_ci": null,
+      "note": "one treated candidate; no interval inference"
+    },
+    "exploratory_rare_boundary": {
+      "definition": "weighted NEVER_FIRED or weighted RARELY_ACTIVE",
+      "candidate_n": 27,
+      "comparison_n": 66,
+      "pnl_difference_pctp": -0.276269,
+      "bootstrap_95_ci": [-1.603586, 1.081876],
+      "mfe_difference_pctp": -1.746425,
+      "mfe_bootstrap_95_ci": [-3.549334, 0.060049],
+      "note": "exploratory only; does not satisfy requested NEVER_FIRED definition"
+    }
+  },
+  "limitations": [
+    "The primary UNVALIDATED_GENE group has only six candidates, below the predeclared minimum of ten.",
+    "Frozen OOS is calendar 2025-01-01..2026-07-02 and overlaps Stage3 train_3 through 2025-06-30.",
+    "POST_GENE_TRAIN_OOS removes dates on/before each gene training end, but candidate and exit-selection leakage can remain.",
+    "Exact ticker fixed effects are not identifiable because 91 of 93 tickers have one candidate.",
+    "Realized exit-reason strata are post-entry outcomes and are descriptive, not causal controls."
+  ]
+}

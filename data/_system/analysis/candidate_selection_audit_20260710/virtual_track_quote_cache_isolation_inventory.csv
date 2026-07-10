@@ -1,0 +1,11 @@
+layer,path,cache_scope,ttl_sec,key_or_granularity,shared_across_processes,batch_support,current_isolation_risk,assessment
+candidate_price,engine/live/elite_shadow_trader.py::_price_cache,process_memory,30,ticker,false,no,"live_candidate_slots와 shadow daemon이 별도 프로세스이면 같은 ticker를 중복 조회",INSUFFICIENT_FOR_FULL_POOL
+candidate_ohlcv,engine/live/elite_shadow_trader.py::_ohlcv_cache,process_memory,600,ticker,false,no,"프로세스 재시작 시 cold burst; 다른 live consumer와 공유 안 됨",INSUFFICIENT_FOR_FULL_POOL
+core_ohlcv,engine/core/data_loader.py::_CACHE,process_memory,300,"ticker+years+end_date",false,no,"elite outer cache와 중첩되지만 cross-process 중복을 막지 못함",LOCAL_ONLY
+market_context,data/_system/market_state.json,file_persistent,3600,global_market_context,true,no,"시장지수 8개 조회는 파일 캐시로 공유",ADEQUATE
+shadow_mtm,engine/live/elite_shadow_mark_to_market.py::_intraday_cache,process_memory,45,"ticker+opened_at",false,no,"shadow daemon 내부 pre/post 호출만 흡수",LOCAL_ONLY
+alpaca_display,engine/live/broker/alpaca.py::_display_price_cache,broker_instance_memory,15,ticker,false,no,"대시보드 인스턴스별 중복 가능",LOCAL_ONLY
+yfinance_batch,yfinance.download API,none,0,multi-ticker request,not_applicable,yes,"현재 후보 평가 경로는 Ticker.history 개별 호출만 사용",AVAILABLE_NOT_USED
+alpaca_batch,StockLatestTradeRequest(symbol_or_symbols=List[str]),provider_request,provider_defined,multi-symbol,provider_account_shared,yes,"현재 broker get_current_price는 단일 ticker만 전달",AVAILABLE_NOT_USED
+shared_quote_snapshot,not_present,none,0,"ticker+interval+prepost+asof_bucket",false,not_applicable,"라이브와 가상 트랙이 같은 provider/IP 예산을 쓰면서 캐시를 공유하지 않음",MISSING_REQUIRED
+priority_budget,not_present,none,0,"source token bucket + LIVE/VIRTUAL lanes",false,not_applicable,"가상 호출이 느려지거나 429가 나면 live 요청을 우선 보호할 장치 없음",MISSING_REQUIRED

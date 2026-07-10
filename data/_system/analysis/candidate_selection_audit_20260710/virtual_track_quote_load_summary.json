@@ -1,0 +1,147 @@
+{
+  "created_at_kst": "2026-07-11",
+  "audit_mode": "READ_ONLY",
+  "verdict": "NEEDS_THROTTLE",
+  "conditional_verdict_for_60s_full_pool": "NEEDS_SEPARATE_BUDGET",
+  "operational_implementation": false,
+  "pool": {
+    "all_candidate_n": 17071,
+    "all_unique_ticker_n": 531,
+    "actual_full_virtual_track_quote_pool": "ALL_17071",
+    "reason": "BLOCK 후보의 false-negative/성과를 비교하려면 BLOCK_v3와 BLOCK_boil도 가상 트랙에 포함해야 함",
+    "live_candidate_n": 84,
+    "live_unique_ticker_n": 83,
+    "block_v3_candidate_n": 4491,
+    "block_v3_unique_ticker_n": 247,
+    "block_boil_candidate_n": 371,
+    "block_boil_unique_ticker_n": 18,
+    "block_union_candidate_n": 4862,
+    "block_union_unique_ticker_n": 257,
+    "static_valid_candidate_n": 2115,
+    "static_valid_unique_ticker_n": 339,
+    "elite_valid_candidate_n": 398,
+    "elite_valid_unique_ticker_n": 83,
+    "incremental_virtual_ticker_n_after_live_snapshot_reuse": 448,
+    "live_and_any_block_ticker_overlap_n": 46
+  },
+  "current_live_observation": {
+    "active_process": "data/_system/ops/live_candidate_slots.py daemon --interval 60",
+    "other_price_daemons_active_during_audit": false,
+    "report_candidate_n": 82,
+    "report_unique_ticker_n": 80,
+    "gate_pass_evaluated_candidate_n": 63,
+    "gate_pass_unique_ticker_n": 61,
+    "cycle_interval_sec": 60,
+    "recent_refresh_n": 100,
+    "recent_elapsed_median_sec": 7.1445,
+    "recent_elapsed_p95_sec": 13.382,
+    "recent_elapsed_max_sec": 14.462,
+    "recent_cadence_median_sec": 59.568682,
+    "recent_cadence_max_sec": 67.527981,
+    "time_headroom_at_p95_sec": 46.618,
+    "observed_provider_429_n": 0,
+    "observation_period_utc": [
+      "2026-07-10T18:09:42.179561+00:00",
+      "2026-07-10T19:47:59.591730+00:00"
+    ]
+  },
+  "quote_sources": {
+    "primary_candidate_price": {
+      "provider": "yfinance/Yahoo",
+      "endpoint_form": "Ticker.history(period=1d, interval=1m, prepost=True)",
+      "call_mode": "individual per ticker",
+      "authentication": "none",
+      "explicit_rate_limit_in_repo": false,
+      "cache_scope": "process memory",
+      "cache_ttl_sec": 30
+    },
+    "candidate_ohlcv": {
+      "provider": "yfinance/Yahoo",
+      "endpoint_form": "download(single ticker, one-year daily history)",
+      "call_mode": "individual per ticker",
+      "authentication": "none",
+      "explicit_rate_limit_in_repo": false,
+      "outer_cache_ttl_sec": 600,
+      "inner_cache_ttl_sec": 300,
+      "cache_scope": "process memory"
+    },
+    "market_context": {
+      "provider": "yfinance/Yahoo",
+      "symbols_per_refresh": 8,
+      "cache": "data/_system/market_state.json",
+      "cache_ttl_min": 60
+    },
+    "broker_price": {
+      "provider": "Alpaca StockHistoricalDataClient",
+      "endpoint_form": "StockLatestTradeRequest",
+      "authentication_names": [
+        "ALPACA_API_KEY",
+        "ALPACA_SECRET_KEY"
+      ],
+      "default_account_mode": "paper",
+      "actual_secret_or_account_inspected": false,
+      "current_call_mode": "single ticker",
+      "sdk_batch_support": true,
+      "explicit_rate_limit_in_repo": false,
+      "used_by_current_candidate_daemon": false
+    }
+  },
+  "load_estimate": {
+    "unit": "logical ticker fetch; actual HTTP request count may be higher inside provider libraries",
+    "current_live_price_fetches_per_min": 61.0,
+    "current_live_ohlcv_fetches_per_min_average": 6.1,
+    "current_live_total_fetches_per_min_average": 67.1,
+    "current_live_refresh_burst_fetches": 122,
+    "full_pool_60s_price_fetches_per_min": 531.0,
+    "full_pool_60s_ohlcv_fetches_per_min_average": 53.1,
+    "full_pool_60s_total_fetches_per_min_average": 584.1,
+    "full_pool_refresh_burst_fetches": 1062,
+    "ticker_scale_multiple": 8.704918032786885,
+    "linear_full_pool_cycle_median_sec": 62.1922868852459,
+    "linear_full_pool_cycle_p95_sec": 116.4892131147541,
+    "linear_full_pool_cycle_max_sec": 125.89052459016393,
+    "provider_quota_headroom": "UNKNOWN_NOT_SPECIFIED",
+    "safe_60s_full_pool_proven": false
+  },
+  "cache_and_isolation": {
+    "cross_process_quote_cache_exists": false,
+    "live_and_virtual_share_yfinance_endpoint_and_host_ip": true,
+    "process_separation_alone_is_quota_isolation": false,
+    "current_batch_candidate_quote_fetch": false,
+    "yfinance_multi_ticker_signature_available": true,
+    "alpaca_multi_symbol_request_available": true,
+    "live_priority_queue_exists": false,
+    "per_source_token_bucket_exists": false,
+    "virtual_circuit_breaker_exists": false
+  },
+  "recommended_operating_envelope": {
+    "live_price_ttl_sec": "30-60",
+    "virtual_price_ttl_sec": "900 default; 600 minimum only after measured soak test",
+    "virtual_full_sweep_min": 15,
+    "persistent_daily_ohlcv_ttl": "one trading day; current-day overlay separated from historical bulk",
+    "live_reserved_logical_fetches_per_min": 80,
+    "virtual_logical_fetch_cap_per_min": 30,
+    "virtual_incremental_ticker_n": 448,
+    "virtual_sweep_time_at_cap_min": 14.933333333333334,
+    "request_shape": "ticker snapshot fetched once then shared by all candidate rules",
+    "scheduling": "staggered; no 448/531 ticker burst",
+    "failure_policy": "429/timeout causes virtual-only exponential backoff; live lane never waits",
+    "priority": "LIVE strict priority over VIRTUAL"
+  },
+  "separate_budget_trigger": {
+    "condition": "full 531-ticker virtual track required at 60-second or near-real-time cadence",
+    "decision": "NEEDS_SEPARATE_BUDGET",
+    "acceptable_examples": [
+      "separate market-data account/key and token budget",
+      "dedicated paid batch/stream feed",
+      "separate Alpaca data budget using multi-symbol latest-trade requests"
+    ],
+    "warning": "separate process using the same yfinance endpoint/IP is not a separate budget"
+  },
+  "source_rule_mutation": false,
+  "live_change": false,
+  "retraining": false,
+  "order": false,
+  "delete": false,
+  "design_change": false
+}

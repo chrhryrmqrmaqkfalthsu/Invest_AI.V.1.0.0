@@ -1,0 +1,9 @@
+pool,candidate_n,unique_ticker_n,stage2_candidate_n,stage3_candidate_n,definition,quote_requirement
+ALL_17071,17071,531,1162,15909,전 후보 가상 트랙; BLOCK 포함,가상 트랙 목적상 실제 전체 대상
+BLOCK_V3,4491,247,300,4191,v3 도달불가 BLOCK,가상 비교를 위해 포함
+BLOCK_BOIL,371,18,2,369,v3 PASS 후 BOIL형 순증 BLOCK,가상 비교를 위해 포함
+BLOCK_UNION,4862,257,302,4560,v3 또는 BOIL BLOCK,가상 비교 대상
+POST_V3_BOIL_SURVIVOR,12209,468,860,11349,v3+BOIL 미차단 전체,유효 후보 전체 추적 시 포함
+STATIC_VALID,2115,339,794,1321,기존 정적 PASS + v3 PASS + BOIL PASS,축소형 가상 트랙 대안
+ELITE_VALID,398,83,21,377,STATIC_VALID + elite + denylist 통과; dedup 전,현재 실용 후보 평가 범위
+LIVE_FINAL,84,83,10,74,최종 84개 후보,라이브 우선 lane

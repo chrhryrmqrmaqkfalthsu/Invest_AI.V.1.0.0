@@ -1,0 +1,128 @@
+{
+  "created_at": "2026-07-10T17:14:49.078061+00:00",
+  "origin_candidate_count": 17071,
+  "strict_never_count": 84,
+  "relaxed_total_count": 801,
+  "relaxed_additional_rare_count": 717,
+  "cause_counts": {
+    "strict_never": {
+      "THRESHOLD_TOO_HIGH": 84
+    },
+    "relaxed_additional_rare": {
+      "NATURALLY_QUIET": 271,
+      "THRESHOLD_TOO_HIGH": 446
+    },
+    "relaxed_total": {
+      "THRESHOLD_TOO_HIGH": 530,
+      "NATURALLY_QUIET": 271
+    }
+  },
+  "boil_named": {
+    "candidate_id": "stage3:BOIL:9044dc2c67a3",
+    "threshold": 2.5,
+    "max": 2.1797161492595807,
+    "p99": 1.914656415177459,
+    "threshold_percentile_pct": 100.0,
+    "reachability": "UNREACHABLE",
+    "cause": "THRESHOLD_TOO_HIGH"
+  },
+  "full_indicator_summary": [
+    {
+      "component": "ma",
+      "condition_form": "BOOLEAN_EVENT",
+      "active_candidate_count": 15393,
+      "unreachable_candidate_count": 0,
+      "unreachable_rate_pct": 0.0
+    },
+    {
+      "component": "macd",
+      "condition_form": "BOOLEAN_CROSS_EVENT",
+      "active_candidate_count": 15578,
+      "unreachable_candidate_count": 0,
+      "unreachable_rate_pct": 0.0
+    },
+    {
+      "component": "rsi",
+      "condition_form": "BAND_INCLUSIVE",
+      "active_candidate_count": 16243,
+      "unreachable_candidate_count": 0,
+      "unreachable_rate_pct": 0.0
+    },
+    {
+      "component": "bb",
+      "condition_form": "ONE_SIDED_LE",
+      "active_candidate_count": 16094,
+      "unreachable_candidate_count": 0,
+      "unreachable_rate_pct": 0.0
+    },
+    {
+      "component": "volume",
+      "condition_form": "ONE_SIDED_GE",
+      "active_candidate_count": 15226,
+      "unreachable_candidate_count": 1094,
+      "unreachable_rate_pct": 7.185078155786155
+    },
+    {
+      "component": "ANY_ACTIVE_CORE",
+      "condition_form": "ANY",
+      "active_candidate_count": 17071,
+      "unreachable_candidate_count": 1094,
+      "unreachable_rate_pct": 6.4085290844121605
+    }
+  ],
+  "condition_forms": [
+    {
+      "component": "MA",
+      "rule_condition": "long: MA5>MA20>MA60; short: MA5<MA20<MA60",
+      "form": "BOOLEAN_EVENT",
+      "one_sided_or_band": "EVENT",
+      "engine_reference": "engine/strategies/evaluator.py"
+    },
+    {
+      "component": "MACD",
+      "rule_condition": "long: golden cross; short: dead cross",
+      "form": "BOOLEAN_CROSS_EVENT",
+      "one_sided_or_band": "EVENT",
+      "engine_reference": "engine/strategies/evaluator.py"
+    },
+    {
+      "component": "RSI",
+      "rule_condition": "rsi_low <= RSI <= rsi_high (short transforms bounds)",
+      "form": "BAND_INCLUSIVE",
+      "one_sided_or_band": "BAND",
+      "engine_reference": "engine/strategies/evaluator.py"
+    },
+    {
+      "component": "BB",
+      "rule_condition": "normalized BB proximity ratio <= bb_proximity",
+      "form": "ONE_SIDED_LE",
+      "one_sided_or_band": "ONE_SIDED",
+      "engine_reference": "engine/strategies/evaluator.py"
+    },
+    {
+      "component": "VOLUME",
+      "rule_condition": "Volume_ratio >= volume_surge_ratio",
+      "form": "ONE_SIDED_GE",
+      "one_sided_or_band": "ONE_SIDED",
+      "engine_reference": "engine/strategies/evaluator.py"
+    },
+    {
+      "component": "FINAL_ENTRY",
+      "rule_condition": "final_score >= signal_threshold",
+      "form": "ONE_SIDED_GE",
+      "one_sided_or_band": "ONE_SIDED",
+      "engine_reference": "engine/strategies/evaluator.py"
+    }
+  ],
+  "method_notes": [
+    "UNREACHABLE: volume threshold > observed training max; other indicators: zero satisfying observations.",
+    "NEAR_UNREACHABLE: volume threshold > observed training p99 but <= max.",
+    "THRESHOLD_TOO_HIGH: UNREACHABLE or NEAR_UNREACHABLE; NATURALLY_QUIET: threshold is distribution-reachable but activity remained low.",
+    "Only indicators with non-zero stored weights count toward full-pool active-indicator defect totals."
+  ],
+  "no_source_mutation": true,
+  "no_live_change": true,
+  "no_training": true,
+  "no_order": true,
+  "no_delete": true
+}

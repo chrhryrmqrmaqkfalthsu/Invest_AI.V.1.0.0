@@ -1,0 +1,7 @@
+component,rule_condition,form,one_sided_or_band,engine_reference
+MA,long: MA5>MA20>MA60; short: MA5<MA20<MA60,BOOLEAN_EVENT,EVENT,engine/strategies/evaluator.py
+MACD,long: golden cross; short: dead cross,BOOLEAN_CROSS_EVENT,EVENT,engine/strategies/evaluator.py
+RSI,rsi_low <= RSI <= rsi_high (short transforms bounds),BAND_INCLUSIVE,BAND,engine/strategies/evaluator.py
+BB,normalized BB proximity ratio <= bb_proximity,ONE_SIDED_LE,ONE_SIDED,engine/strategies/evaluator.py
+VOLUME,Volume_ratio >= volume_surge_ratio,ONE_SIDED_GE,ONE_SIDED,engine/strategies/evaluator.py
+FINAL_ENTRY,final_score >= signal_threshold,ONE_SIDED_GE,ONE_SIDED,engine/strategies/evaluator.py

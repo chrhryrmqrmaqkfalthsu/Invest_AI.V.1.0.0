@@ -1,0 +1,11 @@
+vol_group,scope,total_rules,near_zero_rules,exact_zero_rules,near_zero_rate_pct,exact_zero_rate_pct,near_zero_tickers,total_tickers,note
+LOW_VOL,stage2_pool,9000,1019,866,11.32222222,9.62222222,,,"93개 라이브 후보의 원천 티커 기준"
+LOW_VOL,stage3_entry_pool,498,62,62,12.44979920,12.44979920,,,"고유 진입 룰"
+LOW_VOL,stage3_final_pool,1494,186,186,12.44979920,12.44979920,,,"exit 변형 3개로 진입 룰이 반복됨"
+MID_VOL,stage2_pool,9000,705,566,7.83333333,6.28888889,,,"93개 라이브 후보의 원천 티커 기준"
+MID_VOL,stage3_entry_pool,520,73,65,14.03846154,12.50000000,,,"고유 진입 룰"
+MID_VOL,stage3_final_pool,1500,219,195,14.60000000,13.00000000,,,"일부 티커 final 개수 차이 포함"
+HIGH_VOL,stage2_pool,8700,940,781,10.80459770,8.97701149,26,31,"상류 전체 GA 룰풀"
+HIGH_VOL,stage3_entry_pool,620,101,96,16.29032258,15.48387097,11,31,"선택된 고유 진입 룰풀"
+HIGH_VOL,stage3_final_pool,1860,303,288,16.29032258,15.48387097,11,31,"동일 진입 룰당 exit 변형 3개; 고유 개체 수로 해석 금지"
+HIGH_VOL,live93,31,8,7,25.80645161,22.58064516,8,31,"현재 93개 중 HIGH_VOL 후보"

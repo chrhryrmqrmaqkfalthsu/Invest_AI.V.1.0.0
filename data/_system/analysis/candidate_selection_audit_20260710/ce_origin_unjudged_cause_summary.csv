@@ -1,0 +1,12 @@
+category,count,meaning
+ORIGIN_THRESHOLD_PRESENT,17071,정적 임계 저장
+ORIGIN_CORE_WEIGHTS_PRESENT,17071,정적 가중치 저장
+ORIGIN_REALIZED_FINAL_SCORE_PRESENT,0,원본에 현재 final_score 없음
+ORIGIN_REALIZED_COMPONENTS_PRESENT,0,원본에 현재 활성 컴포넌트 없음
+LIVE93_DYNAMIC_SNAPSHOT,93,read-only 동적 평가 snapshot
+CE_JUDGED_PASS,27,should_buy이며 CE 통과
+CE_JUDGED_FAIL,7,should_buy이며 CE 차단
+CE_NOT_APPLICABLE_NO_BUY,59,동적 값은 있으나 should_buy=False
+CE_RESIDUAL_UNJUDGED,16978,동적 입력 snapshot 없음
+STAGE2_TRADE_FILES_WITH_HISTORICAL_COMPONENTS,1994,1994개 파일 중; 과거 진입시점 값이라 현재 CE와 비동일
+STAGE3_EXIT_TRADE_FILES_WITH_HISTORICAL_COMPONENTS,0,269개 파일 중; Stage3 exit_trades에 점수 구성 없음

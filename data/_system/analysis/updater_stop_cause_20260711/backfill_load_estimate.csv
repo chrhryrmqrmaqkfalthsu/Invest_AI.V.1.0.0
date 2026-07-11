@@ -1,0 +1,9 @@
+scenario,ticker_count,minimum_calls,assumed_limit,theoretical_minimum,script_or_observed_constraint,recovery_difficulty,notes
+free_plan_full_universe,6174,6174,25 requests/day,247 days,"official free daily cap; retries increase calls",VERY_HIGH,"one successful request per ticker minimum"
+premium_75rpm_full_universe,6174,6174,75 requests/min,82.32 minutes,"current request_interval=0.86 sec imposes 88.49 minute sleep floor before network latency",MEDIUM_HIGH,"provider entitlement must be verified"
+premium_150rpm_full_universe,6174,6174,150 requests/min,41.16 minutes,"current request_interval=0.86 sec still imposes 88.49 minute sleep floor",MEDIUM,"script pacing must remain unless separately redesigned"
+premium_300rpm_full_universe,6174,6174,300 requests/min,20.58 minutes,"current request_interval=0.86 sec still imposes 88.49 minute sleep floor",MEDIUM,"network and aggregation add time"
+premium_600rpm_full_universe,6174,6174,600 requests/min,10.29 minutes,"current request_interval=0.86 sec still imposes 88.49 minute sleep floor",MEDIUM,"provider rate is not current bottleneck without pacing change"
+premium_1200rpm_full_universe,6174,6174,1200 requests/min,5.145 minutes,"current request_interval=0.86 sec still imposes 88.49 minute sleep floor",MEDIUM,"provider rate is not current bottleneck without pacing change"
+observed_2026_06_02_run,6174,6183,"local daily-limit override=10000",127.13 minutes,"effective 48.56 ticker requests/min; 9 extra attempts",OBSERVED,"5973 OK;48 skip;153 fail"
+active_live_candidates_only,20,20,25 requests/day,1 day,"based on currently inspected 18 live_slots + 2 central candidates; overlap may reduce unique count",LOW,"fits free daily cap only if no market reserve/other API use; exact daily universe varies"

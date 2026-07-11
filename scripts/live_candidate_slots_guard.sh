@@ -5,10 +5,10 @@ BASE=/home/g3000kkw/kingmaker
 PY="$BASE/venv/bin/python"
 DAEMON_SCRIPT="$BASE/data/_system/ops/live_candidate_slots.py"
 STATE="$BASE/data/_system/live_slots_state.json"
+PIDFILE="$BASE/data/_system/live_candidate_slots_daemon.pid"
 LOG="$BASE/logs/live_candidate_slots_guard.log"
 DAEMON_LOG="$BASE/logs/live_candidate_slots_daemon_guard.log"
 DAEMON_ERR="$BASE/logs/live_candidate_slots_daemon_guard.err.log"
-PATTERN="data/_system/ops/live_candidate_slots.py daemon --interval 60"
 
 mkdir -p "$BASE/logs"
 cd "$BASE" || exit 1
@@ -47,32 +47,101 @@ except Exception:
 PY
 }
 
+exact_daemon_pids() {
+  "$PY" - "$PY" "$DAEMON_SCRIPT" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+expected = [sys.argv[1], sys.argv[2], "daemon", "--interval", "60"]
+seen = set()
+
+pidfile = Path('/home/g3000kkw/kingmaker/data/_system/live_candidate_slots_daemon.pid')
+try:
+    text = pidfile.read_text(encoding='utf-8').strip()
+    if text.isdigit():
+        seen.add(int(text))
+except Exception:
+    pass
+
+for proc in Path('/proc').iterdir():
+    if proc.name.isdigit():
+        seen.add(int(proc.name))
+
+for pid in sorted(seen):
+    try:
+        raw = Path(f'/proc/{pid}/cmdline').read_bytes()
+        argv = [part.decode('utf-8', errors='replace') for part in raw.split(b'\0') if part]
+    except Exception:
+        continue
+    if argv == expected:
+        print(pid)
+PY
+}
+
+daemon_is_running() {
+  [ -n "$(exact_daemon_pids)" ]
+}
+
 start_daemon() {
   log "starting live candidate slots daemon"
   rm -f "$BASE/data/_system/live_slots_tick.lock"
   PYTHONPATH="$BASE" nohup "$PY" "$DAEMON_SCRIPT" daemon --interval 60 >> "$DAEMON_LOG" 2>> "$DAEMON_ERR" &
-  log "daemon start requested pid=$!"
+  pid=$!
+  printf '%s\n' "$pid" > "$PIDFILE"
+  sleep 1
+  if exact_daemon_pids | grep -qx "$pid"; then
+    log "daemon started pid=$pid"
+    return 0
+  fi
+  rm -f "$PIDFILE"
+  log "daemon start failed pid=$pid"
+  return 1
+}
+
+stop_daemons() {
+  pids=$(exact_daemon_pids)
+  if [ -z "$pids" ]; then
+    rm -f "$PIDFILE"
+    return 0
+  fi
+  for pid in $pids; do
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+  for _ in $(seq 1 20); do
+    remaining=$(exact_daemon_pids)
+    [ -z "$remaining" ] && break
+    sleep 1
+  done
+  remaining=$(exact_daemon_pids)
+  if [ -n "$remaining" ]; then
+    for pid in $remaining; do
+      kill -KILL "$pid" 2>/dev/null || true
+    done
+  fi
+  rm -f "$PIDFILE"
 }
 
 restart_daemon() {
   log "restarting live candidate slots daemon: $*"
-  pkill -f "$PATTERN" 2>/dev/null || true
+  stop_daemons
   sleep 2
   start_daemon
 }
 
-if ! pgrep -f "$PATTERN" >/dev/null 2>&1; then
+if ! daemon_is_running; then
   start_daemon
-  exit 0
+  exit $?
 fi
 
+pids=$(exact_daemon_pids | tr '\n' ' ')
 if is_regular_hours; then
   age=$(state_age_sec)
   if [ "$age" -gt 300 ]; then
     restart_daemon "state stale age=${age}s during regular hours"
   else
-    log "ok running; state_age=${age}s"
+    log "ok running pids=${pids}; state_age=${age}s"
   fi
 else
-  log "ok running; outside regular-hours gate"
+  log "ok running pids=${pids}; outside regular-hours gate"
 fi

@@ -1,0 +1,12 @@
+timestamp_utc,artifact_or_code,evidence,value,path_implication
+2026-07-07T20:38:49.714917Z,data/_system/live_slots_state.json,state_created_at,live slot operational state existed before CE first signal
+2026-07-07T20:39:22.288081Z,data/_system/live_slots_events.jsonl,REFRESH force_evaluate=true pool=28 slots=8,live slot evaluator had already run
+2026-07-07T22:22:21.577113Z,data/_system/live_slots_state.json,CE first_signal_at with first_final_score=7.195458414225013,CE first candidate signal recorded by live slot state
+2026-07-07T22:22:21.577623Z,data/_system/live_slots_events.jsonl,REFRESH force_evaluate=true candidate_count=93 evaluated=80 buy_signal_count=28,first CE signal belongs to forced live slot refresh
+2026-07-08T04:43:31Z,commit_fd2400d,data/_system/ops/live_candidate_slots.py first committed,"refresh_slots -> get_market_context -> build_elite_shadow_report -> evaluate_candidate"
+2026-07-08T13:33:49Z,commit_1b42954,real dashboard fallback added,"_candidate_for_real falls back to live_slots_state and labels candidate_source=live_slots_state_fallback"
+2026-07-08T14:27:14.510353Z,data/_system/live_slots_events.jsonl,REFRESH force_evaluate=false candidate_count=93 evaluated=73 buy_signal_count=25,regular-hours live slot reevaluation one second before CE order
+2026-07-08T14:27:14.509621Z,data/_system/real_dashboard_manual_buy_intent.json,CE candidate_snapshot last_seen_at,order snapshot consumed just-refreshed live slot row
+2026-07-08T14:27:15.330072Z,data/_system/real_dashboard_manual_buy_intent.json,"candidate_source=live_slots_state_fallback; real_candidate_fallback=true; score=8.363246295633697; Event +4.62",candidate source is live slot fallback rather than central or Runner state
+2026-07-08T14:27:15.592260Z,data/_system/real_dashboard_manual_buy_intent.json,"source=dashboard-real-detail; execution_mode=direct_alpaca_live_market_order",dashboard submitted direct live order from fallback candidate
+2026-07-08T14:27:15.593482Z,data/_system/live_slots_events.jsonl,DASHBOARD_REAL_BUY_INTENT for CE,order event linked back to live slot ledger

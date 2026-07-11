@@ -1,0 +1,8 @@
+plan,target_count,calls_per_full_refresh,official_limit,theoretical_minimum_time,project_interval_floor,repeatability,observation
+free_current_18,18,18,"25 requests/day",daily quota not elapsed-time limited,"18*0.86=15.48 seconds plus network",once daily feasible,"with project market reserve=2 there are up to 23 ticker calls/day when no other same-day usage; retries consume additional calls"
+free_18_plus_5_holdings,23,23,"25 requests/day",daily quota not elapsed-time limited,"23*0.86=19.78 seconds plus network",once daily at budget ceiling,"no room for retries or candidate churn after reserving 2 market calls"
+free_30_targets,30,30,"25 requests/day",not possible in one day,"25 calls maximum before reserve/other use",not feasible,"must rotate/defer or use premium"
+premium_75rpm_18,18,18,"75 requests/min; no daily limit","14.4 seconds","15.48 seconds plus network under current 0.86 interval",30-minute or daily cycle feasible,"60-second cycle capacity is technically possible but unnecessary for D-1 evaluator"
+premium_75rpm_30,30,30,"75 requests/min; no daily limit","24.0 seconds","25.8 seconds plus network",30-minute cycle feasible,"candidate/holding tens scale comfortably"
+premium_150rpm_18,18,18,"150 requests/min; no daily limit","7.2 seconds","15.48 seconds unless interval reduced",30-minute or daily cycle feasible,"current script interval, not plan entitlement, becomes bottleneck"
+regular_market_60s_18,18,7020,"18 calls * 390 one-minute cycles",not applicable,"about 6.5 market hours",not recommended,"redundant because live lookup is D-1 and updater skips same-day CSV unless --force"

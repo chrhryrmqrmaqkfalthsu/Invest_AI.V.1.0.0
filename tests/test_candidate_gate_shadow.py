@@ -120,27 +120,21 @@ def test_missing_v3_catalog_row_is_hold_but_nonmember_boil_is_pass(tmp_path: Pat
     assert [row.status for row in result.checks] == ["HOLD", "PASS"]
 
 
-def test_current_candidate_pool_uses_final_boil_exclusive_catalog() -> None:
+def test_current_pool_is_already_upstream_filtered() -> None:
     state = json.loads(Path("data/_system/live_slots_state.json").read_text(encoding="utf-8"))
     candidates = state.get("candidate_pool") or []
-    assert len(candidates) == 18
     checker = candidate_gate.CandidateGateChecker()
     decisions = checker.evaluate_many(candidates, enforcement="SHADOW")
-    assert len(decisions) == 18
+    assert candidates
+    assert all(decision.aggregate_status == "PASS" for decision in decisions)
     assert all(decision.should_block is False for decision in decisions)
 
-    boil_fail = []
-    v3_fail = []
-    for decision in decisions:
-        v3_result, boil_result = decision.checks
-        if v3_result.status == "FAIL":
-            v3_fail.append(decision.ticker)
-        if boil_result.status == "FAIL":
-            boil_fail.append(decision.ticker)
-    assert v3_fail == ["BTBT", "BMI", "BCS", "BNTX", "CRK"]
-    assert boil_fail == []
 
-
-def test_policy_defaults_are_shadow() -> None:
-    assert candidate_gate.integrated_gate_enforcement() == "SHADOW"
-    assert candidate_gate.upstream_gate_enforcement() == "SHADOW"
+def test_upstream_policy_is_block_and_default_evaluation_is_shadow() -> None:
+    assert candidate_gate.upstream_gate_enforcement() == "BLOCK"
+    checker = candidate_gate.CandidateGateChecker()
+    result = checker.evaluate(
+        {"candidate_id": "stage3:BNTX:d667608bc166", "ticker": "BNTX"}
+    )
+    assert result.enforcement == "SHADOW"
+    assert result.should_block is False

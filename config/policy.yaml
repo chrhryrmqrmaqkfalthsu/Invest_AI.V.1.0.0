@@ -9,8 +9,6 @@ live:
   # 라이브 current-context의 direct Event 가산 스위치.
   # 기본값 ON으로 기존 실전·페이퍼·가상 평가 동작을 그대로 유지한다.
   direct_event_enabled: false
-  # 기존 live-slot 평가 직전 v3·BOIL 게이트. 현재 SHADOW 유지.
-  integrated_gate_enforcement: SHADOW
   # elite report의 ticker dedup 이전 상류 게이트. BLOCK은 FAIL/HOLD를 단순 제거하고 빈자리를 채우지 않는다.
   upstream_gate_enforcement: BLOCK
 

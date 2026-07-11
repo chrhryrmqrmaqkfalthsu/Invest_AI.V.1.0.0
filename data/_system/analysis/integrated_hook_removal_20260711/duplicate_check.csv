@@ -1,0 +1,2 @@
+scope,row_count,upstream_join_count,aggregate_match_count,fail_count,hold_count,pass_count,result
+latest_integrated_pre_removal_batch,44,44,44,0,0,44,DUPLICATE_CONFIRMED

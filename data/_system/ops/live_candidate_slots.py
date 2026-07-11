@@ -25,7 +25,6 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from engine.live.candidate_gate import CandidateGateChecker, append_candidate_gate_log, integrated_gate_enforcement
 from engine.live.elite_shadow_report import build_elite_shadow_report
 from engine.live.elite_shadow_trader import evaluate_candidate
 from engine.live.regular_hours_gate import regular_hours_snapshot
@@ -272,9 +271,6 @@ def public_candidate_row(candidate: dict[str, Any], ev: dict[str, Any], gate: di
     down_deprioritize = bool(spy.get("is_down") and vol_group == "HIGH_VOL")
     metrics = candidate.get("metrics") if isinstance(candidate.get("metrics"), dict) else {}
     rb = candidate.get("rulebook") if isinstance(candidate.get("rulebook"), dict) else {}
-    # EQ(entry_quality)는 EQ_FILTER_UNVERIFIED 판정으로 후보 자격·정렬에서 배제한다.
-    # evaluate_candidate()가 entry_quality를 계산하더라도 여기서는 실제 allow/block 값을 복사하지 않는다.
-    # 라이브 슬롯 판단에 남기는 검증된 경로는 KEEP gate + should_buy + final_score priority + SPY DOWN/HIGH_VOL 후순위뿐이다.
     return {
         "candidate_id": position_key(candidate),
         "ticker": str(candidate.get("ticker") or ev.get("ticker") or "").upper(),
@@ -387,9 +383,6 @@ def refresh_slots(*, force_evaluate: bool = False, max_candidates: int = MAX_CAN
         errors: list[dict[str, Any]] = []
         evaluated = 0
         buy_signal_count = 0
-        gate_checker = CandidateGateChecker()
-        gate_enforcement = integrated_gate_enforcement()
-        gate_shadow_summary = {"PASS": 0, "FAIL": 0, "HOLD": 0}
         for candidate in candidates:
             cid = position_key(candidate)
             ticker = str(candidate.get("ticker") or "").upper()
@@ -402,23 +395,6 @@ def refresh_slots(*, force_evaluate: bool = False, max_candidates: int = MAX_CAN
                 continue
             if cid in held:
                 blocked["held_excluded"] = blocked.get("held_excluded", 0) + 1
-                continue
-            gate_decision = gate_checker.evaluate(candidate, enforcement=gate_enforcement)
-            gate_shadow_summary[gate_decision.aggregate_status] = gate_shadow_summary.get(gate_decision.aggregate_status, 0) + 1
-            append_candidate_gate_log(
-                gate_decision,
-                path="data._system.ops.live_candidate_slots.refresh_slots",
-                candidate_snapshot={
-                    "candidate_id": cid,
-                    "ticker": ticker,
-                    "stage": candidate.get("stage"),
-                    "rulebook_hash_short": candidate.get("rulebook_hash_short"),
-                },
-            )
-            if gate_decision.should_block:
-                blocked[f"integrated_gate_{gate_decision.aggregate_status.lower()}"] = blocked.get(
-                    f"integrated_gate_{gate_decision.aggregate_status.lower()}", 0
-                ) + 1
                 continue
             try:
                 ev = evaluate_candidate(candidate, ctx=ctx)
@@ -479,8 +455,6 @@ def refresh_slots(*, force_evaluate: bool = False, max_candidates: int = MAX_CAN
             "evaluated": evaluated,
             "buy_signal_count": buy_signal_count,
             "eligible_pool_count": len(pool),
-            "integrated_gate_enforcement": gate_enforcement,
-            "integrated_gate_shadow_summary": gate_shadow_summary,
             "blocked_summary": blocked,
             "errors": errors[-30:],
         }
@@ -532,7 +506,6 @@ def mark_manual_buy(*, slot_no: int | None = None, candidate_id: str | None = No
         save_state(state)
     finally:
         release_lock()
-    # Full refresh after state change. If outside regular hours and no force, cached pool is still fully rebuilt.
     return refresh_slots(force_evaluate=force_evaluate)
 
 

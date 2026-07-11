@@ -1,4 +1,4 @@
-"""Static candidate gate checkers for live shadow/block enforcement.
+"""Static candidate gate checkers used by the upstream elite-report gate.
 
 The implementation consumes the frozen validation catalogs that established
 v3 reachability and final BOIL-exclusive decisions. It does not invent new
@@ -7,7 +7,6 @@ thresholds or recompute research labels with a different data window.
 from __future__ import annotations
 
 import csv
-import fcntl
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -18,7 +17,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 V3_SOURCE = PROJECT_ROOT / "data/_system/analysis/candidate_selection_audit_20260710/threshold_p99_weightless_block_candidate_decisions.csv"
 BOIL_SOURCE = PROJECT_ROOT / "data/_system/analysis/candidate_selection_audit_20260710/boil_block_exclusive_targets.csv"
 BOIL_DECISION_SOURCE = PROJECT_ROOT / "data/_system/analysis/candidate_selection_audit_20260710/boil_block_enforcement_decision.json"
-SHADOW_LOG_DIR = PROJECT_ROOT / "data/_system/analysis/boil_v3_shadow"
 POLICY_VERSION = "integrated-gate-v3-boil-20260710"
 V3_POLICY_VERSION = "integrated-gate-v3-p99-reachability-block-weightless"
 BOIL_POLICY_VERSION = "high-vol-volume-blind-near-zero-v3-exclusive"
@@ -51,11 +49,6 @@ def _policy_value(key: str, default: str) -> str:
     except Exception:
         return default
     return raw if raw in VALID_ENFORCEMENTS else default
-
-
-def integrated_gate_enforcement() -> str:
-    """Live candidate-slot hook enforcement, defaulting safely to SHADOW."""
-    return _policy_value("live.integrated_gate_enforcement", "SHADOW")
 
 
 def upstream_gate_enforcement() -> str:
@@ -214,7 +207,7 @@ class CandidateGateChecker:
             or f"{candidate.get('stage')}:{candidate.get('ticker')}:{candidate.get('rulebook_hash_short')}"
         )
         ticker = str(candidate.get("ticker") or "").upper()
-        mode = str(enforcement or integrated_gate_enforcement()).upper()
+        mode = str(enforcement or "SHADOW").upper()
         if mode not in VALID_ENFORCEMENTS:
             mode = "SHADOW"
         v3 = self.check_v3(candidate_id)
@@ -241,30 +234,3 @@ class CandidateGateChecker:
         self, candidates: Iterable[dict[str, Any]], enforcement: str | None = None
     ) -> list[CandidateGateDecision]:
         return [self.evaluate(candidate, enforcement=enforcement) for candidate in candidates]
-
-
-def append_candidate_gate_log(
-    decision: CandidateGateDecision,
-    *,
-    path: str,
-    candidate_snapshot: dict[str, Any] | None = None,
-) -> Path | None:
-    """Append a gate decision. Failure never changes candidate evaluation."""
-    try:
-        SHADOW_LOG_DIR.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc)
-        log_path = SHADOW_LOG_DIR / f"candidate_gate_{timestamp:%Y%m%d}.jsonl"
-        payload = decision.to_dict()
-        payload["path"] = path
-        payload["candidate_snapshot"] = dict(candidate_snapshot or {})
-        line = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
-        with log_path.open("a", encoding="utf-8") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            try:
-                handle.write(line)
-                handle.flush()
-            finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-        return log_path
-    except Exception:
-        return None

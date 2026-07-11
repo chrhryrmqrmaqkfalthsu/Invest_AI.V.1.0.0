@@ -1,0 +1,7 @@
+stage,file,line_or_symbol,input_fields,ticker_field_present,output_fields,ticker_preserved,code_basis
+fetch,engine/market/context.py,_fetch_realtime_news,"title|description|url|source|publishedAt",false,"same five fields",not_applicable,"NewsAPI top-headlines 응답에서 ticker를 읽거나 저장하는 코드 없음"
+classify,engine/market/colab_v32.py,interpret_news_with_gpt,"article text + matched_event_types",false,"is_real_event|event_type|market_impact|impact_score|confidence|timeframe|affected_sectors|reasoning",false,"LLM JSON 계약에 ticker/company/symbol 필드 없음; impact_score는 S&P500 전체 영향 기준"
+aggregate,engine/market/colab_v32.py,aggregate_events,"interpreted article + interpretation",false,"active_events[event_type]={match_count,total_impact_score,market_impact,affected_sectors,articles}",false,"active_events 및 article payload에 ticker 필드 없음"
+context,engine/market/context.py,MarketContext.active_events,"global active_events dict",false,"single MarketContext.active_events",false,"MarketContext는 ticker 인자를 받지 않는 시장 공통 context"
+flags,engine/strategies/learned_rulebook.py,evaluate,"ctx.active_events keys",false,"has_earnings_shock 등 11개 binary flags",false,"int('실적쇼크' in active)만 수행; evaluate의 ticker와 대조 없음"
+score,engine/strategies/evaluator.py,evaluate_signal,"event_flags + ticker rulebook",false,"components.events",false,"flag * event_response coefficient 후 multiplier; ticker 조건문 없음"

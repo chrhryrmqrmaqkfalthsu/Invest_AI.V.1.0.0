@@ -1,0 +1,12 @@
+axis,source_inputs,local_operation,sign_handling,clamp_or_gate,added_to_raw_score,global_multiplier_stage,code_location
+MA,Aligned_bull or inverse ordering,"weight_ma_align * boolean",nonnegative weight,boolean condition,yes,market_adjustment,engine/strategies/evaluator.py
+MACD,MACD_golden or inverse dead cross,"weight_macd_golden * boolean",nonnegative weight,boolean condition,yes,market_adjustment,engine/strategies/evaluator.py
+RSI,RSI and learned low/high,"weight_rsi_zone * in_band",nonnegative weight,two-sided RSI band,yes,market_adjustment,engine/strategies/evaluator.py
+Bollinger,price and BB band,"weight_bb_near_lower * boolean",nonnegative weight,proximity condition,yes,market_adjustment,engine/strategies/evaluator.py
+Volume,Volume_ratio,"weight_volume_surge * boolean",nonnegative weight,lower threshold,yes,market_adjustment,engine/strategies/evaluator.py
+News,news_sentiment,"weight_news_sentiment * effective_sentiment",signed; short reverses sign,use_news_global gate,yes,market_adjustment,engine/strategies/evaluator.py
+NewsTopics,topic z*confidence,"sum(weight_news_topic * feature)",signed; short reverses sign,"clamp to [-news_block_cap,+news_block_cap]",yes,market_adjustment,engine/strategies/evaluator.py
+Event,event_flags,"sum(flag * event_response_key) * event_strength_multiplier",signed coefficients,use_event_block gate; no block cap,yes,market_adjustment,engine/strategies/evaluator.py
+Crash bonus,market_score,"fixed +2.0",positive only,"crash_buy_enabled and market_score <= threshold",yes,market_adjustment,engine/strategies/evaluator.py
+Market adjustment,"market_score|sector_score|vix","1 + clamped weighted correlation adjustment",signed around 1,"clamp to [1-strength,1+strength]; use_market_entry_adjustment gate",no,multiplies complete raw_score,engine/strategies/evaluator.py
+Final decision,final_score,"raw_score * market_adjustment",signed score,score >= signal_threshold,not_applicable,not_applicable,engine/strategies/evaluator.py

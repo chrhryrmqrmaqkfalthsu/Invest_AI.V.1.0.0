@@ -11,8 +11,8 @@ live:
   direct_event_enabled: false
   # 기존 live-slot 평가 직전 v3·BOIL 게이트. 현재 SHADOW 유지.
   integrated_gate_enforcement: SHADOW
-  # elite report의 ticker dedup 이전 상류 게이트. SHADOW는 제거·승계 시뮬레이션만 기록한다.
-  upstream_gate_enforcement: SHADOW
+  # elite report의 ticker dedup 이전 상류 게이트. BLOCK은 FAIL/HOLD를 단순 제거하고 빈자리를 채우지 않는다.
+  upstream_gate_enforcement: BLOCK
 
 cycle:
   interval_seconds: 60

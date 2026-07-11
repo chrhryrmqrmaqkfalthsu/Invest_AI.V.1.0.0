@@ -1,0 +1,4 @@
+time_window,artifact,status,active_event_categories,source_scope,notes
+2026-07-07_to_2026-07-08,CE candidate/order snapshot,PARTIAL,,aggregate_only,Event contribution +4.62260455만 보존되고 event_flags 및 active_events payload는 없음
+2026-07-07_to_2026-07-08,historical market_state snapshot,NOT_FOUND,,unavailable,해당 시점 market_state 또는 event feed snapshot 미보존
+2026-07-10T19:34:03.640405,current market_state,CONFIRMED,"금리정책_인상|금리정책_인하|인플레이션|유가급등|지정학_긴장|관세",global_market_context,후행 snapshot이므로 CE 진입 시점 활성 set 증거로 사용 금지

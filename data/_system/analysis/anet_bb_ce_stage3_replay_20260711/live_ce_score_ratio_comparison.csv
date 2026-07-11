@@ -1,0 +1,7 @@
+group,n,score_min,score_median,score_max,ratio_min,ratio_median,ratio_max,count_score_ge_live,count_ratio_ge_live,notes
+live_CE,1,8.36324630,8.36324630,8.36324630,3.15096387,3.15096387,3.15096387,1,1,"open live position; Event contribution 4.62"
+all_past_CE_75,75,2.66162312,3.80009520,7.97158449,1.00280178,1.43173622,3.00340010,0,0,"live exceeds past maximum score by 0.39166181 and ratio by 0.14756377"
+A_period_exact_CE_36,36,2.66162312,3.80009520,7.97158449,1.00280178,1.43173622,3.00340010,0,0,"same maxima as all 75; highest-score entry was not the same technical core"
+exact_technical_core_all_6,6,3.74064175,3.74064175,3.74064175,1.40933635,1.40933635,1.40933635,0,0,"all six had identical fixed MACD RSI BB contributions and Event 0"
+exact_technical_core_A_3,3,3.74064175,3.74064175,3.74064175,1.40933635,1.40933635,1.40933635,0,0,"three exact-period entries; all realized pnl positive"
+contains_MACD_RSI_BB_all_8,8,3.74064175,3.74064175,7.91213105,1.40933635,1.40933635,2.98100023,0,0,"six exact core plus MA-augmented one and NewsTopics-augmented one"

@@ -1,0 +1,19 @@
+scope,similarity_group,definition,n,avg_pnl_pct,median_pnl_pct,win_rate_pct,min_pnl_pct,max_pnl_pct
+all_75,a_exact_full_active_set,"active set exactly MACD+RSI+BB+Event",0,,,,,
+all_75,b_exact_technical_core_without_event,"Event excluded; active set exactly MACD+RSI+BB",6,1.13834914,4.16699171,66.666667,-9.54353635,9.19594674
+all_75,c_core_3_of_3_with_extra_non_event,"MACD RSI BB all active plus MA Volume News or NewsTopics",2,4.41137851,4.41137851,50.000000,-4.21354824,13.03630525
+all_75,d_core_overlap_2_of_3,"exactly two of MACD RSI BB active",53,-1.23264646,-0.85808654,41.509434,-14.89608240,13.32956615
+all_75,e_core_overlap_1_of_3,"exactly one of MACD RSI BB active",13,-1.26115896,-2.01666716,38.461538,-13.17701602,13.66052070
+all_75,f_core_overlap_0_of_3,"none of MACD RSI BB active",1,0.46149424,0.46149424,100.000000,0.46149424,0.46149424
+A_period_exact_36,a_exact_full_active_set,"active set exactly MACD+RSI+BB+Event",0,,,,,
+A_period_exact_36,b_exact_technical_core_without_event,"Event excluded; active set exactly MACD+RSI+BB",3,6.27230211,7.32051828,100.000000,2.30044132,9.19594674
+A_period_exact_36,c_core_3_of_3_with_extra_non_event,"MACD RSI BB all active plus MA Volume News or NewsTopics",0,,,,,
+A_period_exact_36,d_core_overlap_2_of_3,"exactly two of MACD RSI BB active",27,-4.36692435,-6.08885703,22.222222,-14.89608240,13.32956615
+A_period_exact_36,e_core_overlap_1_of_3,"exactly one of MACD RSI BB active",5,-0.73338935,-4.13576965,40.000000,-13.17701602,13.66052070
+A_period_exact_36,f_core_overlap_0_of_3,"none of MACD RSI BB active",1,0.46149424,0.46149424,100.000000,0.46149424,0.46149424
+non_A_39,a_exact_full_active_set,"active set exactly MACD+RSI+BB+Event",0,,,,,
+non_A_39,b_exact_technical_core_without_event,"Event excluded; active set exactly MACD+RSI+BB",3,-3.99560384,-8.47681728,33.333333,-9.54353635,6.03354210
+non_A_39,c_core_3_of_3_with_extra_non_event,"MACD RSI BB all active plus MA Volume News or NewsTopics",2,4.41137851,4.41137851,50.000000,-4.21354824,13.03630525
+non_A_39,d_core_overlap_2_of_3,"exactly two of MACD RSI BB active",26,2.02218059,1.92712157,61.538462,-6.24363534,12.42183448
+non_A_39,e_core_overlap_1_of_3,"exactly one of MACD RSI BB active",8,-1.59101496,-1.79314012,37.500000,-6.66865343,3.27976171
+non_A_39,f_core_overlap_0_of_3,"none of MACD RSI BB active",0,,,,,

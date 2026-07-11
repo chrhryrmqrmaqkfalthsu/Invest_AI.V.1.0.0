@@ -1,0 +1,12 @@
+component,value,derivation,confidence,notes
+observed_event_contribution,4.62260455,live order candidate snapshot,high,"55.24% of observed score 8.36324630"
+event_strength_multiplier,2.33874362,exact live rulebook,high,"66.67 percentile among 93 live candidates"
+raw_active_coefficient_sum,1.97653326,observed contribution divided by multiplier,high,"dynamic active-event set determines which coefficients enter this sum"
+max_single_positive_coefficient,1.43315021,CE rulebook event_response_rate_hike,high,"single-event maximum after multiplier is 3.35177092, below observed 4.62260455"
+minimum_active_positive_event_count,2,observed raw sum exceeds any single positive coefficient,medium,"negative active events could require more positive events; exact flags missing"
+exact_subset_solution_example,"fed_statement+inflation+rate_cut+rate_hike","0.16053341+1.27543075-0.89258112+1.43315021=1.97653325",high_math_low_historical,"matches observed sum numerically but active payload is missing, so this is not asserted as the actual event set"
+static_profile_percentile,52.69,scaled L1 capacity percentile among live93,high,"near middle of distribution"
+static_positive_capacity_percentile,56.99,positive capacity percentile among live93,high,"near middle of distribution"
+static_mean_abs_percentile,5.38,mean absolute coefficient percentile among live93,high,"lower tail rather than upper tail"
+static_boundary_count,0,number of coefficients at absolute bound 2.0,high,"no coefficient saturation"
+dynamic_dependency,"required","observed 4.62 needs a multi-event active set and no entry-score recency decay",high,"exact active set and TTL ages unavailable"

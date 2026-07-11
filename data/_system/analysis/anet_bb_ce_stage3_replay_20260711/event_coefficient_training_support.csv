@@ -1,0 +1,10 @@
+ticker,rulebook_hash_short,rulebook_trade_count,bull_trade_count,stress_trade_count,event_activation_sample_count,event_sample_source,replay_event_entry_count,interpretation
+BMA,0c978464f9dd,10,10,12,,not_persisted,,"trade counts exist but event-active learning samples are not separately recorded"
+BNTX,d667608bc166,12,12,18,,not_persisted,,"trade counts exist but event-active learning samples are not separately recorded"
+BTBT,363898884d44,20,20,24,,not_persisted,,"trade counts exist but event-active learning samples are not separately recorded"
+CMC,4f6ee2739add,17,,,,not_persisted,,"Stage2 survivor exposes total trade count only"
+BWXT,f195725cb792,10,10,17,,not_persisted,,"trade counts exist but event-active learning samples are not separately recorded"
+BMI,07d4ee0f7841,8,8,13,,not_persisted,,"trade counts exist but event-active learning samples are not separately recorded"
+BGC,d8c39420992c,11,11,18,,not_persisted,,"trade counts exist but event-active learning samples are not separately recorded"
+CE,998b0b638c66,10,10,23,,not_persisted,0,"CE replay 195-entry analysis contained Event=0 for all replayed CE entries; this does not prove training had zero event samples because historical event context was not reconstructed"
+ACMR,44c1e02681c4,13,13,14,,not_persisted,,"trade counts exist but event-active learning samples are not separately recorded"

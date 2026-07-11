@@ -1,0 +1,10 @@
+ticker,stage,rulebook_hash_short,event_multiplier,multiplier_percentile_live93,mean_abs_event_coefficient,mean_abs_percentile_live93,max_abs_event_coefficient,max_abs_percentile_live93,scaled_l1_capacity,scaled_l1_percentile_live93,positive_event_capacity,positive_capacity_percentile_live93,boundary_coeff_count,use_event_block,static_extreme_observation
+BMA,stage3,0c978464f9dd,3.00000000,100.00,1.07734778,47.31,2.00000000,100.00,35.55247687,87.10,24.14927674,93.55,2,true,"high multiplier and upper-tail positive capacity"
+BNTX,stage3,d667608bc166,3.00000000,100.00,1.35046524,90.32,2.00000000,100.00,44.56535286,97.85,26.02581395,97.85,3,true,"static coefficients and multiplier both upper-tail"
+BTBT,stage3,363898884d44,3.00000000,100.00,0.98923753,27.96,2.00000000,100.00,32.64483852,78.49,27.53619727,100.00,2,true,"multiplier and positive capacity upper-tail"
+CMC,stage2,4f6ee2739add,1.56709300,40.86,1.18861776,65.59,2.00000000,100.00,20.48942025,54.84,14.60480033,76.34,3,true,"moderate multiplier; several boundary coefficients"
+BWXT,stage3,f195725cb792,0.50000000,8.60,1.28439896,86.02,2.00000000,100.00,7.06419427,13.98,4.76077672,25.81,2,true,"large raw coefficients but very low multiplier"
+BMI,stage3,07d4ee0f7841,3.00000000,100.00,0.99960065,29.03,2.00000000,100.00,32.98682153,79.57,22.23857375,92.47,1,true,"high multiplier and upper-tail positive capacity"
+BGC,stage3,d8c39420992c,3.00000000,100.00,0.84603226,9.68,2.00000000,100.00,27.91906442,65.59,13.58174477,69.89,1,true,"high multiplier but low mean coefficient magnitude"
+CE,stage3,998b0b638c66,2.33874362,66.67,0.79499698,5.38,1.93124685,7.53,20.45223543,52.69,10.24264832,56.99,0,true,"not an upper-tail static coefficient profile"
+ACMR,stage3,44c1e02681c4,2.12215576,61.29,0.88960146,18.28,2.00000000,100.00,20.76660165,55.91,9.94065290,54.84,1,true,"near-middle scaled capacity"

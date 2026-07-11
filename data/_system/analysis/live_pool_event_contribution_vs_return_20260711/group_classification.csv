@@ -1,0 +1,4 @@
+group,candidate_count,tickers,off_drop_count,classification_rule
+EVENT_DEPENDENT,7,"BTBT|BMA|BMI|BNTX|CMC|BWXT|ACMR",7,"event_contribution>0 and off_estimated_score<threshold"
+EVENT_AMPLIFIED,3,"CRS|BCS|ADMA",0,"event_contribution>0 and off_estimated_score>=threshold"
+EVENT_NONE_OR_NEG,8,"ALGT|BN|BB|ANET|ARKW|CBRL|CRK|AEIS",0,"event_contribution<=0"

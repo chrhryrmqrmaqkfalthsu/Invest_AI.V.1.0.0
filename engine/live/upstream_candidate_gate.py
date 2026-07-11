@@ -1,7 +1,10 @@
 """Upstream v3/BOIL gate simulation for elite report candidate construction.
 
-SHADOW mode returns the original sorted/deduplicated candidates unchanged and
-logs what BLOCK would have removed or replaced before ticker deduplication.
+All raw candidate rows are evaluated before ticker deduplication.  The baseline
+report selection is then computed with the existing sort/dedup rules.  Simple
+removal removes FAIL/HOLD rows from that baseline only: it never promotes a
+lower-ranked rulebook for the same ticker and never refills vacated capacity.
+SHADOW returns the baseline unchanged and logs the simple-removal result.
 """
 from __future__ import annotations
 
@@ -96,7 +99,7 @@ def apply_upstream_gate_shadow(
     enforcement: str | None = None,
     log_result: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Evaluate before ticker dedup; SHADOW returns baseline candidates unchanged."""
+    """Evaluate raw rows pre-dedup; remove selected FAIL/HOLD without refill."""
     checker = checker or CandidateGateChecker()
     mode = str(enforcement or upstream_gate_enforcement()).upper()
     if mode not in {"SHADOW", "BLOCK"}:
@@ -108,35 +111,29 @@ def apply_upstream_gate_shadow(
         decisions[cid] = checker.evaluate(row, enforcement=mode)
 
     baseline = _dedup_sorted(rows, max_unique=max_unique, sort_key=sort_key)
-    eligible_rows = [
+    simulated = [
         row
-        for row in rows
+        for row in baseline
         if decisions[_candidate_id(row)].aggregate_status == "PASS"
     ]
-    simulated = _dedup_sorted(eligible_rows, max_unique=max_unique, sort_key=sort_key)
 
-    baseline_by_ticker = {_ticker(row): row for row in baseline}
-    simulated_by_ticker = {_ticker(row): row for row in simulated}
     removed = []
-    replacements = []
-    for ticker, original in baseline_by_ticker.items():
+    for original in baseline:
         original_decision = decisions[_candidate_id(original)]
-        replacement = simulated_by_ticker.get(ticker)
         if original_decision.aggregate_status == "PASS":
             continue
-        removed_row = {
-            "ticker": ticker,
-            "candidate_id": _candidate_id(original),
-            "stage": original.get("stage"),
-            "elite_score": original.get("elite_score"),
-            "aggregate_status": original_decision.aggregate_status,
-            "reason": _decision_reason(original_decision),
-            "replacement_candidate_id": _candidate_id(replacement) if replacement else None,
-            "replacement_elite_score": replacement.get("elite_score") if replacement else None,
-        }
-        removed.append(removed_row)
-        if replacement is not None:
-            replacements.append(removed_row)
+        removed.append(
+            {
+                "ticker": _ticker(original),
+                "candidate_id": _candidate_id(original),
+                "stage": original.get("stage"),
+                "elite_score": original.get("elite_score"),
+                "aggregate_status": original_decision.aggregate_status,
+                "reason": _decision_reason(original_decision),
+                "replacement_candidate_id": None,
+                "replacement_elite_score": None,
+            }
+        )
 
     decision_counts = Counter(d.aggregate_status for d in decisions.values())
     baseline_ids = [_candidate_id(row) for row in baseline]
@@ -146,15 +143,17 @@ def apply_upstream_gate_shadow(
         "path": "engine.live.elite_shadow_report.pre_ticker_dedup",
         "stage": stage,
         "enforcement": mode,
+        "simulation_policy": "SIMPLE_REMOVAL_NO_REPLACEMENT_NO_REFILL",
         "raw_candidate_count": len(rows),
         "decision_counts": dict(decision_counts),
         "baseline_selected_count": len(baseline),
         "simulated_selected_count": len(simulated),
+        "vacated_count": len(baseline) - len(simulated),
         "baseline_candidate_ids": baseline_ids,
         "simulated_candidate_ids": simulated_ids,
         "removed_selected": removed,
-        "replacement_count": len(replacements),
-        "replacements": replacements,
+        "replacement_count": 0,
+        "replacements": [],
         "actual_output_changed": mode == "BLOCK",
         "decisions": [decisions[_candidate_id(row)].to_dict() for row in rows],
     }

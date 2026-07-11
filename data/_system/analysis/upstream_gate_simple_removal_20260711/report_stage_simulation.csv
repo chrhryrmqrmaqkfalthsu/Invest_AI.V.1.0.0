@@ -1,0 +1,4 @@
+stage,raw_candidate_count,baseline_selected_count,simulated_selected_count,vacated_count,replacement_count,policy,removed_selected_tickers
+stage2,78,13,9,4,0,SIMPLE_REMOVAL_NO_REPLACEMENT_NO_REFILL,"STM|AGI|IRM|STLD"
+stage3,4640,80,56,24,0,SIMPLE_REMOVAL_NO_REPLACEMENT_NO_REFILL,"CRMD|CLS|CRK|AGQ|CGC|CCL|BTE|AMBA|CRWD|BCS|BNTX|BMI|CWK|BOIL|AAP|BGC|CRNX|CACI|AX|BTBT|ARKK|BILL|CSW|CAT"
+current_live18,18,18,13,5,0,SIMPLE_REMOVAL_NO_REPLACEMENT_NO_REFILL,"BTBT|BMI|BCS|BNTX|CRK"

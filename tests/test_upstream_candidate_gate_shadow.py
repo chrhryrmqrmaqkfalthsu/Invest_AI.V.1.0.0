@@ -50,7 +50,7 @@ def _key(row):
     return (row["elite_score"], row["metrics"]["oos_fitness"], row["metrics"]["oos_expectancy_pct"])
 
 
-def test_shadow_returns_original_dedup_and_simulates_replacement() -> None:
+def test_shadow_returns_original_dedup_and_simulates_simple_removal() -> None:
     rows = [
         {"candidate_id": "stage3:AAA:top", "ticker": "AAA", "stage": "stage3", "elite_score": 10, "metrics": {"oos_fitness": 10, "oos_expectancy_pct": 10}},
         {"candidate_id": "stage3:AAA:next", "ticker": "AAA", "stage": "stage3", "elite_score": 9, "metrics": {"oos_fitness": 9, "oos_expectancy_pct": 9}},
@@ -61,22 +61,37 @@ def test_shadow_returns_original_dedup_and_simulates_replacement() -> None:
         rows, stage="stage3", max_unique=10, sort_key=_key, checker=checker, enforcement="SHADOW", log_result=False
     )
     assert [r["candidate_id"] for r in actual] == ["stage3:AAA:top", "stage3:BBB:only"]
-    assert summary["simulated_candidate_ids"] == ["stage3:AAA:next", "stage3:BBB:only"]
-    assert summary["replacement_count"] == 1
-    assert summary["replacements"][0]["replacement_candidate_id"] == "stage3:AAA:next"
+    assert summary["simulated_candidate_ids"] == ["stage3:BBB:only"]
+    assert summary["replacement_count"] == 0
+    assert summary["replacements"] == []
+    assert summary["vacated_count"] == 1
+    assert summary["simulation_policy"] == "SIMPLE_REMOVAL_NO_REPLACEMENT_NO_REFILL"
     assert summary["actual_output_changed"] is False
 
 
-def test_block_returns_simulated_filtered_dedup() -> None:
+def test_block_removes_without_same_ticker_replacement_or_refill() -> None:
     rows = [
         {"candidate_id": "stage2:AAA:top", "ticker": "AAA", "stage": "stage2", "elite_score": 10, "metrics": {"oos_fitness": 10, "oos_expectancy_pct": 10}},
         {"candidate_id": "stage2:AAA:next", "ticker": "AAA", "stage": "stage2", "elite_score": 9, "metrics": {"oos_fitness": 9, "oos_expectancy_pct": 9}},
+        {"candidate_id": "stage2:BBB:only", "ticker": "BBB", "stage": "stage2", "elite_score": 8, "metrics": {"oos_fitness": 8, "oos_expectancy_pct": 8}},
+        {"candidate_id": "stage2:CCC:below-cap", "ticker": "CCC", "stage": "stage2", "elite_score": 7, "metrics": {"oos_fitness": 7, "oos_expectancy_pct": 7}},
     ]
-    checker = FakeChecker({"stage2:AAA:top": "FAIL", "stage2:AAA:next": "PASS"})
+    checker = FakeChecker({
+        "stage2:AAA:top": "FAIL",
+        "stage2:AAA:next": "PASS",
+        "stage2:BBB:only": "PASS",
+        "stage2:CCC:below-cap": "PASS",
+    })
     actual, summary = apply_upstream_gate_shadow(
-        rows, stage="stage2", max_unique=10, sort_key=_key, checker=checker, enforcement="BLOCK", log_result=False
+        rows, stage="stage2", max_unique=2, sort_key=_key, checker=checker, enforcement="BLOCK", log_result=False
     )
-    assert [r["candidate_id"] for r in actual] == ["stage2:AAA:next"]
+    assert [r["candidate_id"] for r in actual] == ["stage2:BBB:only"]
+    assert "stage2:AAA:next" not in summary["simulated_candidate_ids"]
+    assert "stage2:CCC:below-cap" not in summary["simulated_candidate_ids"]
+    assert summary["baseline_selected_count"] == 2
+    assert summary["simulated_selected_count"] == 1
+    assert summary["vacated_count"] == 1
+    assert summary["replacement_count"] == 0
     assert summary["actual_output_changed"] is True
 
 

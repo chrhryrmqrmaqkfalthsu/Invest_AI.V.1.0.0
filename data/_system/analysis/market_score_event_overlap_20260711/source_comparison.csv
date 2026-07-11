@@ -1,0 +1,11 @@
+dimension,market_score_path,event_axis,relationship
+primary_price_input,"Yahoo Finance/yfinance ^GSPC 60d and ^VIX","none",independent_price_source
+news_provider,"NewsAPI top-headlines country=us category=business","same MarketContext.active_events created from NewsAPI top-headlines",shared_source
+llm_classification,"GPT/LLM event_type and impact_score aggregated into event_adjustment","same event_type keys converted to binary flags",shared_classification
+runtime_object,"MarketContext.score = clip(price_score + event_adjustment)","MarketContext.active_events -> has_* flags",same_object
+representation,"continuous signed total_impact_score aggregate with TTL decay and [-30,+20] total clip","binary key presence times ticker rulebook event_response_* times event_strength_multiplier",different_encoding
+final_score_use,"market_score can trigger crash bonus and can multiply whole raw score through market_adjustment","event component directly added to raw score",duplicate_additive_multiplicative_paths
+composite_event_behavior,"all active_events keys contribute to aggregate total impact","only 11 exact Korean keys are recognized",partial_overlap
+turn_off_use_event_block,"market_score remains event-adjusted","direct event component becomes zero",aggregate_macro_can_remain
+training_input,"market_history.score price/VIX based; score_with_events not consumed","use_llm_events=False forces flags zero",no_duplicate_in_training
+live_input,"ctx.score includes event_adjustment","ctx.active_events flags enabled",duplicate_in_live

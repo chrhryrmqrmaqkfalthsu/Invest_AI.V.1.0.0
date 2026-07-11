@@ -1,0 +1,11 @@
+dimension,dashboard_news,evaluation_news,match_or_difference
+provider,Alpha Vantage,Alpha Vantage,same provider
+endpoint,https://www.alphavantage.co/query,https://www.alphavantage.co/query,same endpoint
+function,NEWS_SENTIMENT,NEWS_SENTIMENT,same API function
+request_mode,"per selected holding/candidate; sort=LATEST; limit=50","bulk historical updater; ticker + time_from/time_to; limit=1000",different call contract
+fetch_time,"real_focus_news_refresh runtime call",separate updater execution only,different trigger
+storage,"holding_news_sentiment_cache.json then real_dashboard_news_state.json","ticker_news_cache/<TICKER>/*.json.gz then ticker_sentiment/<TICKER>_daily.csv",different storage
+consumer,real_dashboard_api /api/real/news and candidate display,LearnedRuleBook._lookup_lagged_news_context then evaluate_signal,different consumer
+freshness_rule,"fetch cache max 180 minutes; score articles max 3 days","D-1 row; max age 7 days",different freshness policy
+score_semantics,"negative-news risk score and top article display","daily average sentiment and topic z-score",different feature semantics
+writes_evaluation_csv,no,yes,disconnected

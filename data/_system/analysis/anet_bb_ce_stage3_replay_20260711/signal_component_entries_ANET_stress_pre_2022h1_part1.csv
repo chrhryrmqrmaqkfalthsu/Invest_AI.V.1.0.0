@@ -1,0 +1,12 @@
+ticker,period_label,period_reproduction_status,trade_match_status,confidence_tier,component_matches_original,entry_date,exit_date,pnl_pct,score,threshold,ratio,market_adjustment,positive_component_count,active_combo,ma_align,macd,rsi,bb,volume,news,news_topics,events
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2021-04-15,2021-05-12,1.27598705,3.20171988,2.63909028,1.21319074,1.0,3,MA+RSI+NewsTopics,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.17662281,0.0
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2021-05-17,2021-05-21,1.27598705,3.02509707,2.63909028,1.14626509,1.0,2,MA+RSI,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.0,0.0
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2021-06-23,2021-07-14,0.28113769,3.03942552,2.63909028,1.15169441,1.0,3,MA+RSI+NewsTopics,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.01432845,0.0
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2021-11-11,2021-12-09,-1.18002591,2.98174473,2.63909028,1.12983809,1.0,2,MA+NewsTopics,1.31484952,0.0,0.0,0.0,0.0,0.0,1.66689521,0.0
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2021-12-16,2022-01-03,1.27598705,3.51238057,2.63909028,1.3309058,1.0,3,MA+MACD+NewsTopics,1.31484952,2.0,0.0,0.0,0.0,0.0,0.19753105,0.0
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2022-01-06,2022-01-14,-2.15882253,3.02509707,2.63909028,1.14626509,1.0,2,MA+RSI,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.0,0.0
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2022-01-20,2022-02-11,-2.38197514,3.05535982,2.63909028,1.15773221,1.0,2,RSI+BB,0.0,0.0,1.71024754,1.34511228,0.0,0.0,0.0,0.0
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2022-02-16,2022-02-18,0.14121811,3.96329608,2.63909028,1.50176601,1.0,2,RSI+Volume,0.0,0.0,1.71024754,0.0,0.25304854,0.0,0.0,0.0
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2022-03-31,2022-04-06,-2.55082447,3.02509707,2.63909028,1.14626509,1.0,2,MA+RSI,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.0,0.0
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2022-04-11,2022-04-20,-3.70747157,3.02509707,2.63909028,1.14626509,1.0,2,MA+RSI,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.0,0.0
+ANET,stress_pre_2022h1,mismatch_period,exact,B_trade_exact,True,2022-04-25,2022-04-29,1.27598705,3.75330154,2.63909028,1.42219521,1.0,3,RSI+BB+NewsTopics,0.0,0.0,1.71024754,1.34511228,0.0,0.0,0.69794172,0.0

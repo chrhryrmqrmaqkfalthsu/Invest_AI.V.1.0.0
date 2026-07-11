@@ -1,0 +1,6 @@
+ticker,period_label,period_reproduction_status,trade_match_status,confidence_tier,component_matches_original,entry_date,exit_date,pnl_pct,score,threshold,ratio,market_adjustment,positive_component_count,active_combo,ma_align,macd,rsi,bb,volume,news,news_topics,events
+BB,train_1,mismatch_period,exact,B_trade_exact,True,2022-12-08,2022-12-22,-21.72436695,3.65188241,2.79195117,1.30800368,1.0,3,MA+RSI+BB,1.54052185,0.0,1.75038162,0.36097895,0.0,0.0,0.0,0.0
+BB,train_1,mismatch_period,exact,B_trade_exact,True,2023-01-09,2023-02-03,23.4778291,3.34905188,2.79195117,1.19953813,1.0,2,MACD+RSI,0.0,1.59867026,1.75038162,0.0,0.0,0.0,0.0,0.0
+BB,train_1,mismatch_period,exact,B_trade_exact,True,2023-02-10,2023-03-07,-12.74062112,3.65188241,2.79195117,1.30800368,1.0,3,MA+RSI+BB,1.54052185,0.0,1.75038162,0.36097895,0.0,0.0,0.0,0.0
+BB,train_1,mismatch_period,entry_date_match_but_values_differ,C_signal_exact_exit_diff,True,2022-07-22,2022-08-17,8.42822983,3.29090347,2.79195117,1.17871097,1.0,2,MA+RSI,1.54052185,0.0,1.75038162,0.0,0.0,0.0,0.0,0.0
+BB,train_1,mismatch_period,entry_date_match_but_values_differ,C_signal_exact_exit_diff,True,2022-10-21,2022-11-16,7.72823154,3.71003083,2.79195117,1.32883084,1.0,3,MACD+RSI+BB,0.0,1.59867026,1.75038162,0.36097895,0.0,0.0,0.0,0.0

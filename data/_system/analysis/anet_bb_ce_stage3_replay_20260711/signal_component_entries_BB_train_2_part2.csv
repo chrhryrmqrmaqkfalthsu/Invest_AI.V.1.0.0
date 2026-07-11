@@ -1,0 +1,6 @@
+ticker,period_label,period_reproduction_status,trade_match_status,confidence_tier,component_matches_original,entry_date,exit_date,pnl_pct,score,threshold,ratio,market_adjustment,positive_component_count,active_combo,ma_align,macd,rsi,bb,volume,news,news_topics,events
+BB,train_2,mismatch_period,exact,B_trade_exact,True,2024-01-29,2024-02-23,-12.03642705,7.15814253,2.79195117,2.56384947,1.0,3,RSI+BB+NewsTopics,0.0,0.0,1.75038162,0.36097895,0.0,0.0,5.04678196,0.0
+BB,train_2,mismatch_period,exact,B_trade_exact,True,2024-03-26,2024-04-22,3.67076396,3.91411303,2.79195117,1.40192746,1.0,3,RSI+BB+NewsTopics,0.0,0.0,1.75038162,0.36097895,0.0,0.0,1.80275246,0.0
+BB,train_2,mismatch_period,exact,B_trade_exact,True,2024-06-24,2024-06-28,6.3861631,3.27298121,2.79195117,1.17229171,1.0,3,RSI+BB+Volume,0.0,0.0,1.75038162,0.36097895,1.16162065,0.0,0.0,0.0
+BB,train_2,mismatch_period,entry_date_match_but_values_differ,C_signal_exact_exit_diff,True,2024-05-03,2024-05-30,-5.81960352,3.71003083,2.79195117,1.32883084,1.0,3,MACD+RSI+BB,0.0,1.59867026,1.75038162,0.36097895,0.0,0.0,0.0,0.0
+BB,train_2,mismatch_period,not_in_original,D_low_partial_or_rerun_only,False,2024-06-07,2024-06-14,-15.49745946,3.27298121,2.79195117,1.17229171,1.0,3,RSI+BB+Volume,0.0,0.0,1.75038162,0.36097895,1.16162065,0.0,0.0,0.0

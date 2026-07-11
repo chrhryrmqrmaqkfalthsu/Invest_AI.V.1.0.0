@@ -1,0 +1,10 @@
+ticker,period_label,period_reproduction_status,trade_match_status,confidence_tier,component_matches_original,entry_date,exit_date,pnl_pct,score,threshold,ratio,market_adjustment,positive_component_count,active_combo,ma_align,macd,rsi,bb,volume,news,news_topics,events
+ANET,train_1,mismatch_period,exact,B_trade_exact,True,2023-05-05,2023-05-12,1.27598705,3.05535982,2.63909028,1.15773221,1.0,2,RSI+BB,0.0,0.0,1.71024754,1.34511228,0.0,0.0,0.0,0.0
+ANET,train_1,mismatch_period,exact,B_trade_exact,True,2023-06-23,2023-06-30,7.45061032,2.75731038,2.63909028,1.04479578,1.0,2,RSI+NewsTopics,0.0,0.0,1.71024754,0.0,0.0,0.0,1.04706283,0.0
+ANET,train_1,mismatch_period,entry_date_match_but_values_differ,C_signal_exact_exit_diff,True,2022-07-05,2022-08-01,34.48145034,3.71024754,2.63909028,1.40588125,1.0,1,RSI,0.0,0.0,1.71024754,0.0,0.0,0.0,0.0,0.0
+ANET,train_1,mismatch_period,entry_date_match_but_values_differ,C_signal_exact_exit_diff,True,2022-10-13,2022-11-09,31.25892051,5.15046824,2.63909028,1.95160745,1.0,3,RSI+BB+NewsTopics,0.0,0.0,1.71024754,1.34511228,0.0,0.0,0.09510842,0.0
+ANET,train_1,mismatch_period,entry_date_match_but_values_differ,C_signal_exact_exit_diff,True,2023-01-18,2023-02-10,12.65005323,3.71024754,2.63909028,1.40588125,1.0,2,MACD+RSI,0.0,2.0,1.71024754,0.0,0.0,0.0,0.0,0.0
+ANET,train_1,mismatch_period,entry_date_match_but_values_differ,C_signal_exact_exit_diff,True,2023-05-22,2023-05-31,16.94174596,3.66488208,2.63909028,1.38869144,1.0,2,MACD+RSI,0.0,2.0,1.71024754,0.0,0.0,0.0,-0.04536547,0.0
+ANET,train_1,mismatch_period,not_in_original,D_low_partial_or_rerun_only,False,2022-11-14,2022-11-16,1.27598705,5.02509707,2.63909028,1.904102,1.0,2,MA+RSI,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.0,0.0
+ANET,train_1,mismatch_period,not_in_original,D_low_partial_or_rerun_only,False,2022-11-21,2022-12-02,1.04023064,3.31484952,2.63909028,1.25605765,1.0,1,MA,1.31484952,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+ANET,train_1,mismatch_period,not_in_original,D_low_partial_or_rerun_only,False,2022-12-07,2022-12-14,1.27598705,4.37232393,2.63909028,1.65675421,1.0,4,MA+RSI+BB+NewsTopics,1.31484952,0.0,1.71024754,1.34511228,0.0,0.0,0.00211458,0.0

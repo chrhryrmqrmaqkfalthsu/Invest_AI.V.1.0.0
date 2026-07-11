@@ -1,0 +1,12 @@
+ticker,period_label,period_reproduction_status,trade_match_status,confidence_tier,component_matches_original,entry_date,exit_date,pnl_pct,score,threshold,ratio,market_adjustment,positive_component_count,active_combo,ma_align,macd,rsi,bb,volume,news,news_topics,events
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-08-06,2025-08-14,1.27598705,3.43304388,2.63909028,1.30084367,1.0,3,MA+RSI+NewsTopics,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.40794681,0.0
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-08-20,2025-09-02,0.74477124,2.93097566,2.63909028,1.11060076,1.0,2,MA+RSI,1.31484952,0.0,1.71024754,0.0,0.0,0.0,-0.0941214,0.0
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-09-17,2025-09-23,1.27598705,3.48424274,2.63909028,1.32024386,1.0,3,MA+RSI+NewsTopics,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.45914568,0.0
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-10-07,2025-10-13,1.27598705,3.02509707,2.63909028,1.14626509,1.0,2,MA+RSI,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.0,0.0
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-10-17,2025-10-21,1.27598705,4.34071699,2.63909028,1.64477776,1.0,2,RSI+NewsTopics,0.0,0.0,1.71024754,0.0,0.0,0.0,2.63046945,0.0
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-10-27,2025-10-31,1.27598705,5.32617587,2.63909028,2.01818631,1.0,4,MA+MACD+RSI+NewsTopics,1.31484952,2.0,1.71024754,0.0,0.0,0.0,0.30107881,0.0
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-11-05,2025-11-18,-12.98790292,2.66653469,2.63909028,1.01039919,1.0,2,MA+RSI,1.31484952,0.0,1.71024754,0.0,0.0,0.0,-0.35856238,0.0
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-11-28,2025-12-12,1.27598705,4.34071699,2.63909028,1.64477776,1.0,2,RSI+NewsTopics,0.0,0.0,1.71024754,0.0,0.0,0.0,2.63046945,0.0
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-12-22,2026-01-06,1.27598705,2.73353933,2.63909028,1.03578849,1.0,2,RSI+NewsTopics,0.0,0.0,1.71024754,0.0,0.0,0.0,1.02329179,0.0
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2026-01-12,2026-01-21,3.02536939,3.49474272,2.63909028,1.3242225,1.0,3,RSI+BB+NewsTopics,0.0,0.0,1.71024754,1.34511228,0.0,0.0,0.4393829,0.0
+ANET,recent_1y,mismatch_period,exact,B_trade_exact,True,2026-01-29,2026-02-04,-12.09912251,3.87220998,2.63909028,1.46725181,1.0,2,MA+NewsTopics,1.31484952,0.0,0.0,0.0,0.0,0.0,2.55736045,0.0

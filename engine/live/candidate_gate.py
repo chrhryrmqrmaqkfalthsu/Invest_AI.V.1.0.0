@@ -1,8 +1,8 @@
 """Static candidate gate checkers for live shadow/block enforcement.
 
 The implementation consumes the frozen validation catalogs that established
-v3 reachability and BOIL decisions. It does not invent new thresholds or
-recompute research labels with a different data window.
+v3 reachability and final BOIL-exclusive decisions. It does not invent new
+thresholds or recompute research labels with a different data window.
 """
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from typing import Any, Iterable
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 V3_SOURCE = PROJECT_ROOT / "data/_system/analysis/candidate_selection_audit_20260710/threshold_p99_weightless_block_candidate_decisions.csv"
-BOIL_SOURCE = PROJECT_ROOT / "data/_system/analysis/candidate_selection_audit_20260710/integrated_gate_candidate_dryrun.csv"
-BOIL_RISK_SOURCE = PROJECT_ROOT / "data/_system/analysis/candidate_selection_audit_20260710/high_vol_volume_blind_risk_candidates.csv"
+BOIL_SOURCE = PROJECT_ROOT / "data/_system/analysis/candidate_selection_audit_20260710/boil_block_exclusive_targets.csv"
+BOIL_DECISION_SOURCE = PROJECT_ROOT / "data/_system/analysis/candidate_selection_audit_20260710/boil_block_enforcement_decision.json"
 SHADOW_LOG_DIR = PROJECT_ROOT / "data/_system/analysis/boil_v3_shadow"
 POLICY_VERSION = "integrated-gate-v3-boil-20260710"
 V3_POLICY_VERSION = "integrated-gate-v3-p99-reachability-block-weightless"
@@ -43,15 +43,24 @@ def _as_float(value: Any, default: float | None = None) -> float | None:
         return default
 
 
-def integrated_gate_enforcement() -> str:
-    """Return SHADOW/BLOCK, failing safely to SHADOW."""
+def _policy_value(key: str, default: str) -> str:
     try:
         from engine.core.config import config
 
-        raw = str(config.get("live.integrated_gate_enforcement", "SHADOW") or "SHADOW").strip().upper()
+        raw = str(config.get(key, default) or default).strip().upper()
     except Exception:
-        return "SHADOW"
-    return raw if raw in VALID_ENFORCEMENTS else "SHADOW"
+        return default
+    return raw if raw in VALID_ENFORCEMENTS else default
+
+
+def integrated_gate_enforcement() -> str:
+    """Live candidate-slot hook enforcement, defaulting safely to SHADOW."""
+    return _policy_value("live.integrated_gate_enforcement", "SHADOW")
+
+
+def upstream_gate_enforcement() -> str:
+    """Elite report upstream gate enforcement, defaulting safely to SHADOW."""
+    return _policy_value("live.upstream_gate_enforcement", "SHADOW")
 
 
 @dataclass(frozen=True)
@@ -94,20 +103,20 @@ class CandidateGateDecision:
 
 
 class CandidateGateChecker:
-    """Evaluate frozen v3 and BOIL policies for one candidate."""
+    """Evaluate frozen v3 and final BOIL-exclusive policies."""
 
     def __init__(
         self,
         v3_source: Path = V3_SOURCE,
         boil_source: Path = BOIL_SOURCE,
-        boil_risk_source: Path = BOIL_RISK_SOURCE,
+        boil_decision_source: Path = BOIL_DECISION_SOURCE,
     ):
         self.v3_source = Path(v3_source)
         self.boil_source = Path(boil_source)
-        self.boil_risk_source = Path(boil_risk_source)
+        self.boil_decision_source = Path(boil_decision_source)
         self._v3_rows = self._load_catalog(self.v3_source)
         self._boil_rows = self._load_catalog(self.boil_source)
-        self._boil_risk_rows = self._load_catalog(self.boil_risk_source)
+        self._boil_decision = self._load_json(self.boil_decision_source)
 
     @staticmethod
     def _load_catalog(path: Path) -> dict[str, dict[str, str]]:
@@ -119,6 +128,14 @@ class CandidateGateChecker:
                 for row in csv.DictReader(handle)
                 if row.get("candidate_id")
             }
+
+    @staticmethod
+    def _load_json(path: Path) -> dict[str, Any]:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
 
     def check_v3(self, candidate_id: str) -> GateCheckResult:
         row = self._v3_rows.get(candidate_id)
@@ -157,46 +174,35 @@ class CandidateGateChecker:
 
     def check_boil(self, candidate_id: str, v3_result: GateCheckResult) -> GateCheckResult:
         row = self._boil_rows.get(candidate_id)
-        risk = self._boil_risk_rows.get(candidate_id, {})
         if row is None:
             return GateCheckResult(
                 checker="boil_high_vol_volume_blind",
-                status="HOLD",
-                reasons=("BOIL_CATALOG_ROW_MISSING",),
-                evidence={"candidate_id": candidate_id, "v3_status": v3_result.status},
+                status="PASS",
+                reasons=("NOT_IN_FINAL_BOIL_EXCLUSIVE_TARGETS",),
+                evidence={
+                    "candidate_id": candidate_id,
+                    "v3_status": v3_result.status,
+                    "exclusive_membership": False,
+                    "decision": str(self._boil_decision.get("decision") or ""),
+                    "definition": self._boil_decision.get("definition") or {},
+                },
                 policy_version=BOIL_POLICY_VERSION,
                 source=str(self.boil_source),
             )
-
-        # The integrated dry-run is the authoritative frozen BOIL decision.
-        # This preserves the previously approved result (including BNTX FAIL)
-        # without redefining the historical v3-overlap semantics.
-        status = str(row.get("check_boil") or "HOLD").upper()
-        if status not in {"PASS", "FAIL", "HOLD"}:
-            status = "HOLD"
-        reason = (
-            "HIGH_VOL_VOLUME_BLIND_AND_ABS_WEIGHT_VOLUME_SURGE_LTE_0_05_AND_V3_PASS"
-            if status == "FAIL"
-            else ("BOIL_CONDITION_NOT_MET" if status == "PASS" else "BOIL_STATUS_UNRESOLVED")
-        )
-        weight_volume = _as_float(row.get("weight_volume_surge"))
         return GateCheckResult(
             checker="boil_high_vol_volume_blind",
-            status=status,
-            reasons=(reason,),
+            status="FAIL",
+            reasons=(str(row.get("block_reason") or "HIGH_VOL_VOLUME_BLIND_AND_ABS_WEIGHT_VOLUME_SURGE_LTE_0_05_AND_V3_PASS"),),
             evidence={
                 "candidate_id": candidate_id,
-                "vol_group": str(row.get("vol_group") or risk.get("vol_group_final") or "").upper(),
-                "nonvolume_entry_possible_market_cap": _as_bool(
-                    risk.get("nonvolume_entry_possible_market_cap")
-                ),
-                "weight_volume_surge": weight_volume,
-                "near_zero_limit": 0.05,
-                "near_zero": weight_volume is not None and abs(weight_volume) <= 0.05,
-                "v3_status_current_catalog": v3_result.status,
-                "frozen_integrated_check_boil": status,
-                "risk_high_vol_volume_blind": _as_bool(risk.get("risk_high_vol_volume_blind")),
-                "legacy_boil_check": str(risk.get("legacy_boil_check") or ""),
+                "exclusive_membership": True,
+                "vol_group": str(row.get("vol_group_final") or "").upper(),
+                "nonvolume_entry_possible_market_cap": _as_bool(row.get("nonvolume_entry_possible_market_cap")),
+                "weight_volume_surge": _as_float(row.get("weight_volume_surge")),
+                "near_zero": _as_bool(row.get("near_zero")),
+                "v3_overlap_excluded": _as_bool(row.get("v3_overlap_excluded")),
+                "v3_status": v3_result.status,
+                "decision": str(self._boil_decision.get("decision") or ""),
             },
             policy_version=BOIL_POLICY_VERSION,
             source=str(self.boil_source),

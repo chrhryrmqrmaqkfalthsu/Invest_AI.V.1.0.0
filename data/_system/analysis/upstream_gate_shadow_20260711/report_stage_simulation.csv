@@ -1,0 +1,4 @@
+stage,raw_candidate_count,baseline_selected_count,simulated_selected_count,raw_fail_count,raw_hold_count,selected_fail_count,same_ticker_replacement_count,observation
+stage2,78,13,10,4,0,4,1,"STM/AGI/IRM removed without same-ticker fallback; STLD replaced by stage2:STLD:47a7f7cefa30"
+stage3,4640,80,80,1273,0,24,10,"top-80 remains full because lower-ranked candidates refill the cap; 10 same-ticker replacements observed"
+current_live18,18,18,16,5,0,5,3,"BTBT and CRK have no same-ticker replacement; BMI/BCS/BNTX have replacements, so simple 13 is not the report-level result"

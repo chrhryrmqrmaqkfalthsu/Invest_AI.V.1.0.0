@@ -1,0 +1,23 @@
+{
+  "run_started_at": "2026-07-11T15:12:01+00:00",
+  "run_finished_at": "2026-07-11T15:12:28.842157+00:00",
+  "mode": "daily",
+  "candidate_count": 18,
+  "holding_count": 0,
+  "selected_count": 18,
+  "deferred_count": 0,
+  "return_code": 0,
+  "updater": "scripts/news_downloader/update_ticker_sentiment_recent.py",
+  "selected": ["ACMR", "ADMA", "AEIS", "ALGT", "ANET", "ARKW", "BB", "BCS", "BMA", "BMI", "BN", "BNTX", "BTBT", "BWXT", "CBRL", "CMC", "CRK", "CRS"],
+  "updated_csvs": ["ACMR", "ADMA", "AEIS", "ALGT", "ANET", "ARKW", "BB", "BCS", "BMA", "BMI", "BN", "BNTX", "BTBT", "BWXT", "CBRL", "CMC", "CRK", "CRS"],
+  "failed": [],
+  "api_usage_before": 0,
+  "api_usage_after": 18,
+  "api_usage_delta": 18,
+  "market_usage": 0,
+  "market_reserve": 2,
+  "remaining_ticker_budget": 5,
+  "wrapper_state_deferred": [],
+  "fail_open_unchanged": true,
+  "summary": "18/18 OK; all ticker_sentiment daily CSV files were rewritten by the existing updater"
+}

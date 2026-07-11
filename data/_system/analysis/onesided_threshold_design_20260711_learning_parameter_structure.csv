@@ -1,0 +1,10 @@
+parameter_group,parameters,representation,band_possible_in_current_schema,optimizer_range,complexity_penalty_relevance,code_basis
+RSI,"rsi_low|rsi_high",TWO_SIDED_BAND,true,"20-40|60-80",none,"Rulebook and PARAM_RANGES contain both bounds; evaluator uses inclusive band"
+Final score,signal_threshold,LOWER_ONLY,false,"1.5-4.0",none,"Rulebook has no signal_upper_threshold; evaluator uses >= only"
+Volume,volume_surge_ratio,LOWER_ONLY,false,"1.2-2.5",none,"no volume upper threshold gene"
+Bollinger,bb_proximity,ONE_SIDED_PROXIMITY,false,"1.0-1.15",none,"single proximity gene"
+MACD,"weight_macd_golden|macd_min_hist",BOOLEAN_PLUS_UNUSED_FIELD,false,"weight 0-2; macd_min_hist not in active PARAM_RANGES",none,"evaluator uses cross boolean and does not read macd_min_hist"
+Event,"event_response_*|event_strength_multiplier",SIGNED_ADDITIVE_UNCAPPED,false,"response -2..2; multiplier 0.5..3.0",mask-only,"no event block cap gene"
+NewsTopics,"weight_news_*|news_block_cap",SIGNED_ADDITIVE_CAPPED,true,"weights -3..3; cap 2..6",mask-only,"symmetric clamp is implemented"
+Market adjustment,"market_score_weight|sector_strength_weight|vix_sensitivity|market_adjustment_strength",SIGNED_CAPPED,true,"weights -1..1; strength 0..1",mask-only,"multiplier explicitly clamped"
+Complexity masks,"use_news_global|use_event_block|use_market_entry_adjustment",FEATURE_BLOCK_COUNT,not_applicable,"boolean",yes,"penalty counts active masks only; it does not penalize threshold count or bands"

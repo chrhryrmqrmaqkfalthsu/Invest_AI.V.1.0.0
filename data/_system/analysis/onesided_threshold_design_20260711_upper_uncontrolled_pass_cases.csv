@@ -1,0 +1,8 @@
+source_scope,ticker,candidate_id,observed_at_or_scope,score,threshold,ratio,passed,upper_gate_present,outcome_evidence,notes
+actual_live_order,CE,stage3:CE:998b0b638c66,2026-07-08T14:27:15.330072+00:00,8.3632462956,2.6541866644,3.1509638745,true,false,"historical avg pnl -1.02%; win 41.8%; stop+timeout 88.6%","actual order-submit snapshot; no score upper rejection"
+live93_snapshot,DDOG,stage3:DDOG,2026-07-10 scan,15.382314,1.720585,8.940165,true,false,"historical avg pnl +3.83%; win 58.6%","highest observed ratio in 93-candidate scan"
+live93_snapshot,BMA,stage3:BMA:0c978464f9dd,2026-07-10 scan,19.245747,2.848392,6.756707,true,false,"historical avg pnl +7.82%; win 65.9%","high ratio passed"
+live93_snapshot,BTBT,stage3:BTBT:363898884d44,2026-07-10 scan,11.329717,1.911258,5.927885,true,false,"historical avg pnl +1.19%; win 58.0%","high ratio passed"
+live93_snapshot,CVNA,stage3:CVNA:8d8594e95b89,2026-07-10 scan,8.737079,1.500000,5.824720,true,false,"historical avg pnl -0.83%; win 48.8%","high ratio passed despite negative historical average"
+live93_snapshot,BMI,stage3:BMI:07d4ee0f7841,2026-07-10 scan,8.291327,2.429303,3.413048,true,false,"historical avg pnl +1.03%; win 60.0%","high ratio passed"
+live93_summary,ALL_PASSED,,2026-07-10 scan,,,34,true,false,,"34 passed; ratio>=1.5:17; >=2:12; >=3:5; >=4:4; >=5:4"

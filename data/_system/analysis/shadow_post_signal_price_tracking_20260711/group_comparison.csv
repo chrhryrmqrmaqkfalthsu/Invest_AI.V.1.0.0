@@ -1,0 +1,3 @@
+group,shadow_row_count,unique_candidate_count,candidates_with_exact_signal_price,candidates_with_any_post_signal_price,candidates_plus_1h_available,candidates_plus_4h_available,candidates_plus_1d_available,candidates_plus_2d_available,observed_candidates,observation
+DROP_ON_OFF,1,1,0,0,0,0,0,0,stage3:BTBT:363898884d44,"only one elite_shared row; signal occurred during weekend; exact signal price absent; no post-signal candles yet"
+SURVIVE_ON_OFF,0,0,0,0,0,0,0,0,,"no elite_shared rows in this group"

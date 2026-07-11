@@ -17,6 +17,7 @@ import pandas as pd
 
 from engine.core.feature_lag import DEFAULT_LAG_DAYS, DEFAULT_MAX_AGE_DAYS, lookup_lagged_daily_dict
 from engine.core.indicators import calc_indicators
+from engine.live.event_policy import append_shadow_direct_event_log, live_event_flags
 from engine.market.context import MarketContext, get_market_context
 from engine.market.ticker_sentiment import load_csv as load_ticker_sentiment
 from engine.strategies.demo_rulebook import RuleBook, Signal, SignalResult
@@ -279,23 +280,7 @@ class LearnedRuleBook(RuleBook):
         )
 
         try:
-            active = getattr(ctx, "active_events", {}) or {}
-            try:
-                event_flags = {
-                    "has_war": int("전쟁" in active),
-                    "has_rate_hike": int("금리정책_인상" in active),
-                    "has_rate_cut": int("금리정책_인하" in active),
-                    "has_geopolitical": int("지정학_긴장" in active),
-                    "has_tariff": int("관세" in active),
-                    "has_export_ban": int("수출규제" in active),
-                    "has_earnings_shock": int("실적쇼크" in active),
-                    "has_oil_surge": int("유가급등" in active),
-                    "has_banking_crisis": int("은행위기" in active),
-                    "has_inflation": int("인플레이션" in active),
-                    "has_fed_statement": int("연준발언" in active),
-                }
-            except Exception:
-                event_flags = None
+            event_flags = live_event_flags(ctx)
             res = evaluate_signal(
                 rb=rb,
                 df=df,
@@ -309,6 +294,29 @@ class LearnedRuleBook(RuleBook):
         except Exception as e:
             log.error(f"{ticker} evaluate_signal 실패: {e}")
             return SignalResult(ticker=ticker, signal=Signal.HOLD, price=price, reason=f"evaluate 예외: {e}")
+
+        try:
+            shadow_off = evaluate_signal(
+                rb=rb,
+                df=df,
+                market_score=market_score,
+                sector_score=sector_score,
+                vix_level=vix_level,
+                news_sentiment=news_normalized,
+                event_flags=live_event_flags(ctx, enabled_override=False),
+                topic_features=topic_features,
+            )
+            append_shadow_direct_event_log(
+                candidate_id=f"learned:{ticker}",
+                mode="runner",
+                path="engine.strategies.learned_rulebook.evaluate",
+                market_score_on=market_score,
+                market_score_off=market_score,
+                result_on=res,
+                result_off=shadow_off,
+            )
+        except Exception as shadow_exc:
+            log.warning("%s direct Event shadow compare skipped: %s", ticker, shadow_exc)
 
         news_tag = ""
         if abs(news_normalized) >= 0.1:

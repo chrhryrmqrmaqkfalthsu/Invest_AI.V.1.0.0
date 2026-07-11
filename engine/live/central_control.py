@@ -40,6 +40,7 @@ from engine.live.manual_buy_intent import (
     trade_date_et,
 )
 from engine.live.position_manager import TRADE_LOG_PATH
+from engine.live.event_policy import append_shadow_direct_event_log, live_event_flags
 from engine.market.context import get_market_context
 from engine.strategies.demo_rulebook import Signal, SignalResult
 from engine.strategies.evaluator import evaluate_signal
@@ -579,24 +580,7 @@ class LiveCentralController:
             logger.warning("[CENTRAL-CONTROL][STAGE3] %s 뉴스 context 실패 entity=%s: %s", ticker, entity.entity_id, exc)
             news_normalized, topic_features = 0.0, {}
 
-        event_flags = None
-        try:
-            active = getattr(ctx, "active_events", {}) or {} if ctx is not None else {}
-            event_flags = {
-                "has_war": int("전쟁" in active),
-                "has_rate_hike": int("금리정책_인상" in active),
-                "has_rate_cut": int("금리정책_인하" in active),
-                "has_geopolitical": int("지정학_긴장" in active),
-                "has_tariff": int("관세" in active),
-                "has_export_ban": int("수출규제" in active),
-                "has_earnings_shock": int("실적쇼크" in active),
-                "has_oil_surge": int("유가급등" in active),
-                "has_banking_crisis": int("은행위기" in active),
-                "has_inflation": int("인플레이션" in active),
-                "has_fed_statement": int("연준발언" in active),
-            }
-        except Exception:
-            event_flags = None
+        event_flags = live_event_flags(ctx)
 
         try:
             res = evaluate_signal(
@@ -612,6 +596,29 @@ class LiveCentralController:
         except Exception as exc:
             logger.error("[CENTRAL-CONTROL][STAGE3] %s evaluate_signal 실패 entity=%s: %s", ticker, entity.entity_id, exc)
             return SignalResult(ticker=ticker, signal=Signal.HOLD, price=price, reason=f"stage3 evaluate 예외: {exc}")
+
+        try:
+            shadow_off = evaluate_signal(
+                rb=rb,
+                df=df,
+                market_score=market_score,
+                sector_score=sector_score,
+                vix_level=vix_level,
+                news_sentiment=float(news_normalized or 0.0),
+                event_flags=live_event_flags(ctx, enabled_override=False),
+                topic_features=topic_features,
+            )
+            append_shadow_direct_event_log(
+                candidate_id=str(entity.entity_id),
+                mode="central",
+                path="engine.live.central_control._evaluate_stage3_entity_signal",
+                market_score_on=market_score,
+                market_score_off=market_score,
+                result_on=res,
+                result_off=shadow_off,
+            )
+        except Exception as shadow_exc:
+            logger.warning("[CENTRAL-CONTROL][STAGE3] %s direct Event shadow compare skipped entity=%s: %s", ticker, entity.entity_id, shadow_exc)
 
         reason = (
             f"[stage3 {rb.direction}] score={res.score:.2f}/threshold={res.threshold:.2f} "

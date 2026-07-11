@@ -33,6 +33,7 @@ from engine.live.elite_shadow_entry_quality import assess_shadow_entry_quality
 from engine.live.elite_entry_concentration import score_entry_concentration
 from engine.live.elite_shadow_report import ROOT as ELITE_ROOT
 from engine.live.elite_shadow_report import build_elite_shadow_report
+from engine.live.event_policy import append_shadow_direct_event_log, live_event_flags
 from engine.live.news_alerts import lookup_live_sell_omen_score
 from engine.live.regular_hours_gate import regular_hours_snapshot
 from engine.market.context import get_market_context
@@ -373,23 +374,8 @@ def _news_context(ticker: str, rb: Rulebook, signal_date: Any) -> tuple[float, d
 
 
 def _event_flags(ctx: Any) -> dict[str, int] | None:
-    try:
-        active = getattr(ctx, "active_events", {}) or {}
-        return {
-            "has_war": int("전쟁" in active),
-            "has_rate_hike": int("금리정책_인상" in active),
-            "has_rate_cut": int("금리정책_인하" in active),
-            "has_geopolitical": int("지정학_긴장" in active),
-            "has_tariff": int("관세" in active),
-            "has_export_ban": int("수출규제" in active),
-            "has_earnings_shock": int("실적쇼크" in active),
-            "has_oil_surge": int("유가급등" in active),
-            "has_banking_crisis": int("은행위기" in active),
-            "has_inflation": int("인플레이션" in active),
-            "has_fed_statement": int("연준발언" in active),
-        }
-    except Exception:
-        return None
+    """Compatibility wrapper shared by live, replay, and history paths."""
+    return live_event_flags(ctx)
 
 
 def evaluate_candidate(candidate: dict[str, Any], ctx: Any = None) -> dict[str, Any]:
@@ -420,6 +406,7 @@ def evaluate_candidate(candidate: dict[str, Any], ctx: Any = None) -> dict[str, 
         market_score, sector_score, vix_level = 50.0, 50.0, 18.0
     signal_date = _signal_date(df)
     news_sentiment, topic = _news_context(ticker, rb, signal_date)
+    event_flags = _event_flags(ctx)
     res = evaluate_signal(
         rb=rb,
         df=df,
@@ -427,9 +414,35 @@ def evaluate_candidate(candidate: dict[str, Any], ctx: Any = None) -> dict[str, 
         sector_score=sector_score,
         vix_level=vix_level,
         news_sentiment=news_sentiment,
-        event_flags=_event_flags(ctx),
+        event_flags=event_flags,
         topic_features=topic,
     )
+    try:
+        shadow_off = evaluate_signal(
+            rb=rb,
+            df=df,
+            market_score=market_score,
+            sector_score=sector_score,
+            vix_level=vix_level,
+            news_sentiment=news_sentiment,
+            event_flags=live_event_flags(ctx, enabled_override=False),
+            topic_features=topic,
+        )
+        candidate_id = str(
+            candidate.get("candidate_id")
+            or "{}:{}:{}".format(candidate.get("stage"), ticker, candidate.get("rulebook_hash_short") or candidate.get("rulebook_hash") or "")
+        )
+        append_shadow_direct_event_log(
+            candidate_id=candidate_id,
+            mode="elite_shared",
+            path="engine.live.elite_shadow_trader.evaluate_candidate",
+            market_score_on=market_score,
+            market_score_off=market_score,
+            result_on=res,
+            result_off=shadow_off,
+        )
+    except Exception as shadow_exc:
+        log.warning("%s direct Event shadow compare skipped: %s", ticker, shadow_exc)
     atr = _safe_float(df["ATR"].iloc[-1], 0.0) if "ATR" in df.columns else 0.0
     sl_atr, tp_atr, tr_atr = get_dynamic_exit_params(rb, market_score=market_score, vix_level=vix_level)
     score = float(res.score)

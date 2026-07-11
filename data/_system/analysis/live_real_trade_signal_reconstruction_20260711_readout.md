@@ -1,81 +1,93 @@
-# 라이브 실거래 손실 진입 신호 구성 재구성
+# 라이브 실거래 손실 진입의 신호 구성 재구성
 
-## 결론
+## 최종 판정
 
-현재 보존된 `alpaca_live` 실거래 자료만으로는 **과거 재실행에서 관찰된 실패 패턴이 라이브에서도 반복됐다고 확인할 수 없다.**
+**신호 복원 관문은 부분 통과, 손실 가설 검증은 불가**다.
 
-확정 가능한 라이브 매수 체결은 CE 1건뿐이고 아직 청산되지 않았다. 확인 시점 미실현 수익률은 -1.31%였지만, 진입 신호는 `MACD+RSI+BB+Event` 4개 발화, ratio 3.151로 복원됐다. 따라서 과거 가설의 핵심인 `MACD+RSI` 단독·BB 부재·소수 발화·threshold 턱걸이 패턴과는 반대다.
+확정 가능한 `alpaca_live` 체결은 CE 매수 1건뿐이며 아직 청산되지 않았다. 확정 매도 체결과 실현 손익 거래는 0건이다. 따라서 “실제 손실 진입이 소수 지표·BB 부재·ratio 턱걸이였는가”를 라이브 실현 손실에서 검증할 표본이 없다.
 
-즉 현재 관찰은 다음과 같다.
+CE의 주문 제출 시점 신호는 실제 라이브 후보 snapshot에서 복원됐다. 다만 구형 snapshot이라 component dictionary가 없고 `reasons`의 반올림 표시값만 남아 있어 지표별 값은 표시 정밀도까지다. point-in-time 재계산은 사용하지 않았다.
 
-- 라이브 확정 청산 거래: 0건
-- 라이브 확정 매수 체결: 1건(CE, 미청산)
-- CE 진입 구성: `MACD+RSI+BB+Event`
-- BB 존재: 예
-- 양수 발화 수: 4개
-- score / threshold / ratio: 8.3632 / 2.6542 / 3.1510
-- 확인 시점 미실현 pnl: -1.31%
-- 과거 실패 가설과의 일치: 아니오
-- 통계적 판단 가능 여부: 불가
+## 실거래 전량
 
-## 실거래 범위 확정
+| 상태 | candidate_id | ticker | 진입 주문 제출 | 체결 평균가 | 수량 | 청산 | 실현 pnl |
+|---|---|---|---|---:|---:|---|---|
+| 보유 중 | `stage3:CE:998b0b638c66` | CE | 2026-07-08 14:27:15 UTC | 48.5715 | 13.270723 | 없음 | 없음 |
 
-`data/_system/real_dashboard_trades_history.json`은 `account_source=alpaca_live`, `isolated=true`인 실거래 전용 청산 기록이지만 거래가 0건이다.
+CE는 이후 `real_dashboard_alpaca_exit_orders.json`의 `position_snapshot.account_source=alpaca_live`에서 동일 candidate_id, entry price, shares가 확인돼 매수 체결로 확정했다. 매수 intent 파일 자체는 여전히 `pending_new`, filled quantity 0으로 남아 있어 실제 fill 시각은 복원되지 않는다.
 
-`data/_system/real_dashboard_manual_buy_intent.json`에는 직접 실계좌 주문 의도 8건이 있으나, 로컬에 저장된 주문 상태는 모두 `pending_new`, `filled_shares=0`, `filled_avg_price=0`이다. 제출 기록만으로는 체결을 확정하지 않았다.
+CE 매도 OCO는 2026-07-08 18:03:50 UTC에 제출됐으나 parent status `pending_new`, filled quantity 0이며 stop leg도 `held`다. 따라서 확정 매도는 0건이다.
 
-`data/_system/real_dashboard_alpaca_exit_orders.json`에는 `account_source=alpaca_live`인 CE 포지션 스냅샷이 있으며, candidate_id가 매수 의도와 일치하고 보유 수량 13.270723주와 평균단가 48.5715가 기록돼 있다. 이 자료로 CE 매수 체결 1건만 확정했다.
+같은 snapshot의 중간 평가값은 current price 47.9350, unrealized pnl -1.3104%(-8.4468)이지만 이는 실현 손실이 아니다.
 
-`trade_log.csv`, `positions.json`은 별도 대시보드 자료에서 `alpaca_paper`로 식별되어 실거래 표본에서 제외했다. 계정 유형이 남지 않은 과거 broker snapshot도 보수적으로 제외했다.
+## 실거래와 제외 기록 구분
+
+- `real_dashboard_trades_history.json`: `alpaca_live` 전용이나 거래 0건.
+- `real_dashboard_manual_buy_intent.json`: direct live 주문 의도 8건. CE 외 7건은 fill/position 증거가 없어 체결로 채택하지 않았다.
+- `trade_log.csv` 11건과 `positions.json` 3건은 Telegram dashboard의 `alpaca_paper` 모드와 연결돼 실거래 표본에서 제외했다.
+- `broker_snapshot_20260625.txt`의 ANET·FNDF·ICHR는 account source가 기록되지 않아 live/paper를 확정할 수 없으므로 제외했다.
+
+제출됐지만 체결 확정되지 않은 것은 BMI, ALGT, BCS, ADPT, BB, CDE, ANET이다. 모두 로컬 상태가 `pending_new`, filled quantity 0이고 이후 `alpaca_live` position evidence가 없다.
 
 ## CE 진입 신호 복원
 
-CE 주문 제출 후보 스냅샷 시각은 `2026-07-08T14:27:15.330072+00:00`이고 주문 제출 시각은 약 0.23초 뒤다. 실제 체결 시각은 보존되지 않았다.
+신호 snapshot 시각: 2026-07-08 14:27:15 UTC. 주문 제출 직전 실제 candidate snapshot이다.
 
-후보 스냅샷과 reasons에서 다음 값을 복원했다.
+| 항목 | 값 | 신뢰도 |
+|---|---:|---|
+| score | 8.363246 | 실제 로그 full precision |
+| raw score | 8.363246 | 실제 로그 full precision |
+| threshold | 2.654187 | 실제 로그 full precision |
+| ratio | 3.150964 | 실제 로그 full precision |
+| market adjustment | 1.0 | final score=raw score에서 계산 |
+| MACD | +1.17 | 실제 reasons 표시값, 반올림 |
+| RSI | +1.73 | 실제 reasons 표시값, 반올림 |
+| BB | +0.85 | 실제 reasons 표시값, 반올림 |
+| Event | +4.62 | 실제 reasons 표시값, 반올림 |
+| MA·Volume·News·NewsTopics | 0으로 추정 | reasons에 없음; explicit component dict 부재 |
 
-| 항목 | 값 |
-|---|---:|
-| score | 8.363246 |
-| raw score | 8.363246 |
-| threshold | 2.654187 |
-| ratio | 3.150964 |
-| market adjustment | 1.0 |
-| MA | 0.00 |
-| MACD | 1.17 |
-| RSI | 1.73 |
-| BB | 0.85 |
-| Volume | 0.00 |
-| News | 0.00 |
-| NewsTopics | 0.00 |
-| Event | 4.62 |
+활성 조합은 **MACD+RSI+BB+Event**, 양수 component 수는 4개다. BB가 존재하고 ratio도 3.15로 threshold 근처가 아니다.
 
-활성 지표 값은 로그 reasons에 두 자리로 반올림돼 있고, score·threshold·ratio는 원 정밀도로 남아 있다. 비활성 지표의 0은 명시적 component dict가 아니라 reasons 부재에서 추론했다. 따라서 분류는 `actual_live_log_reconstruction`이지만 component 정밀도에는 이 제한이 있다.
+## 과거 가설과의 대조
 
-## 과거 가설과 대조
+과거 가설의 위험 패턴은 다음이었다.
 
-과거 신뢰 높은 CE 재실행에서는 다음 6건이 대비됐다.
+- 발화 지표 수가 적음
+- BB 같은 확증 지표 부재
+- MACD+RSI 단독
+- ratio 턱걸이
 
-- `MACD+RSI`, BB 없음: 3건, 평균 -9.59%, 승률 0%
-- `MACD+RSI+BB`: 3건, 평균 +6.27%, 승률 100%
+유일한 확정 live 진입 CE는 위 네 패턴에 해당하지 않는다. 4개 component가 발화했고 BB가 있으며, ratio는 3.15다. 그러나 이 거래는 아직 미실현 상태이고 중간 snapshot 하나만 -1.31%였으므로, 가설을 반박하는 손실 사례로도 사용할 수 없다.
 
-라이브 CE는 `MACD+RSI+BB+Event`다. BB가 존재하고, 발화 수가 4개이며, ratio도 1.15 이하 턱걸이가 아니다. 따라서 현재 미실현 하락을 과거의 `MACD+RSI` 단독 실패 패턴 재현으로 해석할 근거가 없다.
+확정 실현 손실 0건, 확정 실현 수익 0건이므로 손실 대 수익 신호 구성 비교와 “BB 유무가 MACD+RSI 성과를 가른다”는 패턴의 라이브 검증은 **NOT TESTABLE**이다.
 
-또한 아직 청산되지 않았으므로 이 건을 손실 거래로 분류하면 안 된다. 미실현 -1.31%는 특정 시점의 평가손익일 뿐 최종 성과가 아니다.
+## 로깅 관문
 
-## 판정
+현재 라이브 기록으로 가능한 것:
 
-이번 조사에서 관문은 부분적으로 통과했다. CE 1건은 진입 당시 신호 구성을 실제 라이브 후보 로그에서 복원할 수 있었다. 그러나 확정 청산 손실 거래가 0건이어서 손실 대 수익의 신호 구성 비교는 수행할 수 없다.
+- candidate_id와 실제 live position 연결
+- 주문 제출 시점 score, threshold, ratio 복원
+- 활성 지표 조합 복원
+- CE의 반올림 component 기여값 복원
 
-따라서 현재 판정은 다음과 같다.
+현재 기록으로 불가능하거나 불완전한 것:
 
-> 라이브에서 같은 패턴으로 무너졌다는 증거는 없다. 확인 가능한 유일한 라이브 체결은 오히려 BB가 포함된 다중 확증 진입이다. 다만 청산 표본이 없어 과거 가설을 지지하거나 반박할 통계적 근거도 없다.
+- 실제 buy fill timestamp
+- 구형 snapshot의 component full precision
+- intent/order journal의 fill 상태 자동 정합화
+- 청산 체결과 진입 snapshot을 연결한 closed-trade history
+
+따라서 결론은 “신호 구성 자체는 일부 복원되지만, 실현 성과 검증에는 아직 부족하다”이다. 향후 확인을 위해서는 fill event에 candidate_id와 full-precision component snapshot을 고정 저장하고, sell fill 시 같은 trade ID로 closed history를 남겨야 한다. 이번 작업에서는 코드 변경을 하지 않았다.
 
 ## 산출물
 
-- `live_real_trade_signal_reconstruction_20260711_source_inventory.csv`
 - `live_real_trade_signal_reconstruction_20260711_trades.csv`
 - `live_real_trade_signal_reconstruction_20260711_signal_reconstruction.csv`
-- `live_real_trade_signal_reconstruction_20260711_readout.md`
+- `live_real_trade_signal_reconstruction_20260711_order_intents_part1.csv`
+- `live_real_trade_signal_reconstruction_20260711_order_intents_part2.csv`
+- `live_real_trade_signal_reconstruction_20260711_hypothesis_comparison.csv`
+- `live_real_trade_signal_reconstruction_20260711_source_inventory.csv`
+- `live_real_trade_signal_reconstruction_20260711_data_gaps.csv`
+- `live_real_trade_signal_reconstruction_20260711_summary.csv`
 
-운영 소스·설정·주문·상태 파일은 변경하지 않았다.
+이 결과는 실거래 1건, 실현 거래 0건에 대한 기록 감사이며 통계적 결론이 아니다.

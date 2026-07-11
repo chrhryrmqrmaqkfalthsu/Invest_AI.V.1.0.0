@@ -1,0 +1,8 @@
+gap_id,scope,issue,evidence,impact
+G1,CE confirmed live buy,"actual fill timestamp absent","manual intent broker_order remains pending_new with filled_at empty; later alpaca_live position proves fill","entry time can only be represented by order-submit time plus later position confirmation"
+G2,CE confirmed live buy,"buy order journal not reconciled after fill","manual intent shows filled_shares=0 and filled_avg_price=0 while later position snapshot has shares=13.270723 and entry_price=48.5715","order lifecycle source is stale; fill confirmation requires cross-source reconciliation"
+G3,CE signal snapshot,"full-precision component dictionary absent","candidate snapshot has reasons with two-decimal contributions but components field is missing","active combination is recoverable from actual log; individual component values are rounded, inactive zeros inferred"
+G4,all confirmed live trades,"closed live history empty","real_dashboard_trades_history.json has total_trades=0 and trades=[]","no realized loss/win sample; hypothesis cannot be tested"
+G5,submitted direct live orders,"fill evidence absent for 7 intents","local statuses pending_new/filled_shares=0 and no later alpaca_live position snapshot","BMI·ALGT·BCS·ADPT·BB·CDE·ANET excluded from actual trade list"
+G6,paper records,"paper and live records coexist","trade_log.csv/positions.json coexist with telegram mode=alpaca_paper","11 closed and 3 open paper records must not be treated as real-live outcomes"
+G7,broker_snapshot_20260625,"account mode not recorded","snapshot has buys/holdings but no account_source/live-paper field","ANET·FNDF·ICHR records cannot be accepted as confirmed live trades"

@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from engine.live.candidate_gate import CandidateGateChecker, append_candidate_gate_log, integrated_gate_enforcement
 from engine.live.elite_shadow_report import build_elite_shadow_report
 from engine.live.elite_shadow_trader import evaluate_candidate
 from engine.live.regular_hours_gate import regular_hours_snapshot
@@ -386,6 +387,9 @@ def refresh_slots(*, force_evaluate: bool = False, max_candidates: int = MAX_CAN
         errors: list[dict[str, Any]] = []
         evaluated = 0
         buy_signal_count = 0
+        gate_checker = CandidateGateChecker()
+        gate_enforcement = integrated_gate_enforcement()
+        gate_shadow_summary = {"PASS": 0, "FAIL": 0, "HOLD": 0}
         for candidate in candidates:
             cid = position_key(candidate)
             ticker = str(candidate.get("ticker") or "").upper()
@@ -398,6 +402,23 @@ def refresh_slots(*, force_evaluate: bool = False, max_candidates: int = MAX_CAN
                 continue
             if cid in held:
                 blocked["held_excluded"] = blocked.get("held_excluded", 0) + 1
+                continue
+            gate_decision = gate_checker.evaluate(candidate, enforcement=gate_enforcement)
+            gate_shadow_summary[gate_decision.aggregate_status] = gate_shadow_summary.get(gate_decision.aggregate_status, 0) + 1
+            append_candidate_gate_log(
+                gate_decision,
+                path="data._system.ops.live_candidate_slots.refresh_slots",
+                candidate_snapshot={
+                    "candidate_id": cid,
+                    "ticker": ticker,
+                    "stage": candidate.get("stage"),
+                    "rulebook_hash_short": candidate.get("rulebook_hash_short"),
+                },
+            )
+            if gate_decision.should_block:
+                blocked[f"integrated_gate_{gate_decision.aggregate_status.lower()}"] = blocked.get(
+                    f"integrated_gate_{gate_decision.aggregate_status.lower()}", 0
+                ) + 1
                 continue
             try:
                 ev = evaluate_candidate(candidate, ctx=ctx)
@@ -458,6 +479,8 @@ def refresh_slots(*, force_evaluate: bool = False, max_candidates: int = MAX_CAN
             "evaluated": evaluated,
             "buy_signal_count": buy_signal_count,
             "eligible_pool_count": len(pool),
+            "integrated_gate_enforcement": gate_enforcement,
+            "integrated_gate_shadow_summary": gate_shadow_summary,
             "blocked_summary": blocked,
             "errors": errors[-30:],
         }

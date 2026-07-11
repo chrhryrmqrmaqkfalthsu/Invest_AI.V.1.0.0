@@ -1,0 +1,30 @@
+section,field,value,status,source,note
+identity,candidate_id,stage3:CRS:8695c9ce3320,EXACT,data/_system/live_slots_state.json,
+identity,ticker,CRS,EXACT,data/_system/live_slots_state.json,Carpenter Technology
+first_signal,first_signal_at_utc,2026-07-09T17:20:33.590054+00:00,EXACT,data/_system/live_slots_state.json::first_seen_signals,13:20:33 America/New_York
+first_signal,first_signal_price,600.8599853515625,EXACT_VALUE_SOURCE_NOT_PERSISTED,data/_system/live_slots_state.json::first_seen_signals,"price source field was not stored; code path prefers yfinance 1m prepost then daily-close fallback"
+first_signal,first_final_score,2.971797614887265,EXACT,data/_system/live_slots_state.json::first_seen_signals,
+first_signal,threshold,2.5574757832651467,EXACT,stage3 rulebook,
+first_signal,score_margin,0.41432183162211844,EXACT_DERIVED,first_final_score-threshold,16.2004% above threshold
+latest_price,alpaca_latest_trade_price,579.14,EXACT,Alpaca StockLatestTradeRequest,live account data client read-only
+latest_price,alpaca_latest_trade_at_utc,2026-07-10T19:59:38.272913+00:00,EXACT,Alpaca StockLatestTradeRequest,exchange code V
+latest_price,elapsed_from_signal_hours,26.651300794166666,EXACT_DERIVED,signal timestamp to Alpaca latest trade,1 day 2:39:04.683
+latest_price,return_from_signal_pct,-3.6148164099917834,EXACT_DERIVED,Alpaca latest trade versus stored first signal price,
+latest_price,stored_snapshot_return_pct,-3.6714040036609275,EXACT_HISTORICAL,data/_system/analysis/live_pool_event_contribution_vs_return_20260711/candidate_full_table.csv,used 578.7999877929688 at 2026-07-10T19:59:53.001495+00:00
+risk,signal_input_atr,23.387070024602597,RECONSTRUCTED_FROM_EVALUATOR_INPUT,yfinance daily through 2026-07-08,exact first-signal ATR was not separately persisted
+risk,loss_in_signal_input_atr,0.9287176772769589,DERIVED_APPROX,(600.8599853515625-579.14)/23.387070024602597,loss is below one reconstructed ATR
+first_reason_snapshot,exact_reason_list,,UNRECOVERABLE,data/_system/live_slots_state.json,"first signal state persisted time/price/score but not reasons/components/market context/event flags"
+first_reason_snapshot,exact_event_component,,UNRECOVERABLE,no timestamped first-signal component snapshot,
+first_reason_snapshot,exact_market_adjustment,,UNRECOVERABLE,no timestamped first-signal market context snapshot,
+reconstructed_partial,ma_align,1.073432530260209,DIAGNOSTIC_ONLY,evaluator input reconstructed from yfinance through 2026-07-08,MA5>MA20>MA60
+reconstructed_partial,macd,0.0,DIAGNOSTIC_ONLY,evaluator input reconstructed from yfinance through 2026-07-08,no golden cross on last completed bar
+reconstructed_partial,rsi,1.6475902670733407,DIAGNOSTIC_ONLY,evaluator input reconstructed from yfinance through 2026-07-08,RSI 59.8439 within rulebook 38.9701 to 67.2539
+reconstructed_partial,bb,1.9410509060649137,DIAGNOSTIC_ONLY,evaluator input reconstructed from yfinance through 2026-07-08,lower-band proximity rule passed
+reconstructed_partial,volume,0.0,DIAGNOSTIC_ONLY,evaluator input reconstructed from yfinance through 2026-07-08,Volume_ratio 0.8259 below 1.2
+reconstructed_partial,global_news,0.061116159768250376,DIAGNOSTIC_ONLY,2026-07-07 lagged ticker sentiment 0.1488 times rulebook weight,
+reconstructed_partial,topic_news,-1.3137241491157623,DIAGNOSTIC_ONLY,lagged topic features from preserved ticker sentiment,
+reconstructed_partial,event_component,,UNRECOVERABLE,first-signal active-event flags were not persisted,
+reconstructed_partial,neutral_market_no_event_score,3.4094657140509517,DIAGNOSTIC_ONLY,preserved technical/news inputs with neutral market and no events,not the exact first signal score
+reconstructed_partial,saved_minus_diagnostic_score,-0.43766809916368654,UNRESOLVED,2.971797614887265-3.4094657140509517,cannot allocate between historical event and market adjustment
+latest_available_evaluation,latest_score,5.533926668171177,EXACT_LATER_SNAPSHOT,data/_system/live_slots_state.json,not the first-signal score
+latest_available_evaluation,reasons,"정배열(+1.07)|RSI 56∈[39,67](+1.65)|BB근접(+1.94)|전체톤(-0.23)(-0.10)|토픽뉴스(+0.97)",EXACT_LATER_SNAPSHOT,data/_system/live_slots_state.json,"2026-07-11 later evaluation; must not be treated as first-signal reasons"

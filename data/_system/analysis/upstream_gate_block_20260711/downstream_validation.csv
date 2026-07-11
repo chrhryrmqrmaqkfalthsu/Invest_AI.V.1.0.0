@@ -1,0 +1,8 @@
+consumer,source,count,removed_5_active_overlap,result,note
+live_candidate_slots,data/_system/live_slots_state.json::candidate_pool,10,0,PASS,"force refresh 2/3 stable IDs"
+real_dashboard_api,_real_candidate_slots_payload(candidate_pool),10,0,PASS,"dashboard slots reflect current pool"
+real_dashboard_exporter,"export_real_dashboard_buy_candidates.py --source-section candidate_pool",10,0,PASS,"dry-run export validation ok; canonical output not replaced"
+s2_auto_trader,S2AutoTrader.candidate_pool(),10,0,PASS,"all 10 candidate IDs present in KEEP map and gate_keep=true"
+elite_shadow_report,build_elite_shadow_report(),57,0,PASS,"upstream BLOCK report excludes removed tickers"
+elite_signal_history,build_elite_shadow_report() via _find_candidate,56,0,PASS,"removed tickers cannot be resolved from current report"
+live_state_history,data/_system/live_slots_state.json::first_seen_signals,5,5,HISTORY_ONLY,"removed IDs remain only as historical audit metadata, not active candidate sections"

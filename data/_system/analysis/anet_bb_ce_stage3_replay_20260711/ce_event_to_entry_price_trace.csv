@@ -1,0 +1,3 @@
+ticker,event_timestamp,event_price,entry_timestamp,entry_price,price_change_pct,assessment,confidence,reason
+CE,,,2026-07-07T22:22:21.577113+00:00,48.68000000,,not_assessable,unavailable,"active event categories and event occurrence timestamps were not preserved"
+CE,,,2026-07-08T14:27:15.330072+00:00,48.61000061,,not_assessable,unavailable,"order snapshot confirms aggregate Event +4.62260455 but not the originating event payload"

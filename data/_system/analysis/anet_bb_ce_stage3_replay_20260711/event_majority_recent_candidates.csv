@@ -1,0 +1,10 @@
+ticker,candidate_id,first_signal_at,observed_score,observed_event_contribution,event_share_pct,source,notes
+BMA,stage3:BMA:0c978464f9dd,2026-07-07T22:22:21.577113+00:00,13.24574712,11.28502102,85.20,real_dashboard_buy_candidates.json,"event exceeded half of score"
+BNTX,stage3:BNTX:d667608bc166,2026-07-07T22:22:21.577113+00:00,6.18179469,5.04000000,81.53,live_slots_state.json,"event parsed from preserved reason"
+BTBT,stage3:BTBT:363898884d44,2026-07-07T22:22:21.577113+00:00,14.86209784,11.81000000,79.46,live_slots_state.json,"event parsed from preserved reason"
+CMC,stage2:CMC:4f6ee2739add,2026-07-07T22:22:21.577113+00:00,4.60277618,3.55358650,77.21,real_dashboard_buy_candidates.json,"event exceeded half of score"
+BWXT,stage3:BWXT:f195725cb792,2026-07-07T22:22:21.577113+00:00,3.79005048,2.78000000,73.35,live_slots_state.json,"event parsed from preserved reason"
+BMI,stage3:BMI:07d4ee0f7841,2026-07-07T22:22:21.577113+00:00,15.97068927,10.38000000,64.99,live_slots_state.json,"event parsed from preserved reason"
+BGC,stage3:BGC:d8c39420992c,2026-07-10T09:48:35.974824+00:00,3.97462699,2.44116772,61.42,real_dashboard_buy_candidates.json,"event exceeded half of score"
+CE,stage3:CE:998b0b638c66,2026-07-07T22:22:21.577113+00:00,8.36324630,4.62000000,55.24,real_dashboard_manual_buy_intent.json,"actual live candidate later filled"
+ACMR,stage3:ACMR:44c1e02681c4,2026-07-09T17:20:33.590054+00:00,3.86338829,2.11600368,54.77,real_dashboard_buy_candidates.json,"event exceeded half of score"

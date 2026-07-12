@@ -1,0 +1,30 @@
+section,item,condition,points_or_action,code_path,line_range,status,evidence_note
+q_score,5d_low_bounce,bounce_low5_pct>=15,+22,engine/live/elite_shadow_entry_quality.py,127-135,CONFIRMED,
+q_score,5d_low_bounce,bounce_low5_pct>=8,+16,engine/live/elite_shadow_entry_quality.py,127-135,CONFIRMED,
+q_score,5d_low_bounce,bounce_low5_pct>=4,+10,engine/live/elite_shadow_entry_quality.py,127-135,CONFIRMED,
+q_score,ret1,ret_1d_pct>3,+14,engine/live/elite_shadow_entry_quality.py,137-142,CONFIRMED,
+q_score,ret1,ret_1d_pct>0,+8,engine/live/elite_shadow_entry_quality.py,137-142,CONFIRMED,
+q_score,ret3,ret_3d_pct>5,+10,engine/live/elite_shadow_entry_quality.py,144-148,CONFIRMED,
+q_score,ret3,ret_3d_pct>0,+5,engine/live/elite_shadow_entry_quality.py,144-148,CONFIRMED,
+q_score,above_ma5,current_price>=MA5,+14,engine/live/elite_shadow_entry_quality.py,150-152,CONFIRMED,
+q_score,above_ma20,current_price>=MA20,+8,engine/live/elite_shadow_entry_quality.py,153-155,CONFIRMED,
+q_score,higher_close,higher close condition,+10,engine/live/elite_shadow_entry_quality.py,156-158,CONFIRMED,
+q_score,higher_low,higher low condition,+10,engine/live/elite_shadow_entry_quality.py,159-161,CONFIRMED,
+q_score,prev_high_break,current_price>previous_daily_high,+10,engine/live/elite_shadow_entry_quality.py,162-164,CONFIRMED,
+q_score,close_position,close_position>=0.70,+8,engine/live/elite_shadow_entry_quality.py,165-167,CONFIRMED,
+q_score,volume,volume_ratio20>=1.5 and ret1>0,+10,engine/live/elite_shadow_entry_quality.py,168-173,CONFIRMED,
+q_score,volume,volume_ratio20>=1.1 and ret1>0,+6,engine/live/elite_shadow_entry_quality.py,168-173,CONFIRMED,
+q_score,ret1_penalty,ret_1d_pct<-2,-12,engine/live/elite_shadow_entry_quality.py,175-177,CONFIRMED,
+q_score,ma5_penalty,dist_ma5_pct<-3,-10,engine/live/elite_shadow_entry_quality.py,178-180,CONFIRMED,
+q_score,high5_penalty,dist_high5_pct<-12,-8,engine/live/elite_shadow_entry_quality.py,181-183,CONFIRMED,
+q_score,clamp,final q clipped to 0..100,0..100,engine/live/elite_shadow_entry_quality.py,185,CONFIRMED,
+block,q45,q_score<45,BLOCK failed_follow_through_q_lt_45,engine/live/elite_shadow_entry_quality.py,239-241,CONFIRMED,"introduced as literal constant in commit 0782c35"
+block,no_follow,no_follow and q<60,BLOCK,engine/live/elite_shadow_entry_quality.py,242-244,CONFIRMED,
+block,event_heavy,event_heavy and q<60,BLOCK,engine/live/elite_shadow_entry_quality.py,245-247,CONFIRMED,
+block,event_below_ma5,event_heavy and below MA5 and q<75,BLOCK,engine/live/elite_shadow_entry_quality.py,248-250,CONFIRMED,
+block,bottom_fishing,bottom_fishing and q<60,BLOCK,engine/live/elite_shadow_entry_quality.py,251-253,CONFIRMED,
+block,overheat,ret5>=20 and dist_ma20>=18 and ret1<=0,BLOCK,engine/live/elite_shadow_entry_quality.py,254-256,CONFIRMED,
+block,high_risk,"low_price or high_vol, and q<60",BLOCK,engine/live/elite_shadow_entry_quality.py,257-259,CONFIRMED,
+threshold_basis,q45_origin,literal heuristic introduced with implementation,NO calibration artifact found,commit 0782c35,2026-07-01,CONFIRMED,"git history shows no prior threshold sweep/validation"
+threshold_basis,q45_validation,approximate OOS composite EQ replay,UNVERIFIED / HURTS_APPROX,data/_system/analysis/eq_validity_20260708/readout.md,2026-07-07,CONFIRMED,"CAGR Sharpe MDD all worsened in allow-only portfolio"
+threshold_basis,q45_ablation,threshold sweep or independent q<45 validation,NOT_FOUND,data/_system/analysis/candidate_selection_audit_20260710/entry_quality_existing_validation_records_readout.md,2026-07-10,CONFIRMED,"no 45-vs-other-threshold sweep or 5d feature ablation found"

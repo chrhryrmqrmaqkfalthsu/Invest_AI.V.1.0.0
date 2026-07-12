@@ -1,0 +1,11 @@
+item,original_stage2,rerun_copy,match,source
+population,100,100,True,scripts/research/run_stage2.py POPULATION
+generations,50,50,True,scripts/research/run_stage2.py GENERATIONS
+patience,15,15,True,scripts/research/run_stage2.py PATIENCE
+train_split_count,3,3,True,scripts/research/run_stage2.py TRAIN_SPLITS
+train_1_start,2022-07-01,2022-07-01,True,TRAIN_SPLITS
+train_1_end,2023-06-30,2023-06-30,True,TRAIN_SPLITS
+train_2_start,2023-07-01,2023-07-01,True,TRAIN_SPLITS
+train_2_end,2024-06-30,2024-06-30,True,TRAIN_SPLITS
+train_3_start,2024-07-01,2024-07-01,True,TRAIN_SPLITS
+train_3_end,2025-06-30,2025-06-30,True,TRAIN_SPLITS

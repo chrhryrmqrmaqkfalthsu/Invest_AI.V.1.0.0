@@ -1,0 +1,43 @@
+section,exit_reason,holding_sessions,regime,event_count,event_share_pct,mean_holding_sessions,median_holding_sessions,max_holding_sessions,entry_label_miss_count,entry_label_hit_count,avg_return_pct,sample_ticker,sample_entry_date,sample_exit_date,sample_entry_score,sample_exit_score,threshold,period_end_exit,notes
+REASON_SUMMARY,SCORE_DROP_BELOW_THRESHOLD,,,2105,99.66856060606061,1.1187648456057007,1,3,786,1319,0.7987978558889944,,,,,,,,position open AND exit_score < decision_threshold; all regular exit_score values were 0.0
+REASON_SUMMARY,LABEL_MISS_CONFIRMED,,,0,0,,,,789,1323,,,,,,,,,"789 entries had label_2d3pct=0, but label miss was never an exit trigger"
+REASON_SUMMARY,FORCED_PERIOD_END_MARK_TO_MARKET,,,7,0.3314393939393939,0.14285714285714285,0,1,3,4,0.452142680328533,,,,,,,,position remained active at end of regime frame; closed at final D0 close
+REASON_SUMMARY,OTHER,,,0,0,,,,,,,,,,,,,,no other exit path observed
+HOLDING_REASON_CROSSTAB,SCORE_DROP_BELOW_THRESHOLD,0,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,LABEL_MISS_CONFIRMED,0,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,FORCED_PERIOD_END_MARK_TO_MARKET,0,,6,0.2840909090909091,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,OTHER,0,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,SCORE_DROP_BELOW_THRESHOLD,1,,1870,88.54166666666666,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,LABEL_MISS_CONFIRMED,1,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,FORCED_PERIOD_END_MARK_TO_MARKET,1,,1,0.04734848484848485,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,OTHER,1,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,SCORE_DROP_BELOW_THRESHOLD,2,,220,10.416666666666668,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,LABEL_MISS_CONFIRMED,2,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,FORCED_PERIOD_END_MARK_TO_MARKET,2,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,OTHER,2,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,SCORE_DROP_BELOW_THRESHOLD,3,,15,0.7102272727272727,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,LABEL_MISS_CONFIRMED,3,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,FORCED_PERIOD_END_MARK_TO_MARKET,3,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+HOLDING_REASON_CROSSTAB,OTHER,3,,0,0.0,,,,,,,,,,,,,,count by holding_sessions × exit_reason
+REGIME_REASON_CROSSTAB,SCORE_DROP_BELOW_THRESHOLD,,train,977,46.259469696969695,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,LABEL_MISS_CONFIRMED,,train,0,0.0,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,FORCED_PERIOD_END_MARK_TO_MARKET,,train,0,0.0,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,OTHER,,train,0,0.0,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,SCORE_DROP_BELOW_THRESHOLD,,stress,731,34.61174242424242,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,LABEL_MISS_CONFIRMED,,stress,0,0.0,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,FORCED_PERIOD_END_MARK_TO_MARKET,,stress,6,0.2840909090909091,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,OTHER,,stress,0,0.0,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,SCORE_DROP_BELOW_THRESHOLD,,oos,397,18.797348484848484,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,LABEL_MISS_CONFIRMED,,oos,0,0.0,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,FORCED_PERIOD_END_MARK_TO_MARKET,,oos,1,0.04734848484848485,,,,,,,,,,,,,,count by regime × exit_reason
+REGIME_REASON_CROSSTAB,OTHER,,oos,0,0.0,,,,,,,,,,,,,,count by regime × exit_reason
+SAMPLE_EVENT,SCORE_DROP_BELOW_THRESHOLD,1,oos,1,0.04734848484848485,,,,1,,-4.666669463999995,AA,2025-07-15,2025-07-16,0.8636363636363636,0.0,0.5673501997336884,False,entry label miss; exit still caused by next-day score drop
+SAMPLE_EVENT,SCORE_DROP_BELOW_THRESHOLD,1,stress,1,0.04734848484848485,,,,,1,1.7181784320784543,AA,2020-08-24,2020-08-25,0.8636363636363636,0.0,0.5673501997336884,False,entry label hit; exit caused by next-day score drop
+SAMPLE_EVENT,SCORE_DROP_BELOW_THRESHOLD,2,train,1,0.04734848484848485,,,,,1,-2.0447811371538727,AA,2022-07-12,2022-07-14,0.8636363636363636,0.0,0.5673501997336884,False,held across one additional active session; exited when score became 0
+SAMPLE_EVENT,FORCED_PERIOD_END_MARK_TO_MARKET,0,stress,1,0.04734848484848485,,,,1,,1.9848825510979773,ACLS,2022-06-30,2022-06-30,0.8571428571428571,0.8571428571428571,0.5660186418109188,True,entered on final stress day and marked to close same day
+SAMPLE_EVENT,FORCED_PERIOD_END_MARK_TO_MARKET,0,stress,1,0.04734848484848485,,,,,1,2.86052509766922,AEVA,2022-06-30,2022-06-30,0.95,0.95,0.7045006657789613,True,score stayed above threshold; only regime end forced exit
+SAMPLE_EVENT,FORCED_PERIOD_END_MARK_TO_MARKET,0,stress,1,0.04734848484848485,,,,,1,-0.5617872101829179,BIDU,2022-06-30,2022-06-30,0.7,0.7,0.47280958721704397,True,score stayed above threshold; only regime end forced exit
+SAMPLE_EVENT,FORCED_PERIOD_END_MARK_TO_MARKET,0,stress,1,0.04734848484848485,,,,,1,0.26061475369149056,CBRL,2022-06-30,2022-06-30,0.8181818181818182,0.8181818181818182,0.5127563249001331,True,score stayed above threshold; only regime end forced exit
+SAMPLE_EVENT,FORCED_PERIOD_END_MARK_TO_MARKET,0,stress,1,0.04734848484848485,,,,,1,1.1516441144926337,CLF,2022-06-30,2022-06-30,0.782608695652174,0.782608695652174,0.5313981358189082,True,score stayed above threshold; only regime end forced exit
+SAMPLE_EVENT,FORCED_PERIOD_END_MARK_TO_MARKET,1,oos,1,0.04734848484848485,,,,1,,-5.1922944038719,COHR,2026-06-30,2026-07-01,0.84,0.84,0.5979760319573901,True,score remained active through last OOS evaluation day
+SAMPLE_EVENT,FORCED_PERIOD_END_MARK_TO_MARKET,0,stress,1,0.04734848484848485,,,,1,,2.6614138594032277,CRS,2022-06-30,2022-06-30,0.8571428571428571,0.8571428571428571,0.5819973368841544,True,score stayed above threshold; only regime end forced exit

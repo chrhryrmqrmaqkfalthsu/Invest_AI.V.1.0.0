@@ -1,0 +1,9 @@
+candidate_id,ticker,classification,failed_gate_count,stress_precision,stress_passed_count,stress_min_pass_shortfall,stress_precision_shortfall_pp,stress_gap_excess_pp,oos_precision,oos_passed_count,oos_min_pass_shortfall,oos_precision_shortfall_pp,oos_gap_excess_pp,interpretation
+stage3:DDOG:6c41f43018cf,DDOG,TRUE_NEAR_MISS_SAMPLE_ONLY,1,0.692308,26,0,0,0,0.8,10,3,0,0,"quality and gaps pass; OOS minimum pass requires 13 but got 10"
+stage3:BB:f1bdfe7f8ad9,BB,THIN_SAMPLE_NEAR_MISS,2,1.0,1,2,0,0,0.666667,3,0,1.969697,0,"stress sample is only 1; excluded from recommended relaxation"
+stage2:FIX:cab7d458767d,FIX,ONE_REGIME_COLLAPSE,2,0.3,20,0,15.0,1.111111,1.0,6,0,0,0,"OOS strong but stress precision materially fails"
+stage3:CIEN:2ed675d30868,CIEN,THIN_SAMPLE_AND_GAP,2,0.5,4,0,0,17.5,1.0,2,1,0,0,"OOS precision is based on only two passes"
+stage2:ALGT:402f72d48c3c,ALGT,ONE_REGIME_COLLAPSE,2,0.357143,14,0,9.515599,23.233083,0.833333,6,0,0,0,"OOS survives but stress collapses"
+stage2:CMC:4f6ee2739add,CMC,SAMPLE_ONLY_BOTH_REGIMES,2,0.6,5,4,0,0,0.5,4,3,0,0,"precision and gaps pass but both regimes lack original minimum samples"
+stage3:BELFB:b031f5add884,BELFB,OOS_COLLAPSE,2,1.0,4,0,0,0,0.333333,3,0,34.166667,46.666667,"stress-only success is false expansion; OOS collapses"
+stage3:AEVA:3c4e598fa5c7,AEVA,SURVIVOR_REFERENCE,0,0.782609,23,0,0,0,0.882353,17,0,0,0,"only robust double-gate survivor"

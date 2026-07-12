@@ -1,0 +1,7 @@
+path,pre_sha256,post_sha256,unchanged,status,notes
+engine/live/elite_shadow_report.py,9c323945ddaa311ba9767a64f3d505eeb87b9decee2402eeaa194ae58ae1b804,9c323945ddaa311ba9767a64f3d505eeb87b9decee2402eeaa194ae58ae1b804,true,PASS,"live candidate source unchanged"
+data/_system/ops/live_candidate_slots.py,259d3bec12901591c84cd1ad9aec01612d914c9120c0976b54bb34adfe684dbb,259d3bec12901591c84cd1ad9aec01612d914c9120c0976b54bb34adfe684dbb,true,PASS,"daemon source unchanged"
+engine/live/elite_shadow_trader.py,ff8fb6e2bfff23b360a37001a5ae637908624bb2c8df001a4fb58f92c73b927c,ff8fb6e2bfff23b360a37001a5ae637908624bb2c8df001a4fb58f92c73b927c,true,PASS,"signal evaluator unchanged"
+data/_system/live_auto_config.json,e4c15a66a7400d6903c60f5b5b72676237cc7ad0a3823e4f541ed5d9a157b51b,e4c15a66a7400d6903c60f5b5b72676237cc7ad0a3823e4f541ed5d9a157b51b,true,PASS,"configuration unchanged; file mtime remains 2026-07-08T13:15:57.725685Z"
+data/_system/live_slots_state.json,3bf7756e1d0248a7f272a305aa6865da88a57ecbd03cc4cc365e2488b2048aa1,c3d5e299c0a80dacfa70b977a0d6f899af362bb0145832cba514680d0d3bdbc9,false,EXPECTED_MUTABLE,"guarded daemon rewrites cached state outside regular hours; PID 494330 remained running and was not restarted"
+process:live_candidate_slots.py,PID_494330_STARTED_2026-07-11T20:16:00Z,PID_494330_STARTED_2026-07-11T20:16:00Z,true,PASS,"same PID, PPID 1, argv daemon --interval 60"

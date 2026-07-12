@@ -1,0 +1,5 @@
+interpretation,log_based_positive_rate,log_based_signal_count,positive_rate_delta_pp,regime,replay_labeled_signal_count,replay_positive_rate,signal_count_delta,signal_count_ratio
+"replay removes position/entry-log selection but uses current evaluator/context, so delta is not pure causal bias estimate",0.4470468431771894,982,-7.859386036626925,stress,4945,0.36845298281092015,3963,5.035641547861507
+"replay removes position/entry-log selection but uses current evaluator/context, so delta is not pure causal bias estimate",0.38910012674271227,1578,-1.433095578343535,train,10289,0.3747691709592769,8711,6.520278833967047
+"replay removes position/entry-log selection but uses current evaluator/context, so delta is not pure causal bias estimate",0.49195402298850577,870,-1.0336375929682229,oos,2992,0.48161764705882354,2122,3.439080459770115
+"replay removes position/entry-log selection but uses current evaluator/context, so delta is not pure causal bias estimate",0.4317784256559767,3430,-4.118257357652971,all,18226,0.39059585207944697,14796,5.313702623906705

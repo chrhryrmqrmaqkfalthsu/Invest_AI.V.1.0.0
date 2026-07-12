@@ -1,0 +1,62 @@
+{
+  "actual_labeled_signal_date_range": [
+    "2021-01-04",
+    "2026-06-11"
+  ],
+  "actual_replay_signal_date_range": [
+    "2021-01-04",
+    "2026-06-15"
+  ],
+  "all_positive_rate": 0.39059585207944697,
+  "data_error_count": 0,
+  "dataset_signal_count": 18226,
+  "elapsed_sec": 154.62110257148743,
+  "ga": {
+    "elite_count": 16,
+    "generations": 60,
+    "max_active_features": 5,
+    "patience": 18,
+    "population": 128
+  },
+  "generated_at_unix": 1783850672.4373994,
+  "labeled_signal_count": 18226,
+  "live_connected": false,
+  "oos_positive_rate": 0.48161764705882354,
+  "oos_signal_count": 2992,
+  "replay_should_buy_count": 18245,
+  "replay_universe_note": "Current eligible rulebooks were re-evaluated historically with the current SignalCollector/evaluator/context contract. This is not a reconstruction of the original historical signal log.",
+  "splits": {
+    "oos": [
+      "2025-07-01",
+      "2026-07-02"
+    ],
+    "stress": [
+      "2020-01-01",
+      "2022-06-30"
+    ],
+    "train": [
+      "2022-07-01",
+      "2025-06-30"
+    ]
+  },
+  "stress_positive_rate": 0.36845298281092015,
+  "stress_signal_count": 4945,
+  "survivor_count": 1,
+  "survivor_ids": [
+    "stage3:AEVA:3c4e598fa5c7"
+  ],
+  "target": {
+    "horizon_sessions": 2,
+    "return_threshold": 0.03
+  },
+  "train_positive_rate": 0.3747691709592769,
+  "train_signal_count": 10289,
+  "trained_entity_count": 51,
+  "universe_contract": "current eligible rulebooks historically re-evaluated with current SignalCollector/evaluator/context; not original signal-log reconstruction",
+  "universe_entity_count": 57,
+  "unlabeled_signal_count": 19,
+  "unlabeled_status_counts": {
+    "UNLABELED_FUTURE_2_NOT_AVAILABLE": 19
+  },
+  "use_llm_events": false
+}

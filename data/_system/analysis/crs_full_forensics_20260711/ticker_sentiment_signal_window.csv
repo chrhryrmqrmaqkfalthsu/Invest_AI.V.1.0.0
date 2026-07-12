@@ -1,0 +1,5 @@
+date,news_count,sentiment_avg,sentiment_std,bullish_ratio,bearish_ratio,relevance_avg,high_relevance_count,topic_earnings,topic_financial_markets,topic_manufacturing,topic_finance,source_path,source_mtime_utc,source_sha256
+2026-07-06,4,0.1356,0.3984,0.5,0.25,1.0,4,0.1460,0.1370,0.3246,,data/_system/ticker_sentiment/CRS_daily.csv,2026-07-11T15:12:28.804072+00:00,d71b2f86b9d47f7e6d9d1ab545065a01bd2407f1f95498fc2d5df5ebc8ef5e45
+2026-07-07,2,0.1488,0.4795,0.5,0.5,1.0,2,0.1516,0.1340,-0.1903,,data/_system/ticker_sentiment/CRS_daily.csv,2026-07-11T15:12:28.804072+00:00,d71b2f86b9d47f7e6d9d1ab545065a01bd2407f1f95498fc2d5df5ebc8ef5e45
+2026-07-08,1,-0.2349,0.0,0.0,1.0,1.0,1,,-0.2349,-0.2349,-0.2349,data/_system/ticker_sentiment/CRS_daily.csv,2026-07-11T15:12:28.804072+00:00,d71b2f86b9d47f7e6d9d1ab545065a01bd2407f1f95498fc2d5df5ebc8ef5e45
+2026-07-09,0,,,,,,,,,,,NOT_STORED,2026-07-11T15:12:28.804072+00:00,d71b2f86b9d47f7e6d9d1ab545065a01bd2407f1f95498fc2d5df5ebc8ef5e45

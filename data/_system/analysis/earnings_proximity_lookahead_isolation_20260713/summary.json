@@ -1,0 +1,131 @@
+{
+  "verdict": "LOOKAHEAD_SUSPECT",
+  "interpretation": "Exact historical earnings-date proximity retains substantially more MI than a point-in-time-safe fixed-cycle approximation. This does not prove contamination, but the signal cannot be treated as production-safe alpha without archived schedule snapshots.",
+  "sample": {
+    "tickers": ["AAP", "POWI"],
+    "rows_total": 3006,
+    "rows_per_ticker": 1503,
+    "label": "max(High[D+1], High[D+2]) >= Open[D0] * (1 + sqrt(2) * RV20_pct[D-1] / 100)",
+    "cutoff": "D0-1 calendar day"
+  },
+  "exact_contract": {
+    "definition": "next final-observed yfinance earnings date minus cutoff",
+    "lookahead_risk": true,
+    "reason": "historical dates are final observed event dates rather than archived point-in-time schedule snapshots"
+  },
+  "rough_contract": {
+    "definition": "last confirmed actual earnings date available by cutoff + fixed 90 calendar days",
+    "future_exact_date_used": false,
+    "windows_days": [3, 5, 10]
+  },
+  "matched_window_result": {
+    "exact_3_5_10_bias_adjusted_mi_sum_bits": 0.016415513848265832,
+    "rough_3_5_10_bias_adjusted_mi_sum_bits": 0.00520217589794999,
+    "rough_to_exact_ratio": 0.3169060649599804,
+    "exact_significant_windows_p_lt_0_05": 3,
+    "rough_significant_windows_p_lt_0_05": 1,
+    "decision_rule": {
+      "minimum_rough_to_exact_ratio_for_robust": 0.5,
+      "minimum_significant_rough_windows_for_robust": 2
+    },
+    "decision_rule_passed": false
+  },
+  "matched_windows": [
+    {
+      "window_days": 3,
+      "exact_bias_adjusted_mi_bits": 0.00527844570406,
+      "rough_bias_adjusted_mi_bits": 0.00213317499188,
+      "rough_to_exact_ratio": 0.404129380405,
+      "exact_empirical_p": 0.00497512437811,
+      "rough_empirical_p": 0.044776119403,
+      "AAP_activity_jaccard": 0.0875,
+      "POWI_activity_jaccard": 0.336842105263
+    },
+    {
+      "window_days": 5,
+      "exact_bias_adjusted_mi_bits": 0.00594053725936,
+      "rough_bias_adjusted_mi_bits": 0.00155723869534,
+      "rough_to_exact_ratio": 0.262137686771,
+      "exact_empirical_p": 0.00497512437811,
+      "rough_empirical_p": 0.0796019900498,
+      "AAP_activity_jaccard": 0.0948275862069,
+      "POWI_activity_jaccard": 0.393162393162
+    },
+    {
+      "window_days": 10,
+      "exact_bias_adjusted_mi_bits": 0.00519653088484,
+      "rough_bias_adjusted_mi_bits": 0.00151176221072,
+      "rough_to_exact_ratio": 0.2909175841,
+      "exact_empirical_p": 0.00497512437811,
+      "rough_empirical_p": 0.124378109453,
+      "AAP_activity_jaccard": 0.296943231441,
+      "POWI_activity_jaccard": 0.626126126126
+    }
+  ],
+  "schedule_stability": {
+    "AAP": {
+      "actual_events_2020_to_2026": 26,
+      "interval_min_days": 77,
+      "interval_median_days": 91,
+      "interval_max_days": 106,
+      "mean_absolute_error_vs_90_days": 7.2,
+      "intervals_within_plus_minus_5_days_of_90_ratio": 0.32,
+      "weekend_events": 0
+    },
+    "POWI": {
+      "actual_events_2020_to_2026": 26,
+      "interval_min_days": 84,
+      "interval_median_days": 91,
+      "interval_max_days": 98,
+      "mean_absolute_error_vs_90_days": 3.48,
+      "intervals_within_plus_minus_5_days_of_90_ratio": 0.68,
+      "weekend_events": 0
+    },
+    "same_session_repeat_query_mismatches": 0,
+    "different_limit_overlap_value_mismatches": 0,
+    "historical_point_in_time_schedule_change_evidence_available": false
+  },
+  "cross_ticker_behavior": {
+    "AAP": "Rough 3-day and 5-day windows reverse the exact positive lift; fixed-cycle proximity is not stable.",
+    "POWI": "Rough proximity remains positive but weaker than exact-date proximity.",
+    "conclusion": "The rough signal is largely POWI-driven and does not reproduce the prior two-ticker common signal."
+  },
+  "cycle_sensitivity": {
+    "cycles_tested_days": [85, 90, 95],
+    "85_day_bias_adjusted_sum_bits": 0.0003266134759191239,
+    "90_day_bias_adjusted_sum_bits": 0.0054024340230822065,
+    "95_day_bias_adjusted_sum_bits": 0.00415599268728566,
+    "note": "The significant 95-day windows are POWI-driven while AAP MI remains near zero, so this is not cross-ticker robustness."
+  },
+  "conservative_blackout_diagnostics": {
+    "rough_80_to_100_days_bias_adjusted_mi_bits": 0.00252509223884,
+    "rough_80_to_100_days_empirical_p": 0.0348258706468,
+    "rough_75_to_105_days_bias_adjusted_mi_bits": 0.00133967713352,
+    "rough_75_to_105_days_empirical_p": 0.124378109453,
+    "rough_70_to_110_days_bias_adjusted_mi_bits": 0.0014954464115,
+    "rough_70_to_110_days_empirical_p": 0.114427860697,
+    "use_as_alpha": false
+  },
+  "safe_first_feature_contract": {
+    "name": "earnings_schedule_uncertain_blackout",
+    "definition": "1 when days since the last confirmed actual earnings event is between 70 and 110 calendar days; otherwise 0",
+    "uses_future_exact_date": false,
+    "role": "risk-control/entry-block only, not bullish alpha",
+    "production_backtest_rule": "Do not use yfinance final historical future earnings dates as known-at-time features.",
+    "live_rule": "A current announced date may only be used after storing a timestamped schedule snapshot; subsequent reschedules must remain auditable."
+  },
+  "next_required_work": [
+    "begin timestamped daily earnings-calendar snapshot accumulation",
+    "design a point-in-time schedule change log",
+    "test blackout impact on trade risk rather than treat exact proximity as alpha",
+    "keep historical estimate revision features deferred"
+  ],
+  "external_raw_response_persisted": false,
+  "ga_or_training_run": false,
+  "input_sha256": {
+    "market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611",
+    "AAP_ohlcv.csv": "6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717",
+    "POWI_ohlcv.csv": "bd683b376899ff9784eb86a807bd154f74502c8f0bb025ceb120b3e16b8fb400"
+  }
+}

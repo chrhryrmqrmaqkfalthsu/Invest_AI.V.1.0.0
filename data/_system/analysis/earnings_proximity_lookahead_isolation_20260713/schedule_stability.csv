@@ -1,0 +1,3 @@
+ticker,sample_actual_events,first_event_date,last_event_date,interval_min_days,interval_p10_days,interval_median_days,interval_p90_days,interval_max_days,interval_lt70_count,interval_gt110_count,weekend_event_count,before_noon_count,noon_to_1559_count,after_1600_count,limit40_vs100_common_dates,limit40_only100_dates,limit40_value_mismatches,limit12_vs100_common_dates,limit12_only100_dates,limit12_value_mismatches,repeat100_common_dates,repeat100_value_mismatches
+AAP,26,2020-02-18,2026-05-21,77,83.4,91,105,106,0,0,0,20,0,6,50,49,0,25,74,0,99,0
+POWI,26,2020-01-30,2026-05-07,84,86,91,97.2,98,0,0,0,1,0,25,50,44,0,25,69,0,94,0

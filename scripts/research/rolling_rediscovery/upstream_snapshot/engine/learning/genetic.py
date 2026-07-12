@@ -1,9 +1,8 @@
 """Rolling rediscovery interval-gene GA.
 
-This is the working-copy replacement of the copied Stage2 GA.  Every gene is a
-bilateral normalized interval [low, high].  A row passes only when every feature
-independently falls inside its own interval; no weighted sum or compensation
-path exists.
+This working copy uses bilateral normalized intervals [low, high].  A row passes
+only when every feature independently falls inside its own interval; no weighted
+sum or cross-feature compensation path exists.
 """
 from __future__ import annotations
 
@@ -17,13 +16,14 @@ import numpy as np
 
 @dataclass(frozen=True)
 class IntervalGAConfig:
-    population: int = 48
-    generations: int = 20
+    # Restored to the original Stage2 search scale.
+    population: int = 100
+    generations: int = 50
     elite_count: int = 8
     tournament_size: int = 4
     mutation_rate: float = 0.18
     mutation_sigma: float = 0.07
-    patience: int = 6
+    patience: int = 15
     min_width_norm: float = 0.10
     max_near_full_width_norm: float = 0.98
     max_near_full_gene_count: int = 2
@@ -87,12 +87,12 @@ def validate_interval_gene(individual: IntervalIndividual, config: IntervalGACon
 
 
 def _decision_threshold(base_rate: float) -> float:
-    # [추정] pilot threshold.  Same value is used for entry and exit.
+    # [추정] pilot threshold.  Entry uses this value; rolling exit uses target dates.
     return float(min(0.80, max(0.45, base_rate + 0.08)))
 
 
 def _train_min_pass(n: int) -> int:
-    # [추정] pilot gate: at least 20 rows and at least 2% of train rows.
+    # [추정] pilot gate: at least 20 rows and at least 2% of the origin train split.
     return max(20, int(math.ceil(max(0, n) * 0.02)))
 
 
@@ -106,11 +106,7 @@ def _repair_upper_fallback(
     generation: int,
     individual_index: int,
 ) -> list[dict[str, Any]]:
-    """Repair only missing/non-finite upper bounds using successful-trade maxima.
-
-    Finite but too-narrow intervals are not repaired; they are rejected by the
-    minimum-width gate.  This distinction makes the BOIL/narrow-gene cut testable.
-    """
+    """Repair missing/non-finite upper bounds using successful-trade maxima."""
     events: list[dict[str, Any]] = []
     positive = y_train.astype(int) == 1
     for j, name in enumerate(feature_names):
@@ -169,9 +165,6 @@ def _evaluate(
     threshold = _decision_threshold(base_rate)
     widths = individual.high - individual.low
 
-    # Precision-centered, sample-gated objective.  Width only supplies a small
-    # regularizer; it cannot compensate for a failed feature because selection
-    # is always the strict AND mask above.
     score = (
         precision * 220.0
         + lift * 100.0
@@ -196,8 +189,6 @@ def _evaluate(
 
 
 def _random_individual(rng: np.random.Generator, n_features: int, config: IntervalGAConfig, index: int) -> IntervalIndividual:
-    # Broad-but-bilateral intervals make 12-way AND feasible while remaining
-    # narrower than an effectively unbounded [0, 1] gene.
     widths = rng.uniform(0.35, 0.90, n_features)
     lows = rng.uniform(0.0, 1.0 - widths)
     highs = lows + widths
@@ -315,7 +306,6 @@ def train_interval_ga(
         evaluate_population(children, generation)
         population = elites + children
 
-    # Final safety: the selected individual must be fully bilateral and wide enough.
     valid, reason = validate_interval_gene(best_overall, cfg)
     if not valid:
         baseline = IntervalIndividual(np.full(len(feature_names), 0.05), np.full(len(feature_names), 0.95))

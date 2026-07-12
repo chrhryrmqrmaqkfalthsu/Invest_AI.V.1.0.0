@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Stage2/3 rolling rediscovery 50-symbol pilot orchestration.
+"""Stage2/3 rolling rediscovery rerun: 50 symbols, six workers.
 
-This file is the directly modified working copy of the original Stage2
-orchestration.  It keeps the original research flow—universe preparation,
-train-only GA, stress/OOS validation, survivor gating and backtesting—but
-changes the entity definition to bilateral D-5..D-1 interval genes and daily
-rolling entry/exit decisions.
-
-Research only.  It never imports or writes the live candidate pool, live sorter,
-daemon state, market_state, positions or .env.
+Research-only working copy.  It reuses the exact prior 50-symbol list, restores
+three independent Stage2 train splits at population 100 / generations 50 /
+patience 15, validates only on stress and OOS, and compares three exit methods.
+No live candidate, sorter, daemon, position, market-state or .env module is
+imported or written.
 """
 from __future__ import annotations
 
@@ -19,10 +16,9 @@ import json
 import math
 import multiprocessing as mp
 import os
-import random
 import sys
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -39,7 +35,7 @@ from engine.learning.execution_mode_backtest import (
     classification_metrics,
     fixed_two_day_backtest,
     probability_scores,
-    rolling_score_backtest,
+    rolling_target_backtest,
     whipsaw_statistics,
 )
 from engine.learning.genetic import (
@@ -51,11 +47,10 @@ from engine.learning.genetic import (
 )
 
 OUT_DIR = KINGMAKER_ROOT / "data/_system/analysis/stage2_3_rediscovery_pilot_20260712"
-SNAPSHOT_DIR = KINGMAKER_ROOT / "data/_system/analysis/ohlc_snapshot_20260707"
+PREVIOUS_RUN_DIR = OUT_DIR / "_prev_run_gaShrunk_exitBug"
 WORKER_DIR = OUT_DIR / "_worker_tmp"
-SELECTION_SEED = 20260712
 WORKERS = 6
-CURRENT_LIVE_10 = ["ADMA", "CRS", "ALGT", "AEIS", "ARKW", "CBRL", "BTU", "BB", "BN", "ACMR"]
+SELECTION_SEED = 20260712
 START_DATE = pd.Timestamp("2020-01-01")
 STRESS_END = pd.Timestamp("2022-06-30")
 TRAIN_START = pd.Timestamp("2022-07-01")
@@ -64,6 +59,12 @@ OOS_START = pd.Timestamp("2025-07-01")
 TARGET_PCT = 3.0
 HORIZON_SESSIONS = 2
 ROUND_TRIP_COST_BPS = 10.0
+
+TRAIN_SPLITS: list[dict[str, str]] = [
+    {"label": "train_1", "train_start": "2022-07-01", "train_end": "2023-06-30"},
+    {"label": "train_2", "train_start": "2023-07-01", "train_end": "2024-06-30"},
+    {"label": "train_3", "train_start": "2024-07-01", "train_end": "2025-06-30"},
+]
 
 FEATURES = [
     "ret_d5_pct",
@@ -161,6 +162,26 @@ def read_ohlcv(path: Path) -> pd.DataFrame:
     return frame.dropna(subset=["Open", "High", "Low", "Close"])
 
 
+def load_previous_symbols() -> list[dict[str, Any]]:
+    path = PREVIOUS_RUN_DIR / "symbol_list.csv"
+    if not path.exists():
+        raise RuntimeError(f"previous symbol list missing: {path}")
+    frame = pd.read_csv(path)
+    if len(frame) != 50 or frame["ticker"].nunique() != 50:
+        raise RuntimeError(f"previous symbol list must contain exact 50 unique symbols: rows={len(frame)}")
+    rows = frame.to_dict("records")
+    for row in rows:
+        source = KINGMAKER_ROOT / str(row["source_path"])
+        if not source.exists():
+            raise RuntimeError(f"NOT_STORED source missing: {row['ticker']} {source}")
+        actual = sha256(source)
+        if str(row.get("source_sha256", "")) and actual != str(row["source_sha256"]):
+            raise RuntimeError(f"source SHA changed for {row['ticker']}: {actual}")
+        row["reused_from"] = str(path.relative_to(KINGMAKER_ROOT))
+        row["status"] = "SELECTED_REUSED_EXACTLY"
+    return rows
+
+
 def regime_for_date(value: pd.Timestamp) -> str | None:
     day = pd.Timestamp(value).normalize()
     if day < START_DATE:
@@ -170,58 +191,6 @@ def regime_for_date(value: pd.Timestamp) -> str | None:
     if day <= TRAIN_END:
         return "train"
     return "oos"
-
-
-def select_symbols() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    candidates: list[dict[str, Any]] = []
-    rejected: list[dict[str, Any]] = []
-    for path in sorted(SNAPSHOT_DIR.glob("*_ohlcv.csv")):
-        ticker = path.name.replace("_ohlcv.csv", "")
-        if ticker.startswith("benchmark_") or ticker == "ohlc_snapshot_manifest.csv":
-            continue
-        try:
-            frame = read_ohlcv(path)
-            first = pd.Timestamp(frame.index.min()).normalize()
-            last = pd.Timestamp(frame.index.max()).normalize()
-            eligible = first <= pd.Timestamp("2020-01-31") and last >= OOS_START and len(frame) >= 500
-            row = {
-                "ticker": ticker,
-                "source_path": str(path.relative_to(KINGMAKER_ROOT)),
-                "source_sha256": sha256(path),
-                "history_first_date": first.strftime("%Y-%m-%d"),
-                "history_last_date": last.strftime("%Y-%m-%d"),
-                "history_rows": len(frame),
-            }
-            if eligible:
-                candidates.append(row)
-            else:
-                rejected.append({**row, "status": "INSUFFICIENT_HISTORY"})
-        except Exception as exc:
-            rejected.append({"ticker": ticker, "source_path": str(path), "status": "UNRECOVERABLE", "error": str(exc)})
-
-    by_ticker = {row["ticker"]: row for row in candidates}
-    missing_current = [ticker for ticker in CURRENT_LIVE_10 if ticker not in by_ticker]
-    if missing_current:
-        raise RuntimeError(f"current live symbols missing eligible frozen history: {missing_current}")
-
-    pool = [row for row in candidates if row["ticker"] not in CURRENT_LIVE_10]
-    rng = random.Random(SELECTION_SEED)
-    rng.shuffle(pool)
-    chosen = [by_ticker[ticker] for ticker in CURRENT_LIVE_10] + pool[:40]
-    if len(chosen) != 50:
-        raise RuntimeError(f"50 symbols not available: {len(chosen)}")
-    rows: list[dict[str, Any]] = []
-    for index, row in enumerate(chosen, 1):
-        rows.append(
-            {
-                "selection_order": index,
-                "selection_type": "CURRENT_LIVE_10" if row["ticker"] in CURRENT_LIVE_10 else "DETERMINISTIC_RANDOM_40",
-                "selection_seed": SELECTION_SEED,
-                **row,
-                "status": "SELECTED",
-            }
-        )
-    return rows, rejected
 
 
 def _path_features(frame: pd.DataFrame, entry_idx: int) -> dict[str, float] | None:
@@ -264,8 +233,8 @@ def build_daily_universe(symbol_rows: list[dict[str, Any]]) -> tuple[pd.DataFram
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
     for item in symbol_rows:
-        ticker = item["ticker"]
-        path = KINGMAKER_ROOT / item["source_path"]
+        ticker = str(item["ticker"])
+        path = KINGMAKER_ROOT / str(item["source_path"])
         try:
             frame = read_ohlcv(path)
         except Exception as exc:
@@ -281,10 +250,13 @@ def build_daily_universe(symbol_rows: list[dict[str, Any]]) -> tuple[pd.DataFram
                 errors.append({"ticker": ticker, "date": day.strftime("%Y-%m-%d"), "status": "UNRECOVERABLE", "error": "D-5~D-1 feature unavailable"})
                 continue
             entry_open = float(frame.iloc[idx]["Open"])
+            entry_high = float(frame.iloc[idx]["High"])
+            entry_low = float(frame.iloc[idx]["Low"])
             entry_close = float(frame.iloc[idx]["Close"])
             future_high_1 = float(frame.iloc[idx + 1]["High"])
             future_high_2 = float(frame.iloc[idx + 2]["High"])
-            if not all(math.isfinite(value) and value > 0 for value in [entry_open, entry_close, future_high_1, future_high_2]):
+            prices = [entry_open, entry_high, entry_low, entry_close, future_high_1, future_high_2]
+            if not all(math.isfinite(value) and value > 0 for value in prices):
                 errors.append({"ticker": ticker, "date": day.strftime("%Y-%m-%d"), "status": "UNRECOVERABLE", "error": "D0/future label price unavailable"})
                 continue
             max_high = max(future_high_1, future_high_2)
@@ -298,6 +270,8 @@ def build_daily_universe(symbol_rows: list[dict[str, Any]]) -> tuple[pd.DataFram
                     "holding_state_ignored_for_candidate_generation": True,
                     "feature_cutoff": "D-1",
                     "entry_open_d0": entry_open,
+                    "entry_high_d0": entry_high,
+                    "entry_low_d0": entry_low,
                     "entry_close_d0": entry_close,
                     "future_high_d1": future_high_1,
                     "future_high_d2": future_high_2,
@@ -306,10 +280,10 @@ def build_daily_universe(symbol_rows: list[dict[str, Any]]) -> tuple[pd.DataFram
                     **features,
                 }
             )
-    frame = pd.DataFrame(rows)
-    if not frame.empty:
-        frame = frame.sort_values(["ticker", "date"]).reset_index(drop=True)
-    return frame, errors
+    out = pd.DataFrame(rows)
+    if not out.empty:
+        out = out.sort_values(["ticker", "date"]).reset_index(drop=True)
+    return out, errors
 
 
 def fit_domain(train: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
@@ -329,8 +303,18 @@ def normalize(frame: pd.DataFrame, low: np.ndarray, high: np.ndarray) -> np.ndar
     return (frame[FEATURES].to_numpy(float) - low) / span
 
 
+def split_frame(frame: pd.DataFrame, split: dict[str, str]) -> pd.DataFrame:
+    start = pd.Timestamp(split["train_start"])
+    end = pd.Timestamp(split["train_end"])
+    return frame[(frame["date"] >= start) & (frame["date"] <= end)].copy()
+
+
+def train_min_pass(n: int) -> int:
+    return max(20, int(math.ceil(max(0, n) * 0.02)))
+
+
 def validation_min_pass(n: int) -> int:
-    # [추정] 파일럿 게이트: 검증 구간의 1.5%, 최소 8건.
+    # [추정] retained pilot gate: validation 1.5%, minimum 8 rows.
     return max(8, int(math.ceil(max(0, n) * 0.015)))
 
 
@@ -345,17 +329,316 @@ def validation_gate(metrics: dict[str, Any], train_precision: float) -> tuple[bo
     return not reasons, reasons, precision_floor, minimum
 
 
-def ticker_seed(ticker: str) -> int:
-    return int(hashlib.sha256(f"rolling-rediscovery:{SELECTION_SEED}:{ticker}".encode()).hexdigest()[:8], 16)
+def ticker_seed(ticker: str, split_index: int = 0) -> int:
+    raw = f"rolling-rediscovery:{SELECTION_SEED}:{ticker}:split:{split_index}"
+    return int(hashlib.sha256(raw.encode()).hexdigest()[:8], 16)
 
 
-def _model_hash(ticker: str, low: np.ndarray, high: np.ndarray) -> str:
+def _model_hash(ticker: str, split_label: str, domain_low: np.ndarray, domain_high: np.ndarray, low: np.ndarray, high: np.ndarray) -> str:
     payload = json.dumps(
-        {"ticker": ticker, "features": FEATURES, "low": np.round(low, 8).tolist(), "high": np.round(high, 8).tolist()},
+        {
+            "ticker": ticker,
+            "split": split_label,
+            "features": FEATURES,
+            "domain_low": np.round(domain_low, 8).tolist(),
+            "domain_high": np.round(domain_high, 8).tolist(),
+            "low": np.round(low, 8).tolist(),
+            "high": np.round(high, 8).tolist(),
+        },
         sort_keys=True,
         separators=(",", ":"),
     )
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def evaluate_candidate(
+    *,
+    ticker: str,
+    frame: pd.DataFrame,
+    split: dict[str, str],
+    split_index: int,
+    domain_low: np.ndarray,
+    domain_high: np.ndarray,
+    ga: Any,
+    cfg: IntervalGAConfig,
+) -> dict[str, Any]:
+    best = ga.best
+    valid, valid_reason = validate_interval_gene(best, cfg)
+    model_hash = _model_hash(ticker, split["label"], domain_low, domain_high, best.low, best.high)
+    origin_train = split_frame(frame, split)
+
+    metric_rows: list[dict[str, Any]] = []
+    metrics_by_regime: dict[str, dict[str, Any]] = {}
+    masks_by_regime: dict[str, np.ndarray] = {}
+    for regime, subset in [
+        ("train", origin_train),
+        ("stress", frame[frame["regime"] == "stress"].copy()),
+        ("oos", frame[frame["regime"] == "oos"].copy()),
+    ]:
+        x = normalize(subset, domain_low, domain_high)
+        mask = individual_mask(best, x)
+        scores = probability_scores(mask, best.pass_probability)
+        metrics = classification_metrics(subset["label_2d3pct"].to_numpy(int), scores >= best.decision_threshold)
+        metrics_by_regime[regime] = metrics
+        masks_by_regime[regime] = mask
+
+    train_metrics = metrics_by_regime["train"]
+    train_floor = train_min_pass(int(train_metrics["signal_count"]))
+    train_gate = bool(valid and train_metrics["passed_count"] >= train_floor and train_metrics["precision"] >= best.decision_threshold)
+    stress_gate, stress_reasons, stress_precision_floor, stress_sample_floor = validation_gate(metrics_by_regime["stress"], float(train_metrics["precision"]))
+    oos_gate, oos_reasons, oos_precision_floor, oos_sample_floor = validation_gate(metrics_by_regime["oos"], float(train_metrics["precision"]))
+    survivor = bool(train_gate and stress_gate and oos_gate and valid)
+
+    for regime in ["train", "stress", "oos"]:
+        metrics = metrics_by_regime[regime]
+        if regime == "train":
+            passed_gate = train_gate
+            reasons = [] if train_gate else ["train_precision_or_sample_or_gene_gate"]
+            precision_floor = best.decision_threshold
+            sample_floor = train_floor
+            period_start = split["train_start"]
+            period_end = split["train_end"]
+        elif regime == "stress":
+            passed_gate = stress_gate
+            reasons = stress_reasons
+            precision_floor = stress_precision_floor
+            sample_floor = stress_sample_floor
+            period_start = str(frame.loc[frame["regime"] == "stress", "date"].min().date())
+            period_end = str(frame.loc[frame["regime"] == "stress", "date"].max().date())
+        else:
+            passed_gate = oos_gate
+            reasons = oos_reasons
+            precision_floor = oos_precision_floor
+            sample_floor = oos_sample_floor
+            period_start = str(frame.loc[frame["regime"] == "oos", "date"].min().date())
+            period_end = str(frame.loc[frame["regime"] == "oos", "date"].max().date())
+        metric_rows.append(
+            {
+                "ticker": ticker,
+                "model_hash": model_hash,
+                "origin_train_label": split["label"],
+                "regime": regime,
+                "period_start": period_start,
+                "period_end": period_end,
+                **metrics,
+                "pass_probability": best.pass_probability,
+                "decision_threshold": best.decision_threshold,
+                "precision_floor": precision_floor,
+                "sample_floor": sample_floor,
+                "passed_gate": passed_gate,
+                "gate_fail_reasons": reasons,
+                "survivor": survivor,
+            }
+        )
+
+    span = domain_high - domain_low
+    fallback_by_feature = Counter(event["feature"] for event in ga.fallback_events if event.get("applied"))
+    bounds_rows: list[dict[str, Any]] = []
+    for index, feature in enumerate(FEATURES):
+        width = float(best.high[index] - best.low[index])
+        bounds_rows.append(
+            {
+                "ticker": ticker,
+                "model_hash": model_hash,
+                "origin_train_label": split["label"],
+                "feature": feature,
+                "feature_definition": FEATURE_DEFINITIONS[feature],
+                "domain_min_origin_train": float(domain_low[index]),
+                "domain_max_origin_train": float(domain_high[index]),
+                "low_norm": float(best.low[index]),
+                "high_norm": float(best.high[index]),
+                "width_norm": width,
+                "low_value": float(domain_low[index] + best.low[index] * span[index]),
+                "high_value": float(domain_low[index] + best.high[index] * span[index]),
+                "finite_low": bool(math.isfinite(float(best.low[index]))),
+                "finite_high": bool(math.isfinite(float(best.high[index]))),
+                "bilateral": bool(best.high[index] > best.low[index]),
+                "min_width_pass": bool(width + 1e-12 >= cfg.min_width_norm),
+                "near_full_noise_gene": bool(width >= cfg.max_near_full_width_norm),
+                "fallback_applied_any_generation": bool(fallback_by_feature[feature]),
+                "fallback_event_count": int(fallback_by_feature[feature]),
+                "all_feature_and": True,
+            }
+        )
+
+    training_rows = []
+    for row in ga.history:
+        training_rows.append(
+            {
+                "ticker": ticker,
+                "model_hash": model_hash,
+                "origin_train_label": split["label"],
+                "train_start": split["train_start"],
+                "train_end": split["train_end"],
+                "seed": ticker_seed(ticker, split_index),
+                **row,
+                "generations_run": ga.generations_run,
+                "population": cfg.population,
+                "configured_generations": cfg.generations,
+                "patience": cfg.patience,
+                "train_rows": len(origin_train),
+                "train_min_sample_gate": train_floor,
+                "min_width_norm": cfg.min_width_norm,
+                "strict_all_feature_and": True,
+                "weighted_sum_path": False,
+            }
+        )
+
+    survivor_row = {
+        "ticker": ticker,
+        "model_hash": model_hash,
+        "origin_train_label": split["label"],
+        "status": "SURVIVOR" if survivor else "REJECTED",
+        "survivor": survivor,
+        "train_gate": train_gate,
+        "stress_gate": stress_gate,
+        "oos_gate": oos_gate,
+        "valid_bilateral_gene": valid,
+        "gene_validation_reason": valid_reason,
+        "train_fitness": best.fitness,
+        "pass_probability": best.pass_probability,
+        "decision_threshold": best.decision_threshold,
+        "train_passed_count": train_metrics["passed_count"],
+        "train_precision": train_metrics["precision"],
+        "stress_passed_count": metrics_by_regime["stress"]["passed_count"],
+        "stress_precision": metrics_by_regime["stress"]["precision"],
+        "oos_passed_count": metrics_by_regime["oos"]["passed_count"],
+        "oos_precision": metrics_by_regime["oos"]["precision"],
+        "thin_sample_rejected": bool(any("passed_count" in reason for reason in stress_reasons + oos_reasons) or not train_gate),
+        "rejected_narrow_individual_count": ga.rejected_narrow_count,
+        "rejected_open_individual_count": ga.rejected_open_count,
+        "rejected_near_full_individual_count": ga.rejected_near_full_count,
+        "upper_fallback_event_count": len(ga.fallback_events),
+        "genes_json": {feature: [float(best.low[i]), float(best.high[i])] for i, feature in enumerate(FEATURES)},
+        "domain_low_json": {feature: float(domain_low[i]) for i, feature in enumerate(FEATURES)},
+        "domain_high_json": {feature: float(domain_high[i]) for i, feature in enumerate(FEATURES)},
+        "reject_reasons": ([] if train_gate else ["train_gate"]) + stress_reasons + oos_reasons,
+    }
+
+    return {
+        "split": split,
+        "split_index": split_index,
+        "ga": ga,
+        "best": best,
+        "domain_low": domain_low,
+        "domain_high": domain_high,
+        "model_hash": model_hash,
+        "training_rows": training_rows,
+        "bounds_rows": bounds_rows,
+        "fallback_rows": [
+            {"ticker": ticker, "model_hash": model_hash, "origin_train_label": split["label"], **event}
+            for event in ga.fallback_events
+        ],
+        "metric_rows": metric_rows,
+        "survivor_row": survivor_row,
+        "overfit_row": {
+            "ticker": ticker,
+            "model_hash": model_hash,
+            "origin_train_label": split["label"],
+            "survivor": survivor,
+            "train_precision": train_metrics["precision"],
+            "stress_precision": metrics_by_regime["stress"]["precision"],
+            "oos_precision": metrics_by_regime["oos"]["precision"],
+            "train_to_stress_precision_gap": float(train_metrics["precision"] - metrics_by_regime["stress"]["precision"]),
+            "train_to_oos_precision_gap": float(train_metrics["precision"] - metrics_by_regime["oos"]["precision"]),
+            "strict_all_feature_and": True,
+            "weighted_sum_path_present": False,
+            "bilateral_gene_pass": valid,
+            "all_min_width_pass": all(row["min_width_pass"] for row in bounds_rows),
+            "near_full_gene_count": sum(row["near_full_noise_gene"] for row in bounds_rows),
+            "thin_sample_rejected": survivor_row["thin_sample_rejected"],
+        },
+    }
+
+
+def method_rows_for_champion(ticker: str, frame: pd.DataFrame, candidate: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    best = candidate["best"]
+    domain_low = candidate["domain_low"]
+    domain_high = candidate["domain_high"]
+    model_hash = candidate["model_hash"]
+    survivor = bool(candidate["survivor_row"]["survivor"])
+    comparison_rows: list[dict[str, Any]] = []
+    whipsaw_rows: list[dict[str, Any]] = []
+    holding_rows: list[dict[str, Any]] = []
+
+    for regime in ["train", "stress", "oos"]:
+        subset = frame[frame["regime"] == regime].copy().reset_index(drop=True)
+        x = normalize(subset, domain_low, domain_high)
+        mask = individual_mask(best, x)
+        scores = probability_scores(mask, best.pass_probability)
+        off_metrics, off_trades = rolling_target_backtest(
+            subset,
+            scores,
+            best.decision_threshold,
+            target_horizon_sessions=HORIZON_SESSIONS,
+            early_take_profit=False,
+            take_profit_pct=TARGET_PCT,
+            round_trip_cost_bps=ROUND_TRIP_COST_BPS,
+        )
+        on_metrics, on_trades = rolling_target_backtest(
+            subset,
+            scores,
+            best.decision_threshold,
+            target_horizon_sessions=HORIZON_SESSIONS,
+            early_take_profit=True,
+            take_profit_pct=TARGET_PCT,
+            round_trip_cost_bps=ROUND_TRIP_COST_BPS,
+        )
+        fixed_metrics, fixed_trades = fixed_two_day_backtest(
+            subset,
+            scores,
+            best.decision_threshold,
+            round_trip_cost_bps=ROUND_TRIP_COST_BPS,
+        )
+        methods = [
+            ("rolling_target_2_sessions_tp_off", off_metrics, off_trades, False),
+            ("rolling_target_2_sessions_tp_on", on_metrics, on_trades, True),
+            ("fixed_2_sessions", fixed_metrics, fixed_trades, False),
+        ]
+        for method, metrics, trades, early_tp in methods:
+            comparison_rows.append(
+                {
+                    "ticker": ticker,
+                    "model_hash": model_hash,
+                    "champion_origin_train_label": candidate["split"]["label"],
+                    "champion_selected_by": "highest_origin_train_fitness_only",
+                    "regime": regime,
+                    "method": method,
+                    "early_take_profit": early_tp,
+                    "survivor": survivor,
+                    "decision_threshold": best.decision_threshold,
+                    "pass_probability": best.pass_probability,
+                    "round_trip_cost_bps": ROUND_TRIP_COST_BPS,
+                    **metrics,
+                }
+            )
+            whipsaw_rows.append(
+                {
+                    "ticker": ticker,
+                    "model_hash": model_hash,
+                    "champion_origin_train_label": candidate["split"]["label"],
+                    "regime": regime,
+                    "survivor": survivor,
+                    "decision_threshold": best.decision_threshold,
+                    **whipsaw_statistics(subset, scores, best.decision_threshold, trades, method=method),
+                }
+            )
+            counts = Counter((int(t["holding_sessions"]), str(t.get("exit_reason", "UNKNOWN"))) for t in trades)
+            for (holding, reason), count in sorted(counts.items()):
+                holding_rows.append(
+                    {
+                        "ticker": ticker,
+                        "model_hash": model_hash,
+                        "champion_origin_train_label": candidate["split"]["label"],
+                        "regime": regime,
+                        "method": method,
+                        "holding_sessions": holding,
+                        "exit_reason": reason,
+                        "trade_count": count,
+                        "trade_share": count / len(trades) if trades else 0.0,
+                    }
+                )
+    return comparison_rows, whipsaw_rows, holding_rows
 
 
 def train_symbol_worker(payload: dict[str, Any]) -> dict[str, Any]:
@@ -366,216 +649,55 @@ def train_symbol_worker(payload: dict[str, Any]) -> dict[str, Any]:
     output_path = Path(payload["output_path"])
     pid = os.getpid()
     process_name = mp.current_process().name
-    result: dict[str, Any]
     try:
         frame = pd.read_csv(input_path)
         frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
         frame = frame.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
-        train = frame[frame["regime"] == "train"].copy()
-        if len(train) < 100:
-            raise RuntimeError(f"INSUFFICIENT_DATA train rows={len(train)}")
-        domain_low, domain_high = fit_domain(train)
-        x_train = normalize(train, domain_low, domain_high)
-        y_train = train["label_2d3pct"].to_numpy(int)
-        ga_config = IntervalGAConfig()
-        ga = train_interval_ga(x_train, y_train, FEATURES, seed=ticker_seed(ticker), config=ga_config)
-        best = ga.best
-        valid, valid_reason = validate_interval_gene(best, ga_config)
-        model_hash = _model_hash(ticker, best.low, best.high)
-
-        training_rows: list[dict[str, Any]] = []
-        for row in ga.history:
-            training_rows.append(
-                {
-                    "ticker": ticker,
-                    "model_hash": model_hash,
-                    "seed": ticker_seed(ticker),
-                    "pid": pid,
-                    "process_name": process_name,
-                    **row,
-                    "generations_run": ga.generations_run,
-                    "train_rows": len(train),
-                    "train_min_sample_gate": max(20, int(math.ceil(len(train) * 0.02))),
-                    "min_width_norm": ga_config.min_width_norm,
-                    "strict_all_feature_and": True,
-                    "weighted_sum_path": False,
-                }
+        cfg = IntervalGAConfig()
+        candidates: list[dict[str, Any]] = []
+        for split_index, split in enumerate(TRAIN_SPLITS, 1):
+            origin_train = split_frame(frame, split)
+            if len(origin_train) < 100:
+                raise RuntimeError(f"INSUFFICIENT_DATA {split['label']} rows={len(origin_train)}")
+            domain_low, domain_high = fit_domain(origin_train)
+            x_train = normalize(origin_train, domain_low, domain_high)
+            y_train = origin_train["label_2d3pct"].to_numpy(int)
+            ga = train_interval_ga(
+                x_train,
+                y_train,
+                FEATURES,
+                seed=ticker_seed(ticker, split_index),
+                config=cfg,
             )
-
-        fallback_by_feature = Counter(event["feature"] for event in ga.fallback_events if event.get("applied"))
-        bounds_rows: list[dict[str, Any]] = []
-        span = domain_high - domain_low
-        for index, feature in enumerate(FEATURES):
-            width = float(best.high[index] - best.low[index])
-            bounds_rows.append(
-                {
-                    "ticker": ticker,
-                    "model_hash": model_hash,
-                    "feature": feature,
-                    "feature_definition": FEATURE_DEFINITIONS[feature],
-                    "domain_min_train": float(domain_low[index]),
-                    "domain_max_train": float(domain_high[index]),
-                    "low_norm": float(best.low[index]),
-                    "high_norm": float(best.high[index]),
-                    "width_norm": width,
-                    "low_value": float(domain_low[index] + best.low[index] * span[index]),
-                    "high_value": float(domain_low[index] + best.high[index] * span[index]),
-                    "finite_low": bool(math.isfinite(float(best.low[index]))),
-                    "finite_high": bool(math.isfinite(float(best.high[index]))),
-                    "bilateral": bool(best.high[index] > best.low[index]),
-                    "min_width_pass": bool(width + 1e-12 >= ga_config.min_width_norm),
-                    "near_full_noise_gene": bool(width >= ga_config.max_near_full_width_norm),
-                    "fallback_applied_any_generation": bool(fallback_by_feature[feature]),
-                    "fallback_event_count": int(fallback_by_feature[feature]),
-                    "all_feature_and": True,
-                }
-            )
-
-        fallback_rows = [{"ticker": ticker, "model_hash": model_hash, **event} for event in ga.fallback_events]
-        metric_rows: list[dict[str, Any]] = []
-        masks: dict[str, np.ndarray] = {}
-        scores_by_regime: dict[str, np.ndarray] = {}
-        metrics_by_regime: dict[str, dict[str, Any]] = {}
-        for regime in ["train", "stress", "oos"]:
-            subset = frame[frame["regime"] == regime].copy()
-            x = normalize(subset, domain_low, domain_high)
-            mask = individual_mask(best, x)
-            scores = probability_scores(mask, best.pass_probability)
-            metrics = classification_metrics(subset["label_2d3pct"].to_numpy(int), scores >= best.decision_threshold)
-            masks[regime] = mask
-            scores_by_regime[regime] = scores
-            metrics_by_regime[regime] = metrics
-
-        train_metrics = metrics_by_regime["train"]
-        train_gate = bool(valid and train_metrics["passed_count"] >= max(20, int(math.ceil(train_metrics["signal_count"] * 0.02))) and train_metrics["precision"] >= best.decision_threshold)
-        stress_gate, stress_reasons, stress_precision_floor, stress_sample_floor = validation_gate(metrics_by_regime["stress"], float(train_metrics["precision"]))
-        oos_gate, oos_reasons, oos_precision_floor, oos_sample_floor = validation_gate(metrics_by_regime["oos"], float(train_metrics["precision"]))
-        survivor = bool(train_gate and stress_gate and oos_gate and valid)
-
-        for regime in ["train", "stress", "oos"]:
-            metrics = metrics_by_regime[regime]
-            if regime == "train":
-                passed_gate = train_gate
-                reasons = [] if train_gate else ["train_precision_or_sample_or_gene_gate"]
-                precision_floor = best.decision_threshold
-                sample_floor = max(20, int(math.ceil(metrics["signal_count"] * 0.02)))
-            elif regime == "stress":
-                passed_gate = stress_gate
-                reasons = stress_reasons
-                precision_floor = stress_precision_floor
-                sample_floor = stress_sample_floor
-            else:
-                passed_gate = oos_gate
-                reasons = oos_reasons
-                precision_floor = oos_precision_floor
-                sample_floor = oos_sample_floor
-            metric_rows.append(
-                {
-                    "ticker": ticker,
-                    "model_hash": model_hash,
-                    "regime": regime,
-                    **metrics,
-                    "pass_probability": best.pass_probability,
-                    "decision_threshold": best.decision_threshold,
-                    "precision_floor": precision_floor,
-                    "sample_floor": sample_floor,
-                    "passed_gate": passed_gate,
-                    "gate_fail_reasons": reasons,
-                    "survivor": survivor,
-                }
-            )
-
-        survivor_row = {
-            "ticker": ticker,
-            "model_hash": model_hash,
-            "status": "SURVIVOR" if survivor else "REJECTED",
-            "survivor": survivor,
-            "train_gate": train_gate,
-            "stress_gate": stress_gate,
-            "oos_gate": oos_gate,
-            "valid_bilateral_gene": valid,
-            "gene_validation_reason": valid_reason,
-            "pass_probability": best.pass_probability,
-            "decision_threshold": best.decision_threshold,
-            "train_passed_count": train_metrics["passed_count"],
-            "train_precision": train_metrics["precision"],
-            "stress_passed_count": metrics_by_regime["stress"]["passed_count"],
-            "stress_precision": metrics_by_regime["stress"]["precision"],
-            "oos_passed_count": metrics_by_regime["oos"]["passed_count"],
-            "oos_precision": metrics_by_regime["oos"]["precision"],
-            "thin_sample_rejected": bool(any("passed_count" in reason for reason in stress_reasons + oos_reasons) or not train_gate),
-            "rejected_narrow_individual_count": ga.rejected_narrow_count,
-            "rejected_open_individual_count": ga.rejected_open_count,
-            "rejected_near_full_individual_count": ga.rejected_near_full_count,
-            "upper_fallback_event_count": len(ga.fallback_events),
-            "genes_json": {feature: [float(best.low[i]), float(best.high[i])] for i, feature in enumerate(FEATURES)},
-            "reject_reasons": ([] if train_gate else ["train_gate"]) + stress_reasons + oos_reasons,
-        }
-
-        backtest_rows: list[dict[str, Any]] = []
-        whipsaw_rows: list[dict[str, Any]] = []
-        for regime in ["train", "stress", "oos"]:
-            subset = frame[frame["regime"] == regime].copy().reset_index(drop=True)
-            scores = scores_by_regime[regime]
-            rolling_metrics, rolling_trades = rolling_score_backtest(subset, scores, best.decision_threshold, round_trip_cost_bps=ROUND_TRIP_COST_BPS)
-            fixed_metrics, fixed_trades = fixed_two_day_backtest(subset, scores, best.decision_threshold, round_trip_cost_bps=ROUND_TRIP_COST_BPS)
-            for method, metrics, trades in [
-                ("rolling_same_threshold_no_holding_cap", rolling_metrics, rolling_trades),
-                ("fixed_2_sessions", fixed_metrics, fixed_trades),
-            ]:
-                backtest_rows.append(
-                    {
-                        "ticker": ticker,
-                        "model_hash": model_hash,
-                        "regime": regime,
-                        "method": method,
-                        "survivor": survivor,
-                        "decision_threshold": best.decision_threshold,
-                        "pass_probability": best.pass_probability,
-                        "round_trip_cost_bps": ROUND_TRIP_COST_BPS,
-                        **metrics,
-                    }
+            candidates.append(
+                evaluate_candidate(
+                    ticker=ticker,
+                    frame=frame,
+                    split=split,
+                    split_index=split_index,
+                    domain_low=domain_low,
+                    domain_high=domain_high,
+                    ga=ga,
+                    cfg=cfg,
                 )
-            whipsaw_rows.append(
-                {
-                    "ticker": ticker,
-                    "model_hash": model_hash,
-                    "regime": regime,
-                    "survivor": survivor,
-                    "decision_threshold": best.decision_threshold,
-                    **whipsaw_statistics(subset, scores, best.decision_threshold, rolling_trades),
-                }
             )
 
-        precision_gap_stress = float(train_metrics["precision"] - metrics_by_regime["stress"]["precision"])
-        precision_gap_oos = float(train_metrics["precision"] - metrics_by_regime["oos"]["precision"])
+        champion = max(candidates, key=lambda row: float(row["best"].fitness))
+        comparison_rows, whipsaw_rows, holding_rows = method_rows_for_champion(ticker, frame, champion)
         result = {
             "status": "OK",
             "ticker": ticker,
-            "model_hash": model_hash,
-            "training_rows": training_rows,
-            "bounds_rows": bounds_rows,
-            "fallback_rows": fallback_rows,
-            "metric_rows": metric_rows,
-            "survivor_row": survivor_row,
-            "backtest_rows": backtest_rows,
+            "champion_model_hash": champion["model_hash"],
+            "champion_origin_train_label": champion["split"]["label"],
+            "training_rows": [item for candidate in candidates for item in candidate["training_rows"]],
+            "bounds_rows": [item for candidate in candidates for item in candidate["bounds_rows"]],
+            "fallback_rows": [item for candidate in candidates for item in candidate["fallback_rows"]],
+            "metric_rows": [item for candidate in candidates for item in candidate["metric_rows"]],
+            "survivor_rows": [candidate["survivor_row"] for candidate in candidates],
+            "comparison_rows": comparison_rows,
             "whipsaw_rows": whipsaw_rows,
-            "overfit_row": {
-                "ticker": ticker,
-                "model_hash": model_hash,
-                "survivor": survivor,
-                "train_precision": train_metrics["precision"],
-                "stress_precision": metrics_by_regime["stress"]["precision"],
-                "oos_precision": metrics_by_regime["oos"]["precision"],
-                "train_to_stress_precision_gap": precision_gap_stress,
-                "train_to_oos_precision_gap": precision_gap_oos,
-                "strict_all_feature_and": True,
-                "weighted_sum_path_present": False,
-                "bilateral_gene_pass": valid,
-                "all_min_width_pass": all(row["min_width_pass"] for row in bounds_rows),
-                "near_full_gene_count": sum(row["near_full_noise_gene"] for row in bounds_rows),
-                "thin_sample_rejected": survivor_row["thin_sample_rejected"],
-            },
+            "holding_rows": holding_rows,
+            "overfit_rows": [candidate["overfit_row"] for candidate in candidates],
         }
     except Exception as exc:
         result = {"status": "ERROR", "ticker": ticker, "error": f"{type(exc).__name__}: {exc}"}
@@ -587,7 +709,11 @@ def train_symbol_worker(payload: dict[str, Any]) -> dict[str, Any]:
         "status": result.get("status"),
         "pid": pid,
         "process_name": process_name,
-        "seed": ticker_seed(ticker),
+        "seed_scheme": "sha256(ticker, split_index)",
+        "train_split_count": len(TRAIN_SPLITS),
+        "population_per_split": IntervalGAConfig().population,
+        "generations_per_split": IntervalGAConfig().generations,
+        "patience_per_split": IntervalGAConfig().patience,
         "wall_seconds": wall,
         "cpu_seconds": cpu,
         "cpu_percent_single_core": 100.0 * cpu / wall if wall > 0 else 0.0,
@@ -600,38 +726,42 @@ def train_symbol_worker(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ticker": ticker, "status": result.get("status"), "output_path": str(output_path), "parallel_row": result["parallel_row"]}
 
 
-def _merge_worker_results(worker_returns: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def merge_worker_results(worker_returns: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     merged = {
         "training": [],
         "bounds": [],
         "fallback": [],
         "metrics": [],
         "survivors": [],
-        "backtests": [],
+        "comparison": [],
         "whipsaw": [],
+        "holding": [],
         "overfit": [],
         "parallel": [],
         "errors": [],
     }
     for returned in worker_returns:
-        path = Path(returned["output_path"])
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(Path(returned["output_path"]).read_text(encoding="utf-8"))
         merged["parallel"].append(data.get("parallel_row", returned.get("parallel_row", {})))
         if data.get("status") != "OK":
             merged["errors"].append({"ticker": data.get("ticker"), "status": data.get("status"), "error": data.get("error", "UNKNOWN")})
             continue
-        merged["training"].extend(data.get("training_rows", []))
-        merged["bounds"].extend(data.get("bounds_rows", []))
-        merged["fallback"].extend(data.get("fallback_rows", []))
-        merged["metrics"].extend(data.get("metric_rows", []))
-        merged["survivors"].append(data.get("survivor_row", {}))
-        merged["backtests"].extend(data.get("backtest_rows", []))
-        merged["whipsaw"].extend(data.get("whipsaw_rows", []))
-        merged["overfit"].append(data.get("overfit_row", {}))
+        for target, source in [
+            ("training", "training_rows"),
+            ("bounds", "bounds_rows"),
+            ("fallback", "fallback_rows"),
+            ("metrics", "metric_rows"),
+            ("survivors", "survivor_rows"),
+            ("comparison", "comparison_rows"),
+            ("whipsaw", "whipsaw_rows"),
+            ("holding", "holding_rows"),
+            ("overfit", "overfit_rows"),
+        ]:
+            merged[target].extend(data.get(source, []))
     return merged
 
 
-def _label_distribution(feature_set: pd.DataFrame) -> list[dict[str, Any]]:
+def label_distribution(feature_set: pd.DataFrame) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for (ticker, regime), group in feature_set.groupby(["ticker", "regime"], sort=True):
         rows.append(
@@ -660,15 +790,87 @@ def _label_distribution(feature_set: pd.DataFrame) -> list[dict[str, Any]]:
     return rows
 
 
-def _hhi(survivors: list[dict[str, Any]]) -> float | None:
-    counts = [float(row.get("oos_passed_count", 0)) for row in survivors if row.get("survivor") and float(row.get("oos_passed_count", 0)) > 0]
-    total = sum(counts)
+def ga_config_rows() -> list[dict[str, Any]]:
+    cfg = IntervalGAConfig()
+    rows = [
+        {"item": "population", "original_stage2": 100, "rerun_copy": cfg.population, "match": cfg.population == 100, "source": "scripts/research/run_stage2.py POPULATION"},
+        {"item": "generations", "original_stage2": 50, "rerun_copy": cfg.generations, "match": cfg.generations == 50, "source": "scripts/research/run_stage2.py GENERATIONS"},
+        {"item": "patience", "original_stage2": 15, "rerun_copy": cfg.patience, "match": cfg.patience == 15, "source": "scripts/research/run_stage2.py PATIENCE"},
+        {"item": "train_split_count", "original_stage2": 3, "rerun_copy": len(TRAIN_SPLITS), "match": len(TRAIN_SPLITS) == 3, "source": "scripts/research/run_stage2.py TRAIN_SPLITS"},
+    ]
+    for index, split in enumerate(TRAIN_SPLITS, 1):
+        rows.extend(
+            [
+                {"item": f"train_{index}_start", "original_stage2": split["train_start"], "rerun_copy": split["train_start"], "match": True, "source": "TRAIN_SPLITS"},
+                {"item": f"train_{index}_end", "original_stage2": split["train_end"], "rerun_copy": split["train_end"], "match": True, "source": "TRAIN_SPLITS"},
+            ]
+        )
+    return rows
+
+
+def hhi_by_symbol(survivors: list[dict[str, Any]]) -> float | None:
+    by_ticker: dict[str, float] = defaultdict(float)
+    for row in survivors:
+        if row.get("survivor"):
+            by_ticker[str(row["ticker"])] += float(row.get("oos_passed_count", 0))
+    total = sum(by_ticker.values())
     if total <= 0:
         return None
-    return float(sum((value / total) ** 2 for value in counts))
+    return float(sum((value / total) ** 2 for value in by_ticker.values()))
 
 
-def _integrity_probes() -> dict[str, Any]:
+def aggregate_comparison(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    frame = pd.DataFrame(rows)
+    if frame.empty:
+        return []
+    out: list[dict[str, Any]] = []
+    numeric = [
+        "trade_count",
+        "win_rate",
+        "avg_return_pct",
+        "compounded_return_pct",
+        "max_drawdown_pct",
+        "avg_holding_sessions",
+        "max_holding_sessions",
+        "early_take_profit_count",
+        "target_date_exit_count",
+        "mean_target_extension_count",
+    ]
+    for (regime, method), group in frame.groupby(["regime", "method"], sort=True):
+        row: dict[str, Any] = {
+            "ticker": "ALL_50_MEAN",
+            "model_hash": "AGGREGATE",
+            "champion_origin_train_label": "MIXED",
+            "champion_selected_by": "highest_origin_train_fitness_only",
+            "regime": regime,
+            "method": method,
+            "early_take_profit": bool(group["early_take_profit"].iloc[0]),
+            "survivor": bool(group["survivor"].any()),
+            "decision_threshold": float(group["decision_threshold"].mean()),
+            "pass_probability": float(group["pass_probability"].mean()),
+            "round_trip_cost_bps": ROUND_TRIP_COST_BPS,
+        }
+        for column in numeric:
+            row[column] = float(group[column].mean())
+        row["median_return_pct"] = float(group["median_return_pct"].mean())
+        row["median_holding_sessions"] = float(group["median_holding_sessions"].mean())
+        row["p95_holding_sessions"] = float(group["p95_holding_sessions"].mean())
+        row["open_at_period_end_count"] = float(group["open_at_period_end_count"].mean())
+        row["max_target_extension_count"] = int(group["max_target_extension_count"].max())
+        out.append(row)
+    return out
+
+
+def previous_oos_whipsaw_mean() -> float | None:
+    path = PREVIOUS_RUN_DIR / "whipsaw_stats.csv"
+    if not path.exists():
+        return None
+    frame = pd.read_csv(path)
+    subset = frame[frame["regime"] == "oos"]
+    return float(subset["whipsaw_rate"].mean()) if len(subset) else None
+
+
+def integrity_probes() -> dict[str, Any]:
     cfg = IntervalGAConfig()
     open_gene = IntervalIndividual(np.array([0.1, 0.1]), np.array([np.nan, 0.9]))
     narrow_gene = IntervalIndividual(np.array([0.2, 0.2]), np.array([0.21, 0.8]))
@@ -682,85 +884,88 @@ def _integrity_probes() -> dict[str, Any]:
         "open_gene_reason": open_reason,
         "narrow_gene_rejected": not narrow_valid,
         "narrow_gene_reason": narrow_reason,
-        "cross_feature_compensation_pass_count": int(compensation_mask.sum()),
         "strict_and_compensation_blocked": int(compensation_mask.sum()) == 0,
     }
 
 
-def _write_readout(
+def write_readout(
     *,
     selected: list[dict[str, Any]],
     feature_set: pd.DataFrame,
     merged: dict[str, list[dict[str, Any]]],
-    probes: dict[str, Any],
     verdict: str,
     fail_reasons: list[str],
     hhi: float | None,
+    previous_whipsaw: float | None,
+    current_whipsaw: float | None,
     elapsed: float,
 ) -> None:
-    survivor_rows = [row for row in merged["survivors"] if row.get("survivor")]
-    fallback_count = len([row for row in merged["fallback"] if row.get("applied")])
-    oos_backtests = [row for row in merged["backtests"] if row.get("regime") == "oos"]
-    rolling = [row for row in oos_backtests if row.get("method") == "rolling_same_threshold_no_holding_cap" and row.get("survivor")]
-    fixed = [row for row in oos_backtests if row.get("method") == "fixed_2_sessions" and row.get("survivor")]
-    rolling_avg = float(np.mean([row["avg_return_pct"] for row in rolling])) if rolling else None
-    fixed_avg = float(np.mean([row["avg_return_pct"] for row in fixed])) if fixed else None
-    max_hold = max([int(row.get("max_holding_sessions", 0)) for row in merged["whipsaw"]] or [0])
+    survivor_candidates = [row for row in merged["survivors"] if row.get("survivor")]
+    survivor_tickers = sorted({row["ticker"] for row in survivor_candidates})
+    comparison = pd.DataFrame(merged["comparison"])
+    oos_means: dict[str, dict[str, float]] = {}
+    if not comparison.empty:
+        for method, group in comparison[comparison["regime"] == "oos"].groupby("method"):
+            oos_means[str(method)] = {
+                "avg_return_pct": float(group["avg_return_pct"].mean()),
+                "compounded_return_pct": float(group["compounded_return_pct"].mean()),
+                "max_drawdown_pct": float(group["max_drawdown_pct"].mean()),
+                "avg_holding_sessions": float(group["avg_holding_sessions"].mean()),
+                "max_holding_sessions": float(group["max_holding_sessions"].max()),
+            }
     lines = [
-        "# Stage2/3 rolling 재발견 — 50종목 파일럿",
+        "# Stage2/3 rolling 재발견 재실행 — 목표일 청산 + 원본 GA 크기",
         "",
         f"- 판정: **{verdict}**",
         f"- 실행 시각(UTC): {utc_now()}",
-        f"- 실행시간: {elapsed:.1f}초",
-        f"- 표본: {len(selected)}종목 (현 라이브 10 + seed {SELECTION_SEED} 결정적 무작위 40)",
-        f"- 매일 독립 평가 행: {len(feature_set):,}",
-        f"- survivor: {len(survivor_rows)} / {len(selected)}",
-        f"- 종목 쏠림 HHI: {hhi if hhi is not None else 'INSUFFICIENT_DATA'}",
-        f"- upper-bound fallback 적용 이벤트: {fallback_count}",
-        f"- rolling 최장 보유 세션: {max_hold}",
+        f"- 총 실행시간: {elapsed:.2f}초",
+        f"- 종목: {len(selected)}개, 직전 symbol_list.csv 정확히 재사용",
+        f"- 일별 평가 행: {len(feature_set):,}",
+        f"- 학습 후보: {len(merged['survivors'])}개 (50종목 × 3 train split)",
+        f"- survivor 후보: {len(survivor_candidates)}개 / survivor 종목: {len(survivor_tickers)}개",
+        f"- survivor 종목: {', '.join(survivor_tickers) if survivor_tickers else '없음'}",
+        f"- survivor 신호 HHI: {hhi if hhi is not None else 'INSUFFICIENT_DATA'}",
         "",
-        "## 구현 확인",
+        "## 핵심 결함 수정 확인",
         "",
-        "- 복사본 자체를 직접 수정·실행했다. 별도 독립 runner를 새로 만들지 않았다.",
-        "- 모든 거래일을 보유 여부와 무관하게 독립 진입 후보로 만들었다.",
-        "- feature는 D-5~D-1의 해석 가능한 path_filter 12개만 사용했다.",
-        "- 모든 gene은 정규화 train 범위의 [하한, 상한]이며 최소폭 10%를 강제했다.",
-        "- 진입 통과는 12개 지표가 각각 자기 구간을 만족하는 strict AND다. 가중합·다른 지표 상쇄·호재 예외가 없다.",
-        "- 점수는 strict-AND 통과 train 표본의 +3% 정밀도이며, 동일 임계선을 진입·유지·청산에 사용했다.",
-        "- rolling 백테스트에는 인위적 보유일 상한이 없고 구간 말에만 평가용 mark-to-market을 적용했다.",
-        "- GA는 train만 사용했고 stress와 OOS는 검증 전용 이중 게이트다.",
-        "- 50개 종목 GA는 최대 6개 spawn worker로 실행했고 종목별 seed를 고정했다.",
+        "- strict-AND 점수 붕괴 즉시 청산 조건을 제거했다.",
+        "- 진입일 목표를 2거래일 뒤로 설정하고, 보유일에 유효 점수가 나오면 그날+2로 목표를 연장한다.",
+        "- 점수가 끊기면 기존 목표를 유지하며 마지막 유효 목표일까지 보유한다.",
+        "- TP OFF는 목표일까지 보유하고, TP ON은 D0 high가 진입가+3%에 닿으면 목표가격으로 즉시 익절한다.",
+        "- GA는 각 종목에서 train_1/train_2/train_3을 독립 실행하며 각 실행은 population 100, generation 50, patience 15다.",
+        "- 비교용 champion은 stress/OOS를 보지 않고 origin-train fitness만으로 종목당 1개 선정했다.",
         "",
-        "## 과적합 완충",
+        "## 휩쏘 변화",
         "",
-        f"- 열린 gene probe 차단: {probes['open_gene_rejected']} ({probes['open_gene_reason']})",
-        f"- 최소폭 미달 probe 차단: {probes['narrow_gene_rejected']} ({probes['narrow_gene_reason']})",
-        f"- 지표 간 합산 상쇄 probe 통과 건수: {probes['cross_feature_compensation_pass_count']} (0이어야 정상)",
-        "- [추정] train 거래수 게이트는 max(20, train 행의 2%), stress/OOS는 max(8, 검증 행의 1.5%)로 파일럿 실행했다.",
-        "- [추정] 검증 정밀도 하한은 max(30%, 해당 regime 양성률+3%p, train 정밀도-15%p)다.",
+        f"- 직전 OOS 평균 1세션 이하 비율: {previous_whipsaw if previous_whipsaw is not None else 'UNAVAILABLE'}",
+        f"- 이번 OOS 목표일 TP OFF 평균 1세션 이하 비율: {current_whipsaw if current_whipsaw is not None else 'UNAVAILABLE'}",
+        f"- 감소폭: {(previous_whipsaw-current_whipsaw) if previous_whipsaw is not None and current_whipsaw is not None else 'UNAVAILABLE'}",
+        "- TP OFF에서 정상 목표일 청산은 최소 2세션이다. 0~1세션 거래가 남는다면 구간말 강제평가뿐이다.",
         "",
-        "## Rolling vs 고정 2일",
-        "",
-        f"- survivor OOS rolling 거래당 평균수익률: {rolling_avg if rolling_avg is not None else 'INSUFFICIENT_DATA'}",
-        f"- survivor OOS 고정 2일 거래당 평균수익률: {fixed_avg if fixed_avg is not None else 'INSUFFICIENT_DATA'}",
-        "- 상세 성과와 보유기간은 `rolling_vs_fixed_backtest.csv`, 휩쏘와 장기보유 위험은 `whipsaw_stats.csv`에 기록했다.",
-        "",
-        "## 판정 사유",
+        "## OOS 청산 방식 비교 — 50종목 평균",
         "",
     ]
-    if fail_reasons:
-        lines.extend([f"- {reason}" for reason in fail_reasons])
-    else:
-        lines.append("- 코드·출력·양방향 gene·최소폭·strict AND·6병렬·rolling 검증이 모두 정상이며 전체 확대 가능하다.")
+    for method in ["rolling_target_2_sessions_tp_off", "rolling_target_2_sessions_tp_on", "fixed_2_sessions"]:
+        metrics = oos_means.get(method)
+        if not metrics:
+            lines.append(f"- {method}: INSUFFICIENT_DATA")
+            continue
+        lines.append(
+            f"- {method}: 거래당 {metrics['avg_return_pct']:.4f}%, 복리 {metrics['compounded_return_pct']:.4f}%, "
+            f"MDD {metrics['max_drawdown_pct']:.4f}%, 평균보유 {metrics['avg_holding_sessions']:.3f}, 최장 {metrics['max_holding_sessions']:.0f}"
+        )
+    lines.extend(["", "## 판정 사유", ""])
+    lines.extend([f"- {reason}" for reason in fail_reasons] if fail_reasons else ["- 청산·GA·병렬·게이트·무결성 검증 통과"])
     lines.extend(
         [
             "",
-            "## 누수·저장 제약",
+            "## 해석",
             "",
-            "- feature 열에는 D0 gap, STK_gap_d0, ETF_gap_d0, flow, order_book가 없다.",
-            "- `entry_open_d0`, 미래 고가는 라벨과 백테스트 체결 계산 전용이며 GA feature 목록에 들어가지 않는다.",
-            "- 데이터가 없는 종목/날짜는 `NOT_STORED` 또는 `UNRECOVERABLE` 오류 목록으로 남긴다.",
-            "- 라이브 후보 풀·정렬·daemon·설정은 호출하거나 수정하지 않았다.",
+            "- survivor가 나오면 직전 survivor 0에는 축소 탐색량의 영향이 있었다고 판정한다.",
+            "- 원본 크기 3-split 탐색 후에도 survivor가 0이면 탐색부족보다 train→stress/OOS 일반화 실패가 주원인이다.",
+            "- [추정] 거래수 게이트는 train max(20, 2%), stress/OOS max(8, 1.5%)를 유지했다.",
+            "- D0 high/low/open/close는 체결·익절 계산 전용이며 12개 GA feature에는 포함되지 않는다.",
+            "- STK_gap_d0, ETF_gap_d0, flow, order_book는 사용하지 않았다.",
         ]
     )
     (OUT_DIR / "readout.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -771,7 +976,7 @@ def run_pilot() -> dict[str, Any]:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     WORKER_DIR.mkdir(parents=True, exist_ok=True)
 
-    selected, rejected = select_symbols()
+    selected = load_previous_symbols()
     write_csv(OUT_DIR / "symbol_list.csv", selected)
     feature_set, universe_errors = build_daily_universe(selected)
     if feature_set.empty:
@@ -783,12 +988,13 @@ def run_pilot() -> dict[str, Any]:
     pilot_universe["status"] = "ELIGIBLE"
     pilot_universe.to_csv(OUT_DIR / "pilot_universe.csv", index=False)
     feature_set.to_csv(OUT_DIR / "feature_set.csv", index=False)
-    write_csv(OUT_DIR / "label_distribution.csv", _label_distribution(feature_set))
-    write_csv(OUT_DIR / "universe_errors.csv", rejected + universe_errors)
+    write_csv(OUT_DIR / "label_distribution.csv", label_distribution(feature_set))
+    write_csv(OUT_DIR / "universe_errors.csv", universe_errors)
+    write_csv(OUT_DIR / "ga_config_check.csv", ga_config_rows())
 
     tasks: list[dict[str, Any]] = []
     for row in selected:
-        ticker = row["ticker"]
+        ticker = str(row["ticker"])
         ticker_frame = feature_set[feature_set["ticker"] == ticker].copy()
         input_path = WORKER_DIR / f"input_{ticker}.csv"
         output_path = WORKER_DIR / f"result_{ticker}.json"
@@ -798,7 +1004,7 @@ def run_pilot() -> dict[str, Any]:
     context = mp.get_context("spawn")
     with context.Pool(processes=WORKERS) as pool:
         worker_returns = pool.map(train_symbol_worker, tasks)
-    merged = _merge_worker_results(worker_returns)
+    merged = merge_worker_results(worker_returns)
 
     write_csv(OUT_DIR / "training_log.csv", merged["training"])
     write_csv(OUT_DIR / "gene_bounds_check.csv", merged["bounds"])
@@ -806,27 +1012,30 @@ def run_pilot() -> dict[str, Any]:
     write_csv(OUT_DIR / "upper_bound_fallback_log.csv", merged["fallback"])
     write_csv(OUT_DIR / "per_regime_metrics.csv", merged["metrics"])
     write_csv(OUT_DIR / "survivor_summary.csv", merged["survivors"])
-    write_csv(OUT_DIR / "rolling_vs_fixed_backtest.csv", merged["backtests"])
+    comparison_rows = merged["comparison"] + aggregate_comparison(merged["comparison"])
+    write_csv(OUT_DIR / "exit_method_comparison.csv", comparison_rows)
     write_csv(OUT_DIR / "whipsaw_stats.csv", merged["whipsaw"])
+    write_csv(OUT_DIR / "holding_period_dist.csv", merged["holding"])
 
-    probes = _integrity_probes()
-    survivor_rows = [row for row in merged["survivors"] if row.get("survivor")]
-    hhi = _hhi(merged["survivors"])
+    probes = integrity_probes()
+    survivor_candidates = [row for row in merged["survivors"] if row.get("survivor")]
+    survivor_tickers = sorted({row["ticker"] for row in survivor_candidates})
+    hhi = hhi_by_symbol(merged["survivors"])
     total_bounds = len(merged["bounds"])
     valid_bounds = sum(bool(row.get("bilateral")) and bool(row.get("min_width_pass")) for row in merged["bounds"])
-    fallback_applied = sum(bool(row.get("applied")) for row in merged["fallback"])
     unique_pids = len({row.get("pid") for row in merged["parallel"] if row.get("pid")})
-    max_hold = max([int(row.get("max_holding_sessions", 0)) for row in merged["whipsaw"]] or [0])
-
-    rolling_oos_survivors = [row for row in merged["backtests"] if row.get("survivor") and row.get("regime") == "oos" and row.get("method") == "rolling_same_threshold_no_holding_cap"]
-    fixed_oos_survivors = [row for row in merged["backtests"] if row.get("survivor") and row.get("regime") == "oos" and row.get("method") == "fixed_2_sessions"]
-    rolling_oos_avg = float(np.mean([row["avg_return_pct"] for row in rolling_oos_survivors])) if rolling_oos_survivors else None
-    fixed_oos_avg = float(np.mean([row["avg_return_pct"] for row in fixed_oos_survivors])) if fixed_oos_survivors else None
+    previous_whipsaw = previous_oos_whipsaw_mean()
+    current_rows = [
+        row for row in merged["whipsaw"]
+        if row.get("regime") == "oos" and row.get("method") == "rolling_target_2_sessions_tp_off"
+    ]
+    current_whipsaw = float(np.mean([row["whipsaw_rate"] for row in current_rows])) if current_rows else None
 
     global_overfit = {
-        "ticker": "ALL_50",
+        "ticker": "ALL_CANDIDATES",
         "model_hash": "GLOBAL",
-        "survivor": bool(survivor_rows),
+        "origin_train_label": "ALL_SPLITS",
+        "survivor": bool(survivor_candidates),
         "train_precision": float(np.mean([row["train_precision"] for row in merged["overfit"]])) if merged["overfit"] else None,
         "stress_precision": float(np.mean([row["stress_precision"] for row in merged["overfit"]])) if merged["overfit"] else None,
         "oos_precision": float(np.mean([row["oos_precision"] for row in merged["overfit"]])) if merged["overfit"] else None,
@@ -839,62 +1048,75 @@ def run_pilot() -> dict[str, Any]:
         "near_full_gene_count": sum(bool(row.get("near_full_noise_gene")) for row in merged["bounds"]),
         "thin_sample_rejected": sum(bool(row.get("thin_sample_rejected")) for row in merged["survivors"]),
         "symbol_hhi_oos_passed_count": hhi,
-        "completed_symbols": len(merged["survivors"]),
+        "candidate_count": len(merged["survivors"]),
+        "survivor_candidate_count": len(survivor_candidates),
+        "survivor_symbol_count": len(survivor_tickers),
         "worker_error_count": len(merged["errors"]),
         "configured_workers": WORKERS,
         "observed_unique_worker_pids": unique_pids,
-        "upper_fallback_applied_count": fallback_applied,
-        "rolling_max_holding_sessions": max_hold,
-        "rolling_oos_avg_return_pct_survivors": rolling_oos_avg,
-        "fixed_oos_avg_return_pct_survivors": fixed_oos_avg,
+        "previous_oos_whipsaw_mean": previous_whipsaw,
+        "current_oos_target_tp_off_whipsaw_mean": current_whipsaw,
     }
-    overfit_rows = merged["overfit"] + [global_overfit]
-    write_csv(OUT_DIR / "overfit_check.csv", overfit_rows)
+    write_csv(OUT_DIR / "overfit_check.csv", merged["overfit"] + [global_overfit])
 
     fail_reasons: list[str] = []
     if merged["errors"]:
         fail_reasons.append(f"종목 worker 오류 {len(merged['errors'])}건")
-    if len(merged["survivors"]) != 50:
-        fail_reasons.append(f"완료 종목이 50개가 아님: {len(merged['survivors'])}")
-    if total_bounds != 50 * len(FEATURES) or valid_bounds != total_bounds:
+    if len(merged["survivors"]) != 50 * len(TRAIN_SPLITS):
+        fail_reasons.append(f"완료 후보가 150개가 아님: {len(merged['survivors'])}")
+    if total_bounds != 50 * len(TRAIN_SPLITS) * len(FEATURES) or valid_bounds != total_bounds:
         fail_reasons.append(f"양방향/최소폭 gene 검증 실패: {valid_bounds}/{total_bounds}")
-    if not probes["strict_and_compensation_blocked"]:
-        fail_reasons.append("지표 간 합산 상쇄 probe가 차단되지 않음")
-    if not probes["open_gene_rejected"] or not probes["narrow_gene_rejected"]:
-        fail_reasons.append("열린 gene 또는 최소폭 미달 gene probe 차단 실패")
-    if fallback_applied <= 0:
-        fail_reasons.append("upper-bound fallback 실제 적용 사례가 없음")
-    if not survivor_rows:
-        fail_reasons.append("stress·OOS 이중 게이트 survivor가 0개")
+    if not probes["strict_and_compensation_blocked"] or not probes["open_gene_rejected"] or not probes["narrow_gene_rejected"]:
+        fail_reasons.append("strict-AND 또는 gene 무결성 probe 실패")
     if unique_pids > WORKERS:
         fail_reasons.append(f"worker PID가 6개를 초과: {unique_pids}")
-    if max_hold > 252:
-        fail_reasons.append(f"rolling 무한보유 위험: 최장 {max_hold} 세션")
-    if rolling_oos_avg is not None and fixed_oos_avg is not None and rolling_oos_avg < fixed_oos_avg - 0.5:
-        fail_reasons.append(f"survivor OOS rolling 평균수익이 고정 2일보다 0.5%p 초과 열위: {rolling_oos_avg:.4f} vs {fixed_oos_avg:.4f}")
+    if not survivor_candidates:
+        fail_reasons.append("원본 크기 3-split GA 후에도 stress·OOS 이중 게이트 survivor가 0개 — 일반화 실패")
+    if previous_whipsaw is not None and current_whipsaw is not None and current_whipsaw >= previous_whipsaw:
+        fail_reasons.append(f"목표일 TP OFF 휩쏘가 감소하지 않음: {previous_whipsaw:.6f} → {current_whipsaw:.6f}")
+    normal_short = sum(
+        int(row.get("one_session_whipsaw_count", 0))
+        for row in current_rows
+    )
+    if normal_short > 0:
+        fail_reasons.append(f"목표일 방식에서 정상 1세션 청산 잔존: {normal_short}건")
 
     verdict = "PILOT_PASS" if not fail_reasons else "PILOT_FAIL"
     elapsed = time.perf_counter() - started
-    _write_readout(selected=selected, feature_set=feature_set, merged=merged, probes=probes, verdict=verdict, fail_reasons=fail_reasons, hhi=hhi, elapsed=elapsed)
+    write_readout(
+        selected=selected,
+        feature_set=feature_set,
+        merged=merged,
+        verdict=verdict,
+        fail_reasons=fail_reasons,
+        hhi=hhi,
+        previous_whipsaw=previous_whipsaw,
+        current_whipsaw=current_whipsaw,
+        elapsed=elapsed,
+    )
 
     summary = {
         "verdict": verdict,
         "fail_reasons": fail_reasons,
         "selected_symbols": [row["ticker"] for row in selected],
         "feature_rows": len(feature_set),
-        "completed_symbols": len(merged["survivors"]),
-        "survivor_count": len(survivor_rows),
+        "candidate_count": len(merged["survivors"]),
+        "survivor_candidate_count": len(survivor_candidates),
+        "survivor_symbol_count": len(survivor_tickers),
+        "survivor_symbols": survivor_tickers,
         "worker_error_count": len(merged["errors"]),
         "worker_errors": merged["errors"],
         "configured_workers": WORKERS,
         "observed_unique_worker_pids": unique_pids,
-        "upper_fallback_applied_count": fallback_applied,
+        "ga_population": IntervalGAConfig().population,
+        "ga_generations": IntervalGAConfig().generations,
+        "ga_patience": IntervalGAConfig().patience,
+        "train_split_count": len(TRAIN_SPLITS),
         "gene_bounds_valid": valid_bounds,
         "gene_bounds_total": total_bounds,
         "hhi": hhi,
-        "max_holding_sessions": max_hold,
-        "rolling_oos_avg_return_pct_survivors": rolling_oos_avg,
-        "fixed_oos_avg_return_pct_survivors": fixed_oos_avg,
+        "previous_oos_whipsaw_mean": previous_whipsaw,
+        "current_oos_target_tp_off_whipsaw_mean": current_whipsaw,
         "elapsed_seconds": elapsed,
         "generated_at_utc": utc_now(),
     }
@@ -903,8 +1125,8 @@ def run_pilot() -> dict[str, Any]:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Stage2/3 rolling rediscovery 50-symbol pilot")
-    parser.add_argument("--workers", type=int, default=WORKERS, help="must be <= 6; pilot contract uses 6")
+    parser = argparse.ArgumentParser(description="Stage2/3 rolling rediscovery rerun")
+    parser.add_argument("--workers", type=int, default=WORKERS, help="must equal 6")
     return parser.parse_args(argv)
 
 

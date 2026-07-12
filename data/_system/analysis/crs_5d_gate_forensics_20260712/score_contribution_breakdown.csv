@@ -1,0 +1,13 @@
+component,value,is_five_day_based,status,explanation,evidence
+ma_align,1.073432530260209,YES,RECOVERED,"Aligned_bull uses MA5>MA20>MA60; full component is attributable to a condition containing the 5-day MA, but cannot be subdivided into an independent MA5-only subweight",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+rsi,1.6475902670733407,NO,RECOVERED,"14-period RSI zone",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+bb,1.9410509060649137,NO,RECOVERED,"20-period Bollinger lower proximity",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+macd,0.0,NO,RECOVERED,"no MACD cross",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+volume,0.0,YES,RECOVERED,"Volume_ratio is current volume divided by Volume_MA5; reconstructed ratio 0.8258637 < rulebook threshold 1.2, so no score",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv; engine/core/indicators.py:135-137
+news,0.0,NO,RECOVERED,"first live snapshot stored zero",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+news_topics,0.0,NO,RECOVERED,"first live snapshot stored zero",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+events,-1.6902760885111983,NO,RECOVERED,"first live snapshot event contribution",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+market_multiplier,1.0,NO,RECOVERED,"market entry adjustment disabled",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+five_day_score_total,1.073432530260209,YES,RECOVERED,"ma_align 1.073432530260209 + volume 0.0",derived from recovered components
+final_score,2.971797614887265,MIXED,RECOVERED,"sum of all recovered components",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+consistency_check,0.0,MIXED,RECOVERED,"sum(components)-final_score = 0 within floating-point precision",derived

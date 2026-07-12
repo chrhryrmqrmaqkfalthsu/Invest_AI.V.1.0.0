@@ -1,0 +1,14 @@
+id,scope,classification,logic,code_path,line_range,active_at_crs_first_signal,affects_candidate_pool,affects_shadow_open,affects_score,affects_rank,verdict
+F5-01,core_indicator,SCORE_INPUT,"MA5 = Close rolling mean(5); Aligned_bull = MA5 > MA20 > MA60",engine/core/indicators.py,19-20;108-112;150-153,YES,YES_INDIRECTLY_VIA_SIGNAL_SCORE,YES_INDIRECTLY,YES,NO,FOUND
+F5-02,core_indicator,SCORE_INPUT,"Volume_MA5 = Volume rolling mean(5); Volume_ratio = Volume / Volume_MA5",engine/core/indicators.py,135-137,YES,YES_INDIRECTLY_VIA_SIGNAL_SCORE,YES_INDIRECTLY,YES,NO,FOUND
+F5-03,signal_evaluator,SCORE_ADDITION,"if Aligned_bull then add rulebook weight_ma_align",engine/strategies/evaluator.py,64-78,YES,YES,YES,YES,NO,FOUND
+F5-04,signal_evaluator,SCORE_ADDITION,"if Volume_ratio >= rulebook volume_surge_ratio then add weight_volume_surge",engine/strategies/evaluator.py,124-129,YES,YES,YES,YES,NO,FOUND
+F5-05,live_candidate_pool,POOL_GATE,"KEEP gate + evaluate_signal should_buy; entry_quality allow/block explicitly not used for slot eligibility or ordering",data/_system/ops/live_candidate_slots.py,351-366;386-415,YES,YES,NO,NO,YES_FINAL_SCORE_DESC,"NO_5D_BLOCK_GATE_IN_POOL"
+F5-06,shadow_entry_quality,METRIC,"MA5; recent low5/high5; ret_5d; dist_ma5; bounce_low5; dist_high5",engine/live/elite_shadow_entry_quality.py,69-113,YES,NO,YES,NO,NO,FOUND_DOWNSTREAM_ONLY
+F5-07,shadow_entry_quality,QUALITY_SCORE,"5d low bounce bonus; above MA5 bonus; below MA5 penalty; far below 5d high penalty",engine/live/elite_shadow_entry_quality.py,116-185,YES,NO,YES,NO,NO,FOUND_DOWNSTREAM_ONLY
+F5-08,shadow_entry_quality,BLOCK_GATE,"q_score<45; no_follow; bottom_fishing; overheat reversal; high-risk weak quality; several conditions depend on 5d metrics",engine/live/elite_shadow_entry_quality.py,221-259,YES,NO,YES,NO,NO,FOUND_DOWNSTREAM_ONLY
+F5-09,shadow_trader,ENFORCEMENT,"entry_quality allow=false skips virtual OPEN",engine/live/elite_shadow_trader.py,811-838,YES,NO,YES,NO,NO,FOUND_DOWNSTREAM_ONLY
+F5-10,entry_concentration,RANK_FACTOR,"ret5, dist_ma5, dist_high5 alter concentration base score and ranking",engine/live/elite_entry_concentration.py,62-65;93-113;155-172,YES,NO,YES,NO,YES,FOUND_DOWNSTREAM_ONLY
+F5-11,pullback_forecast,FORECAST_SCORE,"recent low5 and MA5 used for pullback forecast/replay",engine/live/elite_pullback_forecast.py,235-271;314,YES,NO,NO,NO,NO,FOUND_NOT_CANDIDATE_SELECTION
+F5-12,exit_logic,EXIT_ONLY,"MA5, recent high5/low5, ret_5d used for exit omen",engine/live/elite_shadow_exit_omen.py,118-151;511-515,YES,NO,NO,NO,NO,FOUND_EXIT_ONLY
+F5-13,research_only,RESEARCH_GATE,"D-5~D-1 path filter: days_since_high5, range position, pullback from high5",scripts/research/run_stage2_path_filter.py,238-325,NO_LIVE_WIRING_FOUND,NO,NO,NO,NO,RESEARCH_ONLY_NOT_LIVE

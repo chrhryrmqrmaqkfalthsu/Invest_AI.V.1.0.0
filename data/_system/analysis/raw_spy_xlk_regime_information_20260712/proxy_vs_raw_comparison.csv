@@ -1,0 +1,7 @@
+method,feature_set,sample_count,top5_mi_bits_sum,top5_features,proxy_top5_mi_bits_sum,raw_minus_proxy_bits,external_existing14_benchmark_bits,difference_vs_external_bits
+TICKER_MEAN,EXISTING5,2918,0.036957950603,rsi|volume_ratio|bb_position|macd_hist|ma_trend,0.036957950603,0,0.129018469313,-0.0920605187098
+TICKER_MEAN,RAW_ONLY,2918,0.105771493511,gspc_realized_vol20_pct|gspc_ret20_pct|xlk_sector_zscore_ret60|xlk_realized_vol20_pct|xlk_ma20_vs_ma60_pct,0.0826632756714,0.0231082178391,0.129018469313,-0.0232469758022
+TICKER_MEAN,COMBINED,2918,0.114341857467,gspc_realized_vol20_pct|rsi|gspc_ret20_pct|xlk_sector_zscore_ret60|xlk_realized_vol20_pct,0.0967281958267,0.0176136616405,0.129018469313,-0.0146766118455
+TICKER_MEAN_BIAS_ADJUSTED,EXISTING5,2918,0.0195212520066,rsi|volume_ratio|bb_position|ma_trend|macd_hist,0.0195212520066,0,0.129018469313,-0.109497217306
+TICKER_MEAN_BIAS_ADJUSTED,RAW_ONLY,2918,0.041563258007,gspc_ret20_pct|xlk_sector_zscore_ret60|gspc_realized_vol20_pct|sector_dispersion_ret5_pct|xlk_sector_rank_ret60,0.0440255507127,-0.00246229270574,0.129018469313,-0.0874552113058
+TICKER_MEAN_BIAS_ADJUSTED,COMBINED,2918,0.0547758477903,rsi|gspc_ret20_pct|xlk_sector_zscore_ret60|gspc_realized_vol20_pct|sector_dispersion_ret5_pct,0.0570915535149,-0.00231570572466,0.129018469313,-0.0742426215225

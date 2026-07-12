@@ -1,0 +1,104 @@
+{
+  "verdict": "RAW_SAME",
+  "fetch": [
+    {"symbol": "^GSPC", "rows": 1759, "first_date": "2019-07-11", "last_date": "2026-07-10", "stored_to_disk": false},
+    {"symbol": "^VIX", "rows": 1761, "first_date": "2019-07-10", "last_date": "2026-07-10", "stored_to_disk": false},
+    {"symbol": "XLK", "rows": 1759, "first_date": "2019-07-11", "last_date": "2026-07-10", "stored_to_disk": false},
+    {"symbol": "XLF", "rows": 1759, "first_date": "2019-07-11", "last_date": "2026-07-10", "stored_to_disk": false},
+    {"symbol": "XLE", "rows": 1759, "first_date": "2019-07-11", "last_date": "2026-07-10", "stored_to_disk": false},
+    {"symbol": "XLV", "rows": 1759, "first_date": "2019-07-11", "last_date": "2026-07-10", "stored_to_disk": false},
+    {"symbol": "XLY", "rows": 1759, "first_date": "2019-07-11", "last_date": "2026-07-10", "stored_to_disk": false},
+    {"symbol": "XLI", "rows": 1759, "first_date": "2019-07-11", "last_date": "2026-07-10", "stored_to_disk": false}
+  ],
+  "sample": {
+    "tickers": ["AAP", "POWI"],
+    "sector_mapping": "tech",
+    "rows_total": 2918,
+    "rows_by_ticker": {"AAP": 1459, "POWI": 1459},
+    "first_date": "2020-09-09",
+    "last_date": "2026-07-01",
+    "positive_rate": 0.34578478409869773,
+    "market_future_leak_rows": 0
+  },
+  "proxy_reference": {
+    "verdict": "REGIME_MARGINAL",
+    "ticker_mean_combined_top5_bits": 0.0967281958266819,
+    "bias_adjusted_combined_top5_bits": 0.05709155351494823,
+    "bias_adjusted_increment_bits": 0.03757030150830722
+  },
+  "raw_result": {
+    "ticker_mean_existing5_top5_bits": 0.03695795060299749,
+    "ticker_mean_raw_only_top5_bits": 0.10577149351093304,
+    "ticker_mean_combined_top5_bits": 0.11434185746721245,
+    "ticker_mean_combined_top5_features": [
+      "gspc_realized_vol20_pct",
+      "rsi",
+      "gspc_ret20_pct",
+      "xlk_sector_zscore_ret60",
+      "xlk_realized_vol20_pct"
+    ],
+    "bias_adjusted_existing5_top5_bits": 0.01952125200664101,
+    "bias_adjusted_raw_only_top5_bits": 0.041563258006991254,
+    "bias_adjusted_combined_top5_bits": 0.054775847790289524,
+    "bias_adjusted_combined_top5_features": [
+      "rsi",
+      "gspc_ret20_pct",
+      "xlk_sector_zscore_ret60",
+      "gspc_realized_vol20_pct",
+      "sector_dispersion_ret5_pct"
+    ],
+    "bias_adjusted_increment_bits": 0.035254595783648514,
+    "raw_minus_proxy_ticker_mean_combined_bits": 0.017613661640530548,
+    "raw_minus_proxy_bias_adjusted_combined_bits": -0.0023157057246587093,
+    "raw_minus_proxy_bias_adjusted_increment_bits": -0.0023157057246587093,
+    "low_redundancy_top5_features": [
+      "rsi",
+      "gspc_ret20_pct",
+      "xlk_sector_zscore_ret60",
+      "gspc_realized_vol20_pct",
+      "sector_dispersion_ret5_pct"
+    ],
+    "low_redundancy_top5_bits": 0.054775847790289524,
+    "cross_ticker_significant_raw_features": ["xlk_sector_zscore_ret60"]
+  },
+  "decision_rule": {
+    "material_bits_10pct_external": 0.012901846931275558,
+    "requires_ticker_mean_combined_improvement_at_least": 0.012901846931275558,
+    "requires_bias_adjusted_combined_improvement_at_least": 0.01,
+    "requires_bias_adjusted_increment_improvement_at_least": 0.01,
+    "requires_cross_ticker_significant_low_redundancy_feature": true,
+    "result": {
+      "ticker_mean_combined_condition": true,
+      "bias_adjusted_combined_condition": false,
+      "bias_adjusted_increment_condition": false,
+      "cross_ticker_feature_condition": true
+    }
+  },
+  "benchmark": {
+    "existing_14_l2_top5_mi_bits": 0.12901846931275557,
+    "raw_ticker_mean_combined_difference_bits": -0.01467661184554312,
+    "raw_bias_adjusted_combined_difference_bits": -0.07424262152246605
+  },
+  "strongest_cross_ticker_raw_feature": {
+    "feature": "xlk_sector_zscore_ret60",
+    "AAP_mi_bits": 0.0125495473768,
+    "POWI_mi_bits": 0.0288707436428,
+    "ticker_mean_bias_adjusted_mi_bits": 0.0117360378789,
+    "ticker_mean_empirical_p": 0.049504950495,
+    "max_abs_corr_with_existing5": 0.136062270289
+  },
+  "feature_contract": {
+    "stock_features": "D-5 strict-interval features",
+    "raw_market_features": "latest raw market row on or before D0-1 calendar day",
+    "market_symbol": "^GSPC",
+    "sector_symbol": "XLK",
+    "cross_section": ["XLK", "XLF", "XLE", "XLV", "XLY", "XLI"],
+    "raw_fetch_written_to_disk": false
+  },
+  "input_sha256": {
+    "market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "AAP_ohlcv.csv": "6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717",
+    "POWI_ohlcv.csv": "bd683b376899ff9784eb86a807bd154f74502c8f0bb025ceb120b3e16b8fb400"
+  },
+  "ga_or_training_run": false
+}

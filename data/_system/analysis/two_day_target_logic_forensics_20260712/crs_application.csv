@@ -1,0 +1,25 @@
+item,value,status,meaning,evidence
+candidate_id,stage3:CRS:8695c9ce3320,RECOVERED,,data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+first_signal_time_et,2026-07-09T13:20:33.590054-04:00,RECOVERED,,data/_system/analysis/crs_full_forensics_20260711/crs_timeline.csv
+first_signal_price,600.8599853515625,RECOVERED,,data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+individual_signal_threshold,2.5574757832651467,RECOVERED,"CRS-specific GA gene; entry baseline",exp_batch_stage123_2009_20260616_full/tickers/CRS/stage3/final_rulebooks.jsonl:25
+first_final_score,2.971797614887265,RECOVERED,"composite live score",data/_system/analysis/crs_full_forensics_20260711/recovery_ledger.csv
+score_threshold_ratio,1.1620042052140767,DERIVED_CONFIRMED,"16.20% above CRS own signal threshold; dashboard ratio concept",derived from recovered score and threshold
+threshold_margin,0.41432183162211844,RECOVERED,"why official candidate gate passed",data/_system/analysis/crs_full_forensics_20260711/crs_timeline.csv
+historical_expectancy_pct,12.288218258394188,RECOVERED,"backtest average trade return under CRS exit rule; not a 2-day forecast",exp_batch_stage123_2009_20260616_full/tickers/CRS/stage3/final_rulebooks.jsonl:25
+historical_avg_return_pct,12.288218258394188,RECOVERED,"same stored bull metric",exp_batch_stage123_2009_20260616_full/tickers/CRS/stage3/final_rulebooks.jsonl:25
+take_profit_atr,2.3721276347759157,RECOVERED,"individual exit gene; not 2-day target",exp_batch_stage123_2009_20260616_full/tickers/CRS/stage3/final_rulebooks.jsonl:25
+atr_at_reconstruction,23.387070024602597,PARTIALLY_RECOVERED,"diagnostic/reconstructed signal-period ATR",data/_system/analysis/crs_underperformance_20260711/crs_basic_and_reasons.csv
+implied_take_profit_move_pct,9.232952177592535,DERIVED_PARTIAL,"ATR * take_profit_atr / signal price; not a guaranteed or 2-day expected rise",derived
+implied_take_profit_price,656.3371004533618,DERIVED_PARTIAL,"reference only",derived
+ma5,600.9259887695313,PARTIALLY_RECOVERED,"five-day state reconstruction",data/_system/analysis/crs_5d_gate_forensics_20260712/crs_signal_five_day_values.csv
+price_vs_ma5_pct,-0.010983618482518498,PARTIALLY_RECOVERED,"almost exactly at MA5",data/_system/analysis/crs_5d_gate_forensics_20260712/crs_signal_five_day_values.csv
+high5,625.989990234375,PARTIALLY_RECOVERED,"five-day high",data/_system/analysis/crs_5d_gate_forensics_20260712/crs_signal_five_day_values.csv
+low5,576.1599731445312,PARTIALLY_RECOVERED,"five-day low",data/_system/analysis/crs_5d_gate_forensics_20260712/crs_signal_five_day_values.csv
+range_position_pct,49.56854050942229,PARTIALLY_RECOVERED,"middle of five-day range",data/_system/analysis/crs_5d_gate_forensics_20260712/crs_signal_five_day_values.csv
+ret_5d_pct,-2.590629791871546,PARTIALLY_RECOVERED,"not a standard candidate block",data/_system/analysis/crs_5d_gate_forensics_20260712/crs_signal_five_day_values.csv
+ma_align_score_contribution,1.073432530260209,RECOVERED,"five-day MA participates in this binary alignment score",data/_system/analysis/crs_5d_gate_forensics_20260712/score_contribution_breakdown.csv
+volume_5d_score_contribution,0.0,RECOVERED,"Volume_MA5 ratio did not reach CRS threshold",data/_system/analysis/crs_5d_gate_forensics_20260712/score_contribution_breakdown.csv
+exact_2day_2to3pct_prediction,,NOT_FOUND,"No CRS predictor artifact or live field for this target",repository and artifact search
+crs_range_payoff_experiment_artifact,,NOT_FOUND,"CRS did not appear in located range/payoff experiment outputs",experiment directory search
+official_pass_reason,"score 2.9717976 >= individual threshold 2.5574758",RECOVERED,"CRS passed due composite score, principally MA alignment RSI BB offset by Event; not because a 2-day target predictor approved it",data/_system/analysis/crs_full_forensics_20260711/readout.md

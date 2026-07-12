@@ -1,0 +1,37 @@
+# Regime·섹터 feature 정보량 산출물 SHA-256
+
+```text
+existing_new_correlation_matrix.csv
+290875ae4c91eb2084ed92163758185ecef220ec117e00efd9bfc1df24580543
+
+feature_information.csv
+17dbfe639ff8a356e8ef0ed75e11844424911b4e684e500b498d551751db36d4
+
+process_audit.md
+cd9587636146b5ba58c884808a8fb05c4c8b470cd5abd0e1b4cf4b69cf6eb15d
+
+readout.md
+0a4f590e414491edb962238d2694c689a4a416ba610445423fb5381a6572bb19
+
+robust_mi_diagnostics.csv
+68e3a4b23a267e85916aa57e661c33e9dc4da71ba5daab6ae4756bd4cc5b08cc
+
+summary.json
+7ad6eb6fcd3806330f8afd78366af8cfdc5edaf9a0c36499b8a44be8275572ea
+
+three_way_information_comparison.csv
+b2625ae6cad25582e5da70e98a315e9614bc605e140fafdeea2bfcdde119c11c
+```
+
+입력 보호값:
+
+```text
+data/_system/market_history.csv
+35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38
+
+data/_system/analysis/ohlc_snapshot_20260707/AAP_ohlcv.csv
+6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717
+
+data/_system/analysis/ohlc_snapshot_20260707/POWI_ohlcv.csv
+bd683b376899ff9784eb86a807bd154f74502c8f0bb025ceb120b3e16b8fb400
+```

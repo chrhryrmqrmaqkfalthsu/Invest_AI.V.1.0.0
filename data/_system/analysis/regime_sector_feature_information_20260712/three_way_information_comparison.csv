@@ -1,0 +1,10 @@
+method,feature_set,sample_count,top5_mi_bits_sum,top5_features,increment_vs_existing5_bits,difference_vs_external_0_129_bits,external_existing14_l2_benchmark_bits,interpretation
+RAW_POOLED,EXISTING5,2918,0.0201892114588,ma_trend|rsi|volume_ratio|bb_position|macd_hist,0,-0.108829257854,0.129018469313,AAP+POWI pooled strict-interval price features
+RAW_POOLED,NEW_REGIME_SECTOR,2918,0.172831262335,sector_minus_market_score|vix_delta5|sector_vs_sp500_60d_proxy|sector_tech_delta5|market_score,0.152642050876,0.0438127930222,0.129018469313,raw pooled result can overstate repeated market-date information
+RAW_POOLED,COMBINED,2918,0.172831262335,sector_minus_market_score|vix_delta5|sector_vs_sp500_60d_proxy|sector_tech_delta5|market_score,0.152642050876,0.0438127930222,0.129018469313,all Top-5 are new features
+TICKER_MEAN,EXISTING5,2918,0.036957950603,rsi|volume_ratio|bb_position|macd_hist|ma_trend,0,-0.0920605187098,0.129018469313,mean of AAP and POWI feature MI
+TICKER_MEAN,NEW_REGIME_SECTOR,2918,0.0826632756714,sp500_60d_vs_ma20|sector_tech_delta5|market_score|sector_tech_delta20|vix_delta5,0.0457053250684,-0.0463551936413,0.129018469313,new information but below external benchmark
+TICKER_MEAN,COMBINED,2918,0.0967281958267,sp500_60d_vs_ma20|rsi|sector_tech_delta5|market_score|sector_tech_delta20,0.0597702452237,-0.0322902734861,0.129018469313,robust comparison used for verdict
+TICKER_MEAN_BIAS_ADJUSTED,EXISTING5,2918,0.0195212520066,rsi|volume_ratio|ma_trend|macd_hist|bb_position,0,-0.109497217306,0.129018469313,circular-shift null mean removed
+TICKER_MEAN_BIAS_ADJUSTED,NEW_REGIME_SECTOR,2918,0.0440255507127,sp500_60d_vs_ma20|sector_tech_delta5|market_score|vix_delta5|sector_tech_delta20,0.0245042987061,-0.0849929186001,0.129018469313,positive unique screening signal remains
+TICKER_MEAN_BIAS_ADJUSTED,COMBINED,2918,0.0570915535149,sp500_60d_vs_ma20|rsi|sector_tech_delta5|market_score|vix_delta5,0.0375703015083,-0.0719269157979,0.129018469313,does not reach material benchmark

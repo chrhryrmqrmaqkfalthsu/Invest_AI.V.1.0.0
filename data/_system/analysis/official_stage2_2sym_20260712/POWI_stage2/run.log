@@ -1,0 +1,17 @@
+2026-07-12 20:58:33,339 INFO stage2 start ticker=POWI out_dir=/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2 seed_base=2026062091 parallel=True
+2026-07-12 20:58:33,950 INFO training mode=parallel train_splits=3 max_workers=3
+2026-07-12 21:04:05,541 INFO train done label=train_3 pid=623055 generations=34 early_stop=True rows=100 elapsed=331.5s
+2026-07-12 21:04:50,179 INFO train done label=train_1 pid=623053 generations=42 early_stop=True rows=100 elapsed=376.2s
+2026-07-12 21:06:42,177 INFO train done label=train_2 pid=623054 generations=50 early_stop=False rows=100 elapsed=488.2s
+2026-07-12 21:06:42,236 INFO eval start period=stress_pre_2022h1 reached=300
+2026-07-12 21:07:23,322 INFO eval done period=stress_pre_2022h1 pass=27
+2026-07-12 21:07:23,322 INFO eval start period=train_3_eval reached=27
+2026-07-12 21:07:28,535 INFO eval done period=train_3_eval pass=15
+2026-07-12 21:07:28,535 INFO eval start period=train_2_eval reached=15
+2026-07-12 21:07:31,028 INFO eval done period=train_2_eval pass=0
+2026-07-12 21:07:31,028 INFO eval start period=train_1_eval reached=0
+2026-07-12 21:07:31,028 INFO eval done period=train_1_eval pass=0
+2026-07-12 21:07:31,028 INFO eval start period=oos_2025h2 reached=0
+2026-07-12 21:07:31,028 INFO eval done period=oos_2025h2 pass=0
+2026-07-12 21:07:32,008 INFO stage2 rl_replay_trades written path=/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2/rl_replay_trades.jsonl rows=5306 missing_field_counts={'entry_rulebook_hash': 5306, 'exit_rank': 5306, 'final_rulebook_hash': 5306} critical_null_counts={}
+2026-07-12 21:07:32,009 INFO stage2 done ticker=POWI survivors=0 elapsed=538.7s

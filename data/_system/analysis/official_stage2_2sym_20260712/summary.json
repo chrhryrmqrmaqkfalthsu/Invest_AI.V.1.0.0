@@ -1,0 +1,106 @@
+{
+  "verdict": "MARKET_NEUTRAL",
+  "phase1": {
+    "passed": true,
+    "market_history_rows": 1759,
+    "market_history_first_date": "2019-07-11",
+    "market_history_last_date": "2026-07-10",
+    "market_history_sha256": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "tickers": {
+      "AAP": {
+        "sector_name": "tech",
+        "sector_column": "sector_tech",
+        "lookup_gate_pass": true
+      },
+      "POWI": {
+        "sector_name": "tech",
+        "sector_column": "sector_tech",
+        "lookup_gate_pass": true
+      }
+    }
+  },
+  "execution": {
+    "official_entrypoint": "scripts/research/run_stage2.py",
+    "parallel_train_splits": 3,
+    "maximum_observed_workers": 3,
+    "fitness_mode": "swing",
+    "use_llm_events": false,
+    "fitness_cache_enabled": false,
+    "runtime_market_loader_protection": true,
+    "official_source_modified": false
+  },
+  "results": {
+    "AAP": {
+      "generated_rulebooks": 300,
+      "generations_by_train": {
+        "train_1": 30,
+        "train_2": 50,
+        "train_3": 39
+      },
+      "stress_reached": 300,
+      "stress_passed": 3,
+      "stress_pass_rate": 0.01,
+      "stress_mean_trade_win_rate_pct": 48.60677515788028,
+      "stress_passed_mean_trade_win_rate_pct": 73.73544973544973,
+      "stress_passed_mean_expectancy_pct": 1.437879031113207,
+      "train_3_reached": 3,
+      "train_3_passed": 0,
+      "oos_reached": 0,
+      "survivor_count": 0,
+      "all_rulebooks_market_gene_active": 93,
+      "all_rulebooks_market_gene_active_rate": 0.31,
+      "stress_passers_market_gene_active": 1,
+      "stress_passers_count": 3,
+      "trade_rows": 7430,
+      "market_adjusted_trade_rows": 2877,
+      "market_adjusted_trade_share": 0.38721399730820993,
+      "market_adjustment_mean": 1.029069250171315,
+      "market_adjustment_min": 0.5837783821242724,
+      "market_adjustment_max": 1.9078654074852257,
+      "elapsed_sec": 493.0071270465851
+    },
+    "POWI": {
+      "generated_rulebooks": 300,
+      "generations_by_train": {
+        "train_1": 42,
+        "train_2": 50,
+        "train_3": 34
+      },
+      "stress_reached": 300,
+      "stress_passed": 27,
+      "stress_pass_rate": 0.09,
+      "stress_mean_trade_win_rate_pct": 53.72490988599021,
+      "stress_passed_mean_trade_win_rate_pct": 66.25813285399342,
+      "stress_passed_mean_expectancy_pct": 1.7097303747682913,
+      "train_3_reached": 27,
+      "train_3_passed": 15,
+      "train_2_reached": 15,
+      "train_2_passed": 0,
+      "oos_reached": 0,
+      "survivor_count": 0,
+      "all_rulebooks_market_gene_active": 196,
+      "all_rulebooks_market_gene_active_rate": 0.6533333333333333,
+      "stress_passers_market_gene_active": 14,
+      "stress_passers_count": 27,
+      "train_3_passers_market_gene_active": 2,
+      "train_3_passers_count": 15,
+      "trade_rows": 5306,
+      "market_adjusted_trade_rows": 3521,
+      "market_adjusted_trade_share": 0.6635883905013192,
+      "market_adjustment_mean": 0.9997416012430772,
+      "market_adjustment_min": 0.3630962268656016,
+      "market_adjustment_max": 2.0,
+      "elapsed_sec": 538.6724019050598
+    }
+  },
+  "pilot_baseline": {
+    "model": "floored grouped interval lambda=0",
+    "market_context": false,
+    "stress_average_binary_precision_pct": 43.26,
+    "selected_pooled_oos_binary_precision_pct": 58.06,
+    "selected_oos_binary_coverage_pct": 18.45,
+    "survivor_count": 0
+  },
+  "comparison_limit": "Pilot binary precision/coverage and official Stage2 trade win-rate/gate metrics are not equivalent.",
+  "decision_reason": "Market context was loaded and materially changed trade signal scores, but neither ticker produced an OOS-reached candidate or survivor. Therefore MARKET_HELPS is unsupported and MARKET_UNUSED is false."
+}

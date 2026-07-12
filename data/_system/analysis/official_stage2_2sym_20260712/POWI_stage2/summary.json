@@ -1,0 +1,77 @@
+{
+  "actual_eval_ratio": 0.228,
+  "actual_period_evaluations": 342,
+  "elapsed_sec": 538.6724019050598,
+  "fail_counts_by_first_failed_period": {
+    "stress_pre_2022h1": 273,
+    "train_2_eval": 15,
+    "train_3_eval": 12
+  },
+  "fitness_cache": {
+    "enabled": false,
+    "hit_rate": 0.0,
+    "hits": 0,
+    "misses": 0,
+    "unique_keys": 0
+  },
+  "fitness_cache_by_train": {
+    "train_1": {
+      "enabled": false,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 0,
+      "unique_keys": 0
+    },
+    "train_2": {
+      "enabled": false,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 0,
+      "unique_keys": 0
+    },
+    "train_3": {
+      "enabled": false,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 0,
+      "unique_keys": 0
+    }
+  },
+  "ga_average_generations_run": 42.0,
+  "ga_early_stop_triggered_by_train": {
+    "train_1": true,
+    "train_2": false,
+    "train_3": true
+  },
+  "ga_early_stop_triggered_count": 2,
+  "ga_generations_run_by_train": {
+    "train_1": 42,
+    "train_2": 50,
+    "train_3": 34
+  },
+  "generated_rulebook_rows": 300,
+  "max_period_evaluations": 1500,
+  "outputs": {
+    "config": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2/config.json",
+    "early_cut_log": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2/early_cut_log.csv",
+    "ga_history": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2/ga_history.csv",
+    "period_metrics_all": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2/period_metrics_all.csv",
+    "rulebooks_all": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2/rulebooks_all.jsonl",
+    "run_log": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2/run.log",
+    "summary": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2/summary.json",
+    "survivors": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2/survivors.jsonl",
+    "trades": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/POWI_stage2/trades.jsonl"
+  },
+  "parallel": {
+    "enabled": true,
+    "live_runner_reserved_cores": 1,
+    "note": "Parallel mode runs independent train splits in separate processes; GA engine has no internal worker parameter.",
+    "system_cpu": 8,
+    "train_splits_parallel": 3
+  },
+  "period_eval_saved_ratio": 0.772,
+  "survivor_count": 0,
+  "survivor_hashes": [],
+  "ticker": "POWI",
+  "unique_rulebook_hashes": 300
+}

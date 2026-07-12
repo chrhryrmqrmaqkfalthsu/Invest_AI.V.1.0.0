@@ -1,0 +1,229 @@
+{
+  "constraints": {
+    "code_body_modified": false,
+    "live_engine_modified": false,
+    "parameters_manifest_positions_trade_log_market_state_modified": false
+  },
+  "created_at_unix": 1783889392.1211467,
+  "data": {
+    "adv_usd_252d": 101771853.93146788,
+    "data_end": "2026-07-10",
+    "data_start": "2020-06-15",
+    "rows": 1525,
+    "sell_omen_score": {
+      "added_columns": [
+        "sell_omen_model_train_end",
+        "sell_omen_score",
+        "sell_omen_score_year"
+      ],
+      "available": true,
+      "coverage": 0.39344262295081966,
+      "matched_rows": 600,
+      "score_max": 0.81137879359898,
+      "score_min": 0.1577570346203378,
+      "score_table_path": "data/_system/ml_sell_omen/sell_omen_scores.csv"
+    },
+    "sentiment_days": 293
+  },
+  "early_cut_order": [
+    "stress_pre_2022h1",
+    "train_3_eval",
+    "train_2_eval",
+    "train_1_eval",
+    "oos_2025h2"
+  ],
+  "evaluation_periods": [
+    {
+      "end": "2022-06-30",
+      "kind": "stress",
+      "label": "stress_pre_2022h1",
+      "order": 1,
+      "start": "2020-06-15"
+    },
+    {
+      "end": "2025-06-30",
+      "kind": "train",
+      "label": "train_3_eval",
+      "order": 2,
+      "start": "2024-07-01"
+    },
+    {
+      "end": "2024-06-30",
+      "kind": "train",
+      "label": "train_2_eval",
+      "order": 3,
+      "start": "2023-07-01"
+    },
+    {
+      "end": "2023-06-30",
+      "kind": "train",
+      "label": "train_1_eval",
+      "order": 4,
+      "start": "2022-07-01"
+    },
+    {
+      "end": "2026-07-10",
+      "kind": "oos",
+      "label": "oos_2025h2",
+      "order": 5,
+      "start": "2025-07-01"
+    }
+  ],
+  "fitness_cache": {
+    "add_buy_runtime_enabled": false,
+    "cache_schema_version": 1,
+    "code_commit": "8c28da3a70bc14b2dabf072fe6a026fccbfade66",
+    "enabled": false,
+    "toggle": "default off; enable with --fitness-cache or KINGMAKER_FITNESS_CACHE=1; --no-fitness-cache is accepted as a no-op compatibility flag",
+    "type": "in_memory_process_local"
+  },
+  "ga": {
+    "early_stop_no_improve": 15,
+    "elite_ratio": 0.2,
+    "generations": 50,
+    "mutation_rate": 0.15,
+    "mutation_strength": 0.2,
+    "population": 100,
+    "random_seed_base": 2026061735,
+    "seed_pattern_ratio": 0.33,
+    "tournament_size": 3
+  },
+  "gate": {
+    "config": {
+      "min_member_score": 10.0,
+      "min_trades": 5,
+      "oos_keep_trade_member_gate": true,
+      "oos_min_expectancy_pct": 1.0,
+      "oos_min_mdd_pct": -15.0,
+      "stress_min_expectancy_pct": 1.0,
+      "stress_min_mdd_pct": -20.0,
+      "stress_min_return_mdd_ratio": 1.0,
+      "train_min_expectancy_pct": 1.0
+    },
+    "function": "stage2_fail_reasons",
+    "hash_unit": "rulebook_hash",
+    "member_score_policy": "topn_survivor._score_period_candidates: expectancy 0.70 + profit_factor 0.20 + drawdown 0.10, win_rate excluded; scored over entities that reached the period",
+    "module": "engine.pipeline.stage2_gate",
+    "period_kind_policy": {
+      "oos_2025h2": "oos",
+      "stress_pre_2022h1": "stress",
+      "train_1_eval": "train",
+      "train_2_eval": "train",
+      "train_3_eval": "train"
+    }
+  },
+  "output_dir": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/AAP_stage2",
+  "parallel": {
+    "enabled": true,
+    "live_runner_reserved_cores": 1,
+    "note": "Parallel mode runs independent train splits in separate processes; GA engine has no internal worker parameter.",
+    "system_cpu": 8,
+    "train_splits_parallel": 3
+  },
+  "purpose": "AAP ticker-agnostic Stage 2 definition validation; research-only; not live trading",
+  "summary": {
+    "actual_eval_ratio": 0.202,
+    "actual_period_evaluations": 303,
+    "elapsed_sec": 493.0071270465851,
+    "fail_counts_by_first_failed_period": {
+      "stress_pre_2022h1": 297,
+      "train_3_eval": 3
+    },
+    "fitness_cache": {
+      "enabled": false,
+      "hit_rate": 0.0,
+      "hits": 0,
+      "misses": 0,
+      "unique_keys": 0
+    },
+    "fitness_cache_by_train": {
+      "train_1": {
+        "enabled": false,
+        "hit_rate": 0.0,
+        "hits": 0,
+        "misses": 0,
+        "unique_keys": 0
+      },
+      "train_2": {
+        "enabled": false,
+        "hit_rate": 0.0,
+        "hits": 0,
+        "misses": 0,
+        "unique_keys": 0
+      },
+      "train_3": {
+        "enabled": false,
+        "hit_rate": 0.0,
+        "hits": 0,
+        "misses": 0,
+        "unique_keys": 0
+      }
+    },
+    "ga_average_generations_run": 39.666666666666664,
+    "ga_early_stop_triggered_by_train": {
+      "train_1": true,
+      "train_2": false,
+      "train_3": true
+    },
+    "ga_early_stop_triggered_count": 2,
+    "ga_generations_run_by_train": {
+      "train_1": 30,
+      "train_2": 50,
+      "train_3": 39
+    },
+    "generated_rulebook_rows": 300,
+    "max_period_evaluations": 1500,
+    "outputs": {
+      "config": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/AAP_stage2/config.json",
+      "early_cut_log": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/AAP_stage2/early_cut_log.csv",
+      "ga_history": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/AAP_stage2/ga_history.csv",
+      "period_metrics_all": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/AAP_stage2/period_metrics_all.csv",
+      "rulebooks_all": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/AAP_stage2/rulebooks_all.jsonl",
+      "run_log": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/AAP_stage2/run.log",
+      "summary": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/AAP_stage2/summary.json",
+      "survivors": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/AAP_stage2/survivors.jsonl",
+      "trades": "/home/g3000kkw/kingmaker/data/_system/analysis/official_stage2_2sym_20260712/AAP_stage2/trades.jsonl"
+    },
+    "parallel": {
+      "enabled": true,
+      "live_runner_reserved_cores": 1,
+      "note": "Parallel mode runs independent train splits in separate processes; GA engine has no internal worker parameter.",
+      "system_cpu": 8,
+      "train_splits_parallel": 3
+    },
+    "period_eval_saved_ratio": 0.798,
+    "survivor_count": 0,
+    "survivor_hashes": [],
+    "ticker": "AAP",
+    "unique_rulebook_hashes": 300
+  },
+  "ticker": "AAP",
+  "trade_persistence": {
+    "heavy_trade_keys_omitted": [
+      "backtest_params_full",
+      "entry_context_full",
+      "exit_context_full",
+      "holding_path_full",
+      "rulebook_full"
+    ],
+    "reason": "trades.jsonl preserves trade-level MFE/MAE and scalar diagnostics while avoiding very large full context dumps; full rulebook params are in rulebooks_all.jsonl",
+    "trade_rows_compacted": true
+  },
+  "train_splits": [
+    {
+      "label": "train_1",
+      "train_end": "2023-06-30",
+      "train_start": "2022-07-01"
+    },
+    {
+      "label": "train_2",
+      "train_end": "2024-06-30",
+      "train_start": "2023-07-01"
+    },
+    {
+      "label": "train_3",
+      "train_end": "2025-06-30",
+      "train_start": "2024-07-01"
+    }
+  ]
+}

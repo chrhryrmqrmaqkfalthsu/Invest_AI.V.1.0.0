@@ -1,0 +1,18 @@
+{
+  "initial_population": {
+    "population": 1000,
+    "invalid_count": 0,
+    "valid_count": 1000,
+    "invalid_reasons": {},
+    "passed": true
+  },
+  "offspring_population": {
+    "population": 1000,
+    "invalid_count": 0,
+    "valid_count": 1000,
+    "invalid_reasons": {},
+    "passed": true
+  },
+  "one_sided_or_nan_count": 0,
+  "passed": true
+}

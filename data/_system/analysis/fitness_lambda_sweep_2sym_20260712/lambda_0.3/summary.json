@@ -1,0 +1,65 @@
+{
+  "actual_worker_pids": [
+    610682,
+    610683,
+    610684,
+    610685,
+    610686,
+    610687
+  ],
+  "candidate_stats": {
+    "candidate_count": 6,
+    "oos_avg_precision": 0.5616103041558943,
+    "oos_gate_count": 0,
+    "stress_avg_precision_cheating": 0.7000821018062396,
+    "stress_gate_count": 1,
+    "survivor_count": 0,
+    "train_avg_precision": 0.8537878787878789
+  },
+  "consistency_lambda": 0.3,
+  "elapsed_seconds": 2.483606702007819,
+  "fallback_source": "TRAIN_ONLY",
+  "fitness_module_sha_expected_unchanged": "4c716806d69e8d3f3d1321113f0bfe9ed2b696328da08ae2783caa57b24bc8c6",
+  "gene_domain_source": "TRAIN_ONLY",
+  "generated_at_utc": "2026-07-12T18:39:01.096165+00:00",
+  "lambda_source": "RUNTIME_CONSTANT_ONLY",
+  "max_parallel_workers": 6,
+  "selected_models": {
+    "AAP": {
+      "group_thresholds": {
+        "G1_PULLBACK": 3,
+        "G2_VOLATILITY": 3,
+        "G3_RANGE_EXPANSION": 2,
+        "G4_VOLUME_CONFIRMATION": 2
+      },
+      "model_hash": "4c864eb552a8500fd0d14c2b093e85d797037d135a796eb01ff74035550d4b8f",
+      "origin_train_label": "train_1",
+      "selection_rule": "NON_SURVIVOR_highest_train_fitness_among_stress_pass",
+      "survivor": false
+    },
+    "POWI": {
+      "group_thresholds": {
+        "G1_PULLBACK": 3,
+        "G2_VOLATILITY": 2,
+        "G3_RANGE_EXPANSION": 2,
+        "G4_VOLUME_CONFIRMATION": 2
+      },
+      "model_hash": "f224ea1271f00ea7c9525e8516f4208086fcf66e6ce08bad02b3746f1cf57693",
+      "origin_train_label": "train_1",
+      "selection_rule": "NON_SURVIVOR_highest_train_fitness",
+      "survivor": false
+    }
+  },
+  "selected_pooled_metrics": {
+    "avg_return_pct": -0.09294597122588719,
+    "compounded_return_pct": -14.642017299569698,
+    "max_drawdown_pct": -45.382550744031725,
+    "oos_coverage": 0.1488095238095238,
+    "oos_rows": 504,
+    "oos_signal_count": 75,
+    "selected_oos_precision": 0.48,
+    "trade_count": 45,
+    "win_rate": 0.5333333333333333
+  },
+  "stress_role": "FITNESS_SCORER_ONLY_CHEATING_NOT_INDEPENDENT"
+}

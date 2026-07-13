@@ -2,7 +2,8 @@
 """Stage 3 strict-entry wiring wrapper.
 
 원본 구현의 단계 순서와 exit/validate 경로는 그대로 유지하고 qualify와
-entry만 strict entry scope에 연결한다.
+entry만 strict entry scope에 연결한다. Strict entry 기술 feature는
+신호일 D 기준 D-5 거래일 값으로 학습·생성·평가·interval-break를 정렬한다.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ import pandas as pd
 _BACKUP_NAME = "run_stage3_aggressive.py.bak.before_qualify_eval_early_stop_20260706_001"
 _BACKUP_PATH = Path(__file__).resolve().with_name(_BACKUP_NAME)
 _MODULE_NAME = "_kingmaker_stage3_aggressive_original_20260706"
-ENTRY_PHASE_CACHE_MODE = "entry_provisional_interval_break_v1"
+ENTRY_PHASE_CACHE_MODE = "entry_provisional_interval_break_d5_v2"
 ENTRY_PHASE_MAX_HOLDING_DAYS = 7
 
 
@@ -43,10 +44,13 @@ def _load_original_module() -> Any:
 _base = _load_original_module()
 
 from engine.learning import execution_mode_backtest as _execution_backtest  # noqa: E402
+from engine.strategies.evaluator import TECHNICAL_FEATURE_LAG_TRADING_DAYS  # noqa: E402
 from engine.strategies.rulebook import (  # noqa: E402
     ENTRY_INTERVAL_MIN_FEATURE_SUPPORT,
     ENTRY_INTERVAL_SPECS,
 )
+
+TECHNICAL_FEATURE_LAG_MODE = f"strict_entry_d{TECHNICAL_FEATURE_LAG_TRADING_DAYS}_v1"
 
 
 def _date_series(df: pd.DataFrame) -> pd.Series:
@@ -63,7 +67,12 @@ def build_entry_feature_domain(
     start: str | None,
     end: str | None,
 ) -> dict[str, dict[str, Any]]:
-    """한 train fold의 정렬된 5개 raw feature와 q01/q99/IQR을 계산한다."""
+    """한 train fold의 D-5 정렬 feature domain과 raw support values를 계산한다.
+
+    원시 지표로 5개 feature series를 만든 뒤 전체 시계열에서 ``shift(5)``를
+    적용하고 그 다음 fold 날짜를 자른다. 따라서 신호일 D의 domain/support
+    값은 evaluator와 동일하게 D-5 거래일 행을 참조한다.
+    """
     df = ctx.get("df")
     if not isinstance(df, pd.DataFrame) or df.empty:
         raise ValueError("ticker context df is missing or empty")
@@ -90,12 +99,16 @@ def build_entry_feature_domain(
     frame["bb_position"] = (close - bb_lower) / (bb_upper - bb_lower)
     frame["volume_ratio"] = numeric("Volume_ratio")
 
+    feature_names = tuple(ENTRY_INTERVAL_SPECS)
+    frame.loc[:, list(feature_names)] = frame.loc[:, list(feature_names)].shift(
+        TECHNICAL_FEATURE_LAG_TRADING_DAYS
+    )
+
     if start is not None:
         frame = frame.loc[frame["date"] >= pd.Timestamp(start)]
     if end is not None:
         frame = frame.loc[frame["date"] <= pd.Timestamp(end)]
 
-    feature_names = tuple(ENTRY_INTERVAL_SPECS)
     finite_mask = np.ones(len(frame), dtype=bool)
     for feature_name in feature_names:
         finite_mask &= np.isfinite(frame[feature_name].to_numpy(dtype=float))
@@ -123,7 +136,7 @@ def build_entry_feature_domain(
 
 @contextmanager
 def _entry_phase_execution_context() -> Iterator[None]:
-    """Daily tape를 entry-phase simulate_exit 호출에 주입한다."""
+    """D-5 strict daily tape를 entry-phase simulate_exit 호출에 주입한다."""
     original_builder = _execution_backtest._build_daily_signal_tape
     original_simulate_exit = _execution_backtest.simulate_exit
     state: dict[str, Any] = {}
@@ -158,7 +171,7 @@ def run_entry_backtest_period(
     start: str | None,
     end: str | None,
 ) -> Any:
-    """Qualify/entry 전용 provisional-exit backtest."""
+    """Qualify/entry 전용 D-5 strict provisional-exit backtest."""
     with _entry_phase_execution_context():
         return _base.run_backtest_execution_mode(
             rulebook,
@@ -211,7 +224,7 @@ def run_qualify(
     code_commit: str | None = None,
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Entry-scope qualify with result-preserving cross-period early stop."""
+    """D-5 entry-scope qualify with result-preserving cross-period early stop."""
     started = time.time()
     ctx = context if context is not None else _base.prepare_ticker_context(ticker)
     code_commit = code_commit or _base.resolve_code_commit(_base.PROJECT_ROOT)
@@ -257,6 +270,8 @@ def run_qualify(
             "split": split,
             "seed": split_seed,
             "gene_scope": "entry",
+            "technical_feature_lag_mode": TECHNICAL_FEATURE_LAG_MODE,
+            "technical_feature_lag_trading_days": TECHNICAL_FEATURE_LAG_TRADING_DAYS,
             "entry_domain_sample_count": min(int(v["sample_count"]) for v in entry_feature_domain.values()),
             "generations_run": getattr(ga, "generations_run", None),
             "top_count": len(top_rulebooks),
@@ -280,6 +295,9 @@ def run_qualify(
             "periods": list(_base.TRAIN_SPLITS),
             "seed_base": seed_base,
             "entry_execution_semantics": ENTRY_PHASE_CACHE_MODE,
+            "technical_feature_lag_mode": TECHNICAL_FEATURE_LAG_MODE,
+            "technical_feature_lag_trading_days": TECHNICAL_FEATURE_LAG_TRADING_DAYS,
+            "market_context_lag_days": int(getattr(_base, "FEATURE_LAG_DAYS", 1)),
             "data_start": ctx.get("data_start"),
             "data_end": ctx.get("data_end"),
             "ga_summaries": ga_summaries,
@@ -293,7 +311,7 @@ def run_qualify(
             "early_stopped": bool(early_stopped),
             "early_stop_reason": early_stop_reason,
             "elapsed_seconds": time.time() - started,
-            "note": "entry-scope qualify with fold empirical domains and provisional entry exits",
+            "note": "D-5 entry-scope qualify with shifted fold empirical domains and provisional entry exits",
         }
         _base.write_json(out_dir / "qualify_result.json", result)
         return result
@@ -377,7 +395,7 @@ def run_entry_ga(
     code_commit: str | None = None,
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Stage 3 entry GA wired to strict entry scope and provisional exits."""
+    """Stage 3 entry GA wired to D-5 strict entry scope and provisional exits."""
     qualify_path = out_dir / "qualify_result.json"
     if not qualify_path.exists():
         raise FileNotFoundError(f"missing prerequisite: {qualify_path}")
@@ -430,6 +448,8 @@ def run_entry_ga(
             "rulebook_hash": _base.compute_rulebook_hash(rb),
             "train_period": train_3,
             "gene_scope": "entry",
+            "technical_feature_lag_mode": TECHNICAL_FEATURE_LAG_MODE,
+            "technical_feature_lag_trading_days": TECHNICAL_FEATURE_LAG_TRADING_DAYS,
             "entry_execution_semantics": ENTRY_PHASE_CACHE_MODE,
             "train_fitness": _base.safe_float(metrics.get("fitness")),
             "expectancy_pct": _base.safe_float(metrics.get("expectancy_pct")),
@@ -457,6 +477,9 @@ def run_entry_ga(
         "seed": seed,
         "train_period": train_3,
         "gene_scope": "entry",
+        "technical_feature_lag_mode": TECHNICAL_FEATURE_LAG_MODE,
+        "technical_feature_lag_trading_days": TECHNICAL_FEATURE_LAG_TRADING_DAYS,
+        "market_context_lag_days": int(getattr(_base, "FEATURE_LAG_DAYS", 1)),
         "entry_execution_semantics": ENTRY_PHASE_CACHE_MODE,
         "entry_domain_sample_count": min(int(v["sample_count"]) for v in entry_feature_domain.values()),
         "selection_config": _base.dataclasses.asdict(_base.DEFAULT_STAGE3_ENTRY_SELECTION),

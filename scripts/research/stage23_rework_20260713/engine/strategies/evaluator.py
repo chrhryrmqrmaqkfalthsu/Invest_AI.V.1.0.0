@@ -2,6 +2,7 @@
 매수 신호 평가기
 - legacy schema v1: 기존 가중 합산 score >= threshold 진입
 - strict entry schema v2+: 5개 연속 feature interval의 strict-AND로만 진입
+- strict entry 기술 feature는 신호일 D 기준 D-5 거래일 값을 사용
 - 뉴스·시장·이벤트 합산 점수는 quality score로 보존하며 사이징·정렬·진단에만 사용
 """
 from __future__ import annotations
@@ -24,6 +25,8 @@ from engine.strategies.rulebook import (
 )
 
 log = get_logger("evaluator")
+
+TECHNICAL_FEATURE_LAG_TRADING_DAYS = 5
 
 
 @dataclass
@@ -54,7 +57,7 @@ def _finite_number(value: Any) -> bool:
 
 
 def extract_entry_features(df: pd.DataFrame) -> dict[str, float]:
-    """가장 최근 봉에서 strict entry용 5개 연속 feature를 추출한다.
+    """신호일 D에서 D-5 거래일 행의 strict entry feature를 추출한다.
 
     반환 feature:
       ma_trend      = 0.5 * [(MA5/MA20-1) + (MA20/MA60-1)] * 100
@@ -63,14 +66,16 @@ def extract_entry_features(df: pd.DataFrame) -> dict[str, float]:
       bb_position   = (Close-BB_lower) / (BB_upper-BB_lower)
       volume_ratio  = Volume_ratio
 
-    값은 clip하지 않는다. 계산 불가·누락·비유한 값은 NaN으로 남겨
-    evaluate_entry_intervals()가 fail-closed 처리한다.
+    ``df``의 마지막 행이 신호일 D이며, 참조 행은
+    ``df.iloc[-1 - TECHNICAL_FEATURE_LAG_TRADING_DAYS]``다. 앞쪽 5거래일처럼
+    D-5 행이 없으면 모든 feature를 NaN으로 반환해 strict validator가
+    fail-closed 처리한다. 어떤 값도 clip하지 않는다.
     """
     names = tuple(ENTRY_INTERVAL_SPECS)
-    if df is None or len(df) == 0:
+    if df is None or len(df) <= TECHNICAL_FEATURE_LAG_TRADING_DAYS:
         return {name: float("nan") for name in names}
 
-    row = df.iloc[-1]
+    row = df.iloc[-1 - TECHNICAL_FEATURE_LAG_TRADING_DAYS]
 
     def value(name: str) -> float:
         raw = row.get(name)
@@ -294,7 +299,11 @@ def evaluate_signal(
     event_flags: dict = None,
     topic_features: dict = None,
 ) -> SignalResult:
-    """가장 최근 봉에 대해 진입 판정과 quality score를 계산한다."""
+    """가장 최근 봉 D의 진입 판정과 quality score를 계산한다.
+
+    Strict interval feature는 D-5 거래일 값을 사용한다. Legacy quality
+    component와 D-1로 전달된 시장 context는 기존 의미를 유지한다.
+    """
     if df is None or len(df) < 60:
         return SignalResult(
             should_buy=False,

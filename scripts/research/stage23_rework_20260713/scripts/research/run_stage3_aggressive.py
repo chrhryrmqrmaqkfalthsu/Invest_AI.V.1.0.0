@@ -4,10 +4,15 @@
 원본 구현의 단계 순서와 exit/validate 경로는 그대로 유지하고 qualify와
 entry만 strict entry scope에 연결한다. Strict entry 기술 feature는
 신호일 D 기준 D-5 거래일 값으로 학습·생성·평가·interval-break를 정렬한다.
+
+시장 context는 검증된 repository-root snapshot을 단일 소스로 사용한다.
+파일·SHA·필수 컬럼·거래일 freshness가 하나라도 맞지 않으면 즉시 중단하며,
+이 연구 runner 안에서는 시장 데이터 auto-fetch/auto-regenerate를 금지한다.
 """
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.machinery
 import importlib.util
 import json
@@ -15,8 +20,10 @@ import sys
 import time
 from collections import Counter
 from contextlib import contextmanager
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator, Mapping
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -44,6 +51,9 @@ def _load_original_module() -> Any:
 _base = _load_original_module()
 
 from engine.learning import execution_mode_backtest as _execution_backtest  # noqa: E402
+from engine.live.us_market_calendar import UsMarketCalendar  # noqa: E402
+from engine.market import context as _market_context  # noqa: E402
+from engine.pipeline import context as _pipeline_context  # noqa: E402
 from engine.strategies.evaluator import TECHNICAL_FEATURE_LAG_TRADING_DAYS  # noqa: E402
 from engine.strategies.rulebook import (  # noqa: E402
     ENTRY_INTERVAL_MIN_FEATURE_SUPPORT,
@@ -51,6 +61,248 @@ from engine.strategies.rulebook import (  # noqa: E402
 )
 
 TECHNICAL_FEATURE_LAG_MODE = f"strict_entry_d{TECHNICAL_FEATURE_LAG_TRADING_DAYS}_v1"
+
+
+def _find_repository_root() -> Path:
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / ".git").exists() and (candidate / "data/_system").is_dir():
+            return candidate
+    raise RuntimeError("cannot resolve kingmaker repository root for Stage3 market snapshot")
+
+
+REPOSITORY_ROOT = _find_repository_root()
+RESEARCH_MARKET_HISTORY_SOURCE = (REPOSITORY_ROOT / "data/_system/market_history.csv").resolve()
+RESEARCH_MARKET_HISTORY_V2_SOURCE = (REPOSITORY_ROOT / "data/_system/market_history_v2.csv").resolve()
+RESEARCH_MARKET_CALENDAR_SOURCE = (
+    REPOSITORY_ROOT / "data/_system/calendars/us_xnys_2020_2027.json"
+).resolve()
+RESEARCH_MARKET_HISTORY_EXPECTED_SHA256 = "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38"
+RESEARCH_MARKET_HISTORY_V2_EXPECTED_SHA256 = "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+RESEARCH_MARKET_AUTO_FETCH_ENABLED = False
+RESEARCH_MARKET_AUTO_REGENERATE_ENABLED = False
+RESEARCH_MARKET_PRIMARY_REQUIRED_COLUMNS = (
+    "date",
+    "score",
+    "vix",
+    "sector_tech",
+    "sector_finance",
+    "sector_energy",
+    "sector_healthcare",
+    "sector_consumer",
+    "sector_industrials",
+)
+RESEARCH_MARKET_V2_REQUIRED_COLUMNS = (
+    "date",
+    "event_adjustment",
+    "active_events_count",
+    "av_sentiment_avg",
+)
+_RESEARCH_MARKET_SNAPSHOT_CACHE: dict[str, Any] = {}
+_ORIGINAL_ENSURE_EXPERIMENT_HEADER = _base.ensure_experiment_header
+_ORIGINAL_PREPARE_TICKER_CONTEXT = _base.prepare_ticker_context
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_snapshot_file(
+    path: Path,
+    *,
+    expected_sha256: str,
+    required_columns: tuple[str, ...],
+    numeric_columns: tuple[str, ...],
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    if not path.is_file():
+        raise FileNotFoundError(f"required Stage3 market snapshot is missing: {path}")
+    actual_sha256 = _sha256(path)
+    if actual_sha256 != expected_sha256:
+        raise RuntimeError(
+            f"Stage3 market snapshot SHA mismatch: path={path}, "
+            f"expected={expected_sha256}, actual={actual_sha256}"
+        )
+
+    frame = pd.read_csv(path)
+    missing = sorted(set(required_columns) - set(frame.columns))
+    if missing:
+        raise RuntimeError(f"Stage3 market snapshot required columns missing at {path}: {missing}")
+    dates = pd.to_datetime(frame["date"], errors="coerce")
+    if dates.isna().any():
+        raise RuntimeError(f"Stage3 market snapshot has invalid date rows: {path}")
+    if dates.duplicated().any():
+        raise RuntimeError(f"Stage3 market snapshot has duplicate dates: {path}")
+    frame = frame.copy()
+    frame["date"] = dates.dt.normalize()
+    frame = frame.sort_values("date").reset_index(drop=True)
+
+    for column in numeric_columns:
+        values = pd.to_numeric(frame[column], errors="coerce")
+        array = values.to_numpy(dtype=float)
+        if not np.isfinite(array).all():
+            raise RuntimeError(f"Stage3 market snapshot column has NaN/Inf: {path}:{column}")
+        if np.count_nonzero(array) == 0:
+            raise RuntimeError(f"Stage3 market snapshot column is all zero: {path}:{column}")
+        frame[column] = values
+
+    metadata = {
+        "path": str(path),
+        "sha256": actual_sha256,
+        "row_count": int(len(frame)),
+        "first_date": frame["date"].iloc[0].date().isoformat() if len(frame) else None,
+        "last_date": frame["date"].iloc[-1].date().isoformat() if len(frame) else None,
+        "required_columns": list(required_columns),
+    }
+    if frame.empty:
+        raise RuntimeError(f"Stage3 market snapshot is empty: {path}")
+    return frame, metadata
+
+
+def _primary_freshness(last_date: date, *, as_of_date: date | None = None) -> dict[str, Any]:
+    as_of = as_of_date or datetime.now(ZoneInfo("America/New_York")).date()
+    start = min(last_date, as_of) - timedelta(days=14)
+    calendar = UsMarketCalendar(
+        start=start,
+        end=as_of,
+        cache_path=RESEARCH_MARKET_CALENDAR_SOURCE,
+        allow_api=False,
+        force_refresh=False,
+    )
+    prior_sessions = [session.date for session in calendar.sessions if session.date < as_of]
+    expected_latest = max(prior_sessions) if prior_sessions else None
+    missing_sessions = [session_date for session_date in prior_sessions if session_date > last_date]
+    fresh = expected_latest is not None and last_date >= expected_latest
+    result = {
+        "basis": "latest_us_market_session_strictly_before_as_of_new_york_date",
+        "as_of_new_york_date": as_of.isoformat(),
+        "calendar_source": calendar.source,
+        "calendar_path": str(RESEARCH_MARKET_CALENDAR_SOURCE),
+        "expected_latest_session": expected_latest.isoformat() if expected_latest else None,
+        "snapshot_last_date": last_date.isoformat(),
+        "missing_session_count": len(missing_sessions),
+        "missing_sessions": [value.isoformat() for value in missing_sessions],
+        "fresh": bool(fresh),
+    }
+    if not fresh:
+        raise RuntimeError(f"Stage3 primary market snapshot is stale: {json.dumps(result, ensure_ascii=False)}")
+    return result
+
+
+def _load_research_market_snapshot_bundle() -> tuple[pd.DataFrame, dict[str, Any]]:
+    cached_frame = _RESEARCH_MARKET_SNAPSHOT_CACHE.get("frame")
+    cached_metadata = _RESEARCH_MARKET_SNAPSHOT_CACHE.get("metadata")
+    if isinstance(cached_frame, pd.DataFrame) and isinstance(cached_metadata, dict):
+        return cached_frame.copy(), copy.deepcopy(cached_metadata)
+
+    primary_numeric = tuple(column for column in RESEARCH_MARKET_PRIMARY_REQUIRED_COLUMNS if column != "date")
+    primary, primary_metadata = _validate_snapshot_file(
+        RESEARCH_MARKET_HISTORY_SOURCE,
+        expected_sha256=RESEARCH_MARKET_HISTORY_EXPECTED_SHA256,
+        required_columns=RESEARCH_MARKET_PRIMARY_REQUIRED_COLUMNS,
+        numeric_columns=primary_numeric,
+    )
+    v2, v2_metadata = _validate_snapshot_file(
+        RESEARCH_MARKET_HISTORY_V2_SOURCE,
+        expected_sha256=RESEARCH_MARKET_HISTORY_V2_EXPECTED_SHA256,
+        required_columns=RESEARCH_MARKET_V2_REQUIRED_COLUMNS,
+        numeric_columns=("event_adjustment", "active_events_count", "av_sentiment_avg"),
+    )
+
+    primary_last_date = primary["date"].iloc[-1].date()
+    freshness = _primary_freshness(primary_last_date)
+
+    primary_indexed = primary.set_index("date")
+    v2_indexed = v2.set_index("date")
+    event_columns = [
+        column
+        for column in v2_indexed.columns
+        if column.startswith("has_")
+        or column
+        in {
+            "event_adjustment",
+            "active_events_count",
+            "av_sentiment_avg",
+            "av_sentiment_std",
+            "av_bullish_ratio",
+            "av_bearish_ratio",
+        }
+    ]
+    merged = primary_indexed.join(v2_indexed[event_columns], how="left")
+    for column in event_columns:
+        if column.startswith("has_"):
+            merged[column] = merged[column].fillna(0).astype(int)
+        else:
+            merged[column] = merged[column].fillna(0.0)
+    if "event_adjustment" in merged.columns:
+        merged["score_with_events"] = (merged["score"] + merged["event_adjustment"]).clip(0, 100)
+
+    metadata = {
+        "primary": primary_metadata,
+        "v2": {
+            **v2_metadata,
+            "freshness_applicable": False,
+            "freshness_policy": "sha_pinned_event_snapshot_no_stage3_auto_refresh",
+        },
+        "primary_freshness": freshness,
+        "auto_fetch_enabled": RESEARCH_MARKET_AUTO_FETCH_ENABLED,
+        "auto_regenerate_enabled": RESEARCH_MARKET_AUTO_REGENERATE_ENABLED,
+        "fail_closed": True,
+        "source_mode": "repository_root_sha_pinned_single_source",
+    }
+    _RESEARCH_MARKET_SNAPSHOT_CACHE["frame"] = merged.copy()
+    _RESEARCH_MARKET_SNAPSHOT_CACHE["metadata"] = copy.deepcopy(metadata)
+    return merged, metadata
+
+
+def load_research_market_history(years: int = 7) -> pd.DataFrame:
+    frame, _ = _load_research_market_snapshot_bundle()
+    years_value = max(1, int(years))
+    cutoff = pd.Timestamp.now().normalize() - pd.DateOffset(years=years_value)
+    return frame.loc[frame.index >= cutoff].copy()
+
+
+def _blocked_market_history_build(*args: Any, **kwargs: Any) -> pd.DataFrame:
+    raise RuntimeError(
+        "Stage3 research auto-fetch/auto-regenerate is disabled; "
+        "use the SHA-pinned repository-root market snapshot"
+    )
+
+
+def prepare_research_ticker_context(ticker: str) -> dict[str, Any]:
+    context = _ORIGINAL_PREPARE_TICKER_CONTEXT(ticker)
+    _, metadata = _load_research_market_snapshot_bundle()
+    context["market_history_snapshot"] = metadata
+    return context
+
+
+def ensure_research_experiment_header(
+    out_dir: Path,
+    *,
+    ticker: str,
+    seed_base: int,
+    stage: str,
+) -> None:
+    _, metadata = _load_research_market_snapshot_bundle()
+    _ORIGINAL_ENSURE_EXPERIMENT_HEADER(
+        out_dir,
+        ticker=ticker,
+        seed_base=seed_base,
+        stage=stage,
+    )
+    manifest_path = out_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["research_market_snapshot"] = metadata
+    _base.write_json(manifest_path, manifest)
+
+
+# 원본 context 함수가 조회하는 global loader를 연구용 fail-closed loader로 교체한다.
+# build_market_history 자체도 막아 어떤 우회 경로에서도 fetch/write가 발생하지 않게 한다.
+_pipeline_context.get_market_history = load_research_market_history
+_market_context.get_market_history = load_research_market_history
+_market_context.build_market_history = _blocked_market_history_build
 
 
 def _date_series(df: pd.DataFrame) -> pd.Series:
@@ -496,7 +748,10 @@ def run_entry_ga(
     return summary
 
 
-# Qualify/entry만 교체한다. 원본 run_backtest_period, exit GA, validate는 불변이다.
+# Stage 3 전용 context/header와 qualify/entry만 교체한다.
+# 원본 run_backtest_period, exit GA, validate 구조는 불변이다.
+_base.prepare_ticker_context = prepare_research_ticker_context
+_base.ensure_experiment_header = ensure_research_experiment_header
 _base.run_qualify = run_qualify
 _base.run_entry_ga = run_entry_ga
 _base.run_entry_backtest_period = run_entry_backtest_period

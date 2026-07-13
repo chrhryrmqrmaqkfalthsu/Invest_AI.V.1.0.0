@@ -1,4 +1,9 @@
-"""ExitPolicy 기반 청산 시뮬레이터."""
+"""ExitPolicy 기반 청산 시뮬레이터.
+
+기본 경로는 기존 14-field ExitPolicy를 그대로 사용한다.
+``entry_phase_exit=True``일 때만 provisional entry 청산을 사용한다:
+ATR hard stop -> strict interval break(next open) -> 7 trading-day cap.
+"""
 from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Optional
 
@@ -17,7 +22,11 @@ from engine.core.metadata import compute_rulebook_hash
 from engine.strategies.rulebook import Rulebook
 
 
-ADD_BUY_RUNTIME_ENABLED = False  # 비활성화: 중앙 통제기가 추가매수 담당
+ADD_BUY_RUNTIME_ENABLED = False
+ENTRY_PHASE_PROVISIONAL_MAX_HOLDING_DAYS = 7
+ENTRY_PHASE_INTERVAL_BREAK_REASON = "entry_interval_break"
+ENTRY_PHASE_STOP_REASON = "entry_provisional_atr_stop"
+ENTRY_PHASE_TIMEOUT_REASON = "entry_provisional_max_holding"
 
 
 @dataclass
@@ -198,6 +207,48 @@ def _lookup_sell_omen_score(source: Any, ticker: str, snap: PriceSnapshot, row: 
     return max(0.0, min(1.0, float(score)))
 
 
+def _signal_tape_point(signal_tape: Any, idx: int, date_key: str) -> Optional[Mapping[str, Any]]:
+    """4단계 public tape 또는 내부 idx mapping에서 해당 거래일을 찾는다."""
+    if signal_tape is None:
+        return None
+    if isinstance(signal_tape, Mapping):
+        point = signal_tape.get(idx)
+        if point is None:
+            point = signal_tape.get(str(idx))
+        if point is None:
+            point = signal_tape.get(date_key)
+        if point is not None and hasattr(point, "to_public_dict"):
+            point = point.to_public_dict(role="holding")
+        return point if isinstance(point, Mapping) else None
+    if isinstance(signal_tape, (list, tuple)):
+        for point in signal_tape:
+            if not isinstance(point, Mapping):
+                continue
+            if point.get("row_index") == idx or _normalize_date_key(point.get("date")) == date_key:
+                return point
+    return None
+
+
+def _strict_interval_pass_from_tape(signal_tape: Any, idx: int, row: Any) -> Optional[bool]:
+    point = _signal_tape_point(signal_tape, idx, _normalize_date_key(row.name))
+    if point is None:
+        return None
+    if not bool(point.get("strict_entry", False)):
+        return None
+    value = point.get("strict_interval_pass")
+    if isinstance(value, bool):
+        return value
+    should_buy = point.get("should_buy")
+    return should_buy if isinstance(should_buy, bool) else None
+
+
+def _entry_phase_stop_fill(snap: PriceSnapshot, stop_price: float) -> float:
+    """당일 gap-down이면 open, 아니면 ATR stop 가격으로 체결한다."""
+    if snap.open is not None and float(snap.open) <= stop_price:
+        return float(snap.open)
+    return float(stop_price)
+
+
 def _build_trade(
     *,
     entry_date: str,
@@ -288,6 +339,9 @@ def simulate_exit(
     entry_price_override: Optional[float] = None,
     entry_atr_override: Optional[float] = None,
     exit_execution_mode: str = "base",
+    entry_phase_exit: bool = False,
+    entry_phase_signal_tape: Any = None,
+    entry_phase_max_holding_days: int = ENTRY_PHASE_PROVISIONAL_MAX_HOLDING_DAYS,
 ) -> Optional[Trade]:
     if entry_idx + 1 >= len(df):
         return None
@@ -334,8 +388,13 @@ def simulate_exit(
     add_buys: list = []
     mfe = 0.0
     mae = 0.0
+    holding_cap = (
+        max(1, int(entry_phase_max_holding_days))
+        if entry_phase_exit
+        else int(rb.max_holding_days)
+    )
 
-    for i in range(entry_idx + 1, min(entry_idx + int(rb.max_holding_days) + 1, len(df))):
+    for i in range(entry_idx + 1, min(entry_idx + holding_cap + 1, len(df))):
         row = df.iloc[i]
         close = float(row["Close"])
         holding_days = i - entry_idx
@@ -346,6 +405,83 @@ def simulate_exit(
                 mfe = max(mfe, (float(snap.high) - position.avg_cost) / position.avg_cost * 100.0)
             if snap.low is not None:
                 mae = min(mae, (float(snap.low) - position.avg_cost) / position.avg_cost * 100.0)
+
+        if entry_phase_exit:
+            # 1) intraday ATR hard stop. Rulebook stop_loss_atr로 초기화된 stop_price 사용.
+            stop_price = float(position.stop_price)
+            if snap.low is not None and float(snap.low) <= stop_price:
+                fill = _entry_phase_stop_fill(snap, stop_price)
+                return _build_trade(
+                    entry_date=entry_date,
+                    entry_price=entry_price,
+                    entry_shares=initial_shares,
+                    exit_date=row.name,
+                    exit_price=fill,
+                    exit_reason=ENTRY_PHASE_STOP_REASON,
+                    holding_days=holding_days,
+                    add_buys=add_buys,
+                    total_shares=(float(position.shares) if fractional_shares else int(position.shares)),
+                    avg_cost=float(position.avg_cost),
+                    commission_rate=commission_rate,
+                    trigger_price=stop_price,
+                    fill_price_base=fill,
+                    fill_price_stress=fill,
+                    ctx=ctx,
+                    max_profit_during_hold=mfe,
+                    max_loss_during_hold=mae,
+                )
+
+            # 2) 종가 기준 strict interval break는 다음 거래일 open으로 체결.
+            interval_pass = _strict_interval_pass_from_tape(entry_phase_signal_tape, i, row)
+            if interval_pass is False:
+                next_idx = i + 1
+                if next_idx < len(df):
+                    next_row = df.iloc[next_idx]
+                    fill = _safe_float(next_row.get("Open", next_row.get("Close")))
+                    if fill is None:
+                        fill = float(next_row["Close"])
+                    return _build_trade(
+                        entry_date=entry_date,
+                        entry_price=entry_price,
+                        entry_shares=initial_shares,
+                        exit_date=next_row.name,
+                        exit_price=float(fill),
+                        exit_reason=ENTRY_PHASE_INTERVAL_BREAK_REASON,
+                        holding_days=next_idx - entry_idx,
+                        add_buys=add_buys,
+                        total_shares=(float(position.shares) if fractional_shares else int(position.shares)),
+                        avg_cost=float(position.avg_cost),
+                        commission_rate=commission_rate,
+                        trigger_price=close,
+                        fill_price_base=float(fill),
+                        fill_price_stress=float(fill),
+                        ctx=ctx,
+                        max_profit_during_hold=mfe,
+                        max_loss_during_hold=mae,
+                    )
+
+            # 3) provisional max holding. Break와 같은 날이면 위 분기가 우선.
+            if holding_days >= holding_cap:
+                return _build_trade(
+                    entry_date=entry_date,
+                    entry_price=entry_price,
+                    entry_shares=initial_shares,
+                    exit_date=row.name,
+                    exit_price=close,
+                    exit_reason=ENTRY_PHASE_TIMEOUT_REASON,
+                    holding_days=holding_days,
+                    add_buys=add_buys,
+                    total_shares=(float(position.shares) if fractional_shares else int(position.shares)),
+                    avg_cost=float(position.avg_cost),
+                    commission_rate=commission_rate,
+                    trigger_price=close,
+                    fill_price_base=close,
+                    fill_price_stress=close,
+                    ctx=ctx,
+                    max_profit_during_hold=mfe,
+                    max_loss_during_hold=mae,
+                )
+            continue
 
         current_pnl_pct = (close - position.avg_cost) / position.avg_cost * 100 if position.avg_cost > 0 else 0.0
         if (
@@ -414,17 +550,27 @@ def simulate_exit(
                 sell_omen_score=decision.diagnostics.get("sell_omen_score"),
             )
 
-    last_idx = min(entry_idx + int(rb.max_holding_days), len(df) - 1)
+    last_idx = min(entry_idx + holding_cap, len(df) - 1)
     last_row = df.iloc[last_idx]
-    snap = _make_price_snapshot(df, last_idx)
-    sell_omen_score = _lookup_sell_omen_score(sell_omen_scores, str(getattr(rb, "ticker", "") or ""), snap, last_row)
+    if entry_phase_exit:
+        reason = ENTRY_PHASE_TIMEOUT_REASON
+        sell_omen_score = None
+    else:
+        reason = "time_out"
+        snap = _make_price_snapshot(df, last_idx)
+        sell_omen_score = _lookup_sell_omen_score(
+            sell_omen_scores,
+            str(getattr(rb, "ticker", "") or ""),
+            snap,
+            last_row,
+        )
     return _build_trade(
         entry_date=entry_date,
         entry_price=entry_price,
         entry_shares=initial_shares,
         exit_date=last_row.name,
         exit_price=float(last_row["Close"]),
-        exit_reason="time_out",
+        exit_reason=reason,
         holding_days=last_idx - entry_idx,
         add_buys=add_buys,
         total_shares=(float(position.shares) if fractional_shares else int(position.shares)),

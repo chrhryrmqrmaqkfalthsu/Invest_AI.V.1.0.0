@@ -46,6 +46,7 @@ EXECUTION_SEMANTICS_CACHE_TOKEN = DAILY_SIGNAL_TAPE_MODE
 
 ENTRY_GA_SCOPE_MARKER = "_active_ga_gene_scope"
 ENTRY_GA_SCOPE_VALUE = "entry"
+ENTRY_FITNESS_MIN_TRADES = 10
 ENTRY_FITNESS_MIN_WIN_RATE_PCT = 60.0
 ENTRY_FITNESS_MAE_THRESHOLD_PCT = -2.0
 ENTRY_FITNESS_MAE_PENALTY_WEIGHT = 1.0
@@ -444,8 +445,9 @@ def _apply_entry_scope_fitness(
     """Entry GA 전용 fitness 원칙을 적용한다.
 
     본체는 거래별 ``비용 차감 pnl_pct / max(holding_days, 1)``의 평균이다.
-    MAE -2% 이탈분 평균을 감산하고, 비용 차감 실현수익 기준 승률 60% 미만은
-    점수 합산이 아닌 strict disqualification으로 최하 fitness를 부여한다.
+    MAE -2% 이탈분 평균을 감산하고, 거래 수 10건 이상과 비용 차감 실현수익
+    기준 승률 60% 이상을 동시에 만족할 때만 fitness를 인정한다. 두 조건 중
+    하나라도 실패하면 점수 합산이 아닌 strict disqualification을 적용한다.
     """
     trades = [trade for trade in list(result.trades or []) if isinstance(trade, dict)]
     per_trade_daily_returns: list[float] = []
@@ -488,13 +490,22 @@ def _apply_entry_scope_fitness(
         pre_complexity_fitness,
         complexity_penalty_per_mask,
     )
-    disqualified = trade_count <= 0 or win_rate < ENTRY_FITNESS_MIN_WIN_RATE_PCT
+    trade_count_gate_pass = trade_count >= ENTRY_FITNESS_MIN_TRADES
+    win_rate_threshold_pass = win_rate >= ENTRY_FITNESS_MIN_WIN_RATE_PCT
+    entry_gate_pass = trade_count_gate_pass and win_rate_threshold_pass
+    disqualification_reasons: list[str] = []
+    if not trade_count_gate_pass:
+        disqualification_reasons.append("trade_count_below_minimum")
+    if not win_rate_threshold_pass:
+        disqualification_reasons.append("win_rate_below_60_pct")
+    disqualified = not entry_gate_pass
     final_fitness = ENTRY_FITNESS_DISQUALIFIED if disqualified else post_complexity_fitness
     mdd_risk = _classify_mdd_risk(trades)
     mutation_hint = _aggregate_entry_exit_mutation_hint(trades)
     diagnostics = {
         "scope": ENTRY_GA_SCOPE_VALUE,
         "primary_objective": "mean(net_realized_pnl_pct / max(holding_days, 1))",
+        "primary_objective_trade_count_neutral": True,
         "primary_objective_pct_per_day": float(primary_objective),
         "mae_source": "trade.max_loss_during_hold from holding-period daily lows",
         "mae_threshold_pct": ENTRY_FITNESS_MAE_THRESHOLD_PCT,
@@ -505,15 +516,23 @@ def _apply_entry_scope_fitness(
             (_safe_float(trade.get("max_loss_during_hold"), 0.0) for trade in trades),
             default=0.0,
         ),
+        "fitness_before_entry_gate": float(post_complexity_fitness),
         "fitness_before_win_gate": float(post_complexity_fitness),
         "final_fitness": float(final_fitness),
+        "trade_count": int(trade_count),
+        "min_trade_count": ENTRY_FITNESS_MIN_TRADES,
+        "trade_count_gate_pass": bool(trade_count_gate_pass),
         "win_definition": "net realized pnl_pct after commission > 0",
         "win_count": int(wins),
         "loss_count": int(losses),
         "win_rate_pct": float(win_rate),
         "win_rate_gate_pct": ENTRY_FITNESS_MIN_WIN_RATE_PCT,
-        "win_rate_gate_pass": bool(not disqualified),
+        "win_rate_threshold_pass": bool(win_rate_threshold_pass),
+        "entry_gate_rule": "trade_count >= 10 AND win_rate_pct >= 60.0",
+        "entry_gate_pass": bool(entry_gate_pass),
+        "win_rate_gate_pass": bool(entry_gate_pass),
         "disqualified": bool(disqualified),
+        "disqualification_reasons": disqualification_reasons,
         "disqualified_fitness": ENTRY_FITNESS_DISQUALIFIED,
         "mdd_risk": mdd_risk,
         "exit_mutation_hint": mutation_hint,

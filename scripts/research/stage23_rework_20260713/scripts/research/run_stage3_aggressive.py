@@ -1,31 +1,30 @@
 #!/usr/bin/env python3
-"""Stage 3 aggressive runner wrapper with safe qualify-eval early stop.
+"""Stage 3 strict-entry wiring wrapper.
 
-원본 runner는 같은 폴더의
-`run_stage3_aggressive.py.bak.before_qualify_eval_early_stop_20260706_001`에
-보존되어 있다. 이 wrapper는 원본 모듈을 그대로 로드한 뒤 `run_qualify`만
-최종 qualify 결과를 바꾸지 않는 조기탈락 버전으로 교체한다.
-
-안전성:
-- 세 train split의 GA 후보 pool은 원본과 동일하게 모두 만든다.
-- 그 다음 cross-period qualify 평가 중 어떤 필수 split의 pass_count가 0이면,
-  all3 pass 후보가 존재할 수 없으므로 즉시 qualified=false로 종료한다.
-- 따라서 최종 entry/exit/validate로 넘어가는 ticker 집합은 원본과 동일하다.
+원본 구현의 단계 순서와 exit/validate 경로는 그대로 유지하고 qualify와
+entry만 strict entry scope에 연결한다.
 """
 from __future__ import annotations
 
+import copy
 import importlib.machinery
 import importlib.util
 import json
 import sys
 import time
 from collections import Counter
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator, Mapping
+
+import numpy as np
+import pandas as pd
 
 _BACKUP_NAME = "run_stage3_aggressive.py.bak.before_qualify_eval_early_stop_20260706_001"
 _BACKUP_PATH = Path(__file__).resolve().with_name(_BACKUP_NAME)
 _MODULE_NAME = "_kingmaker_stage3_aggressive_original_20260706"
+ENTRY_PHASE_CACHE_MODE = "entry_provisional_interval_break_v1"
+ENTRY_PHASE_MAX_HOLDING_DAYS = 7
 
 
 def _load_original_module() -> Any:
@@ -43,6 +42,165 @@ def _load_original_module() -> Any:
 
 _base = _load_original_module()
 
+from engine.learning import execution_mode_backtest as _execution_backtest  # noqa: E402
+from engine.strategies.rulebook import (  # noqa: E402
+    ENTRY_INTERVAL_MIN_FEATURE_SUPPORT,
+    ENTRY_INTERVAL_SPECS,
+)
+
+
+def _date_series(df: pd.DataFrame) -> pd.Series:
+    if "date" in df.columns:
+        return pd.Series(pd.to_datetime(df["date"], errors="coerce").to_numpy(), index=df.index)
+    if isinstance(df.index, pd.DatetimeIndex):
+        return pd.Series(pd.to_datetime(df.index, errors="coerce"), index=df.index)
+    raise ValueError("Stage3 entry feature domain requires a date column or DatetimeIndex")
+
+
+def build_entry_feature_domain(
+    ctx: Mapping[str, Any],
+    *,
+    start: str | None,
+    end: str | None,
+) -> dict[str, dict[str, Any]]:
+    """한 train fold의 정렬된 5개 raw feature와 q01/q99/IQR을 계산한다."""
+    df = ctx.get("df")
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        raise ValueError("ticker context df is missing or empty")
+
+    frame = pd.DataFrame(index=df.index)
+    frame["date"] = _date_series(df)
+
+    def numeric(column: str) -> pd.Series:
+        if column not in df.columns:
+            return pd.Series(np.nan, index=df.index, dtype=float)
+        return pd.to_numeric(df[column], errors="coerce")
+
+    ma5 = numeric("MA5")
+    ma20 = numeric("MA20")
+    ma60 = numeric("MA60")
+    close = numeric("Close")
+    macd_hist = numeric("MACD_hist")
+    bb_lower = numeric("BB_lower")
+    bb_upper = numeric("BB_upper")
+
+    frame["ma_trend"] = 0.5 * (((ma5 / ma20) - 1.0) + ((ma20 / ma60) - 1.0)) * 100.0
+    frame["macd_hist"] = macd_hist / close * 100.0
+    frame["rsi"] = numeric("RSI")
+    frame["bb_position"] = (close - bb_lower) / (bb_upper - bb_lower)
+    frame["volume_ratio"] = numeric("Volume_ratio")
+
+    if start is not None:
+        frame = frame.loc[frame["date"] >= pd.Timestamp(start)]
+    if end is not None:
+        frame = frame.loc[frame["date"] <= pd.Timestamp(end)]
+
+    feature_names = tuple(ENTRY_INTERVAL_SPECS)
+    finite_mask = np.ones(len(frame), dtype=bool)
+    for feature_name in feature_names:
+        finite_mask &= np.isfinite(frame[feature_name].to_numpy(dtype=float))
+    frame = frame.loc[finite_mask, ["date", *feature_names]].copy()
+    if len(frame) < ENTRY_INTERVAL_MIN_FEATURE_SUPPORT:
+        raise ValueError(
+            f"entry feature fold has only {len(frame)} finite aligned rows; "
+            f"minimum is {ENTRY_INTERVAL_MIN_FEATURE_SUPPORT}"
+        )
+
+    domain: dict[str, dict[str, Any]] = {}
+    for feature_name in feature_names:
+        values = frame[feature_name].to_numpy(dtype=float)
+        domain[feature_name] = {
+            "train_min": float(np.min(values)),
+            "train_max": float(np.max(values)),
+            "q01": float(np.quantile(values, 0.01)),
+            "q99": float(np.quantile(values, 0.99)),
+            "iqr": float(np.quantile(values, 0.75) - np.quantile(values, 0.25)),
+            "sample_count": int(len(values)),
+            "values": values.tolist(),
+        }
+    return domain
+
+
+@contextmanager
+def _entry_phase_execution_context() -> Iterator[None]:
+    """Daily tape를 entry-phase simulate_exit 호출에 주입한다."""
+    original_builder = _execution_backtest._build_daily_signal_tape
+    original_simulate_exit = _execution_backtest.simulate_exit
+    state: dict[str, Any] = {}
+
+    def build_tape(*args: Any, **kwargs: Any) -> Any:
+        tape = original_builder(*args, **kwargs)
+        state["signal_tape"] = tape
+        return tape
+
+    def simulate_entry_exit(*args: Any, **kwargs: Any) -> Any:
+        tape = state.get("signal_tape")
+        if tape is None:
+            raise RuntimeError("entry-phase daily signal tape was not built before simulate_exit")
+        kwargs["entry_phase_exit"] = True
+        kwargs["entry_phase_signal_tape"] = tape
+        kwargs["entry_phase_max_holding_days"] = ENTRY_PHASE_MAX_HOLDING_DAYS
+        return original_simulate_exit(*args, **kwargs)
+
+    _execution_backtest._build_daily_signal_tape = build_tape
+    _execution_backtest.simulate_exit = simulate_entry_exit
+    try:
+        yield
+    finally:
+        _execution_backtest._build_daily_signal_tape = original_builder
+        _execution_backtest.simulate_exit = original_simulate_exit
+
+
+def run_entry_backtest_period(
+    rulebook: Any,
+    ctx: dict[str, Any],
+    *,
+    start: str | None,
+    end: str | None,
+) -> Any:
+    """Qualify/entry 전용 provisional-exit backtest."""
+    with _entry_phase_execution_context():
+        return _base.run_backtest_execution_mode(
+            rulebook,
+            ctx["df"],
+            start_date=start,
+            end_date=end,
+            **_base.base_backtest_kwargs(ctx),
+            entry_execution_mode=_base.ENTRY_EXECUTION_MODE,
+            exit_execution_mode=_base.EXIT_EXECUTION_MODE,
+            fold_exit_policy=_base.FOLD_EXIT_POLICY,
+            live_hard_stop_guard=_base.LIVE_HARD_STOP_GUARD,
+        )
+
+
+def _maybe_cached_entry_evaluate_fn(
+    raw_evaluate_fn: Any,
+    *,
+    enabled: bool,
+    ticker: str,
+    period_label: str,
+    start_date: Any,
+    end_date: Any,
+    fitness_mode: str,
+    code_commit: str,
+) -> tuple[Any, Any]:
+    if not enabled:
+        return raw_evaluate_fn, None
+    cache = _base.FitnessCache()
+    key_ctx = _base.make_cache_key_context(
+        ticker=ticker,
+        period_label=f"{period_label}|{ENTRY_PHASE_CACHE_MODE}",
+        start_date=start_date,
+        end_date=end_date,
+        entry_execution_mode=_base.ENTRY_EXECUTION_MODE,
+        exit_execution_mode=ENTRY_PHASE_CACHE_MODE,
+        fold_exit_policy=_base.FOLD_EXIT_POLICY,
+        fitness_mode=fitness_mode,
+        code_commit=code_commit,
+        add_buy_runtime_enabled=_base.ADD_BUY_RUNTIME_ENABLED,
+    )
+    return _base.make_cached_evaluate_fn(raw_evaluate_fn, cache=cache, key_ctx=key_ctx), cache
+
 
 def run_qualify(
     ticker: str,
@@ -53,28 +211,22 @@ def run_qualify(
     code_commit: str | None = None,
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Stage 3 qualify with result-preserving early stop in cross-period eval.
-
-    원본과 동일하게 세 train split의 GA/top rulebook pool을 먼저 모두 만든다.
-    이후 모든 후보를 split별로 재평가할 때 어떤 필수 split에서 pass_count가
-    0이면 all3_pass_count는 반드시 0이므로 남은 split 평가는 생략한다.
-    """
+    """Entry-scope qualify with result-preserving cross-period early stop."""
     started = time.time()
     ctx = context if context is not None else _base.prepare_ticker_context(ticker)
     code_commit = code_commit or _base.resolve_code_commit(_base.PROJECT_ROOT)
     candidates_by_hash: dict[str, Any] = {}
     ga_summaries: list[dict[str, Any]] = []
 
-    # 원본과 동일: 세 train split의 GA 후보 pool을 모두 만든다.
     for idx, split in enumerate(_base.TRAIN_SPLITS, 1):
         split_seed = seed_base + idx
-        print(json.dumps({"event": "stage3_qualify_ga_start", "ticker": ticker, "split": split["label"], "seed": split_seed}, ensure_ascii=False), flush=True)
+        entry_feature_domain = build_entry_feature_domain(ctx, start=split["start"], end=split["end"])
 
         def evaluate_fn(rulebook: Any, s: dict[str, str] = split) -> float:
-            result = _base.run_backtest_period(rulebook, ctx, start=s["start"], end=s["end"])
+            result = run_entry_backtest_period(rulebook, ctx, start=s["start"], end=s["end"])
             return _base.safe_float(getattr(result, "fitness", 0.0), -1_000_000.0)
 
-        evaluate_fn_wrapped, fitness_cache = _base._maybe_cached_evaluate_fn(
+        wrapped, fitness_cache = _maybe_cached_entry_evaluate_fn(
             evaluate_fn,
             enabled=use_fitness_cache,
             ticker=ticker,
@@ -84,30 +236,34 @@ def run_qualify(
             fitness_mode="swing",
             code_commit=code_commit,
         )
-
         ga = _base.run_ga(
             base_rulebook=ctx["base_rulebook"],
-            evaluate_fn=evaluate_fn_wrapped,
-            ga_config=_base.make_ga_config(population=_base.QUALIFY_POPULATION, generations=_base.QUALIFY_GENERATIONS, seed=split_seed),
+            evaluate_fn=wrapped,
+            ga_config=_base.make_ga_config(
+                population=_base.QUALIFY_POPULATION,
+                generations=_base.QUALIFY_GENERATIONS,
+                seed=split_seed,
+            ),
+            gene_scope="entry",
+            entry_feature_domain=entry_feature_domain,
         )
         top_rulebooks = _base.collect_top_rulebooks(ga, _base.TOP_N_QUALIFY)
         for rb in top_rulebooks:
-            h = _base.compute_rulebook_hash(rb)
-            current = candidates_by_hash.get(h)
+            rulebook_hash = _base.compute_rulebook_hash(rb)
+            current = candidates_by_hash.get(rulebook_hash)
             if current is None or _base.safe_float(getattr(rb, "fitness", 0.0)) > _base.safe_float(getattr(current, "fitness", 0.0)):
-                candidates_by_hash[h] = _base.copy.deepcopy(rb)
-        ga_summaries.append(
-            {
-                "split": split,
-                "seed": split_seed,
-                "generations_run": getattr(ga, "generations_run", None),
-                "top_count": len(top_rulebooks),
-                "best_fitness": _base.safe_float(getattr(getattr(ga, "best", None), "fitness", 0.0)),
-                "best_hash": _base.compute_rulebook_hash(ga.best) if getattr(ga, "best", None) is not None else None,
-                "fitness_cache": _base.summarize_fitness_cache(fitness_cache),
-            }
-        )
-        print(json.dumps({"event": "stage3_qualify_ga_done", "ticker": ticker, "split": split["label"], "top_count": len(top_rulebooks)}, ensure_ascii=False), flush=True)
+                candidates_by_hash[rulebook_hash] = copy.deepcopy(rb)
+        ga_summaries.append({
+            "split": split,
+            "seed": split_seed,
+            "gene_scope": "entry",
+            "entry_domain_sample_count": min(int(v["sample_count"]) for v in entry_feature_domain.values()),
+            "generations_run": getattr(ga, "generations_run", None),
+            "top_count": len(top_rulebooks),
+            "best_fitness": _base.safe_float(getattr(getattr(ga, "best", None), "fitness", 0.0)),
+            "best_hash": _base.compute_rulebook_hash(ga.best) if getattr(ga, "best", None) is not None else None,
+            "fitness_cache": _base.summarize_fitness_cache(fitness_cache),
+        })
 
     candidate_hashes = sorted(candidates_by_hash)
     metrics_by_hash: dict[str, dict[str, dict[str, Any]]] = {h: {} for h in candidate_hashes}
@@ -123,6 +279,7 @@ def run_qualify(
             "config": _base.dataclasses.asdict(_base.DEFAULT_STAGE3_QUALIFY),
             "periods": list(_base.TRAIN_SPLITS),
             "seed_base": seed_base,
+            "entry_execution_semantics": ENTRY_PHASE_CACHE_MODE,
             "data_start": ctx.get("data_start"),
             "data_end": ctx.get("data_end"),
             "ga_summaries": ga_summaries,
@@ -136,42 +293,37 @@ def run_qualify(
             "early_stopped": bool(early_stopped),
             "early_stop_reason": early_stop_reason,
             "elapsed_seconds": time.time() - started,
-            "note": (
-                "qualification rulebooks are intentionally discarded; only summary counts are persisted; "
-                "early stop is result-preserving because a required split with pass_count=0 makes all3 qualification impossible"
-                if early_stopped
-                else "qualification rulebooks are intentionally discarded; only summary counts are persisted"
-            ),
+            "note": "entry-scope qualify with fold empirical domains and provisional entry exits",
         }
         _base.write_json(out_dir / "qualify_result.json", result)
         return result
 
-    # 원본과 동일한 cross-period 평가를 하되, 필수 split pass_count=0이면 즉시 탈락 확정.
     for split in _base.TRAIN_SPLITS:
         raw_rows: list[dict[str, Any]] = []
-        print(json.dumps({"event": "stage3_qualify_eval_start", "ticker": ticker, "split": split["label"], "candidate_count": len(candidate_hashes)}, ensure_ascii=False), flush=True)
-        for rank, h in enumerate(candidate_hashes, 1):
-            rb = candidates_by_hash[h]
-            result = _base.run_backtest_period(rb, ctx, start=split["start"], end=split["end"])
-            raw_rows.append(
-                {
-                    "ticker": ticker,
-                    "label": split["label"],
-                    "period_label": split["label"],
-                    "rulebook_hash": h,
-                    "rank_is": rank,
-                    "oos": _base.result_metrics(result),
-                }
+        for rank, rulebook_hash in enumerate(candidate_hashes, 1):
+            result = run_entry_backtest_period(
+                candidates_by_hash[rulebook_hash],
+                ctx,
+                start=split["start"],
+                end=split["end"],
             )
+            raw_rows.append({
+                "ticker": ticker,
+                "label": split["label"],
+                "period_label": split["label"],
+                "rulebook_hash": rulebook_hash,
+                "rank_is": rank,
+                "oos": _base.result_metrics(result),
+            })
         scored = _base._score_period_candidates(raw_rows)
         pass_count = 0
         scores: list[float] = []
         for row in scored:
-            h = str(row["rulebook_hash"])
+            rulebook_hash = str(row["rulebook_hash"])
             metrics = dict(row.get("oos_metrics") or {})
             metrics["member_score"] = _base.safe_float(row.get("oos_member_score"))
             metrics["fitness"] = _base.safe_float(row.get("fitness"))
-            metrics_by_hash[h][split["label"]] = metrics
+            metrics_by_hash[rulebook_hash][split["label"]] = metrics
             scores.append(metrics["member_score"])
             if _base._pass_one_year(metrics):
                 pass_count += 1
@@ -182,48 +334,149 @@ def run_qualify(
             "max": max(scores) if scores else None,
             "mean": sum(scores) / len(scores) if scores else None,
         }
-        print(json.dumps({"event": "stage3_qualify_eval_done", "ticker": ticker, "split": split["label"], "pass_count": pass_count}, ensure_ascii=False), flush=True)
-
         if pass_count <= 0:
             fail_reason_counter["early_stop_zero_pass_split"] += 1
-            early_stop_reason = {
-                "split": split["label"],
-                "reason": "required_split_has_zero_passing_candidates",
-                "evaluated_split_count": len(year_pass_counts),
-                "proof": "Stage3 qualification requires at least one candidate to pass all train splits; zero pass candidates in any required split makes all3_pass_count impossible.",
-            }
-            print(json.dumps({"event": "stage3_qualify_eval_early_stop", "ticker": ticker, **early_stop_reason}, ensure_ascii=False), flush=True)
             return write_result(
                 qualified=False,
                 all3_pass_count=0,
                 all3_pass_hash_samples=[],
                 early_stopped=True,
-                early_stop_reason=early_stop_reason,
+                early_stop_reason={
+                    "split": split["label"],
+                    "reason": "required_split_has_zero_passing_candidates",
+                    "evaluated_split_count": len(year_pass_counts),
+                },
             )
 
     all3_pass_count = 0
-    all3_pass_hash_samples: list[str] = []
-    for h in candidate_hashes:
-        reasons = _base.stage3_qualify_fail_reasons(metrics_by_hash.get(h, {}), _base.DEFAULT_STAGE3_QUALIFY)
+    samples: list[str] = []
+    for rulebook_hash in candidate_hashes:
+        reasons = _base.stage3_qualify_fail_reasons(metrics_by_hash.get(rulebook_hash, {}), _base.DEFAULT_STAGE3_QUALIFY)
         if not reasons:
             all3_pass_count += 1
-            if len(all3_pass_hash_samples) < 10:
-                all3_pass_hash_samples.append(h)
+            if len(samples) < 10:
+                samples.append(rulebook_hash)
         else:
             for reason in reasons:
                 fail_reason_counter[str(reason.get("metric") or "unknown")] += 1
-
     return write_result(
         qualified=all3_pass_count > 0,
         all3_pass_count=all3_pass_count,
-        all3_pass_hash_samples=all3_pass_hash_samples,
+        all3_pass_hash_samples=samples,
         early_stopped=False,
         early_stop_reason=None,
     )
 
 
-# Monkey-patch original module so its main()/run_entry/exit/validate flow remains unchanged.
+def run_entry_ga(
+    ticker: str,
+    out_dir: Path,
+    *,
+    seed_base: int,
+    use_fitness_cache: bool = False,
+    code_commit: str | None = None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Stage 3 entry GA wired to strict entry scope and provisional exits."""
+    qualify_path = out_dir / "qualify_result.json"
+    if not qualify_path.exists():
+        raise FileNotFoundError(f"missing prerequisite: {qualify_path}")
+    qualify = json.loads(qualify_path.read_text(encoding="utf-8"))
+    if not bool(qualify.get("qualified")):
+        raise RuntimeError(f"ticker {ticker} did not pass Stage 3 qualification")
+
+    started = time.time()
+    ctx = context if context is not None else _base.prepare_ticker_context(ticker)
+    code_commit = code_commit or _base.resolve_code_commit(_base.PROJECT_ROOT)
+    train_3 = next(split for split in _base.TRAIN_SPLITS if split["label"] == "train_3")
+    seed = seed_base + 100
+    entry_feature_domain = build_entry_feature_domain(ctx, start=train_3["start"], end=train_3["end"])
+
+    def evaluate_fn(rulebook: Any) -> float:
+        result = run_entry_backtest_period(rulebook, ctx, start=train_3["start"], end=train_3["end"])
+        return _base.safe_float(getattr(result, "fitness", 0.0), -1_000_000.0)
+
+    wrapped, fitness_cache = _maybe_cached_entry_evaluate_fn(
+        evaluate_fn,
+        enabled=use_fitness_cache,
+        ticker=ticker,
+        period_label=train_3["label"],
+        start_date=train_3["start"],
+        end_date=train_3["end"],
+        fitness_mode="swing",
+        code_commit=code_commit,
+    )
+    ga = _base.run_ga(
+        base_rulebook=ctx["base_rulebook"],
+        evaluate_fn=wrapped,
+        ga_config=_base.make_ga_config(
+            population=_base.ENTRY_POPULATION,
+            generations=_base.ENTRY_GENERATIONS,
+            seed=seed,
+        ),
+        gene_scope="entry",
+        entry_feature_domain=entry_feature_domain,
+    )
+    top_rulebooks = _base.collect_top_rulebooks(ga, _base.TOP_N_ENTRY_POOL)
+
+    evaluated_rows: list[dict[str, Any]] = []
+    for pool_rank, rb in enumerate(top_rulebooks, 1):
+        result = run_entry_backtest_period(rb, ctx, start=train_3["start"], end=train_3["end"])
+        metrics = _base.result_metrics(result)
+        entry_dates = sorted(_base.entry_dates_from_trades(list(getattr(result, "trades", []) or [])))
+        evaluated_rows.append({
+            "ticker": ticker,
+            "pool_rank": pool_rank,
+            "rulebook_hash": _base.compute_rulebook_hash(rb),
+            "train_period": train_3,
+            "gene_scope": "entry",
+            "entry_execution_semantics": ENTRY_PHASE_CACHE_MODE,
+            "train_fitness": _base.safe_float(metrics.get("fitness")),
+            "expectancy_pct": _base.safe_float(metrics.get("expectancy_pct")),
+            "trade_count": _base.safe_int(metrics.get("trade_count")),
+            "win_rate": _base.safe_float(metrics.get("win_rate")),
+            "profit_factor": _base.safe_float(metrics.get("profit_factor")),
+            "max_drawdown_pct": _base.safe_float(metrics.get("max_drawdown_pct")),
+            "entry_date_count": len(entry_dates),
+            "entry_dates": entry_dates,
+            "rulebook": rb.to_dict(),
+        })
+
+    selected, rejected = _base._select_diverse_entry_rows(evaluated_rows, _base.DEFAULT_STAGE3_ENTRY_SELECTION)
+    output_rows = []
+    for rank, row in enumerate(selected, 1):
+        output = dict(row)
+        output["rank"] = rank
+        output_rows.append(output)
+
+    _base.append_jsonl(out_dir / "entry_rulebooks.jsonl", output_rows)
+    _base.write_json(out_dir / "entry_rejected_overlap.json", rejected)
+    summary = {
+        "ticker": ticker,
+        "stage": "entry",
+        "seed": seed,
+        "train_period": train_3,
+        "gene_scope": "entry",
+        "entry_execution_semantics": ENTRY_PHASE_CACHE_MODE,
+        "entry_domain_sample_count": min(int(v["sample_count"]) for v in entry_feature_domain.values()),
+        "selection_config": _base.dataclasses.asdict(_base.DEFAULT_STAGE3_ENTRY_SELECTION),
+        "pool_count": len(evaluated_rows),
+        "absolute_pass_count": sum(1 for row in evaluated_rows if _base.safe_float(row.get("expectancy_pct")) >= _base.DEFAULT_STAGE3_ENTRY_SELECTION.entry_min_expectancy_pct),
+        "selected_count": len(output_rows),
+        "overlap_rejected_count": len(rejected),
+        "fitness_cache": _base.summarize_fitness_cache(fitness_cache),
+        "best_fitness": output_rows[0]["train_fitness"] if output_rows else None,
+        "best_hash": output_rows[0]["rulebook_hash"] if output_rows else None,
+        "elapsed_seconds": time.time() - started,
+    }
+    _base.write_json(out_dir / "entry_result.json", summary)
+    return summary
+
+
+# Qualify/entry만 교체한다. 원본 run_backtest_period, exit GA, validate는 불변이다.
 _base.run_qualify = run_qualify
+_base.run_entry_ga = run_entry_ga
+_base.run_entry_backtest_period = run_entry_backtest_period
 
 
 def main(argv: list[str] | None = None) -> int:

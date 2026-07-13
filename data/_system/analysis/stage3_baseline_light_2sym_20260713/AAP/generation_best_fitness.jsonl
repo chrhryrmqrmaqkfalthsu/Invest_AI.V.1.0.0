@@ -1,0 +1,9 @@
+{"average_fitness": -77.51274102123018, "best_fitness": 29.821098471109995, "call_index": 1, "event": "stage3_light_ga_generation", "gene_scope": "entry", "generation": 1}
+{"average_fitness": -22.954698816148067, "best_fitness": 31.58224922283417, "call_index": 1, "event": "stage3_light_ga_generation", "gene_scope": "entry", "generation": 2}
+{"average_fitness": 19.464600704950215, "best_fitness": 31.58224922283417, "call_index": 1, "event": "stage3_light_ga_generation", "gene_scope": "entry", "generation": 3}
+{"average_fitness": -35.48680568661774, "best_fitness": 61.19310590468444, "call_index": 2, "event": "stage3_light_ga_generation", "gene_scope": "entry", "generation": 1}
+{"average_fitness": -21.978663644907776, "best_fitness": 61.19310590468444, "call_index": 2, "event": "stage3_light_ga_generation", "gene_scope": "entry", "generation": 2}
+{"average_fitness": 18.169535792949326, "best_fitness": 83.05745751968233, "call_index": 2, "event": "stage3_light_ga_generation", "gene_scope": "entry", "generation": 3}
+{"average_fitness": -67.00497923729927, "best_fitness": 26.923032401569195, "call_index": 3, "event": "stage3_light_ga_generation", "gene_scope": "entry", "generation": 1}
+{"average_fitness": 0.32934295209597764, "best_fitness": 65.08619655714813, "call_index": 3, "event": "stage3_light_ga_generation", "gene_scope": "entry", "generation": 2}
+{"average_fitness": -1.1085834739458604, "best_fitness": 65.08619655714813, "call_index": 3, "event": "stage3_light_ga_generation", "gene_scope": "entry", "generation": 3}

@@ -1,7 +1,0 @@
-delta,log_based,log_based_detail,metric,ratio,replay_based,replay_based_detail
-14815,3430,entry-biased saved log,full_replay_should_buy_count,5.319241982507289,18245,"labeled=18226, unlabeled=19"
-14796,3430,,dataset_signal_count,5.313702623906705,18226,
--1,2,"[""stage3:AMSC:57bf3f342f43"", ""stage3:AVAV:3d66945d7c65""]",survivor_count,,1,"[""stage3:AEVA:3c4e598fa5c7""]"
-0.08260869565217399,0.7,passed=10,stress_survivor_pool_filtered_precision,,0.782608695652174,passed=23
--0.046099290780141855,0.8333333333333334,passed=18,train_survivor_pool_filtered_precision,,0.7872340425531915,passed=47
-0.10457516339869277,0.7777777777777778,passed=9,oos_survivor_pool_filtered_precision,,0.8823529411764706,passed=17

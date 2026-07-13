@@ -1,7 +1,0 @@
-path,pre_sha256,post_sha256,unchanged,status,notes
-engine/live/elite_shadow_report.py,9c323945ddaa311ba9767a64f3d505eeb87b9decee2402eeaa194ae58ae1b804,9c323945ddaa311ba9767a64f3d505eeb87b9decee2402eeaa194ae58ae1b804,true,PASS,"live elite source unchanged"
-data/_system/ops/live_candidate_slots.py,259d3bec12901591c84cd1ad9aec01612d914c9120c0976b54bb34adfe684dbb,259d3bec12901591c84cd1ad9aec01612d914c9120c0976b54bb34adfe684dbb,true,PASS,"candidate pool daemon source unchanged"
-engine/live/elite_shadow_trader.py,ff8fb6e2bfff23b360a37001a5ae637908624bb2c8df001a4fb58f92c73b927c,ff8fb6e2bfff23b360a37001a5ae637908624bb2c8df001a4fb58f92c73b927c,true,PASS,"signal evaluator unchanged"
-engine/core/indicators.py,21c82425537e32600821e4460bdea53b09dc90597971b9a7fbdc4f3dfa50db38,21c82425537e32600821e4460bdea53b09dc90597971b9a7fbdc4f3dfa50db38,true,PASS,"indicator source unchanged"
-data/_system/live_auto_config.json,e4c15a66a7400d6903c60f5b5b72676237cc7ad0a3823e4f541ed5d9a157b51b,e4c15a66a7400d6903c60f5b5b72676237cc7ad0a3823e4f541ed5d9a157b51b,true,PASS,"live configuration unchanged"
-process:live_candidate_slots.py,"PID 494330; start 2026-07-11 20:16:00 UTC","PID 494330; start 2026-07-11 20:16:00 UTC",true,PASS,"daemon was not restarted"

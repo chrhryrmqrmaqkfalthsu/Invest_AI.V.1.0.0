@@ -1,9 +1,0 @@
-policy,where_applied,S2_candidate_pool,S2_full_lookup,S2_execution_signal,verdict,evidence
-Event_OFF,"live_event_flags() inside evaluate_candidate()",INDIRECT_VIA_SHARED_POOL,YES,YES,"APPLIED","engine/live/elite_shadow_trader.py:376-419; effective live.direct_event_enabled=false on 2026-07-12"
-v3_BLOCK,"collect_stage2_elite/collect_stage3_elite -> apply_upstream_gate_shadow",YES,YES,YES_VIA_CANDIDATE_EXISTENCE,"APPLIED","engine/live/elite_shadow_report.py:283-309;312-378; effective live.upstream_gate_enforcement=BLOCK"
-BOIL_BLOCK,"same CandidateGateChecker aggregate path",YES,YES,YES_VIA_CANDIDATE_EXISTENCE,"APPLIED","engine/live/candidate_gate.py:99-230; engine/live/upstream_candidate_gate.py:92-164"
-Event_market_context,"MarketContext.score remains unchanged when direct Event disabled",YES,YES,YES,"PARTIAL_BY_DESIGN","engine/live/event_policy.py:1-6"
-entry_quality_q45,"computed during evaluate_candidate but S2 validates only should_buy",NO,NO_HARD_BLOCK,NO_HARD_BLOCK,"NOT_APPLIED_AS_GATE","engine/live/s2_auto_trader.py:313-329; engine/live/elite_shadow_trader.py:453-475"
-shared_pool_refresh,"live_candidate_slots daemon every 60 seconds",YES,NA,NA,"APPLIED","running PID 494330 since 2026-07-11T20:16:00Z; crontab guard every minute"
-BLOCK_bypass_risk,"S2 full lookup calls same report under effective BLOCK",NO_BYPASS,NO_BYPASS,NO_BYPASS,"NOT_FOUND","engine/live/s2_auto_trader.py:300-329"
-Event_ON_bypass_risk,"S2 evaluate_candidate reads same global Event switch",NO_BYPASS,NO_BYPASS,NO_BYPASS,"NOT_FOUND","engine/live/event_policy.py:53-79; engine/live/elite_shadow_trader.py:409-419"

@@ -1,4 +1,0 @@
-path,status,reason,live_change_risk
-scripts/research/build_stage3_live_pool.py,EXCLUDED_NOT_DEPENDENCY,"학습·개체 생성 모듈이 아니라 stage3 profile catalog를 live_stage3_candidates.json으로 내보내는 배포 도구; 라이브 후보 풀 변경 금지 때문에 복사·실행하지 않음",HIGH
-config/policy.yaml,READ_ONLY_NOT_COPIED,"rolling 파일럿은 복사 작업본 내부 상수와 frozen OHLC만 사용하며 라이브 policy를 import하지 않음",HIGH
-.env,READ_ONLY_NOT_COPIED,"민감 설정이며 네트워크·라이브 데이터 소스를 사용하지 않음",CRITICAL

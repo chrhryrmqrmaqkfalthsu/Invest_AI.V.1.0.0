@@ -8,6 +8,7 @@ This module keeps explicit learning-backtest execution semantics isolated from
 - conservative_core exit mode
 - fold-end bounded exit scoring with mark-to-market fallback
 - all post-start trading days precomputed into a daily signal tape
+- entry-scope fitness diagnostics and bounded exit-timing mutation hints
 
 The tape separates signal measurement from trade-index jumps. Holding and
 cooldown dates are measured even when the execution loop skips directly to the
@@ -42,6 +43,16 @@ from engine.strategies.rulebook import Rulebook
 OUT_DIR = Path("data/_system/research/learning_execution_mode_gate")
 DAILY_SIGNAL_TAPE_MODE = "all_post_start_days_precomputed_v1"
 EXECUTION_SEMANTICS_CACHE_TOKEN = DAILY_SIGNAL_TAPE_MODE
+
+ENTRY_GA_SCOPE_MARKER = "_active_ga_gene_scope"
+ENTRY_GA_SCOPE_VALUE = "entry"
+ENTRY_FITNESS_MIN_WIN_RATE_PCT = 60.0
+ENTRY_FITNESS_MAE_THRESHOLD_PCT = -2.0
+ENTRY_FITNESS_MAE_PENALTY_WEIGHT = 1.0
+ENTRY_FITNESS_DISQUALIFIED = -1_000_000_000.0
+ENTRY_EXIT_LOCAL_SEARCH_MAX_HOLDING_DAYS = 7
+ENTRY_EXIT_MUTATION_HINT_ATTR = "_entry_exit_mutation_hint"
+ENTRY_FITNESS_DIAGNOSTICS_ATTR = "_entry_fitness_diagnostics"
 
 
 @dataclass(frozen=True)
@@ -90,6 +101,18 @@ class _DailySignalPoint:
             "event_flags": dict(self.event_flags or {}),
             "topic_features": dict(self.topic_features or {}),
         }
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    return number if np.isfinite(number) else float(default)
+
+
+def _entry_scope_active(rb: Rulebook) -> bool:
+    return str(getattr(rb, ENTRY_GA_SCOPE_MARKER, "") or "") == ENTRY_GA_SCOPE_VALUE
 
 
 def _date_series_for_df(df: pd.DataFrame) -> Optional[pd.Series]:
@@ -222,6 +245,293 @@ def _maybe_relabel_fold_mtm(
     return trade
 
 
+def _net_pnl_pct(entry_price: float, exit_price: float, commission_rate: float) -> float:
+    """simulate_exit._build_trade와 같은 왕복 비용 차감 수익률."""
+    entry = _safe_float(entry_price)
+    exit_value = _safe_float(exit_price)
+    if entry <= 0.0 or exit_value <= 0.0:
+        return 0.0
+    commission_per_share = (entry + exit_value) * (max(float(commission_rate), 0.0) / 2.0)
+    return float((exit_value - entry - commission_per_share) / entry * 100.0)
+
+
+def _row_exit_price(row: pd.Series) -> float | None:
+    for key in ("Open", "Close"):
+        value = _safe_float(row.get(key), float("nan"))
+        if np.isfinite(value) and value > 0.0:
+            return float(value)
+    return None
+
+
+def _row_date(df: pd.DataFrame, idx: int) -> str:
+    try:
+        value = df.index[int(idx)]
+        return str(value.date()) if hasattr(value, "date") else str(value)
+    except Exception:
+        return str(idx)
+
+
+def _attach_entry_exit_local_search(
+    trade: dict[str, Any],
+    *,
+    df_exit: pd.DataFrame,
+    entry_idx: int,
+    realized_exit_idx: int,
+    commission_rate: float,
+) -> dict[str, Any]:
+    """진입 다음 날부터 최대 7거래일까지 청산 open을 탐색한다.
+
+    이 결과는 fitness, 승패, 실격 게이트에 사용하지 않고 다음 세대 entry
+    interval mutation의 widen/narrow 방향 힌트로만 사용한다.
+    """
+    trade = dict(trade)
+    first_idx = int(entry_idx) + 1
+    last_idx = min(
+        int(entry_idx) + ENTRY_EXIT_LOCAL_SEARCH_MAX_HOLDING_DAYS,
+        len(df_exit) - 1,
+    )
+    realized_idx = int(realized_exit_idx)
+    realized_pnl = _safe_float(trade.get("pnl_pct"))
+    entry_price = _safe_float(trade.get("avg_cost", trade.get("entry_price")))
+    candidates: list[dict[str, Any]] = []
+
+    if first_idx <= last_idx and entry_price > 0.0:
+        for candidate_idx in range(first_idx, last_idx + 1):
+            if candidate_idx == realized_idx:
+                continue
+            exit_price = _row_exit_price(df_exit.iloc[candidate_idx])
+            if exit_price is None:
+                continue
+            alternative_pnl = _net_pnl_pct(entry_price, exit_price, commission_rate)
+            improvement = alternative_pnl - realized_pnl
+            direction = "earlier" if candidate_idx < realized_idx else "later"
+            candidates.append(
+                {
+                    "direction": direction,
+                    "exit_index": int(candidate_idx),
+                    "exit_date": _row_date(df_exit, candidate_idx),
+                    "exit_price": float(exit_price),
+                    "net_pnl_pct": float(alternative_pnl),
+                    "improvement_pct_point": float(improvement),
+                }
+            )
+
+    improving = [row for row in candidates if row["improvement_pct_point"] > 1e-12]
+    best = max(improving, key=lambda row: row["improvement_pct_point"]) if improving else None
+    search = {
+        "policy": "sell_open_within_entry_plus_7_trading_days",
+        "fitness_input": False,
+        "win_gate_input": False,
+        "mutation_hint_only": True,
+        "entry_index": int(entry_idx),
+        "entry_date": _row_date(df_exit, entry_idx),
+        "realized_exit_index": int(realized_idx),
+        "realized_exit_date": trade.get("exit_date"),
+        "realized_net_pnl_pct": float(realized_pnl),
+        "search_first_exit_index": int(first_idx),
+        "search_last_exit_index": int(last_idx),
+        "search_first_exit_date": _row_date(df_exit, first_idx) if first_idx <= last_idx else None,
+        "search_last_exit_date": _row_date(df_exit, last_idx) if first_idx <= last_idx else None,
+        "candidate_count": len(candidates),
+        "better_direction": best["direction"] if best else "none",
+        "best_alternative": dict(best) if best else None,
+        "within_7_day_cap": bool(last_idx <= int(entry_idx) + ENTRY_EXIT_LOCAL_SEARCH_MAX_HOLDING_DAYS),
+    }
+    trade["entry_exit_local_search"] = search
+    return trade
+
+
+def _aggregate_entry_exit_mutation_hint(trades: list[dict[str, Any]]) -> dict[str, Any]:
+    direction_counts = {"earlier": 0, "later": 0}
+    improvement_totals = {"earlier": 0.0, "later": 0.0}
+    for trade in trades:
+        search = trade.get("entry_exit_local_search") if isinstance(trade, dict) else None
+        if not isinstance(search, dict):
+            continue
+        best = search.get("best_alternative")
+        direction = str(search.get("better_direction") or "none")
+        if direction not in direction_counts or not isinstance(best, dict):
+            continue
+        improvement = max(_safe_float(best.get("improvement_pct_point")), 0.0)
+        if improvement <= 0.0:
+            continue
+        direction_counts[direction] += 1
+        improvement_totals[direction] += improvement
+
+    total_improvement = improvement_totals["earlier"] + improvement_totals["later"]
+    improving_count = direction_counts["earlier"] + direction_counts["later"]
+    if total_improvement <= 0.0 or improving_count <= 0:
+        direction = "none"
+        confidence = 0.0
+        strength = 0.0
+    else:
+        direction = (
+            "later"
+            if improvement_totals["later"] >= improvement_totals["earlier"]
+            else "earlier"
+        )
+        dominant = improvement_totals[direction]
+        confidence = dominant / total_improvement
+        opportunity_rate = improving_count / max(len(trades), 1)
+        strength = min(1.0, 0.5 * confidence + 0.5 * opportunity_rate)
+
+    return {
+        "direction": direction,
+        "strength": float(strength),
+        "direction_confidence": float(confidence),
+        "trade_count": len(trades),
+        "improving_trade_count": int(improving_count),
+        "direction_counts": direction_counts,
+        "improvement_totals_pct_point": improvement_totals,
+        "search_cap_trading_days": ENTRY_EXIT_LOCAL_SEARCH_MAX_HOLDING_DAYS,
+        "target_genes": "entry_strict_interval_widths_used_by_provisional_interval_break",
+        "fitness_input": False,
+        "win_gate_input": False,
+    }
+
+
+def _classify_mdd_risk(trades: list[dict[str, Any]]) -> dict[str, Any]:
+    pnl = np.asarray([_safe_float(trade.get("pnl_pct")) for trade in trades], dtype=float)
+    if pnl.size == 0:
+        return {
+            "mdd_type": "NO_TRADES",
+            "peak_trade_index": None,
+            "trough_trade_index": None,
+            "episode_trade_indices": [],
+            "episode_loss_count": 0,
+        }
+    cumulative = np.cumsum(pnl)
+    running_max = np.maximum.accumulate(cumulative)
+    drawdown = cumulative - running_max
+    trough = int(np.argmin(drawdown))
+    if float(drawdown[trough]) >= -1e-12:
+        return {
+            "mdd_type": "NO_DRAWDOWN",
+            "peak_trade_index": None,
+            "trough_trade_index": None,
+            "episode_trade_indices": [],
+            "episode_loss_count": 0,
+        }
+    peak_value = float(running_max[trough])
+    peak_candidates = np.flatnonzero(
+        np.isclose(cumulative[: trough + 1], peak_value, rtol=0.0, atol=1e-12)
+    )
+    peak = int(peak_candidates[-1]) if peak_candidates.size else -1
+    start = peak + 1
+    episode_indices = list(range(max(start, 0), trough + 1))
+    losses = [idx for idx in episode_indices if pnl[idx] <= 0.0]
+    long_loss = any(
+        max(int(_safe_float(trades[idx].get("holding_days"), 0.0)), 0)
+        >= ENTRY_EXIT_LOCAL_SEARCH_MAX_HOLDING_DAYS
+        for idx in losses
+    )
+    mdd_type = "TYPE1_ACCIDENT" if len(losses) == 1 and not long_loss else "TYPE2_NEGLECT"
+    return {
+        "mdd_type": mdd_type,
+        "peak_trade_index": peak + 1 if peak >= 0 else 0,
+        "trough_trade_index": trough + 1,
+        "episode_trade_indices": [idx + 1 for idx in episode_indices],
+        "episode_loss_count": len(losses),
+    }
+
+
+def _apply_entry_scope_fitness(
+    rb: Rulebook,
+    result: BacktestResult,
+    *,
+    complexity_penalty_per_mask: float,
+) -> BacktestResult:
+    """Entry GA 전용 fitness 원칙을 적용한다.
+
+    본체는 거래별 ``비용 차감 pnl_pct / max(holding_days, 1)``의 평균이다.
+    MAE -2% 이탈분 평균을 감산하고, 비용 차감 실현수익 기준 승률 60% 미만은
+    점수 합산이 아닌 strict disqualification으로 최하 fitness를 부여한다.
+    """
+    trades = [trade for trade in list(result.trades or []) if isinstance(trade, dict)]
+    per_trade_daily_returns: list[float] = []
+    mae_excesses: list[float] = []
+    wins = 0
+
+    for trade in trades:
+        pnl_pct = _safe_float(trade.get("pnl_pct"))
+        holding_days = max(int(_safe_float(trade.get("holding_days"), 0.0)), 1)
+        daily_return = pnl_pct / holding_days
+        mae_pct = min(_safe_float(trade.get("max_loss_during_hold"), 0.0), 0.0)
+        mae_excess = max(0.0, ENTRY_FITNESS_MAE_THRESHOLD_PCT - mae_pct)
+        trade["entry_fitness_daily_return_pct"] = float(daily_return)
+        trade["mae_pct"] = float(mae_pct)
+        trade["mae_threshold_pct"] = ENTRY_FITNESS_MAE_THRESHOLD_PCT
+        trade["mae_breach_pct_point"] = float(mae_excess)
+        trade["fitness_win_after_cost"] = bool(pnl_pct > 0.0)
+        per_trade_daily_returns.append(float(daily_return))
+        mae_excesses.append(float(mae_excess))
+        if pnl_pct > 0.0:
+            wins += 1
+
+    trade_count = len(trades)
+    losses = trade_count - wins
+    win_rate = (wins / trade_count * 100.0) if trade_count else 0.0
+    primary_objective = (
+        float(np.mean(np.asarray(per_trade_daily_returns, dtype=float)))
+        if per_trade_daily_returns
+        else 0.0
+    )
+    mean_mae_excess = (
+        float(np.mean(np.asarray(mae_excesses, dtype=float)))
+        if mae_excesses
+        else 0.0
+    )
+    mae_penalty = mean_mae_excess * ENTRY_FITNESS_MAE_PENALTY_WEIGHT
+    pre_complexity_fitness = primary_objective - mae_penalty
+    post_complexity_fitness = _apply_complexity_penalty(
+        rb,
+        pre_complexity_fitness,
+        complexity_penalty_per_mask,
+    )
+    disqualified = trade_count <= 0 or win_rate < ENTRY_FITNESS_MIN_WIN_RATE_PCT
+    final_fitness = ENTRY_FITNESS_DISQUALIFIED if disqualified else post_complexity_fitness
+    mdd_risk = _classify_mdd_risk(trades)
+    mutation_hint = _aggregate_entry_exit_mutation_hint(trades)
+    diagnostics = {
+        "scope": ENTRY_GA_SCOPE_VALUE,
+        "primary_objective": "mean(net_realized_pnl_pct / max(holding_days, 1))",
+        "primary_objective_pct_per_day": float(primary_objective),
+        "mae_source": "trade.max_loss_during_hold from holding-period daily lows",
+        "mae_threshold_pct": ENTRY_FITNESS_MAE_THRESHOLD_PCT,
+        "mae_penalty_method": "mean(max(0, -2.0 - mae_pct)) * 1.0",
+        "mae_penalty": float(mae_penalty),
+        "mae_breach_trade_count": int(sum(value > 0.0 for value in mae_excesses)),
+        "worst_mae_pct": min(
+            (_safe_float(trade.get("max_loss_during_hold"), 0.0) for trade in trades),
+            default=0.0,
+        ),
+        "fitness_before_win_gate": float(post_complexity_fitness),
+        "final_fitness": float(final_fitness),
+        "win_definition": "net realized pnl_pct after commission > 0",
+        "win_count": int(wins),
+        "loss_count": int(losses),
+        "win_rate_pct": float(win_rate),
+        "win_rate_gate_pct": ENTRY_FITNESS_MIN_WIN_RATE_PCT,
+        "win_rate_gate_pass": bool(not disqualified),
+        "disqualified": bool(disqualified),
+        "disqualified_fitness": ENTRY_FITNESS_DISQUALIFIED,
+        "mdd_risk": mdd_risk,
+        "exit_mutation_hint": mutation_hint,
+    }
+
+    result.win_count = wins
+    result.loss_count = losses
+    result.win_rate = win_rate
+    result.fitness = float(final_fitness)
+    result.entry_fitness_diagnostics = diagnostics
+    result.entry_exit_mutation_hint = mutation_hint
+    rb.win_rate = win_rate
+    rb.fitness = float(final_fitness)
+    setattr(rb, ENTRY_FITNESS_DIAGNOSTICS_ATTR, diagnostics)
+    setattr(rb, ENTRY_EXIT_MUTATION_HINT_ATTR, mutation_hint)
+    return result
+
+
 def _apply_fitness_mode(
     rb: Rulebook,
     result: BacktestResult,
@@ -233,6 +543,12 @@ def _apply_fitness_mode(
     if mode == "legacy":
         return result
     if mode == "swing":
+        if _entry_scope_active(rb):
+            return _apply_entry_scope_fitness(
+                rb,
+                result,
+                complexity_penalty_per_mask=complexity_penalty_per_mask,
+            )
         raw_fitness = _calc_fitness_swing(
             expectancy_pct=result.expectancy_pct,
             win_rate=result.win_rate,
@@ -368,6 +684,7 @@ def run_backtest_execution_mode(
 ) -> BacktestResult:
     """Run a fold-aware learning backtest with explicit execution semantics."""
     trades: list[dict[str, Any]] = []
+    entry_scope_active = _entry_scope_active(rb)
     start_ts = pd.Timestamp(start_date) if start_date else None
     end_ts = pd.Timestamp(end_date) if end_date else None
     date_series = _date_series_for_df(df)
@@ -490,6 +807,14 @@ def run_backtest_execution_mode(
         exit_idx = _find_df_index_by_date(df_exit, trade.get("exit_date"))
         if exit_idx is None:
             exit_idx = entry_idx + 1
+        if entry_scope_active:
+            trade = _attach_entry_exit_local_search(
+                trade,
+                df_exit=df_exit,
+                entry_idx=entry_idx,
+                realized_exit_idx=int(exit_idx),
+                commission_rate=commission_rate,
+            )
         trade["holding_signal_path"] = _signal_tape_slice(
             signal_tape,
             entry_idx,

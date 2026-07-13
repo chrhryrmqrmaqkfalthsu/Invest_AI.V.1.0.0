@@ -4,6 +4,9 @@
 - entry scope: strict interval pair + position/context quality gene만 진화
 - entry scope는 fold empirical domain과 정렬된 raw feature values를 받아
   interval support를 실제 계산하며 exit 14-field를 진화하지 않음
+- entry scope 평가에서만 신규 일평균 수익 fitness/MAE/승률 게이트를 활성화
+- entry provisional interval-break와 연결된 interval width mutation에만
+  7거래일 청산 국소탐색 방향 힌트를 적용
 """
 from __future__ import annotations
 
@@ -124,11 +127,16 @@ _MASK_CATEGORICAL_PARAMS = {
 }
 _ENTRY_SCOPE = "entry"
 _LEGACY_SCOPE = "legacy"
+_ENTRY_GA_SCOPE_MARKER = "_active_ga_gene_scope"
+_ENTRY_EXIT_MUTATION_HINT_ATTR = "_entry_exit_mutation_hint"
+_ENTRY_EXIT_MUTATION_RATE_BOOST = 0.75
+_ENTRY_EXIT_DIRECTION_PROBABILITY_BOOST = 0.40
 _ENTRY_INTERVAL_FIELDS = frozenset(
     field_name
     for spec in ENTRY_INTERVAL_SPECS.values()
     for field_name in (spec["low_field"], spec["high_field"])
 )
+_ENTRY_EXIT_LINKED_INTERVAL_FIELDS = _ENTRY_INTERVAL_FIELDS
 _ENTRY_POSITION_NUMERIC_PARAMS = {
     "base_position_ratio",
     "signal_multiplier",
@@ -260,6 +268,86 @@ def _positive_int(value: Any, *, label: str) -> int:
 
 def _numbers_close(actual: float, supplied: float) -> bool:
     return bool(np.isclose(actual, supplied, rtol=1e-6, atol=1e-9, equal_nan=False))
+
+
+def _normalize_entry_exit_mutation_hint(rb: Rulebook) -> dict[str, Any]:
+    raw = getattr(rb, _ENTRY_EXIT_MUTATION_HINT_ATTR, None)
+    if not isinstance(raw, Mapping):
+        return {"direction": "none", "strength": 0.0, "improving_trade_count": 0}
+    direction = str(raw.get("direction") or "none").lower()
+    if direction not in {"earlier", "later"}:
+        direction = "none"
+    try:
+        strength = float(raw.get("strength", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        strength = 0.0
+    if not np.isfinite(strength):
+        strength = 0.0
+    try:
+        improving_count = max(int(raw.get("improving_trade_count", 0) or 0), 0)
+    except (TypeError, ValueError):
+        improving_count = 0
+    return {
+        "direction": direction,
+        "strength": float(max(0.0, min(strength, 1.0))),
+        "improving_trade_count": improving_count,
+    }
+
+
+def _merge_entry_exit_mutation_hints(p1: Rulebook, p2: Rulebook) -> dict[str, Any]:
+    hints = [_normalize_entry_exit_mutation_hint(p1), _normalize_entry_exit_mutation_hint(p2)]
+    weights = [max(int(hint["improving_trade_count"]), 1) for hint in hints]
+    directional_scores = {"earlier": 0.0, "later": 0.0}
+    total_weight = 0.0
+    for hint, weight in zip(hints, weights):
+        direction = str(hint["direction"])
+        strength = float(hint["strength"])
+        if direction not in directional_scores or strength <= 0.0:
+            continue
+        directional_scores[direction] += strength * weight
+        total_weight += weight
+    if total_weight <= 0.0:
+        return {"direction": "none", "strength": 0.0, "improving_trade_count": 0}
+    direction = (
+        "later"
+        if directional_scores["later"] >= directional_scores["earlier"]
+        else "earlier"
+    )
+    strength = directional_scores[direction] / total_weight
+    return {
+        "direction": direction,
+        "strength": float(max(0.0, min(strength, 1.0))),
+        "improving_trade_count": int(sum(hint["improving_trade_count"] for hint in hints)),
+        "source": "merged_parent_entry_exit_local_search",
+    }
+
+
+def _entry_interval_mutation_probability(base_rate: float, hint: Mapping[str, Any]) -> float:
+    direction = str(hint.get("direction") or "none")
+    strength = float(hint.get("strength", 0.0) or 0.0)
+    if direction not in {"earlier", "later"} or strength <= 0.0:
+        return float(max(0.0, min(base_rate, 1.0)))
+    boosted = float(base_rate) * (1.0 + _ENTRY_EXIT_MUTATION_RATE_BOOST * strength)
+    return float(max(0.0, min(boosted, 1.0)))
+
+
+def _entry_interval_width_log_delta(
+    mutation_strength: float,
+    hint: Mapping[str, Any],
+) -> float:
+    direction = str(hint.get("direction") or "none")
+    hint_strength = float(hint.get("strength", 0.0) or 0.0)
+    if direction not in {"earlier", "later"} or hint_strength <= 0.0:
+        return float(random.gauss(0.0, mutation_strength))
+
+    directional_probability = min(
+        0.90,
+        0.50 + _ENTRY_EXIT_DIRECTION_PROBABILITY_BOOST * hint_strength,
+    )
+    desired_sign = 1.0 if direction == "later" else -1.0
+    sampled_magnitude = abs(random.gauss(0.0, mutation_strength))
+    sign = desired_sign if random.random() < directional_probability else -desired_sign
+    return float(sign * sampled_magnitude)
 
 
 def _normalize_entry_feature_domain(
@@ -598,6 +686,8 @@ def mutate(
 
     ctx = _normalize_entry_feature_domain(entry_feature_domain)
     context_mutated = _mutate_entry_context_genes(rb, mutation_rate, strength)
+    exit_hint = _normalize_entry_exit_mutation_hint(rb)
+    interval_mutation_rate = _entry_interval_mutation_probability(mutation_rate, exit_hint)
 
     for _ in range(max(1, int(max_attempts))):
         candidate = copy.deepcopy(context_mutated)
@@ -605,12 +695,13 @@ def mutate(
             for feature_name, spec in ENTRY_INTERVAL_SPECS.items():
                 low = float(getattr(rb, spec["low_field"]))
                 high = float(getattr(rb, spec["high_field"]))
-                if random.random() < mutation_rate:
+                if random.random() < interval_mutation_rate:
                     domain = ctx.metadata[feature_name]
                     span = float(domain["q99"]) - float(domain["q01"])
                     minimum_width = float(domain["iqr"]) * float(spec["min_width_iqr_ratio"])
                     center = (low + high) / 2.0 + random.gauss(0.0, span * strength)
-                    width = (high - low) * float(np.exp(random.gauss(0.0, strength)))
+                    width_delta = _entry_interval_width_log_delta(strength, exit_hint)
+                    width = (high - low) * float(np.exp(width_delta))
                     low, high = _clamp_entry_pair(
                         center=center,
                         width=width,
@@ -623,6 +714,17 @@ def mutate(
         except (TypeError, ValueError):
             continue
 
+        setattr(
+            candidate,
+            "_entry_exit_mutation_applied",
+            {
+                "direction": exit_hint["direction"],
+                "strength": exit_hint["strength"],
+                "interval_mutation_rate": interval_mutation_rate,
+                "target_fields": sorted(_ENTRY_EXIT_LINKED_INTERVAL_FIELDS),
+                "fitness_input": False,
+            },
+        )
         _finalize_rulebook_genes(candidate, gene_scope=_ENTRY_SCOPE)
         _apply_entry_domain_and_support(candidate, ctx)
         if not _entry_validation_errors(candidate):
@@ -657,6 +759,7 @@ def crossover(
 
     ctx = _normalize_entry_feature_domain(entry_feature_domain)
     base = copy.deepcopy(p1)
+    setattr(base, _ENTRY_EXIT_MUTATION_HINT_ATTR, _merge_entry_exit_mutation_hints(p1, p2))
     for key in sorted(_ENTRY_NUMERIC_PARAMS):
         if hasattr(base, key) and random.random() < 0.5:
             setattr(base, key, getattr(p2, key))
@@ -720,11 +823,24 @@ def _evaluate_candidate(
     entry_ctx: _EntryDomainContext | None,
     stage: str,
 ) -> float:
+    marker_was_present = hasattr(rb, _ENTRY_GA_SCOPE_MARKER)
+    previous_marker = getattr(rb, _ENTRY_GA_SCOPE_MARKER, None)
     if gene_scope == _ENTRY_SCOPE:
         if entry_ctx is None:
             raise RuntimeError("entry domain context missing before evaluation")
         _require_valid_entry_candidate(rb, entry_ctx, stage=stage)
-    return float(evaluate_fn(rb))
+        setattr(rb, _ENTRY_GA_SCOPE_MARKER, _ENTRY_SCOPE)
+    try:
+        return float(evaluate_fn(rb))
+    finally:
+        if gene_scope == _ENTRY_SCOPE:
+            if marker_was_present:
+                setattr(rb, _ENTRY_GA_SCOPE_MARKER, previous_marker)
+            else:
+                try:
+                    delattr(rb, _ENTRY_GA_SCOPE_MARKER)
+                except AttributeError:
+                    pass
 
 
 def run_ga(
@@ -739,9 +855,10 @@ def run_ga(
 ) -> GAResult:
     """유전 알고리즘을 실행한다.
 
-    ``legacy`` scope는 기존 유전자 전체를 그대로 사용한다.
+    ``legacy`` scope는 기존 유전자 전체와 기존 fitness를 그대로 사용한다.
     ``entry`` scope는 strict interval pair와 position/context quality gene만
-    진화하며 Stage 3 EXIT_FIELDS를 보존한다.
+    진화하며 Stage 3 EXIT_FIELDS를 보존한다. 평가 호출 중에만 entry scope
+    marker를 부여해 신규 fitness/MAE/승률 게이트를 활성화한다.
 
     entry_feature_domain은 feature별 train_min/train_max/q01/q99/iqr/
     sample_count 및 같은 행에 정렬된 values를 제공해야 한다. raw values는

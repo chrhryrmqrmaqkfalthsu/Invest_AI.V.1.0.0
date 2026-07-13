@@ -1,0 +1,5 @@
+41c9be36beff6b5a57ec01bcd1b6f966bdb50716da4e192b8d4de5e9d206f3a1  readout.md
+6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717  ../ohlc_snapshot_20260707/AAP_ohlcv.csv
+bd683b376899ff9784eb86a807bd154f74502c8f0bb025ceb120b3e16b8fb400  ../ohlc_snapshot_20260707/POWI_ohlcv.csv
+35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38  ../../market_history.csv
+b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611  ../../market_history_v2.csv

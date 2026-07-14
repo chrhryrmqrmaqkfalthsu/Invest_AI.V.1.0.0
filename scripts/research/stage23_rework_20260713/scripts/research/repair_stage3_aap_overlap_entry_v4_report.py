@@ -163,7 +163,7 @@ def repair(out_dir: Path) -> dict[str, Any]:
     readout = readout_path.read_text(encoding="utf-8")
     readout = re.sub(
         r"```powershell\n.*?\n```",
-        "```powershell\n" + powershell + "\n```",
+        lambda _match: "```powershell\n" + powershell + "\n```",
         readout,
         count=1,
         flags=re.DOTALL,
@@ -171,7 +171,7 @@ def repair(out_dir: Path) -> dict[str, Any]:
     distribution_section = _distribution_section(distribution)
     readout = re.sub(
         r"## Fold-best 거래수 분포\n.*?(?=\n### 최종 population·pass 후보 거래수와 gate 병목)",
-        distribution_section + "\n",
+        lambda _match: distribution_section + "\n",
         readout,
         count=1,
         flags=re.DOTALL,
@@ -180,7 +180,8 @@ def repair(out_dir: Path) -> dict[str, Any]:
     marker = "\n## Trade-level 로그\n"
     if marker not in readout:
         raise RuntimeError("trade-level readout marker not found")
-    readout = readout.replace(marker, "\n" + event_section + marker, 1)
+    if "\n## 독립 사건 수 해석\n" not in readout:
+        readout = readout.replace(marker, "\n" + event_section + marker, 1)
     readout_path.write_text(readout, encoding="utf-8")
 
     _refresh_sha_manifest(out_dir)

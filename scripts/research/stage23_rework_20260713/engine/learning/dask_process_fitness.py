@@ -1,32 +1,35 @@
-"""Thread-safe Dask entry-fitness evaluator.
+"""Dask worker bridge to a local external fitness process service.
 
-The current Dask workers are daemon processes and cannot create child process
-pools. This module keeps the public API used by the official probe but executes
-fitness directly in the worker's configured threads. Thread safety comes from
-``entry_fitness_threadsafe.run_entry_backtest_threadsafe``, which passes the
-provisional-exit arguments explicitly and never patches shared module globals.
+Dask worker processes are daemonic and cannot create multiprocessing children.
+Each worker therefore launches ``engine.learning.dask_fitness_service`` as a
+standalone non-daemon subprocess. Dask task threads communicate with that
+service through a loopback TCP socket; the service owns a persistent ``spawn``
+process pool sized to the worker's configured thread count.
 """
 from __future__ import annotations
 
-import copy
-import hashlib
-import json
 import os
+import pickle
+import socket
 import struct
+import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Any, Mapping
 
 _TASK_INVOCATIONS: dict[str, int] = {}
 _TASK_LOCK = threading.Lock()
-_ACTIVE_TASKS = 0
-_PEAK_ACTIVE_TASKS = 0
-_ACTIVE_LOCK = threading.Lock()
+_SERVICE_LOCK = threading.Lock()
+_SERVICE_PROCESS: subprocess.Popen[Any] | None = None
+_SERVICE_PORT = 0
+_SERVICE_CONFIG_KEY = ""
+_SERVICE_MAX_WORKERS = 0
+_SERVICE_PROJECT_ROOT = ""
 
 
 def _current_worker() -> Any:
-    """Resolve the worker in task and ``Client.run`` execution contexts."""
     try:
         from dask.distributed import get_worker
 
@@ -41,7 +44,6 @@ def _current_worker() -> Any:
 
 
 def _worker_nthreads(worker: Any) -> int:
-    """Return configured Dask worker concurrency across Dask API versions."""
     state_value = getattr(getattr(worker, "state", None), "nthreads", None)
     if state_value is not None:
         return int(state_value)
@@ -52,7 +54,6 @@ def _worker_nthreads(worker: Any) -> int:
 
 
 def _scheduler_worker_address(worker: Any) -> str:
-    """Normalize localhost aliases to the scheduler's registered worker key."""
     reported = str(getattr(worker, "address", ""))
     if reported.startswith("tcp://") and ":" in reported:
         port = reported.rsplit(":", 1)[-1]
@@ -61,32 +62,196 @@ def _scheduler_worker_address(worker: Any) -> str:
     return reported
 
 
-def _float_hex(value: float) -> str:
-    return struct.pack(">d", float(value)).hex()
+def _service_port() -> int:
+    return 49328 if os.name == "nt" else 49308
 
 
-def _canonical_sha256(value: Any) -> str:
-    payload = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+def _recv_exact(stream: socket.socket, size: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = int(size)
+    while remaining:
+        chunk = stream.recv(remaining)
+        if not chunk:
+            raise EOFError("fitness service socket closed")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
 
 
-def _runtime_attrs(rulebook: Any) -> dict[str, Any]:
-    names = (
-        "_entry_fitness_diagnostics",
-        "_entry_exit_mutation_hint",
-        "_entry_exit_mutation_applied",
-    )
-    return {
-        name: copy.deepcopy(getattr(rulebook, name))
-        for name in names
-        if hasattr(rulebook, name)
+def _service_request(
+    request: Mapping[str, Any],
+    *,
+    port: int,
+    timeout: float = 900.0,
+) -> dict[str, Any]:
+    payload = pickle.dumps(dict(request), protocol=5)
+    with socket.create_connection(("127.0.0.1", int(port)), timeout=timeout) as stream:
+        stream.settimeout(timeout)
+        stream.sendall(struct.pack(">Q", len(payload)) + payload)
+        length = struct.unpack(">Q", _recv_exact(stream, 8))[0]
+        response = pickle.loads(_recv_exact(stream, length))
+    if not response.get("ok"):
+        raise RuntimeError(
+            f"fitness service {response.get('operation')} failed: "
+            f"{response.get('error_type')}: {response.get('error')}\n"
+            f"{response.get('traceback')}"
+        )
+    return dict(response["result"])
+
+
+def _service_is_alive(port: int) -> bool:
+    try:
+        status = _service_request({"op": "status"}, port=port, timeout=2.0)
+        return bool(status.get("service_pid"))
+    except Exception:
+        return False
+
+
+def _wait_for_service(port: int, timeout: float = 60.0) -> None:
+    deadline = time.monotonic() + float(timeout)
+    while time.monotonic() < deadline:
+        if _service_is_alive(port):
+            return
+        time.sleep(0.1)
+    raise RuntimeError(f"fitness service did not start on 127.0.0.1:{port}")
+
+
+def _launch_service(project_root: str, port: int) -> subprocess.Popen[Any]:
+    root = str(project_root)
+    vendor = str(Path(root) / "vendor")
+    environment = dict(os.environ)
+    existing = environment.get("PYTHONPATH", "")
+    preferred = os.pathsep.join([root, vendor])
+    environment["PYTHONPATH"] = preferred if not existing else os.pathsep.join([preferred, existing])
+    environment["PYTHONUTF8"] = "1"
+    environment["PYTHONIOENCODING"] = "utf-8"
+    environment["OMP_NUM_THREADS"] = "1"
+    environment["OPENBLAS_NUM_THREADS"] = "1"
+    environment["MKL_NUM_THREADS"] = "1"
+    environment["NUMEXPR_NUM_THREADS"] = "1"
+    args = [
+        sys.executable,
+        "-m",
+        "engine.learning.dask_fitness_service",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(int(port)),
+    ]
+    kwargs: dict[str, Any] = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+        "env": environment,
     }
+    if os.name == "nt":
+        kwargs["creationflags"] = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    else:
+        kwargs["start_new_session"] = True
+    return subprocess.Popen(args, **kwargs)
+
+
+def _clear_service_state() -> None:
+    global _SERVICE_PROCESS, _SERVICE_PORT, _SERVICE_CONFIG_KEY
+    global _SERVICE_MAX_WORKERS, _SERVICE_PROJECT_ROOT
+
+    _SERVICE_PROCESS = None
+    _SERVICE_PORT = 0
+    _SERVICE_CONFIG_KEY = ""
+    _SERVICE_MAX_WORKERS = 0
+    _SERVICE_PROJECT_ROOT = ""
+
+
+def _stop_service_locked() -> dict[str, Any]:
+    process = _SERVICE_PROCESS
+    port = int(_SERVICE_PORT or _service_port())
+    status_before: dict[str, Any] | None = None
+    try:
+        if _service_is_alive(port):
+            status_before = _service_request({"op": "shutdown"}, port=port, timeout=30.0)
+    except Exception:
+        status_before = None
+
+    if process is not None:
+        try:
+            process.wait(timeout=45.0)
+        except subprocess.TimeoutExpired:
+            process.terminate()
+            try:
+                process.wait(timeout=15.0)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=15.0)
+    _clear_service_state()
+    return {
+        "service_port": port,
+        "status_before": status_before,
+        "process_returncode": None if process is None else process.returncode,
+    }
+
+
+def _ensure_service(
+    payload: Mapping[str, Any],
+    *,
+    payload_key: str,
+    max_workers: int,
+    project_root: str,
+) -> dict[str, Any]:
+    global _SERVICE_PROCESS, _SERVICE_PORT, _SERVICE_CONFIG_KEY
+    global _SERVICE_MAX_WORKERS, _SERVICE_PROJECT_ROOT
+
+    workers = max(1, int(max_workers))
+    root = str(project_root)
+    port = _service_port()
+    with _SERVICE_LOCK:
+        same_config = (
+            _SERVICE_CONFIG_KEY == str(payload_key)
+            and _SERVICE_MAX_WORKERS == workers
+            and _SERVICE_PROJECT_ROOT == root
+            and _service_is_alive(port)
+        )
+        if same_config:
+            status = _service_request({"op": "status"}, port=port, timeout=10.0)
+            return {
+                "configured": bool(status.get("configured")),
+                "reused": True,
+                "payload_key": status.get("payload_key", str(payload_key)),
+                "max_workers": int(status.get("max_workers", workers) or workers),
+                "project_root": status.get("project_root", root),
+                "service_pid": status.get("service_pid"),
+                "child_pids": [],
+                "child_pid_count": 0,
+                "warmup_seconds": 0.0,
+                "child_environment": {},
+            }
+
+        _stop_service_locked()
+        if _service_is_alive(port):
+            try:
+                _service_request({"op": "shutdown"}, port=port, timeout=15.0)
+                time.sleep(0.5)
+            except Exception:
+                pass
+        process = _launch_service(root, port)
+        _SERVICE_PROCESS = process
+        _SERVICE_PORT = port
+        _wait_for_service(port, timeout=90.0)
+        configure = _service_request(
+            {
+                "op": "configure",
+                "payload": payload,
+                "payload_key": str(payload_key),
+                "max_workers": workers,
+                "project_root": root,
+            },
+            port=port,
+            timeout=900.0,
+        )
+        _SERVICE_CONFIG_KEY = str(payload_key)
+        _SERVICE_MAX_WORKERS = workers
+        _SERVICE_PROJECT_ROOT = root
+        return configure
 
 
 def warmup_worker_pool(
@@ -95,24 +260,29 @@ def warmup_worker_pool(
     payload_key: str,
     max_workers: int,
 ) -> dict[str, Any]:
-    started = time.perf_counter()
     worker = _current_worker()
-    from engine.learning.entry_fitness_threadsafe import run_entry_backtest_threadsafe
-
-    if payload.get("market_snapshot_sha256") is None:
-        raise RuntimeError("market snapshot SHA missing from worker payload")
-    configured = _worker_nthreads(worker)
+    project_root = str(Path(__import__("engine").__file__).resolve().parent.parent)
+    started = time.perf_counter()
+    configured = _ensure_service(
+        payload,
+        payload_key=payload_key,
+        max_workers=max_workers,
+        project_root=project_root,
+    )
     return {
         "worker_address": _scheduler_worker_address(worker),
         "worker_reported_address": str(worker.address),
-        "worker_nthreads": configured,
+        "worker_nthreads": _worker_nthreads(worker),
         "pool_max_workers": int(max_workers),
-        "execution_model": "dask_worker_threads_threadsafe_backtest",
-        "process_pid": os.getpid(),
-        "child_pids": [os.getpid()],
-        "child_pid_count": 1,
-        "threadsafe_function": f"{run_entry_backtest_threadsafe.__module__}.{run_entry_backtest_threadsafe.__name__}",
+        "execution_model": "external_loopback_spawn_process_service",
+        "project_root": project_root,
         "payload_key": str(payload_key),
+        "service_port": _service_port(),
+        "service_pid": configured.get("service_pid"),
+        "child_pids": configured.get("child_pids", []),
+        "child_pid_count": configured.get("child_pid_count", 0),
+        "child_environment": configured.get("child_environment", {}),
+        "service_warmup_seconds": configured.get("warmup_seconds"),
         "warmup_seconds": time.perf_counter() - started,
     }
 
@@ -125,143 +295,96 @@ def evaluate_via_worker_pool(
     payload_key: str,
     max_workers: int,
 ) -> dict[str, Any]:
-    global _ACTIVE_TASKS, _PEAK_ACTIVE_TASKS
-
-    import numpy as np
-    import pandas as pd
-
-    from engine.core.metadata import compute_rulebook_hash
-    from engine.learning import execution_mode_backtest as execution_bt
-    from engine.learning import genetic as genetic
-    from engine.learning.entry_fitness_threadsafe import run_entry_backtest_threadsafe
-    from engine.strategies.rulebook import Rulebook
-
     worker = _current_worker()
     with _TASK_LOCK:
         invocation = _TASK_INVOCATIONS.get(str(task_id), 0) + 1
         _TASK_INVOCATIONS[str(task_id)] = invocation
-    with _ACTIVE_LOCK:
-        _ACTIVE_TASKS += 1
-        _PEAK_ACTIVE_TASKS = max(_PEAK_ACTIVE_TASKS, _ACTIVE_TASKS)
-        active_at_start = _ACTIVE_TASKS
-        peak_at_start = _PEAK_ACTIVE_TASKS
 
+    project_root = str(Path(__import__("engine").__file__).resolve().parent.parent)
+    _ensure_service(
+        payload,
+        payload_key=payload_key,
+        max_workers=max_workers,
+        project_root=project_root,
+    )
     started = time.perf_counter()
-    try:
-        candidate = Rulebook.from_dict(dict(task_envelope["rulebook_payload"]))
-        for name, value in dict(task_envelope.get("runtime_attrs") or {}).items():
-            setattr(candidate, str(name), copy.deepcopy(value))
-        entry_ctx = genetic._normalize_entry_feature_domain(task_envelope["entry_domain"])
-        stage = str(task_envelope["stage"])
-
-        def evaluate_fn(item: Any) -> float:
-            split = payload["split"]
-            result = run_entry_backtest_threadsafe(
-                item,
-                payload["df"],
-                start_date=str(split["start"]),
-                end_date=str(split["end"]),
-                position_limit_krw=120_000.0,
-                market_history_df=payload["market_history_df"],
-                sector_name=str(payload.get("sector_name") or "tech"),
-                ticker_sentiment=payload.get("ticker_sentiment"),
-                complexity_penalty_per_mask=0.0,
-                use_llm_events=False,
-                entry_execution_mode="t_plus_1_open",
-                exit_execution_mode="conservative_core",
-                fold_exit_policy="fold_end_mark_to_market",
-                live_hard_stop_guard=True,
-                entry_phase_max_holding_days=7,
-            )
-            return float(getattr(result, "fitness", -1_000_000_000.0))
-
-        fitness = genetic._evaluate_candidate(
-            candidate,
-            evaluate_fn,
-            gene_scope="entry",
-            entry_ctx=entry_ctx,
-            stage=stage,
-        )
-        candidate.fitness = float(fitness)
-        diagnostics = dict(
-            getattr(candidate, execution_bt.ENTRY_FITNESS_DIAGNOSTICS_ATTR, {}) or {}
-        )
-        elapsed = time.perf_counter() - started
-        return {
-            "index": int(task_envelope["index"]),
-            "candidate_payload": candidate.to_dict(),
-            "candidate_runtime_attrs": _runtime_attrs(candidate),
-            "chromosome_hash": compute_rulebook_hash(candidate),
-            "parameter_sha256": _canonical_sha256(candidate.to_dict()),
-            "fitness": float(fitness),
-            "fitness_hex": _float_hex(float(fitness)),
-            "trade_count": diagnostics.get("trade_count"),
-            "win_rate_pct": diagnostics.get("win_rate_pct"),
-            "entry_gate_pass": diagnostics.get("entry_gate_pass"),
+    result = _service_request(
+        {"op": "evaluate", "task_envelope": dict(task_envelope)},
+        port=_service_port(),
+        timeout=1800.0,
+    )
+    result.update(
+        {
             "task_id": str(task_id),
             "worker_task_invocation_count": int(invocation),
             "worker_address": _scheduler_worker_address(worker),
             "worker_reported_address": str(worker.address),
             "worker_os_name": os.name,
             "worker_python": sys.version,
-            "worker_numpy": np.__version__,
-            "worker_pandas": pd.__version__,
             "worker_nthreads": _worker_nthreads(worker),
             "worker_pool_max_workers": int(max_workers),
             "worker_engine_file": str(__import__("engine").__file__),
             "worker_process_pid": os.getpid(),
-            "child_pid": os.getpid(),
             "worker_thread_id": threading.get_ident(),
-            "active_tasks_at_start": int(active_at_start),
-            "peak_active_tasks_at_start": int(peak_at_start),
-            "evaluation_seconds": elapsed,
-            "worker_task_seconds": elapsed,
-            "market_snapshot_sha256": payload["market_snapshot_sha256"],
-            "worker_local_market_file_read": False,
-            "execution_model": "dask_worker_threads_threadsafe_backtest",
+            "worker_task_seconds": time.perf_counter() - started,
+            "execution_model": "external_loopback_spawn_process_service",
             "payload_key": str(payload_key),
+            "service_port": _service_port(),
         }
-    finally:
-        with _ACTIVE_LOCK:
-            _ACTIVE_TASKS -= 1
+    )
+    return result
 
 
 def worker_pool_status() -> dict[str, Any]:
     worker = _current_worker()
-    configured = _worker_nthreads(worker)
-    with _ACTIVE_LOCK:
-        active = int(_ACTIVE_TASKS)
-        peak = int(_PEAK_ACTIVE_TASKS)
+    port = _service_port()
+    status = (
+        _service_request({"op": "status"}, port=port, timeout=10.0)
+        if _service_is_alive(port)
+        else {
+            "configured": False,
+            "evaluation_count": 0,
+            "failure_count": 0,
+            "active_count": 0,
+            "peak_active_count": 0,
+            "max_workers": 0,
+            "service_pid": None,
+        }
+    )
     return {
         "worker_address": _scheduler_worker_address(worker),
         "worker_reported_address": str(worker.address),
-        "executor_active": True,
-        "executor_max_workers": configured,
-        "executor_payload_key": "threadsafe-direct",
+        "executor_active": bool(status.get("configured")),
+        "executor_max_workers": int(status.get("max_workers", 0) or 0),
+        "executor_payload_key": status.get("payload_key", ""),
         "task_invocation_key_count": len(_TASK_INVOCATIONS),
-        "worker_nthreads": configured,
-        "active_tasks": active,
-        "peak_active_tasks": peak,
-        "execution_model": "dask_worker_threads_threadsafe_backtest",
+        "worker_nthreads": _worker_nthreads(worker),
+        "active_tasks": int(status.get("active_count", 0) or 0),
+        "peak_active_tasks": int(status.get("peak_active_count", 0) or 0),
+        "evaluation_count": int(status.get("evaluation_count", 0) or 0),
+        "failure_count": int(status.get("failure_count", 0) or 0),
+        "service_pid": status.get("service_pid"),
+        "service_port": port,
+        "execution_model": "external_loopback_spawn_process_service",
     }
 
 
 def shutdown_worker_pool() -> dict[str, Any]:
-    global _PEAK_ACTIVE_TASKS
-
     worker = _current_worker()
     with _TASK_LOCK:
         invocation_count = len(_TASK_INVOCATIONS)
         _TASK_INVOCATIONS.clear()
-    with _ACTIVE_LOCK:
-        peak = int(_PEAK_ACTIVE_TASKS)
-        _PEAK_ACTIVE_TASKS = 0
+    with _SERVICE_LOCK:
+        stopped = _stop_service_locked()
     return {
         "worker_address": _scheduler_worker_address(worker),
         "worker_reported_address": str(worker.address),
-        "was_active": bool(invocation_count),
+        "was_active": bool(invocation_count or stopped.get("status_before")),
         "task_invocation_key_count": invocation_count,
-        "peak_active_tasks": peak,
+        "peak_active_tasks": (
+            (stopped.get("status_before") or {}).get("peak_active_count", 0)
+        ),
         "shutdown_seconds": 0.0,
-        "execution_model": "dask_worker_threads_threadsafe_backtest",
+        "execution_model": "external_loopback_spawn_process_service",
+        "service_stop": stopped,
     }

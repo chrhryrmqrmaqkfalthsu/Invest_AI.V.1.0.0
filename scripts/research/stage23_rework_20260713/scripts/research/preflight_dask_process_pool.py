@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preflight concurrent thread-safe Dask entry-fitness evaluation."""
+"""Preflight the external process-pool fitness services on both Dask workers."""
 from __future__ import annotations
 
 import copy
@@ -11,6 +11,9 @@ import time
 from typing import Any
 
 from dask.distributed import Client
+
+EXPECTED_MODEL = "external_loopback_spawn_process_service"
+EXPECTED_FITNESS_HEX = "3ff4cb6cc6ec4670"
 
 
 class AtomicClient(Client):
@@ -68,7 +71,7 @@ def load_module(name: str, path: pathlib.Path):
 
 def main() -> int:
     scripts_dir = pathlib.Path(__file__).resolve().parent
-    stage3 = load_module("_thread_preflight_stage3", scripts_dir / "run_stage3_aggressive.py")
+    stage3 = load_module("_service_preflight_stage3", scripts_dir / "run_stage3_aggressive.py")
 
     from engine.learning import genetic
     from engine.strategies.rulebook import Rulebook
@@ -102,15 +105,25 @@ def main() -> int:
         "split": dict(split),
         "market_snapshot_sha256": metadata["primary"]["sha256"],
     }
-    key = "AAP:train_3:thread-preflight"
+    key = "AAP:train_3:external-service-preflight"
 
     client = AtomicClient("tcp://localhost:8786", direct_to_workers=False)
     try:
         worker_info = client.scheduler_info()["workers"]
+        original_workers = {
+            address: row
+            for address, row in worker_info.items()
+            if not str(row.get("name", "")).startswith(("official-vm", "official-notebook"))
+        }
+        if len(original_workers) != 2:
+            raise RuntimeError(f"expected two original workers, got {list(original_workers)}")
+
         payload_futures: dict[str, Any] = {}
         warm_futures = []
-        for address, info in worker_info.items():
-            nthreads = int(info["nthreads"])
+        capacities: dict[str, int] = {}
+        for address, info in original_workers.items():
+            capacity = int(info["nthreads"])
+            capacities[address] = capacity
             payload_future = client.scatter(
                 payload,
                 workers=[address],
@@ -124,30 +137,33 @@ def main() -> int:
                     warm,
                     payload_future,
                     key,
-                    nthreads,
+                    capacity,
                     workers=[address],
                     allow_other_workers=False,
                     pure=False,
-                    key=f"thread-preflight-warm-{nthreads}",
+                    key=f"service-preflight-warm-{capacity}",
                 )
             )
         warm_rows = client.gather(warm_futures, direct=False)
-        for row in warm_rows:
-            if row["execution_model"] != "dask_worker_threads_threadsafe_backtest":
+        warm_by_address = {row["worker_address"]: row for row in warm_rows}
+        for address, capacity in capacities.items():
+            row = warm_by_address[address]
+            if row["execution_model"] != EXPECTED_MODEL:
                 raise RuntimeError(f"wrong execution model: {row}")
-            if int(row["worker_nthreads"]) != int(row["pool_max_workers"]):
-                raise RuntimeError(f"thread capacity mismatch: {row}")
+            if int(row["pool_max_workers"]) != capacity:
+                raise RuntimeError(f"service capacity mismatch: {row}")
+            if int(row["child_pid_count"]) < max(1, capacity // 2):
+                raise RuntimeError(f"insufficient process fan-out: {row}")
 
         futures = []
         started = time.perf_counter()
-        for address, info in worker_info.items():
-            nthreads = int(info["nthreads"])
-            for index in range(nthreads):
+        for address, capacity in capacities.items():
+            for index in range(capacity):
                 envelope = {
                     "index": index,
                     "rulebook_payload": rulebook.to_dict(),
                     "runtime_attrs": {},
-                    "stage": f"thread-preflight-{address}-{index}",
+                    "stage": f"service-preflight-{address}-{index}",
                     "entry_domain": copy.deepcopy(entry_domain_payload),
                 }
                 envelope_future = client.scatter(
@@ -160,49 +176,75 @@ def main() -> int:
                 futures.append(
                     client.submit(
                         evaluate,
-                        f"thread-preflight:{address}:{index}",
+                        f"service-preflight:{address}:{index}",
                         envelope_future,
                         payload_futures[address],
                         key,
-                        nthreads,
+                        capacity,
                         workers=[address],
                         allow_other_workers=False,
                         pure=False,
-                        key=f"thread-preflight-eval-{nthreads}-{index}",
+                        key=f"service-preflight-eval-{capacity}-{index}",
                     )
                 )
         rows = client.gather(futures, direct=False)
         elapsed = time.perf_counter() - started
         fitness_hexes = {row["fitness_hex"] for row in rows}
-        if len(fitness_hexes) != 1:
-            raise RuntimeError(f"concurrent fitness mismatch: {fitness_hexes}")
-        status_rows = client.run(status)
-        for address, row in status_rows.items():
-            if int(row["peak_active_tasks"]) < 2:
-                raise RuntimeError(f"worker did not execute concurrent tasks: {address}: {row}")
+        if fitness_hexes != {EXPECTED_FITNESS_HEX}:
+            raise RuntimeError(f"process service fitness mismatch: {fitness_hexes}")
+
+        status_rows = client.run(status, workers=list(original_workers))
+        for address, capacity in capacities.items():
+            row = status_rows[address]
+            if row["execution_model"] != EXPECTED_MODEL:
+                raise RuntimeError(f"wrong service status: {row}")
+            if int(row["executor_max_workers"]) != capacity:
+                raise RuntimeError(f"wrong service process count: {row}")
+            if int(row["failure_count"]) != 0:
+                raise RuntimeError(f"service failures detected: {row}")
+            if int(row["evaluation_count"]) != capacity:
+                raise RuntimeError(f"service evaluation count mismatch: {row}")
+            if int(row["peak_active_tasks"]) < max(2, capacity // 2):
+                raise RuntimeError(f"insufficient concurrent service requests: {row}")
+
+        worker_counts = {
+            address: sum(row["worker_address"] == address for row in rows)
+            for address in original_workers
+        }
+        child_pids = {
+            address: sorted(
+                {
+                    int(row["child_pid"])
+                    for row in rows
+                    if row["worker_address"] == address
+                }
+            )
+            for address in original_workers
+        }
+        for address, capacity in capacities.items():
+            if worker_counts[address] != capacity:
+                raise RuntimeError(f"worker assignment mismatch: {worker_counts}")
+            if len(child_pids[address]) < max(1, capacity // 2):
+                raise RuntimeError(f"child PID usage too low: {child_pids}")
+
         print(
             json.dumps(
                 {
                     "status": "PASS",
+                    "execution_model": EXPECTED_MODEL,
                     "warmup": warm_rows,
                     "evaluation_count": len(rows),
-                    "fitness_hex": next(iter(fitness_hexes)),
+                    "fitness_hex": EXPECTED_FITNESS_HEX,
                     "wall_clock_seconds": elapsed,
-                    "worker_counts": {
-                        address: sum(row["worker_address"] == address for row in rows)
-                        for address in worker_info
-                    },
+                    "worker_capacities": capacities,
+                    "worker_counts": worker_counts,
                     "worker_status": status_rows,
-                    "thread_ids": {
-                        address: sorted(
-                            {
-                                int(row["worker_thread_id"])
-                                for row in rows
-                                if row["worker_address"] == address
-                            }
-                        )
-                        for address in worker_info
+                    "child_pids": child_pids,
+                    "child_pid_counts": {
+                        address: len(pids) for address, pids in child_pids.items()
                     },
+                    "market_snapshot_sha256": payload["market_snapshot_sha256"],
+                    "worker_local_market_file_read": False,
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -211,7 +253,7 @@ def main() -> int:
         return 0
     finally:
         try:
-            client.run(stop)
+            client.run(stop, workers=list(client.scheduler_info()["workers"]))
         except Exception:
             pass
         client.close()

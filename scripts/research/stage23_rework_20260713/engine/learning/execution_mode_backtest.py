@@ -10,11 +10,12 @@ This module keeps explicit learning-backtest execution semantics isolated from
 - all post-start trading days precomputed into a daily signal tape
 - entry-scope fitness diagnostics and bounded exit-timing mutation hints
 
-The tape separates signal measurement from trade-index jumps. Holding and
-cooldown dates are measured even when the execution loop skips directly to the
-next eligible entry date. Rows beyond ``end_date`` are measured as
-``entry_eligible=False`` so an unbounded trade can still retain its full holding
-and cooldown signal path without reopening entry eligibility.
+The tape separates signal measurement from entry scheduling. Entry-scope runs
+measure every eligible day and allow independent overlapping positions, while
+legacy runs retain the original single-position exit-plus-cooldown index jump.
+Rows beyond ``end_date`` are measured as ``entry_eligible=False`` so an
+unbounded trade can still retain its full holding and cooldown signal path
+without reopening entry eligibility.
 """
 from __future__ import annotations
 
@@ -934,7 +935,10 @@ def run_backtest_execution_mode(
         trade["cooldown_signal_path_count"] = len(trade["cooldown_signal_path"])
         trades.append(trade)
 
-        i = max(int(exit_idx) + 1 + cooldown_days, entry_idx + 1)
+        if entry_scope_active:
+            i += 1
+        else:
+            i = max(int(exit_idx) + 1 + cooldown_days, entry_idx + 1)
 
     result = _summarize(rb, trades)
     result = _apply_fitness_mode(

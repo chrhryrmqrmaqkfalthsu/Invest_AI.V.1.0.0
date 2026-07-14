@@ -46,10 +46,13 @@ EXECUTION_SEMANTICS_CACHE_TOKEN = DAILY_SIGNAL_TAPE_MODE
 
 ENTRY_GA_SCOPE_MARKER = "_active_ga_gene_scope"
 ENTRY_GA_SCOPE_VALUE = "entry"
-ENTRY_FITNESS_MIN_TRADES = 10
+ENTRY_FITNESS_MIN_TRADES = 12
 ENTRY_FITNESS_MIN_WIN_RATE_PCT = 60.0
+ENTRY_FITNESS_WIN_THRESHOLD_PCT = 0.5
 ENTRY_FITNESS_MAE_THRESHOLD_PCT = -2.0
 ENTRY_FITNESS_MAE_PENALTY_WEIGHT = 1.0
+ENTRY_FITNESS_REALIZED_LOSS_THRESHOLD_PCT = -1.0
+ENTRY_FITNESS_REALIZED_LOSS_PENALTY_WEIGHT = 1.0
 ENTRY_FITNESS_DISQUALIFIED = -1_000_000_000.0
 ENTRY_EXIT_LOCAL_SEARCH_MAX_HOLDING_DAYS = 7
 ENTRY_EXIT_MUTATION_HINT_ATTR = "_entry_exit_mutation_hint"
@@ -110,6 +113,29 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
     except (TypeError, ValueError):
         return float(default)
     return number if np.isfinite(number) else float(default)
+
+
+def _entry_fitness_realized_loss_excess(pnl_pct: Any) -> float:
+    """Return the realized-loss excess below the -1% tolerance."""
+    return float(
+        max(
+            0.0,
+            ENTRY_FITNESS_REALIZED_LOSS_THRESHOLD_PCT - _safe_float(pnl_pct),
+        )
+    )
+
+
+def _entry_fitness_is_win(pnl_pct: Any) -> bool:
+    """A win requires net realized trade PnL strictly above +0.5%."""
+    return bool(_safe_float(pnl_pct) > ENTRY_FITNESS_WIN_THRESHOLD_PCT)
+
+
+def _entry_fitness_gate_pass(trade_count: int, win_rate_pct: float) -> bool:
+    """Strict support-and-quality gate used only by entry-scope fitness."""
+    return bool(
+        int(trade_count) >= ENTRY_FITNESS_MIN_TRADES
+        and _safe_float(win_rate_pct) >= ENTRY_FITNESS_MIN_WIN_RATE_PCT
+    )
 
 
 def _entry_scope_active(rb: Rulebook) -> bool:
@@ -445,13 +471,15 @@ def _apply_entry_scope_fitness(
     """Entry GA 전용 fitness 원칙을 적용한다.
 
     본체는 거래별 ``비용 차감 pnl_pct / max(holding_days, 1)``의 평균이다.
-    MAE -2% 이탈분 평균을 감산하고, 거래 수 10건 이상과 비용 차감 실현수익
-    기준 승률 60% 이상을 동시에 만족할 때만 fitness를 인정한다. 두 조건 중
-    하나라도 실패하면 점수 합산이 아닌 strict disqualification을 적용한다.
+    MAE -2% 이탈분 평균과 비용 차감 실현손실 -1% 초과분 평균을 각각 감산한다.
+    거래 수 12건 이상과 비용 차감 실현수익 > 0.5% 기준 승률 60% 이상을
+    동시에 만족할 때만 fitness를 인정한다. 두 조건 중 하나라도 실패하면
+    점수 합산이 아닌 strict disqualification을 적용한다.
     """
     trades = [trade for trade in list(result.trades or []) if isinstance(trade, dict)]
     per_trade_daily_returns: list[float] = []
     mae_excesses: list[float] = []
+    realized_loss_excesses: list[float] = []
     wins = 0
 
     for trade in trades:
@@ -460,14 +488,20 @@ def _apply_entry_scope_fitness(
         daily_return = pnl_pct / holding_days
         mae_pct = min(_safe_float(trade.get("max_loss_during_hold"), 0.0), 0.0)
         mae_excess = max(0.0, ENTRY_FITNESS_MAE_THRESHOLD_PCT - mae_pct)
+        realized_loss_excess = _entry_fitness_realized_loss_excess(pnl_pct)
+        win_after_cost = _entry_fitness_is_win(pnl_pct)
         trade["entry_fitness_daily_return_pct"] = float(daily_return)
         trade["mae_pct"] = float(mae_pct)
         trade["mae_threshold_pct"] = ENTRY_FITNESS_MAE_THRESHOLD_PCT
         trade["mae_breach_pct_point"] = float(mae_excess)
-        trade["fitness_win_after_cost"] = bool(pnl_pct > 0.0)
+        trade["realized_loss_threshold_pct"] = ENTRY_FITNESS_REALIZED_LOSS_THRESHOLD_PCT
+        trade["realized_loss_breach_pct_point"] = float(realized_loss_excess)
+        trade["fitness_win_threshold_pct"] = ENTRY_FITNESS_WIN_THRESHOLD_PCT
+        trade["fitness_win_after_cost"] = bool(win_after_cost)
         per_trade_daily_returns.append(float(daily_return))
         mae_excesses.append(float(mae_excess))
-        if pnl_pct > 0.0:
+        realized_loss_excesses.append(float(realized_loss_excess))
+        if win_after_cost:
             wins += 1
 
     trade_count = len(trades)
@@ -484,7 +518,17 @@ def _apply_entry_scope_fitness(
         else 0.0
     )
     mae_penalty = mean_mae_excess * ENTRY_FITNESS_MAE_PENALTY_WEIGHT
-    pre_complexity_fitness = primary_objective - mae_penalty
+    mean_realized_loss_excess = (
+        float(np.mean(np.asarray(realized_loss_excesses, dtype=float)))
+        if realized_loss_excesses
+        else 0.0
+    )
+    realized_loss_penalty = (
+        mean_realized_loss_excess * ENTRY_FITNESS_REALIZED_LOSS_PENALTY_WEIGHT
+    )
+    pre_complexity_fitness = (
+        primary_objective - mae_penalty - realized_loss_penalty
+    )
     post_complexity_fitness = _apply_complexity_penalty(
         rb,
         pre_complexity_fitness,
@@ -492,7 +536,7 @@ def _apply_entry_scope_fitness(
     )
     trade_count_gate_pass = trade_count >= ENTRY_FITNESS_MIN_TRADES
     win_rate_threshold_pass = win_rate >= ENTRY_FITNESS_MIN_WIN_RATE_PCT
-    entry_gate_pass = trade_count_gate_pass and win_rate_threshold_pass
+    entry_gate_pass = _entry_fitness_gate_pass(trade_count, win_rate)
     disqualification_reasons: list[str] = []
     if not trade_count_gate_pass:
         disqualification_reasons.append("trade_count_below_minimum")
@@ -512,6 +556,14 @@ def _apply_entry_scope_fitness(
         "mae_penalty_method": "mean(max(0, -2.0 - mae_pct)) * 1.0",
         "mae_penalty": float(mae_penalty),
         "mae_breach_trade_count": int(sum(value > 0.0 for value in mae_excesses)),
+        "realized_loss_source": "trade.pnl_pct net of commission",
+        "realized_loss_threshold_pct": ENTRY_FITNESS_REALIZED_LOSS_THRESHOLD_PCT,
+        "realized_loss_penalty_method": "mean(max(0, -1.0 - net_realized_pnl_pct)) * 1.0",
+        "realized_loss_penalty": float(realized_loss_penalty),
+        "realized_loss_breach_trade_count": int(
+            sum(value > 0.0 for value in realized_loss_excesses)
+        ),
+        "total_risk_penalty": float(mae_penalty + realized_loss_penalty),
         "worst_mae_pct": min(
             (_safe_float(trade.get("max_loss_during_hold"), 0.0) for trade in trades),
             default=0.0,
@@ -522,13 +574,14 @@ def _apply_entry_scope_fitness(
         "trade_count": int(trade_count),
         "min_trade_count": ENTRY_FITNESS_MIN_TRADES,
         "trade_count_gate_pass": bool(trade_count_gate_pass),
-        "win_definition": "net realized pnl_pct after commission > 0",
+        "win_definition": "net realized pnl_pct after commission > 0.5",
+        "win_threshold_pct": ENTRY_FITNESS_WIN_THRESHOLD_PCT,
         "win_count": int(wins),
         "loss_count": int(losses),
         "win_rate_pct": float(win_rate),
         "win_rate_gate_pct": ENTRY_FITNESS_MIN_WIN_RATE_PCT,
         "win_rate_threshold_pass": bool(win_rate_threshold_pass),
-        "entry_gate_rule": "trade_count >= 10 AND win_rate_pct >= 60.0",
+        "entry_gate_rule": "trade_count >= 12 AND win_rate_pct >= 60.0",
         "entry_gate_pass": bool(entry_gate_pass),
         "win_rate_gate_pass": bool(entry_gate_pass),
         "disqualified": bool(disqualified),

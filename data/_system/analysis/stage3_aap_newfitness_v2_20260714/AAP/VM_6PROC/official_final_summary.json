@@ -1,0 +1,113 @@
+{
+  "ticker": "AAP",
+  "execution_scale": "OFFICIAL_FULL_STAGE3_NEW_FITNESS",
+  "official_config": {
+    "qualify_population": 100,
+    "qualify_generations": 40,
+    "entry_population": 100,
+    "entry_generations": 50,
+    "exit_population": 60,
+    "exit_generations": 25,
+    "top_n_qualify": 100,
+    "top_n_entry_pool": 100,
+    "max_entry_candidates": 20,
+    "top_n_exit_per_entry": 3,
+    "entry_min_expectancy_pct": 2.0,
+    "entry_overlap_threshold": 0.7
+  },
+  "workers": 6,
+  "parallel_axis": "population_fitness_evaluation",
+  "parallel_reproducibility_probe": {
+    "passed": true,
+    "sequential_best_hash": "4c9db562068ce3e6ce66683ed933d9b49b76299e45bfb1089906c3bee6213677",
+    "parallel_best_hash": "4c9db562068ce3e6ce66683ed933d9b49b76299e45bfb1089906c3bee6213677",
+    "fitness_history_equal": true,
+    "final_population_equal": true,
+    "parallel_axis": "population_fitness_evaluation",
+    "workers": 6,
+    "merge_order": "input_index_order",
+    "random_generation_location": "parent_process_only",
+    "process_start_method": "fork"
+  },
+  "new_fitness_activation_probe": {
+    "passed": true,
+    "checks": {
+      "gene_scope_marker": true,
+      "primary_formula": true,
+      "mae_threshold": true,
+      "realized_loss_threshold": true,
+      "realized_loss_penalty_present": true,
+      "win_threshold": true,
+      "minimum_trade_count": true,
+      "win_rate_gate": true,
+      "entry_gate_rule": true,
+      "mutation_hint_only": true,
+      "stage2_legacy_defaults": true
+    },
+    "gene_scope_defaults": {
+      "random_rulebook": "legacy",
+      "mutate": "legacy",
+      "crossover": "legacy",
+      "run_ga": "legacy"
+    },
+    "sample_trade_count": 7,
+    "sample_final_fitness": -1000000000.0
+  },
+  "manifest_gate_passed": true,
+  "qualified": false,
+  "all3_pass_count": 0,
+  "pass_count_distribution": {
+    "all3": 0,
+    "all2": 0,
+    "all1": 191,
+    "all0": 109
+  },
+  "entry_survivor_count": 0,
+  "exit_candidate_count": 0,
+  "validate_survivor_count": 0,
+  "entry_result": null,
+  "exit_result": null,
+  "validate_result": null,
+  "ce_boil_audit": {
+    "candidate_count": 0,
+    "one_sided_count": 0,
+    "missing_domain_count": 0,
+    "validator_error_count": 0,
+    "validator_errors": {},
+    "quality_score_override_count": 0,
+    "ce_boil_zero": true
+  },
+  "stop_reason": "qualify_failed",
+  "protected_sha_start": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+  },
+  "protected_sha_end": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+  },
+  "protected_unchanged": true,
+  "daemon_start": {
+    "pid": 494330,
+    "state": "S",
+    "starttime_ticks": "36014393",
+    "cmdline": "/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60"
+  },
+  "daemon_end": {
+    "pid": 494330,
+    "state": "S",
+    "starttime_ticks": "36014393",
+    "cmdline": "/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60"
+  },
+  "daemon_unchanged": true,
+  "elapsed_seconds": 1244.038718700409,
+  "independent_host_role": "vm",
+  "host_name": "invest-bot",
+  "requested_local_workers": 6,
+  "market_available_cutoff_date": "2026-07-10",
+  "inter_machine_candidate_communication": false,
+  "notebook_exit_validate_workers": 6,
+  "source_git_commit": "6338b91"
+}

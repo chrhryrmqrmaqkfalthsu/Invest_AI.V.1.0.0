@@ -1,0 +1,132 @@
+{
+  "policy": "mutation hint only; excluded from fitness, win gate and qualify pass",
+  "local_search_cap_trading_days": 7,
+  "by_stage_fold": {
+    "qualify:train_1": {
+      "history_rows": 41,
+      "hint_direction_counts": {
+        "earlier": 325,
+        "later": 3775,
+        "none": 0
+      },
+      "applied_direction_counts": {
+        "earlier": 61,
+        "later": 3884,
+        "none": 155
+      },
+      "width_alignment": {
+        "earlier_total_feature_moves": 43,
+        "earlier_aligned_feature_moves": 30,
+        "later_total_feature_moves": 3428,
+        "later_aligned_feature_moves": 2996,
+        "earlier_alignment_rate": 0.6976744186046512,
+        "later_alignment_rate": 0.8739789964994166
+      },
+      "mean_interval_width_first": {
+        "ma_trend": 7.1761076978320295,
+        "macd_hist": 1.877560881296053,
+        "rsi": 23.567320228521062,
+        "bb_position": 0.645323236901575,
+        "volume_ratio": 0.5298933069610035
+      },
+      "mean_interval_width_last": {
+        "ma_trend": 6.958635061948805,
+        "macd_hist": 1.4158345288032854,
+        "rsi": 28.139249806032147,
+        "bb_position": 0.5387327324935606,
+        "volume_ratio": 0.658230252577164
+      },
+      "mean_interval_width_change": {
+        "ma_trend": -0.21747263588322419,
+        "macd_hist": -0.4617263524927675,
+        "rsi": 4.571929577511085,
+        "bb_position": -0.10659050440801443,
+        "volume_ratio": 0.1283369456161606
+      }
+    },
+    "qualify:train_2": {
+      "history_rows": 41,
+      "hint_direction_counts": {
+        "earlier": 209,
+        "later": 3891,
+        "none": 0
+      },
+      "applied_direction_counts": {
+        "earlier": 67,
+        "later": 3873,
+        "none": 160
+      },
+      "width_alignment": {
+        "earlier_total_feature_moves": 50,
+        "earlier_aligned_feature_moves": 33,
+        "later_total_feature_moves": 3664,
+        "later_aligned_feature_moves": 3008,
+        "earlier_alignment_rate": 0.66,
+        "later_alignment_rate": 0.8209606986899564
+      },
+      "mean_interval_width_first": {
+        "ma_trend": 14.49715745238027,
+        "macd_hist": 2.1058311802548086,
+        "rsi": 26.235814842570317,
+        "bb_position": 0.7089869547189044,
+        "volume_ratio": 0.5776268180101037
+      },
+      "mean_interval_width_last": {
+        "ma_trend": 25.16300548274876,
+        "macd_hist": 2.540131978219665,
+        "rsi": 24.530274837366036,
+        "bb_position": 0.49355222062818455,
+        "volume_ratio": 0.7180792131881466
+      },
+      "mean_interval_width_change": {
+        "ma_trend": 10.665848030368489,
+        "macd_hist": 0.4343007979648563,
+        "rsi": -1.7055400052042806,
+        "bb_position": -0.21543473409071984,
+        "volume_ratio": 0.14045239517804287
+      }
+    },
+    "qualify:train_3": {
+      "history_rows": 41,
+      "hint_direction_counts": {
+        "earlier": 57,
+        "later": 4043,
+        "none": 0
+      },
+      "applied_direction_counts": {
+        "earlier": 8,
+        "later": 3956,
+        "none": 136
+      },
+      "width_alignment": {
+        "earlier_total_feature_moves": 6,
+        "earlier_aligned_feature_moves": 4,
+        "later_total_feature_moves": 3472,
+        "later_aligned_feature_moves": 3042,
+        "earlier_alignment_rate": 0.6666666666666666,
+        "later_alignment_rate": 0.8761520737327189
+      },
+      "mean_interval_width_first": {
+        "ma_trend": 15.020008917940046,
+        "macd_hist": 1.9736183119931843,
+        "rsi": 22.541569570080288,
+        "bb_position": 0.6598603631706865,
+        "volume_ratio": 0.5354192134428782
+      },
+      "mean_interval_width_last": {
+        "ma_trend": 11.925051387479334,
+        "macd_hist": 1.4887938775673488,
+        "rsi": 25.56244129115676,
+        "bb_position": 0.5909189182706299,
+        "volume_ratio": 0.44427641830247344
+      },
+      "mean_interval_width_change": {
+        "ma_trend": -3.0949575304607126,
+        "macd_hist": -0.48482443442583545,
+        "rsi": 3.020871721076471,
+        "bb_position": -0.0689414449000566,
+        "volume_ratio": -0.0911427951404048
+      }
+    }
+  }
+}

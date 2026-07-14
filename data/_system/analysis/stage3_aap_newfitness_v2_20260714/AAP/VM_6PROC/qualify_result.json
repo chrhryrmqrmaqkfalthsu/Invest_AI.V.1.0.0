@@ -1,0 +1,183 @@
+{
+  "ticker": "AAP",
+  "stage": "qualify",
+  "execution_scale": "OFFICIAL_FULL_STAGE3_NEW_FITNESS",
+  "qualified": false,
+  "all3_pass_count": 0,
+  "all3_pass_hash_samples": [],
+  "pass_count_distribution": {
+    "all3": 0,
+    "all2": 0,
+    "all1": 191,
+    "all0": 109
+  },
+  "fold_pass_counts": {
+    "train_1": 52,
+    "train_2": 78,
+    "train_3": 61
+  },
+  "unique_candidate_count": 300,
+  "population_rows_preserved": 300,
+  "cross_fold_rows": 900,
+  "ga_summaries": [
+    {
+      "fold": "train_1",
+      "seed": 2026071402,
+      "population": 100,
+      "generation_limit": 40,
+      "generations_run": 40,
+      "evaluation_workers": 6,
+      "parallel_axis": "population_fitness_evaluation",
+      "best_hash": "2b0b832ba63e45481c6e8ea0a70bc00638aa5f4ebd23397d57def6cf72bd0e67",
+      "best_fitness": 0.9809299162049917,
+      "final_population_count": 100
+    },
+    {
+      "fold": "train_2",
+      "seed": 2026071403,
+      "population": 100,
+      "generation_limit": 40,
+      "generations_run": 40,
+      "evaluation_workers": 6,
+      "parallel_axis": "population_fitness_evaluation",
+      "best_hash": "ddcca16bc6183d74cc5c2f57ae24501aedcf4637743c41ac75fba7815975d54d",
+      "best_fitness": 1.461869792790604,
+      "final_population_count": 100
+    },
+    {
+      "fold": "train_3",
+      "seed": 2026071404,
+      "population": 100,
+      "generation_limit": 40,
+      "generations_run": 40,
+      "evaluation_workers": 6,
+      "parallel_axis": "population_fitness_evaluation",
+      "best_hash": "39a3ce724892f3e257bd941fe4263b268508f01439d4a045eb7512e10257ba15",
+      "best_fitness": 2.808396587502216,
+      "final_population_count": 100
+    }
+  ],
+  "gate_bottleneck": {
+    "train_1": {
+      "candidate_count": 300,
+      "trade_count_below_12_count": 214,
+      "trade_count_below_12_rate": 0.7133333333333334,
+      "trade_count_met_but_win_rate_below_60_count": 17,
+      "trade_count_met_but_win_rate_below_60_rate": 0.056666666666666664,
+      "both_entry_gates_pass_count": 69,
+      "both_entry_gates_pass_rate": 0.23,
+      "realized_loss_penalized_count": 206,
+      "realized_loss_penalized_rate": 0.6866666666666666,
+      "mean_realized_loss_penalty_among_penalized": 8.89935900844697,
+      "mean_realized_loss_penalty_all": 6.110893185800253,
+      "mae_penalized_count": 290,
+      "mae_penalized_rate": 0.9666666666666667,
+      "mean_mae_penalty_among_penalized": 7.337503708092577,
+      "mean_mae_penalty_all": 7.092920251156158,
+      "trade_count_distribution": {
+        "min": 1,
+        "median": 8.0,
+        "max": 16,
+        "count_12_13": 66,
+        "rate_12_13": 0.22
+      },
+      "mean_primary_objective_pct_per_day": -3.102489967778994,
+      "mean_fitness_before_entry_gate": -16.306303404735406,
+      "qualify_pass_count": 52,
+      "fail_metric_counts": {
+        "entry_trade_count_below_12": 214,
+        "expectancy_pct": 230,
+        "entry_win_rate_below_60": 17
+      },
+      "hard_gate_partition_exclusive": true,
+      "note": "MAE and realized-loss are score penalties; support and win-rate are hard gates."
+    },
+    "train_2": {
+      "candidate_count": 300,
+      "trade_count_below_12_count": 212,
+      "trade_count_below_12_rate": 0.7066666666666667,
+      "trade_count_met_but_win_rate_below_60_count": 5,
+      "trade_count_met_but_win_rate_below_60_rate": 0.016666666666666666,
+      "both_entry_gates_pass_count": 83,
+      "both_entry_gates_pass_rate": 0.27666666666666667,
+      "realized_loss_penalized_count": 214,
+      "realized_loss_penalized_rate": 0.7133333333333334,
+      "mean_realized_loss_penalty_among_penalized": 0.648502765148094,
+      "mean_realized_loss_penalty_all": 0.4625986391389737,
+      "mae_penalized_count": 292,
+      "mae_penalized_rate": 0.9733333333333334,
+      "mean_mae_penalty_among_penalized": 0.5584497762387746,
+      "mean_mae_penalty_all": 0.5435577822057406,
+      "trade_count_distribution": {
+        "min": 1,
+        "median": 5.0,
+        "max": 16,
+        "count_12_13": 72,
+        "rate_12_13": 0.24
+      },
+      "mean_primary_objective_pct_per_day": 0.9204451546730149,
+      "mean_fitness_before_entry_gate": -0.08571126667169938,
+      "qualify_pass_count": 78,
+      "fail_metric_counts": {
+        "entry_trade_count_below_12": 212,
+        "expectancy_pct": 124,
+        "member_score": 23,
+        "entry_win_rate_below_60": 5
+      },
+      "hard_gate_partition_exclusive": true,
+      "note": "MAE and realized-loss are score penalties; support and win-rate are hard gates."
+    },
+    "train_3": {
+      "candidate_count": 300,
+      "trade_count_below_12_count": 223,
+      "trade_count_below_12_rate": 0.7433333333333333,
+      "trade_count_met_but_win_rate_below_60_count": 10,
+      "trade_count_met_but_win_rate_below_60_rate": 0.03333333333333333,
+      "both_entry_gates_pass_count": 67,
+      "both_entry_gates_pass_rate": 0.22333333333333333,
+      "realized_loss_penalized_count": 298,
+      "realized_loss_penalized_rate": 0.9933333333333333,
+      "mean_realized_loss_penalty_among_penalized": 1.5814844534672265,
+      "mean_realized_loss_penalty_all": 1.570941223777445,
+      "mae_penalized_count": 300,
+      "mae_penalized_rate": 1.0,
+      "mean_mae_penalty_among_penalized": 1.7447344808609766,
+      "mean_mae_penalty_all": 1.7447344808609766,
+      "trade_count_distribution": {
+        "min": 2,
+        "median": 6.0,
+        "max": 16,
+        "count_12_13": 73,
+        "rate_12_13": 0.24333333333333335
+      },
+      "mean_primary_objective_pct_per_day": 0.04369674277496468,
+      "mean_fitness_before_entry_gate": -3.2719789618634567,
+      "qualify_pass_count": 61,
+      "fail_metric_counts": {
+        "entry_trade_count_below_12": 223,
+        "expectancy_pct": 216,
+        "entry_win_rate_below_60": 10,
+        "member_score": 10
+      },
+      "hard_gate_partition_exclusive": true,
+      "note": "MAE and realized-loss are score penalties; support and win-rate are hard gates."
+    }
+  },
+  "new_fitness": {
+    "primary": "mean(net realized pnl_pct / max(holding_days, 1))",
+    "mae_threshold_pct": -2.0,
+    "mae_penalty_weight": 1.0,
+    "win_rate_gate_pct": 60.0,
+    "disqualified_fitness": -1000000000.0,
+    "mutation_hint_only": true
+  },
+  "parallel": {
+    "workers": 6,
+    "axis": "population_fitness_evaluation",
+    "merge_order": "input_index_order",
+    "rng_location": "parent_process_only",
+    "cross_fold_workers": 6
+  },
+  "early_stopped_cross_fold": false,
+  "elapsed_seconds": 1242.778995513916
+}

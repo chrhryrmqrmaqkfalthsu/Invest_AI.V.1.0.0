@@ -1,0 +1,174 @@
+{
+  "policy": "mutation hint only; excluded from fitness, win gate and qualify pass",
+  "local_search_cap_trading_days": 7,
+  "by_stage_fold": {
+    "qualify:train_1": {
+      "history_rows": 41,
+      "hint_direction_counts": {
+        "earlier": 215,
+        "later": 3885,
+        "none": 0
+      },
+      "applied_direction_counts": {
+        "earlier": 75,
+        "later": 3893,
+        "none": 132
+      },
+      "width_alignment": {
+        "earlier_total_feature_moves": 57,
+        "earlier_aligned_feature_moves": 38,
+        "later_total_feature_moves": 3401,
+        "later_aligned_feature_moves": 2825,
+        "earlier_alignment_rate": 0.6666666666666666,
+        "later_alignment_rate": 0.830638047633049
+      },
+      "mean_interval_width_first": {
+        "ma_trend": 7.1761076978320295,
+        "macd_hist": 1.877560881296053,
+        "rsi": 23.567320228521062,
+        "bb_position": 0.645323236901575,
+        "volume_ratio": 0.5298933069610035
+      },
+      "mean_interval_width_last": {
+        "ma_trend": 17.4802674332482,
+        "macd_hist": 1.7365889450937717,
+        "rsi": 34.37467858051708,
+        "bb_position": 0.8046059197542719,
+        "volume_ratio": 1.6797726228958765
+      },
+      "mean_interval_width_change": {
+        "ma_trend": 10.304159735416171,
+        "macd_hist": -0.1409719362022812,
+        "rsi": 10.807358351996015,
+        "bb_position": 0.15928268285269687,
+        "volume_ratio": 1.149879315934873
+      }
+    },
+    "qualify:train_2": {
+      "history_rows": 41,
+      "hint_direction_counts": {
+        "earlier": 874,
+        "later": 3226,
+        "none": 0
+      },
+      "applied_direction_counts": {
+        "earlier": 535,
+        "later": 3421,
+        "none": 144
+      },
+      "width_alignment": {
+        "earlier_total_feature_moves": 454,
+        "earlier_aligned_feature_moves": 342,
+        "later_total_feature_moves": 3006,
+        "later_aligned_feature_moves": 2402,
+        "earlier_alignment_rate": 0.7533039647577092,
+        "later_alignment_rate": 0.7990685296074518
+      },
+      "mean_interval_width_first": {
+        "ma_trend": 14.49715745238027,
+        "macd_hist": 2.1058311802548086,
+        "rsi": 26.235814842570317,
+        "bb_position": 0.7089869547189044,
+        "volume_ratio": 0.5776268180101037
+      },
+      "mean_interval_width_last": {
+        "ma_trend": 20.71934263536862,
+        "macd_hist": 2.555880626697433,
+        "rsi": 18.55817328491315,
+        "bb_position": 0.6367380456903935,
+        "volume_ratio": 1.0643424979413307
+      },
+      "mean_interval_width_change": {
+        "ma_trend": 6.222185182988349,
+        "macd_hist": 0.45004944644262457,
+        "rsi": -7.677641557657168,
+        "bb_position": -0.07224890902851089,
+        "volume_ratio": 0.486715679931227
+      }
+    },
+    "qualify:train_3": {
+      "history_rows": 41,
+      "hint_direction_counts": {
+        "earlier": 13,
+        "later": 4087,
+        "none": 0
+      },
+      "applied_direction_counts": {
+        "earlier": 1,
+        "later": 3970,
+        "none": 129
+      },
+      "width_alignment": {
+        "earlier_total_feature_moves": 0,
+        "earlier_aligned_feature_moves": 0,
+        "later_total_feature_moves": 3465,
+        "later_aligned_feature_moves": 2948,
+        "earlier_alignment_rate": null,
+        "later_alignment_rate": 0.8507936507936508
+      },
+      "mean_interval_width_first": {
+        "ma_trend": 15.020008917940046,
+        "macd_hist": 1.9736183119931843,
+        "rsi": 22.541569570080288,
+        "bb_position": 0.6598603631706865,
+        "volume_ratio": 0.5354192134428782
+      },
+      "mean_interval_width_last": {
+        "ma_trend": 26.300922904072973,
+        "macd_hist": 2.4124108868620984,
+        "rsi": 11.338066971193973,
+        "bb_position": 0.6594642767020598,
+        "volume_ratio": 0.7553174942853029
+      },
+      "mean_interval_width_change": {
+        "ma_trend": 11.280913986132926,
+        "macd_hist": 0.4387925748689141,
+        "rsi": -11.203502598886315,
+        "bb_position": -0.0003960864686267662,
+        "volume_ratio": 0.2198982808424247
+      }
+    },
+    "entry:train_3": {
+      "history_rows": 51,
+      "hint_direction_counts": {
+        "earlier": 36,
+        "later": 5064,
+        "none": 0
+      },
+      "applied_direction_counts": {
+        "earlier": 1,
+        "later": 4967,
+        "none": 132
+      },
+      "width_alignment": {
+        "earlier_total_feature_moves": 2,
+        "earlier_aligned_feature_moves": 2,
+        "later_total_feature_moves": 4159,
+        "later_aligned_feature_moves": 3516,
+        "earlier_alignment_rate": 1.0,
+        "later_alignment_rate": 0.8453955277710988
+      },
+      "mean_interval_width_first": {
+        "ma_trend": 14.332977128914452,
+        "macd_hist": 1.9697622380648685,
+        "rsi": 21.458956586155082,
+        "bb_position": 0.6431648784989099,
+        "volume_ratio": 0.5401254610191988
+      },
+      "mean_interval_width_last": {
+        "ma_trend": 33.205684560816145,
+        "macd_hist": 2.9071106581750374,
+        "rsi": 15.959726443911125,
+        "bb_position": 0.5688386382239731,
+        "volume_ratio": 0.9856026074477577
+      },
+      "mean_interval_width_change": {
+        "ma_trend": 18.872707431901695,
+        "macd_hist": 0.937348420110169,
+        "rsi": -5.499230142243958,
+        "bb_position": -0.07432624027493684,
+        "volume_ratio": 0.44547714642855896
+      }
+    }
+  }
+}

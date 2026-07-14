@@ -28,6 +28,7 @@ import pandas as pd
 from engine.learning.backtest import (
     BacktestResult,
     _apply_complexity_penalty,
+    _calc_concentration_penalty,
     _calc_fitness_swing,
     _find_df_index_by_date,
     _lookup_signal_context,
@@ -136,6 +137,20 @@ def _entry_fitness_gate_pass(trade_count: int, win_rate_pct: float) -> bool:
         int(trade_count) >= ENTRY_FITNESS_MIN_TRADES
         and _safe_float(win_rate_pct) >= ENTRY_FITNESS_MIN_WIN_RATE_PCT
     )
+
+
+def _entry_fitness_trade_factor(trade_count: int) -> float:
+    """Return the original swing-fitness trade-count factor unchanged."""
+    count = int(trade_count)
+    if count < 5:
+        return 0.10
+    if count < 10:
+        return 0.35
+    if count < 20:
+        return 0.70
+    if count <= 80:
+        return 1.00
+    return float(max(0.65, 1.0 - (count - 80) / 250.0))
 
 
 def _entry_scope_active(rb: Rulebook) -> bool:
@@ -471,10 +486,11 @@ def _apply_entry_scope_fitness(
     """Entry GA 전용 fitness 원칙을 적용한다.
 
     본체는 거래별 ``비용 차감 pnl_pct / max(holding_days, 1)``의 평균이다.
-    MAE -2% 이탈분 평균과 비용 차감 실현손실 -1% 초과분 평균을 각각 감산한다.
-    거래 수 12건 이상과 비용 차감 실현수익 > 0.5% 기준 승률 60% 이상을
-    동시에 만족할 때만 fitness를 인정한다. 두 조건 중 하나라도 실패하면
-    점수 합산이 아닌 strict disqualification을 적용한다.
+    원본 swing fitness의 거래수 factor를 raw primary에 곱하고, MAE -2% 이탈분
+    평균과 비용 차감 실현손실 -1% 초과분 평균을 감산한 뒤 원본의 단일 양의
+    수익 집중도 벌점을 추가로 감산한다. 거래 수 12건 이상과 비용 차감
+    실현수익 > 0.5% 기준 승률 60% 이상을 동시에 만족할 때만 fitness를
+    인정하며, 두 조건 중 하나라도 실패하면 strict disqualification을 적용한다.
     """
     trades = [trade for trade in list(result.trades or []) if isinstance(trade, dict)]
     per_trade_daily_returns: list[float] = []
@@ -512,6 +528,8 @@ def _apply_entry_scope_fitness(
         if per_trade_daily_returns
         else 0.0
     )
+    trade_count_factor = _entry_fitness_trade_factor(trade_count)
+    trade_count_adjusted_primary = primary_objective * trade_count_factor
     mean_mae_excess = (
         float(np.mean(np.asarray(mae_excesses, dtype=float)))
         if mae_excesses
@@ -526,8 +544,13 @@ def _apply_entry_scope_fitness(
     realized_loss_penalty = (
         mean_realized_loss_excess * ENTRY_FITNESS_REALIZED_LOSS_PENALTY_WEIGHT
     )
+    profit_concentration = _safe_float(result.profit_concentration)
+    concentration_penalty = _calc_concentration_penalty(profit_concentration)
     pre_complexity_fitness = (
-        primary_objective - mae_penalty - realized_loss_penalty
+        trade_count_adjusted_primary
+        - mae_penalty
+        - realized_loss_penalty
+        - concentration_penalty
     )
     post_complexity_fitness = _apply_complexity_penalty(
         rb,
@@ -550,7 +573,12 @@ def _apply_entry_scope_fitness(
         "scope": ENTRY_GA_SCOPE_VALUE,
         "primary_objective": "mean(net_realized_pnl_pct / max(holding_days, 1))",
         "primary_objective_trade_count_neutral": True,
+        "entry_fitness_trade_count_neutral": False,
         "primary_objective_pct_per_day": float(primary_objective),
+        "trade_count_factor_method": "original_swing: <5=0.10, <10=0.35, <20=0.70, <=80=1.00, >80=max(0.65, 1-(n-80)/250)",
+        "trade_count_factor": float(trade_count_factor),
+        "primary_after_trade_count_factor": float(trade_count_adjusted_primary),
+        "trade_count_factor_discontinuity": "0.70 to 1.00 at trade_count=20",
         "mae_source": "trade.max_loss_during_hold from holding-period daily lows",
         "mae_threshold_pct": ENTRY_FITNESS_MAE_THRESHOLD_PCT,
         "mae_penalty_method": "mean(max(0, -2.0 - mae_pct)) * 1.0",
@@ -563,11 +591,19 @@ def _apply_entry_scope_fitness(
         "realized_loss_breach_trade_count": int(
             sum(value > 0.0 for value in realized_loss_excesses)
         ),
+        "profit_concentration_source": "max single positive pnl contribution / total positive pnl; pnl_krw preferred, pnl_pct fallback",
+        "profit_concentration": float(profit_concentration),
+        "profit_concentration_penalty_method": "<=0.50: 0; 0.50..0.75: linear 0..20; >=0.75: 20",
+        "profit_concentration_penalty": float(concentration_penalty),
         "total_risk_penalty": float(mae_penalty + realized_loss_penalty),
+        "total_entry_penalty": float(
+            mae_penalty + realized_loss_penalty + concentration_penalty
+        ),
         "worst_mae_pct": min(
             (_safe_float(trade.get("max_loss_during_hold"), 0.0) for trade in trades),
             default=0.0,
         ),
+        "fitness_before_complexity": float(pre_complexity_fitness),
         "fitness_before_entry_gate": float(post_complexity_fitness),
         "fitness_before_win_gate": float(post_complexity_fitness),
         "final_fitness": float(final_fitness),

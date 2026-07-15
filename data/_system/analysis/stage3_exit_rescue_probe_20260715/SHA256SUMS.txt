@@ -1,0 +1,40 @@
+# stage3_exit_rescue_probe_20260715 SHA / audit
+
+# output files
+eb5e2d18d3fe8072551d5ccfd537db32ccc0c76b9e57b745f4f7c727f9c89a46  readout.md
+b4112611f5e3719183cc2e64c6532ea750395f3bdad4811f77d47a603c40e0c3  exit_rescue_summary.json
+752459e79d175d831ed9f2a92947c0752817fd4b3e36b469b9edff978d374e7c  exit_rescue_results.jsonl
+5d2560a9a6aa4cca6f51e10ed8a3a8a69c598c962133871a12af8847995bd033  exit_rescue_trade_level.jsonl
+48c24939734860c8d91d5a07fae0dd5048e1c9995a5085b7d088883bc79d1b04  exit_rescue_final_rulebooks.jsonl
+
+# added probe helper
+871a1f6188e659d0d62e1c3073febf4fa2d97c424f1fa45cfd9bdcb2aec53faa  scripts/research/stage23_rework_20260713/scripts/research/run_stage3_exit_rescue_probe.py
+# py_compile: PASS
+# mutation helper AST SHA: aab7163f9194cf5f989ad01973e8d2967dad48be53f7d52ee09747eea502077d
+
+# immutable source ADPT v5 artifacts: start == end confirmed
+7643a37e80fb78a307e87825e87d03d226daea686ebe6993c2b4a01a09155c18  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/qualify_result.json
+8b0135c4d1757179054ac5497e48270f1469e34cd10f46f93a3e28951a759a6d  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/qualify_cross_fold_matrix.jsonl
+b6e3ba9b55dcb0d2a1ca5fd5298a80db5ed30fbca66805198be31f77aeaf97f5  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/qualify_candidate_rulebooks.jsonl
+55b8944fa53135b3ec751c4cb182cb6c15f5990f23c1a9fa5f155b6f1fc43d29  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/fold_best_summary.json
+9a08d8e36bc9130dc9c52fa349debf9028bb02a96ac214b03c03474411096f14  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/fold_best_trade_level.jsonl
+b3fa3c6e99106ffd650659eb5f07dd11765cc892ba6d95b0ecafa2919252e217  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/qualify_gate_bottleneck.json
+
+# protected files: start == end confirmed
+da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce  .env
+35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38  data/_system/market_history.csv
+b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611  data/_system/market_history_v2.csv
+
+# execution
+# host: invest-bot
+# mode: isolated VM ProcessPoolExecutor, 4 workers
+# exit GA only: original _run_exit_ga_for_entry, EXIT_POPULATION=60, EXIT_GENERATIONS=25, TOP_N_EXIT_PER_ENTRY=3
+# entry GA / qualify / run_exit_ga pipeline: not run
+# output logs: exit_ga_logs/*.log
+
+# daemon end-state
+# PID PPID STAT STARTED CMD
+# 494330 1 Sl Sat Jul 11 20:16:00 2026 /home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60
+
+# git
+# pre-output backup commit: 1fa2053

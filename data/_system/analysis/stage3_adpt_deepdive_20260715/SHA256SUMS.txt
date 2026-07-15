@@ -1,0 +1,39 @@
+# stage3_adpt_deepdive_20260715 SHA / audit
+
+# output files
+f20d4299f2b96c9b27ac3bdd95975acf170a5482a759572f09c1d175c99ac3e6  readout.md
+9e99697b9e2062a124f519559e6bc537ee237b4d75aeb8b13a286a8db3c50be2  adpt_trade_ledger.md
+
+# ADPT source artifacts
+9a08d8e36bc9130dc9c52fa349debf9028bb02a96ac214b03c03474411096f14  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/fold_best_trade_level.jsonl
+55b8944fa53135b3ec751c4cb182cb6c15f5990f23c1a9fa5f155b6f1fc43d29  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/fold_best_summary.json
+b6e3ba9b55dcb0d2a1ca5fd5298a80db5ed30fbca66805198be31f77aeaf97f5  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/qualify_candidate_rulebooks.jsonl
+8b0135c4d1757179054ac5497e48270f1469e34cd10f46f93a3e28951a759a6d  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/qualify_cross_fold_matrix.jsonl
+b3fa3c6e99106ffd650659eb5f07dd11765cc892ba6d95b0ecafa2919252e217  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/qualify_gate_bottleneck.json
+
+# ADPT OHLCV input
+13fb9f982e8efa29e4ee6dd3ffb585d7fb5d578c3c5099e8c76409ca0ada9503  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/ADPT.pkl
+
+# D-5 feature matrix SHA from same OHLCV + existing 5 features
+# ADPT: 7ae6f2107da975d4c43c628705be74719f7203ee3469a3a205c23eaa2588ea60
+
+# ADPT fold-best candidate hashes
+# train_1: 1b4db2d534374cf60e03ed2a0177edcfc2c8b000b3d860a8be6351025ce42633
+# train_2: 55c9381b72245c640bafd9096be4ec9bf8556663d58741aedb8e69442a060526
+# train_3: 3627625692c71a9ff047054cadb1a90db4bac13366dd786f29e0d61ce0d1e529
+
+# ADPT all3 candidate
+# candidate_hash: 3c950cfa5f239b1530cb312ad4b224b74ad1e7d8922d5dbe1c6e0146774231d6
+# crossfold_object_sha: cf8615fe097218846c331db95a931ce95914ae27b3e9a7a600f99aaed3688d53
+
+# protected files: start == end confirmed
+da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce  .env
+35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38  data/_system/market_history.csv
+b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611  data/_system/market_history_v2.csv
+
+# daemon end-state
+# PID PPID STAT STARTED CMD
+# 494330 1 Sl Sat Jul 11 20:16:00 2026 /home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60
+
+# git
+# pre-output backup commit: bd5ee22

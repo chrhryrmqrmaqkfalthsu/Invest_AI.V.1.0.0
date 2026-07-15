@@ -1,13 +1,49 @@
 {
-  "python_executable": "/home/g3000kkw/kingmaker/scripts/research/stage23_rework_20260713/../../../venv/bin/python",
-  "cwd": "/home/g3000kkw/kingmaker/scripts/research/stage23_rework_20260713",
-  "argv": [
-    "/home/g3000kkw/kingmaker/scripts/research/stage23_rework_20260713/../../../venv/bin/python",
-    "/home/g3000kkw/kingmaker/scripts/research/stage23_rework_20260713/scripts/research/run_stage3_aap_tradecount_factor_v3_host.py",
+  "run_id": "stage3_aap_eec_penalty_v5_20260715_notebook_local",
+  "authoritative_execution": "notebook_host_local_parent_with_28_local_processes",
+  "source_git_commit": "beda7cb1acfb8d33ec7156de09caade2420453f8",
+  "source_file": "scripts/research/stage23_rework_20260713/engine/learning/execution_mode_backtest.py",
+  "source_file_sha256": "41b3ccbb8e073034f673e1273fa796cd009df78cae08ff80f5dda8b77f7a3a81",
+  "source_file_sha256_before": "ce2b6673375a121c02a443ad24b811e2b7c00ce3de2c723ec69e132e74caf0ca",
+  "notebook": {
+    "worker_address": "tcp://127.0.0.1:60941",
+    "host": "DESKTOP-TO74AR2",
+    "platform": "Windows",
+    "python_executable": "C:\\dask310\\Scripts\\python.exe",
+    "python_version": "3.10.11",
+    "workspace_root": "C:\\kingmaker_aap_eec_penalty_v5_20260715",
+    "output_dir": "C:\\kingmaker_aap_eec_penalty_v5_20260715\\data\\_system\\analysis\\stage3_aap_eec_penalty_v5_20260715\\AAP",
+    "baseline_dir": "C:\\kingmaker_aap_eec_penalty_v5_20260715\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP",
+    "local_process_workers": 28,
+    "parent_pid_successful_attempt": 19140,
+    "host_local_parent": true,
+    "inter_machine_candidate_communication": false,
+    "rng_location": "parent_process_only",
+    "merge_order": "input_index_order",
+    "process_start_method": "spawn"
+  },
+  "management_channel": {
+    "scheduler": "tcp://localhost:8786",
+    "purpose": "one-time bundle installation, detached launch, status polling, read-only result collection",
+    "candidate_fitness_execution": false,
+    "vm_candidate_evaluations": 0
+  },
+  "bundle": {
+    "file_count": 242,
+    "byte_count": 14737213,
+    "installed_locally_before_launch": true,
+    "market_and_baseline_inputs_local": true,
+    "backup_runner_source": "scripts/research/stage23_rework_20260713/scripts/research/run_stage3_aggressive.py.bak.before_qualify_eval_early_stop_20260706_001",
+    "backup_runner_source_sha256": "bc3e191a449d6b67980dd0884a2a510acf9ecda719a8b12e76b0e8178de33004",
+    "repository_root_marker_created": true
+  },
+  "successful_supervisor_argv": [
+    "C:\\dask310\\Scripts\\python.exe",
+    "C:\\kingmaker_aap_eec_penalty_v5_20260715\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_overlap_entry_v4_cutoff_host.py",
     "--baseline-dir",
-    "../../../data/_system/analysis/stage3_aap_tradecount_factor_v3_20260715/AAP/NOTEBOOK_MAX",
+    "C:\\kingmaker_aap_eec_penalty_v5_20260715\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP",
     "--out-dir",
-    "../../../data/_system/analysis/stage3_aap_eec_penalty_v5_20260715/AAP",
+    "C:\\kingmaker_aap_eec_penalty_v5_20260715\\data\\_system\\analysis\\stage3_aap_eec_penalty_v5_20260715\\AAP",
     "--seed-base",
     "2026071401",
     "--workers",
@@ -16,34 +52,118 @@
     "notebook",
     "--market-cutoff-date",
     "2026-07-10",
-    "--protected-snapshot-json",
-    "{\".env\":\"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\",\"data/_system/market_history.csv\":\"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\",\"data/_system/market_history_v2.csv\":\"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}",
-    "--daemon-snapshot-json",
-    "{\"cmdline\":\"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\",\"pid\":494330,\"snapshot_source\":\"VM_proxy_for_notebook_independent_run\",\"starttime_ticks\":\"36014393\",\"state\":\"R\"}",
     "--source-git-commit",
-    "50997c2"
+    "beda7cb"
+  ],
+  "effective_runner_argv": [
+    "C:\\dask310\\Scripts\\python.exe",
+    "C:\\kingmaker_aap_eec_penalty_v5_20260715\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_tradecount_factor_v3_host.py",
+    "--baseline-dir",
+    "C:\\kingmaker_aap_eec_penalty_v5_20260715\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP",
+    "--out-dir",
+    "C:\\kingmaker_aap_eec_penalty_v5_20260715\\data\\_system\\analysis\\stage3_aap_eec_penalty_v5_20260715\\AAP",
+    "--seed-base",
+    "2026071401",
+    "--workers",
+    "28",
+    "--host-role",
+    "notebook",
+    "--market-cutoff-date",
+    "2026-07-10",
+    "--source-git-commit",
+    "beda7cb"
   ],
   "environment": {
-    "PYTHONPATH": ".",
-    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin",
+    "PYTHONPATH": "C:\\kingmaker_aap_eec_penalty_v5_20260715\\scripts\\research\\stage23_rework_20260713;C:\\kingmaker\\vendor;C:\\kingmaker_aap_v2_swing_restore_20260715_r2\\vendor",
     "PYTHONUTF8": "1",
     "PYTHONUNBUFFERED": "1",
     "OMP_NUM_THREADS": "1",
     "OPENBLAS_NUM_THREADS": "1",
     "MKL_NUM_THREADS": "1",
-    "NUMEXPR_NUM_THREADS": "1"
+    "NUMEXPR_NUM_THREADS": "1",
+    "KINGMAKER_MARKET_CUTOFF_DATE": "2026-07-10"
   },
-  "powershell_command": "& '/home/g3000kkw/kingmaker/scripts/research/stage23_rework_20260713/../../../venv/bin/python' '/home/g3000kkw/kingmaker/scripts/research/stage23_rework_20260713/scripts/research/run_stage3_aap_tradecount_factor_v3_host.py' '--baseline-dir' '../../../data/_system/analysis/stage3_aap_tradecount_factor_v3_20260715/AAP/NOTEBOOK_MAX' '--out-dir' '../../../data/_system/analysis/stage3_aap_eec_penalty_v5_20260715/AAP' '--seed-base' '2026071401' '--workers' '28' '--host-role' 'notebook' '--market-cutoff-date' '2026-07-10' '--protected-snapshot-json' '{\".env\":\"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\",\"data/_system/market_history.csv\":\"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\",\"data/_system/market_history_v2.csv\":\"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}' '--daemon-snapshot-json' '{\"cmdline\":\"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\",\"pid\":494330,\"snapshot_source\":\"VM_proxy_for_notebook_independent_run\",\"starttime_ticks\":\"36014393\",\"state\":\"R\"}' '--source-git-commit' '50997c2'",
-  "host_local_parent": true,
-  "local_process_workers": 28,
-  "inter_machine_candidate_communication": false,
-  "environment_recording_scope": "execution-relevant whitelist; secrets excluded",
-  "entry_concurrency_mode": "entry_scope_independent_overlapping_positions",
-  "legacy_concurrency_mode": "single_position_exit_plus_cooldown",
-  "eec_penalty_patch_token": "entry_scope_eec_penalty_v5_20260715",
-  "eec_target": 6.0,
-  "eec_floor": 0.5,
-  "eec_cluster_gap_trading_days": 8,
-  "remote_fetch_regenerate_disabled": true,
-  "logged_at_utc": "2026-07-15T07:23:30.185383+00:00"
+  "ga": {
+    "ticker": "AAP",
+    "qualify_population": 100,
+    "qualify_generations": 40,
+    "fold_count": 3,
+    "seed_base": 2026071401,
+    "fold_seeds": {
+      "train_1": 2026071402,
+      "train_2": 2026071403,
+      "train_3": 2026071404
+    },
+    "generation_log_rows": 120,
+    "elapsed_seconds": 835.1330318450928,
+    "parallel_reproducibility_probe_passed": true
+  },
+  "eec_penalty": {
+    "scope": "entry_scope",
+    "cluster_gap_trading_days": 8,
+    "target": 6.0,
+    "floor": 0.5,
+    "formula": "primary_after_trade_count_factor * clamp(effective_event_count / 6.0, 0.5, 1.0)",
+    "legacy_non_entry_path_unchanged": true,
+    "fixed_sizing_entry_scope_included": true,
+    "fixed_sizing_inclusion_reason": "train_2 attenuation requirement and entry-scope-only interpretation"
+  },
+  "input_snapshots": {
+    "ohlcv_sha256": "6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717",
+    "protected": {
+      ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+      "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+      "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+    },
+    "auto_fetch_enabled": false,
+    "auto_regenerate_enabled": false,
+    "fail_closed": true
+  },
+  "launch_attempts": [
+    {
+      "attempt": 1,
+      "pid": 32432,
+      "status": "preflight_failed",
+      "reason": "required pinned backup runner source omitted from first bundle",
+      "ga_generation_rows": 0,
+      "candidate_evaluations": 0
+    },
+    {
+      "attempt": 2,
+      "pid": 14516,
+      "status": "preflight_failed",
+      "reason": "new notebook root lacked repository .git marker",
+      "ga_generation_rows": 0,
+      "candidate_evaluations": 0
+    },
+    {
+      "attempt": 3,
+      "pid": 19140,
+      "status": "completed",
+      "ga_generation_rows": 120,
+      "candidate_evaluations": 12000,
+      "official_summary_written": true
+    }
+  ],
+  "notebook_raw_output_sha256": {
+    "fold_best_concurrency_summary.json": "5b2ab3a8d770d5d727d825b2a93a1810be0bade26c54ebcd9e06ed90488c0488",
+    "fold_best_summary.json": "98aa06266f8ffa48ad60483f26d5bd1c1bce28528751565d7c84541204976d6f",
+    "fold_best_trade_level.jsonl": "eb6a80e18c00e2543dfb6cfaff6a70a19987d9f3435047f8ce60fee769c9348d",
+    "ga_population_history.jsonl": "b8e283260188cfdebecd33cc1e5a9068cb6d6746cf0419e86e7fb8646021b917",
+    "generation_best_fitness.jsonl": "157d228093f2fe145de64bf55a38a9b63f985a3e89f4362761ec7d53721a0579",
+    "launch_command.json": "de860fe48f47bc6ac8fc98f79d41c96b0eae84434f55d5d2700c23eed8464541",
+    "manifest.json": "0a25fb77d813abb7494c63567440cfa7c6c9d53800f09d65efee4619c9705c28",
+    "mutation_bias_summary.json": "46878b8442a7f0125465ebbe49eb19ee2247e9158e816087b9969b76b21255f6",
+    "official_final_summary.json": "43cd3f1b909578ce50cf00a95e0a2a88e20a7bad274d11008465f6bf1df3c334",
+    "overlap_entry_comparison.json": "e40e79b2562f00b0063df9cdcef8243a055584ca1f232f898f7231b5d1889008",
+    "qualify_candidate_pass_vectors.jsonl": "c933568a43b1ccf8df79dc319286ca5e60af53a69c17ca3bd144bade1d581b14",
+    "qualify_candidate_rulebooks.jsonl": "d53887b010d32659081f72855767beab2023841adb6e54e543898db8a3205beb",
+    "qualify_cross_fold_matrix.jsonl": "a70ba5098de908ddcfe95f24089f7fd51d256ac9d6b80ebcc898018572a2ec05",
+    "qualify_gate_bottleneck.json": "1c1b8ffc1003153af97e3e0097de8e7977913e6d8fd121813a13f4143e27e24a",
+    "qualify_population_all.jsonl": "1641736640e99b5a5e7475a27bfa09104614fee7a4d7c8ae51b60ccf03b71da7",
+    "qualify_result.json": "60cdf7cf920b75884124337bbe5e04a3c08f32bf74ddc9b5aaa22013aad60388",
+    "run.log": "417fa43f6c85b3f237a658ba5f6fd4b0b937712ab6ef32302059c8d3541d18eb",
+    "trade_count_factor_comparison.json": "22dfa99e5f14c1ee1aac1a30b7a73b48df2b7091cc76dbb11f3b3446dc3be397"
+  },
+  "concurrent_repository_artifacts_note": "During finalization another process committed numerically matching v5 raw artifacts produced through source commit 50997c2 and a different byte schema. Those raw files were not overwritten. This launch manifest and readout are authoritative for the notebook-local direct-code run at beda7cb."
 }

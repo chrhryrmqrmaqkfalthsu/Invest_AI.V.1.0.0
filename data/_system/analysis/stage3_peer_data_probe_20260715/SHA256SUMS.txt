@@ -1,28 +1,32 @@
-# stage3_peer_data_probe_20260715 SHA / audit
+# stage3_peer_data_probe_20260715 SHA / audit — corrected
 
 # output files
-c65c19cd2d8faf0138900b0e687195deb0020ec57d5c45a1c6c25db6e9acce9c  readout.md
+2f0b6481b57c7acf62cc0997296b7b7317b75b63e7da6567dbf7cc2e1367be00  readout.md
+
+# corrected verdict
+# PEER_DATA_AVAILABLE: stage0/ohlcv_cache has 5758 ticker pkl files in honest_full_6174_20260616_stage01_full.
+# Core peer OHLCV available and aligned for AAP stage3 folds: GPC, ORLY, AZO.
 
 # protected files: start == end confirmed
 da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce  .env
 35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38  data/_system/market_history.csv
 b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611  data/_system/market_history_v2.csv
 
-# analysis inputs
+# primary analysis inputs
 6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717  data/_system/analysis/ohlc_snapshot_20260707/AAP_ohlcv.csv
-3f0e999acf7c2778d47b6d25b3a2edcce6c2e030cae64f8e759cbf89cded5825  data/_system/analysis/ohlc_snapshot_20260707/benchmark_SPY_ohlcv.csv
-b6523573bbcda36875ce1e89f051dd6cd238edcba592190b679b93b0e0c8a932  data/_system/analysis/ohlc_snapshot_20260707/benchmark_QQQ_ohlcv.csv
-3f0e999acf7c2778d47b6d25b3a2edcce6c2e030cae64f8e759cbf89cded5825  data/_system/analysis/entry_quality_stops_regime_20260707/benchmark_SPY_ohlcv.csv
-b6523573bbcda36875ce1e89f051dd6cd238edcba592190b679b93b0e0c8a932  data/_system/analysis/entry_quality_stops_regime_20260707/benchmark_QQQ_ohlcv.csv
-
-# data availability verdict
-# PEER_DATA_ABSENT: exact peer OHLCV files absent for GPC, ORLY, AZO, LKQ, CPRT, DORM, MNRO, KMX, AN, PAG, LAD, SAH, GPI, ABG, CVNA, CARG, DRVN, MUSA, CASY.
-# INDEX_DATA_AVAILABLE: SPY and QQQ benchmark OHLCV cover all AAP stage3 fold dates.
+f3982ccac813b9932b58059afe30dc554b66964dd01e312fca771f7d96f719da  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/AAP.pkl
+172528a07786e0e204ddeafb7570a185c465f13570ae19e50d6aecaa696bfeda  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/GPC.pkl
+e37d9b5da83d517e6e77ba0f2d55ef4f07869815b24e73cc4f7259df01f8d75a  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/ORLY.pkl
+42006c75744935719992fe0c423580541ba560e4ba67d3cd894d130690bd36d1  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/AZO.pkl
+33c810ef5b300731df735d32567e450399ec3af0cc3eb130aaa4da69988aebf9  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/LKQ.pkl
+a327ece139e0cfe4b66d8428b60ea29c7a35a0fad7d98db980a81af759974cf5  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/CPRT.pkl
+093813515870781db70500a55be9b1e94998caea497f088b33b4596c57e551fc  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/DORM.pkl
+06bd26941e4e598383d595ed9dfdc5b61a6bac83e0d9eda4699f25ddee0ce015  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/MNRO.pkl
 
 # daemon end-state
 # PID PPID STAT STARTED CMD
 # 494330 1 Sl Sat Jul 11 20:16:00 2026 /home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60
 
 # git
-# backup commit before output write: 38d64a9
-# git status before artifact commit: only this output directory new/modified; source code and research input data unchanged
+# first backup commit before initial report: 38d64a9
+# correction backup commit: 9bfc6a8

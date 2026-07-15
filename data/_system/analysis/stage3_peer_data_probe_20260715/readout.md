@@ -1,170 +1,177 @@
-# Stage3 AAP peer OHLCV 데이터 존재·정합 확인
+# Stage3 AAP peer OHLCV 데이터 존재·정합 확인 — 정정본
+
+## 정정 결론
+
+판정: **PEER_DATA_AVAILABLE**
+
+사용자 지적이 맞았다. 이전 보고서는 `ohlc_snapshot_20260707/`와 파일명 중심으로만 찾아서, 6000개대 종목 OHLCV가 들어 있는 `stage0/ohlcv_cache/*.pkl` 저장소를 놓쳤다. 저장소에는 AAP와 동종/인접 peer의 6년치 OHLCV 캐시가 존재한다.
+
+사용 가능한 주 저장소:
+
+`data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/`
+
+- pkl 파일 수: 5,758개
+- 파일 형식: ticker별 `pandas.DataFrame` pickle
+- 기본 컬럼: `Open`, `High`, `Low`, `Close`, `Volume`, MA/RSI/MACD/BB/ATR/Volume_ratio 등 파생 컬럼 포함
+- 기간: 대체로 2020-05-18 ~ 2026-06-12 또는 2026-06-15
+- AAP stage3 3-fold 기간 train_1/train_2/train_3는 핵심 peer 모두 날짜 누락 0일로 커버
+
+이전 `PEER_DATA_ABSENT` 판정은 **취소**한다.
 
 ## 실행 사실
 
 - 실행 host: `invest-bot`
 - 작업 위치: `scripts/research/stage23_rework_20260713/` 및 `data/_system/`
 - 범위: read-only 확인. 코드 수정, 데이터 수정, auto-fetch, 외부 다운로드, GA, 재학습 없음.
-- 산출물 작성 전 기준점 백업 commit: `38d64a9`
+- 최초 산출물 작성 전 기준점 백업 commit: `38d64a9`
+- 정정보고 전 기준점 백업 commit: `9bfc6a8`
 
-## 결론
+## STEP 0 — 전수 검색 재확인
 
-판정: **PEER_DATA_ABSENT**
+### 발견된 6000개대 OHLCV 캐시
 
-저장소 전체에서 AAP 동종 peer로 볼 수 있는 GPC, ORLY, AZO, LKQ, CPRT, DORM, MNRO, KMX, AN, PAG, LAD, SAH, GPI, ABG, CVNA, CARG, DRVN, MUSA, CASY의 종목별 OHLCV는 발견되지 않았다. 따라서 peer-relative feature는 현재 저장소 데이터만으로는 계산할 수 없고, 데이터 수집/스냅샷 생성이 별도 선행 과제다.
+| 경로 | pkl 수 | 비고 |
+|---|---:|---|
+| `data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/` | 5,758 | 이번 정합성 판정의 주 기준 |
+| `data/_system/research/honest_full_6174_20260610/stage0/ohlcv_cache/` | 5,753 | 이전 버전 캐시 |
+| `data/_system/research/honest_full_6174_20260616_stage01_full_w2/stage0/ohlcv_cache/` | 729 | 부분 캐시 |
 
-지수 benchmark는 SPY/QQQ가 존재한다. SPY/QQQ는 AAP 3-fold 기간 전체를 날짜 누락 없이 커버하므로 index-relative feature는 계산 가능하다. 다만 이는 peer-relative가 아니라 market/index-relative다.
+### 정확 매칭 peer 파일 존재
 
-## STEP 0 — 전수 검색 결과
+주 기준: `data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/`
 
-### 종목별 OHLCV snapshot
-
-검색 위치: `data/`, `scripts/research/stage23_rework_20260713/`
-
-주요 OHLCV 디렉터리:
-
-- `data/_system/analysis/ohlc_snapshot_20260707/`
-- `data/_system/analysis/entry_quality_stops_regime_20260707/`
-
-`ohlc_snapshot_20260707/ohlc_snapshot_manifest.csv`는 91개 ticker를 가진다. 이 manifest에서 동종 peer 후보와 정확히 일치하는 ticker는 AAP뿐이었다.
-
-### 정확 매칭 파일 목록
-
-| 구분 | ticker | 발견 경로 |
-|---|---|---|
-| 대상 종목 | AAP | `data/_system/analysis/ohlc_snapshot_20260707/AAP_ohlcv.csv` |
-| peer | GPC | 없음 |
-| peer | ORLY | 없음 |
-| peer | AZO | 없음 |
-| peer | LKQ | 없음 |
-| peer | CPRT | 없음 |
-| peer | DORM | 없음 |
-| peer | MNRO | 없음 |
-| peer | KMX | 없음 |
-| peer | AN | 없음 |
-| peer | PAG | 없음 |
-| peer | LAD | 없음 |
-| peer | SAH | 없음 |
-| peer | GPI | 없음 |
-| peer | ABG | 없음 |
-| peer | CVNA | 없음 |
-| peer | CARG | 없음 |
-| peer | DRVN | 없음 |
-| peer | MUSA | 없음 |
-| peer | CASY | 없음 |
-| index | SPY | `data/_system/analysis/ohlc_snapshot_20260707/benchmark_SPY_ohlcv.csv`; `data/_system/analysis/entry_quality_stops_regime_20260707/benchmark_SPY_ohlcv.csv` |
-| index | QQQ | `data/_system/analysis/ohlc_snapshot_20260707/benchmark_QQQ_ohlcv.csv`; `data/_system/analysis/entry_quality_stops_regime_20260707/benchmark_QQQ_ohlcv.csv` |
-| index | IWM | 없음 |
-| index | DIA | 없음 |
-| index | XLY | 없음 |
-| index | XRT | 없음 |
-| index | CARZ | 없음 |
-
-주의: 넓은 문자열 검색에서는 `ANET_ohlcv.csv`, `CAN_ohlcv.csv`가 `AN` 문자열을 포함해 잡혔지만, 정확 ticker 매칭 기준으로 `AN_ohlcv.csv`는 없다.
+| 구분 | ticker | 상태 | 경로 |
+|---|---|---:|---|
+| 대상 | AAP | 있음 | `.../ohlcv_cache/AAP.pkl` |
+| 핵심 auto parts retail peer | GPC | 있음 | `.../ohlcv_cache/GPC.pkl` |
+| 핵심 auto parts retail peer | ORLY | 있음 | `.../ohlcv_cache/ORLY.pkl` |
+| 핵심 auto parts retail peer | AZO | 있음 | `.../ohlcv_cache/AZO.pkl` |
+| adjacent peer | LKQ | 있음 | `.../ohlcv_cache/LKQ.pkl` |
+| adjacent peer | CPRT | 있음 | `.../ohlcv_cache/CPRT.pkl` |
+| adjacent peer | DORM | 있음 | `.../ohlcv_cache/DORM.pkl` |
+| adjacent peer | MNRO | 있음 | `.../ohlcv_cache/MNRO.pkl` |
+| broader auto retail/dealer | KMX | 있음 | `.../ohlcv_cache/KMX.pkl` |
+| broader auto retail/dealer | AN | 있음 | `.../ohlcv_cache/AN.pkl` |
+| broader auto retail/dealer | PAG | 있음 | `.../ohlcv_cache/PAG.pkl` |
+| broader auto retail/dealer | LAD | 있음 | `.../ohlcv_cache/LAD.pkl` |
+| broader auto retail/dealer | SAH | 있음 | `.../ohlcv_cache/SAH.pkl` |
+| broader auto retail/dealer | GPI | 있음 | `.../ohlcv_cache/GPI.pkl` |
+| broader auto retail/dealer | ABG | 있음 | `.../ohlcv_cache/ABG.pkl` |
+| broader auto retail/dealer | CVNA | 있음 | `.../ohlcv_cache/CVNA.pkl` |
+| broader auto retail/dealer | CARG | 있음 | `.../ohlcv_cache/CARG.pkl` |
+| broader auto retail/dealer | MUSA | 있음 | `.../ohlcv_cache/MUSA.pkl` |
+| broader retail/adjacent | CASY | 있음 | `.../ohlcv_cache/CASY.pkl` |
+| requested/possible peer | DRVN | 없음 | - |
+| index | SPY | 있음 | `.../ohlcv_cache/SPY.pkl` |
+| index | QQQ | 있음 | `.../ohlcv_cache/QQQ.pkl` |
 
 ### market_history 계열 확인
 
-`market_history.csv` / `market_history_v2.csv` 및 백업 파일들은 멀티 종목 OHLCV 테이블이 아니었다. symbol/ticker 컬럼이 없다.
-
-| 파일 | row 수 | column 수 | symbol/ticker 컬럼 | 성격 |
-|---|---:|---:|---:|---|
-| `data/_system/market_history.csv` | 1759 | 12 | 없음 | 날짜별 market regime / sector score |
-| `data/_system/market_history.csv.before_6y` | 500 | 12 | 없음 | 백업 market regime |
-| `data/_system/market_history.csv.empty_20260712_bak` | 0 | 0 | 없음 | 빈 백업 파일 |
-| `data/_system/market_history_v2.csv` | 2196 | 28 | 없음 | 날짜별 뉴스/이벤트 aggregate |
-| `data/_system/market_history_v2.csv.bak` | 637 | 28 | 없음 | 백업 뉴스/이벤트 aggregate |
-| `data/_system/market_history_v2.csv.before_expand` | 637 | 22 | 없음 | 백업 뉴스/이벤트 aggregate |
-| `data/_system/market_history_v2.csv.before_expanded_has` | 637 | 22 | 없음 | 백업 뉴스/이벤트 aggregate |
-| `data/_system/market_history_v2.csv.old` | 637 | 28 | 없음 | 백업 뉴스/이벤트 aggregate |
-
-`data/` 하위 `.parquet` 파일도 발견되지 않았다.
+`market_history.csv` / `market_history_v2.csv`는 여전히 멀티 종목 OHLCV 테이블이 아니다. symbol/ticker 컬럼이 없는 날짜별 market/news aggregate다. 6000개대 종목 OHLCV는 `market_history*`가 아니라 `stage0/ohlcv_cache/*.pkl`에 있다.
 
 ## STEP 1 — 발견 데이터 정합성
 
-### 사용 가능한 OHLCV/benchmark 정합표
+기준 fold:
 
-| symbol | 경로 | SHA256 | 파일 mtime UTC | rows | 기간 | OHLCV 완비 | null OHLCV | duplicate date |
-|---|---|---|---|---:|---|---:|---:|---:|
-| AAP | `data/_system/analysis/ohlc_snapshot_20260707/AAP_ohlcv.csv` | `6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717` | 2026-07-07 16:56:12 +0000 | 1526 | 2020-06-08~2026-07-06 | YES | 0 | 0 |
-| SPY | `data/_system/analysis/ohlc_snapshot_20260707/benchmark_SPY_ohlcv.csv` | `3f0e999acf7c2778d47b6d25b3a2edcce6c2e030cae64f8e759cbf89cded5825` | 2026-07-07 19:38:09 +0000 | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 |
-| QQQ | `data/_system/analysis/ohlc_snapshot_20260707/benchmark_QQQ_ohlcv.csv` | `b6523573bbcda36875ce1e89f051dd6cd238edcba592190b679b93b0e0c8a932` | 2026-07-07 19:38:09 +0000 | 1527 | 2020-05-18~2026-06-15 | YES | 0 | 0 |
-| SPY duplicate | `data/_system/analysis/entry_quality_stops_regime_20260707/benchmark_SPY_ohlcv.csv` | `3f0e999acf7c2778d47b6d25b3a2edcce6c2e030cae64f8e759cbf89cded5825` | 2026-07-07 19:38:09 +0000 | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 |
-| QQQ duplicate | `data/_system/analysis/entry_quality_stops_regime_20260707/benchmark_QQQ_ohlcv.csv` | `b6523573bbcda36875ce1e89f051dd6cd238edcba592190b679b93b0e0c8a932` | 2026-07-07 19:38:09 +0000 | 1527 | 2020-05-18~2026-06-15 | YES | 0 | 0 |
+- train_1: 2022-07-01 ~ 2023-06-30
+- train_2: 2023-07-01 ~ 2024-06-30
+- train_3: 2024-07-01 ~ 2025-06-30
 
-SPY/QQQ duplicate 파일은 byte-identical이다.
+기준 AAP snapshot:
 
-### AAP 3-fold 날짜 정합
+`data/_system/analysis/ohlc_snapshot_20260707/AAP_ohlcv.csv`, SHA `6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717`
 
-| symbol | train_1 rows / AAP rows | train_1 missing AAP dates | train_2 rows / AAP rows | train_2 missing AAP dates | train_3 rows / AAP rows | train_3 missing AAP dates |
-|---|---:|---:|---:|---:|---:|---:|
-| AAP | 251/251 | 0 | 250/250 | 0 | 250/250 | 0 |
-| SPY | 251/251 | 0 | 250/250 | 0 | 250/250 | 0 |
-| QQQ | 251/251 | 0 | 250/250 | 0 | 250/250 | 0 |
+### 핵심 peer 정합표
 
-전체 2020-06-08~2026-07-06 기준으로는 SPY가 AAP 날짜 대비 14일 차이, QQQ가 13일 차이를 보인다. 그러나 stage3 AAP의 train_1/2/3 기간에서는 SPY/QQQ 모두 AAP 거래일과 완전히 일치한다.
+모든 행은 주 캐시 `honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/` 기준이다.
 
-### peer 데이터 정합성
+| ticker | SHA256 | rows | 기간 | OHLCV 완비 | null OHLCV | duplicate dates | train_1 누락 | train_2 누락 | train_3 누락 |
+|---|---|---:|---|---:|---:|---:|---:|---:|---:|
+| AAP | `f3982ccac813b9932b58059afe30dc554b66964dd01e312fca771f7d96f719da` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| GPC | `172528a07786e0e204ddeafb7570a185c465f13570ae19e50d6aecaa696bfeda` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| ORLY | `e37d9b5da83d517e6e77ba0f2d55ef4f07869815b24e73cc4f7259df01f8d75a` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| AZO | `42006c75744935719992fe0c423580541ba560e4ba67d3cd894d130690bd36d1` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| LKQ | `33c810ef5b300731df735d32567e450399ec3af0cc3eb130aaa4da69988aebf9` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| CPRT | `a327ece139e0cfe4b66d8428b60ea29c7a35a0fad7d98db980a81af759974cf5` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| DORM | `093813515870781db70500a55be9b1e94998caea497f088b33b4596c57e551fc` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| MNRO | `06bd26941e4e598383d595ed9dfdc5b61a6bac83e0d9eda4699f25ddee0ce015` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
 
-동종 peer OHLCV가 없으므로 다음 항목은 확인 불가다.
+핵심 auto parts peer인 **GPC/ORLY/AZO는 AAP stage3 3-fold 기간을 전부 정합하게 커버**한다.
 
-| 항목 | 상태 |
-|---|---|
-| peer 시작~끝 기간 | 데이터 없음 |
-| peer row 수 | 데이터 없음 |
-| peer OHLCV 컬럼 완비 | 데이터 없음 |
-| peer 결측 여부 | 데이터 없음 |
-| peer AAP 3-fold 날짜 정합 | 데이터 없음 |
-| peer 거래정지/상장폐지 구간 | 데이터 없음 |
+### broader peer / index 정합표
+
+| ticker | SHA256 | rows | 기간 | OHLCV 완비 | null OHLCV | duplicate dates | train_1 누락 | train_2 누락 | train_3 누락 |
+|---|---|---:|---|---:|---:|---:|---:|---:|---:|
+| KMX | `e4b5959d68268d99ac56e329d142217dd84f5f3f0a0c8a3ba7a97aa452dd14c9` | 1527 | 2020-05-18~2026-06-15 | YES | 0 | 0 | 0 | 0 | 0 |
+| AN | `dbbe15bfab9795133d980361d5caed6a4545099147957b0a8872ad69d07163d8` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| PAG | `388def8e2f22fe93656e1623d7cf09247ca448bfec4f4b5841af6a926ca0fa6f` | 1527 | 2020-05-18~2026-06-15 | YES | 0 | 0 | 0 | 0 | 0 |
+| LAD | `e731078124802e887ebe1d74dffd008b66490071d972e11d4a6085b5233c8313` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| SAH | `dfc042650f94319bd6bafc287d29e42a73969dc6c3343c9c7a527ddddae3554d` | 1527 | 2020-05-18~2026-06-15 | YES | 0 | 0 | 0 | 0 | 0 |
+| GPI | `3a707f5d252c3ec3ab6bc53ea5d066383ebf77d263a110ed153c3f463512378d` | 1527 | 2020-05-18~2026-06-15 | YES | 0 | 0 | 0 | 0 | 0 |
+| ABG | `f123c93a0bfd0d01e2d911748873bb8afd78e68c5d456ddde54497fc8d868c87` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| CVNA | `01e56748cc4f7116300e5818fb05f41c75244cbef10196de839f762b7d3784bb` | 1527 | 2020-05-18~2026-06-15 | YES | 0 | 0 | 0 | 0 | 0 |
+| CARG | `f5b700f8f9dabf266fe7a3e02d8859ba47a775c8aada850655ffe1e9064e0e68` | 1527 | 2020-05-18~2026-06-15 | YES | 0 | 0 | 0 | 0 | 0 |
+| MUSA | `3a83b81f659041382ced4a88f4de26dc4c180f849e047e890ad59b270337694a` | 1527 | 2020-05-18~2026-06-15 | YES | 0 | 0 | 0 | 0 | 0 |
+| CASY | `6b91beb3d3f94c90564b88b00567d34e1732d895b9b7de25ee81e39ed38e667d` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| SPY | `ef9cfdd484488dc6635fe542a0a7b39bfaf0c7661f7ddff8a6081af27bbe1637` | 1526 | 2020-05-18~2026-06-12 | YES | 0 | 0 | 0 | 0 | 0 |
+| QQQ | `b13782d26d80191920f26a69d9ef740c0427fb861ac7c9dc34661c316f926460` | 1527 | 2020-05-18~2026-06-15 | YES | 0 | 0 | 0 | 0 | 0 |
+
+### AAP snapshot과 cache 비교
+
+AAP snapshot과 `AAP.pkl`은 전체 파일 기간이 다르다.
+
+| 항목 | snapshot | pkl cache |
+|---|---|---|
+| 경로 | `ohlc_snapshot_20260707/AAP_ohlcv.csv` | `honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/AAP.pkl` |
+| 기간 | 2020-06-08~2026-07-06 | 2020-05-18~2026-06-12 |
+| stage3 train_1/2/3 날짜 누락 | 0 | 0 |
+| OHLCV 동일성 | 공통 날짜에서 최대 차이 `4.84e-10` | float serialization 수준 |
+
+즉 stage3 fold 기간에는 pkl cache를 peer-relative 계산에 사용할 수 있다. 다만 2026-06-12 이후 날짜까지 필요한 분석에는 `ohlc_snapshot_20260707`과 시점 차이가 있으므로 별도 freeze 기준을 맞춰야 한다.
 
 ## STEP 2 — peer-relative 계산 가능성 판정
 
-판정: **PEER_DATA_ABSENT**
+판정: **PEER_DATA_AVAILABLE**
 
-근거:
+최소 1개가 아니라 핵심 peer 3개 `GPC`, `ORLY`, `AZO`가 모두 AAP 3-fold 기간을 완전히 커버한다. adjacent peer까지 포함하면 `LKQ`, `CPRT`, `DORM`, `MNRO`도 사용 가능하다.
 
-1. 종목별 snapshot manifest 91개 ticker 중 peer 후보와 정확히 일치하는 ticker는 AAP뿐이다.
-2. 저장소 전체 파일명 정확 검색에서 GPC, ORLY, AZO, LKQ, CPRT, DORM, MNRO, KMX, AN, PAG, LAD, SAH, GPI, ABG, CVNA, CARG, DRVN, MUSA, CASY OHLCV가 없다.
-3. `market_history*` 파일군은 날짜별 시장/뉴스 aggregate이며 멀티 종목 OHLCV가 아니다.
-4. `.parquet` 기반 숨은 OHLCV 파일도 data 하위에서 발견되지 않았다.
+### 권장 peer 집합
 
-### 사용 가능한 상대강도 범위
+1차 핵심 peer basket:
 
-| feature 종류 | 가능 여부 | 사용 가능 데이터 | 비고 |
-|---|---:|---|---|
-| AAP vs SPY | 가능 | SPY benchmark OHLCV | index-relative 가능 |
-| AAP vs QQQ | 가능 | QQQ benchmark OHLCV | index-relative 가능 |
-| AAP vs peer basket | 불가 | peer OHLCV 없음 | 별도 수집 필요 |
-| AAP vs sector/retail ETF | 불가 | XLY/XRT/CARZ 없음 | 별도 수집 필요 |
+- `GPC`
+- `ORLY`
+- `AZO`
 
-### 다음 단계 권고
+2차 확장 basket:
 
-현재 저장소 데이터만 쓸 경우:
+- `GPC`, `ORLY`, `AZO`, `LKQ`, `CPRT`, `DORM`, `MNRO`
 
-1. peer-relative feature는 구현하지 않는다.
-2. index-relative 후보만 2차 보조 feature로 둘 수 있다.
-   - `rs_qqq_ret20 = AAP 20d return - QQQ 20d return`
-   - `rs_spy_ret20 = AAP 20d return - SPY 20d return`
-3. 직전 독립성 분석 기준으로 RS20 계열은 후보끼리 중복이 크므로, 하나를 고른다면 `rs_qqq_ret20` 하나만 보류 후보로 유지한다.
+broader auto retail/dealer basket은 사업 구조가 달라 1차 feature에는 넣지 않고 비교/robustness 용도로 둔다.
 
-peer-relative feature를 정말 검증하려면 선행 데이터 수집 대상은 다음 순서가 적절하다.
+- `KMX`, `AN`, `PAG`, `LAD`, `SAH`, `GPI`, `ABG`, `CVNA`, `CARG`
 
-1. 핵심 auto parts retail peer: `ORLY`, `AZO`, `GPC`
-2. adjacent auto parts / salvage / services: `LKQ`, `DORM`, `CPRT`, `MNRO`
-3. broader auto retail/dealer는 AAP와 사업 구조가 달라 2차 후보: `KMX`, `AN`, `PAG`, `LAD`, `SAH`, `GPI`, `ABG`, `CVNA`, `CARG`
+### 계산 방식 초안
 
-계산 방식 초안, 데이터 확보 후:
+stage3 fold 기간에서 AAP와 peer의 거래일은 모두 일치하므로 intersection 기준으로 fail-closed 정렬하면 된다.
 
-- 각 peer의 adjusted 또는 동일 기준 OHLCV Close로 20d/60d return 계산.
-- peer basket return은 사용 가능한 핵심 peer의 equal-weight median 또는 mean.
-- feature 예시:
-  - `rs_peer_ret20 = AAP_ret20 - peer_basket_ret20`
-  - `rs_peer_ret60 = AAP_ret60 - peer_basket_ret60`
-  - `rs_peer_line_slope20 = pct_change(AAP_close / peer_basket_close, 20)`
-- AAP와 peer basket의 거래일 intersection을 사용하고, stage3 fold 기간에서 missing AAP dates가 0인지 fail-closed 검증한다.
+권장 feature:
+
+1. `rs_peer3_ret20 = AAP_ret20 - median(GPC_ret20, ORLY_ret20, AZO_ret20)`
+2. `rs_peer3_ret60 = AAP_ret60 - median(GPC_ret60, ORLY_ret60, AZO_ret60)`
+3. `rs_peer3_line_slope20 = pct_change(AAP_close / median_peer3_close_indexed, 20)`
+
+여기서 `median_peer3_close_indexed`는 각 peer close를 첫 유효일 100으로 rebasing한 뒤 median을 쓰는 방식이 안전하다. 단순 가격 median은 AZO/ORLY/GPC 가격 레벨 차이 때문에 부적절하다.
+
+권장 우선순위:
+
+- 첫 null-test는 `rs_peer3_ret20` 하나만 추가.
+- 그 다음 `rs_peer3_ret60` 또는 `rs_peer7_ret20` 확장.
+- SPY/QQQ index-relative는 peer-relative와 비교용 baseline으로만 둔다.
 
 ## 보호파일 / daemon / git 기록
 
-시작 SHA:
+시작/종료 SHA 대조 대상:
 
 | 파일 | SHA256 |
 |---|---|

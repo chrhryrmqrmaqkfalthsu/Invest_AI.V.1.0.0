@@ -11,6 +11,7 @@ engine.pipeline.stage2_gate and is the only gate implementation used here.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import csv
 import dataclasses
 import json
@@ -27,8 +28,11 @@ from statistics import mean
 from typing import Any, Mapping
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+# Fail closed against accidentally importing the repository-root ``engine`` package.
+# Stage2 rework must use the colocated Stage3 rework engine modules.
+if str(PROJECT_ROOT) in sys.path:
+    sys.path.remove(str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
 import pandas as pd
@@ -48,7 +52,8 @@ from engine.learning.fitness_cache import (
 from engine.pipeline.context import prepare_ticker_context
 from engine.pipeline.stage2_gate import DEFAULT_STAGE2_GATE, stage2_fail_reasons
 from engine.pipeline.topn_survivor import _score_period_candidates
-from engine.strategies.rulebook import Rulebook
+from engine.strategies.evaluator import TECHNICAL_FEATURE_LAG_TRADING_DAYS
+from engine.strategies.rulebook import ENTRY_INTERVAL_MIN_FEATURE_SUPPORT, ENTRY_INTERVAL_SPECS, Rulebook
 
 POPULATION = 100
 GENERATIONS = 50
@@ -59,6 +64,10 @@ EXIT_EXECUTION_MODE = "conservative_core"
 FOLD_EXIT_POLICY = "fold_end_mark_to_market"
 LIVE_HARD_STOP_GUARD = True
 ADD_BUY_RUNTIME_ENABLED = False
+ENTRY_PHASE_CACHE_MODE = "entry_provisional_interval_break_d5_v2"
+ENTRY_PHASE_MAX_HOLDING_DAYS = 7
+TECHNICAL_FEATURE_LAG_MODE = f"strict_entry_d{TECHNICAL_FEATURE_LAG_TRADING_DAYS}_v1"
+STAGE2_EXECUTION_SEMANTICS = "stage3_entry_phase_d5_strict_interval_v1"
 
 TRAIN_SPLITS: list[dict[str, str]] = [
     {"label": "train_1", "train_start": "2022-07-01", "train_end": "2023-06-30"},
@@ -428,6 +437,148 @@ def _configure_logging(out_dir: Path) -> logging.Logger:
     return logger
 
 
+def _date_series(df: pd.DataFrame) -> pd.Series:
+    if "date" in df.columns:
+        return pd.Series(pd.to_datetime(df["date"], errors="coerce").to_numpy(), index=df.index)
+    if isinstance(df.index, pd.DatetimeIndex):
+        return pd.Series(pd.to_datetime(df.index, errors="coerce"), index=df.index)
+    raise ValueError("Stage2 Stage3 entry feature domain requires a date column or DatetimeIndex")
+
+
+def build_entry_feature_domain(
+    ctx: Mapping[str, Any],
+    *,
+    start: str | None,
+    end: str | None,
+) -> dict[str, dict[str, Any]]:
+    """Stage3와 같은 D-5 strict-entry feature domain/support를 계산한다.
+
+    Stage2의 rolling 선별 방식은 유지하되, entry gene 진화와 support 검증은
+    Stage3 rework와 동일하게 5개 strict feature의 전체 series에 shift(5)를
+    먼저 적용한 뒤 fold 구간을 자른다.
+    """
+    df = ctx.get("df")
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        raise ValueError("ticker context df is missing or empty")
+
+    frame = pd.DataFrame(index=df.index)
+    frame["date"] = _date_series(df)
+
+    def numeric(column: str) -> pd.Series:
+        if column not in df.columns:
+            return pd.Series(np.nan, index=df.index, dtype=float)
+        return pd.to_numeric(df[column], errors="coerce")
+
+    ma5 = numeric("MA5")
+    ma20 = numeric("MA20")
+    ma60 = numeric("MA60")
+    close = numeric("Close")
+    bb_lower = numeric("BB_lower")
+    bb_upper = numeric("BB_upper")
+
+    frame["ma_trend"] = 0.5 * (((ma5 / ma20) - 1.0) + ((ma20 / ma60) - 1.0)) * 100.0
+    frame["macd_hist"] = numeric("MACD_hist") / close * 100.0
+    frame["rsi"] = numeric("RSI")
+    frame["bb_position"] = (close - bb_lower) / (bb_upper - bb_lower)
+    frame["volume_ratio"] = numeric("Volume_ratio")
+
+    feature_names = tuple(ENTRY_INTERVAL_SPECS)
+    frame.loc[:, list(feature_names)] = frame.loc[:, list(feature_names)].shift(
+        TECHNICAL_FEATURE_LAG_TRADING_DAYS
+    )
+
+    if start is not None:
+        frame = frame.loc[frame["date"] >= pd.Timestamp(start)]
+    if end is not None:
+        frame = frame.loc[frame["date"] <= pd.Timestamp(end)]
+
+    finite_mask = np.ones(len(frame), dtype=bool)
+    for feature_name in feature_names:
+        finite_mask &= np.isfinite(frame[feature_name].to_numpy(dtype=float))
+    frame = frame.loc[finite_mask, ["date", *feature_names]].copy()
+    if len(frame) < ENTRY_INTERVAL_MIN_FEATURE_SUPPORT:
+        raise ValueError(
+            f"entry feature fold has only {len(frame)} finite aligned rows; "
+            f"minimum is {ENTRY_INTERVAL_MIN_FEATURE_SUPPORT}"
+        )
+
+    domain: dict[str, dict[str, Any]] = {}
+    for feature_name in feature_names:
+        values = frame[feature_name].to_numpy(dtype=float)
+        domain[feature_name] = {
+            "train_min": float(np.min(values)),
+            "train_max": float(np.max(values)),
+            "q01": float(np.quantile(values, 0.01)),
+            "q99": float(np.quantile(values, 0.99)),
+            "iqr": float(np.quantile(values, 0.75) - np.quantile(values, 0.25)),
+            "sample_count": int(len(values)),
+            "values": values.tolist(),
+        }
+    return domain
+
+
+@contextmanager
+def _stage3_entry_phase_execution_context():
+    """Stage3 entry-phase execution semantics를 Stage2 train/eval 호출에 주입한다.
+
+    - T+1 open 진입은 기존 run_backtest_execution_mode entry plan을 사용한다.
+    - 청산은 Stage3와 동일하게 entry_phase_exit=True로 강제한다.
+    - 보유 중 매일 D-5 strict signal tape를 재계산한 결과로 interval break를 판단한다.
+    - provisional max holding은 7거래일로 제한한다.
+    - 컨텍스트 종료 시 monkeypatch를 반드시 원복한다.
+    """
+    from engine.learning import execution_mode_backtest as _execution_backtest
+
+    original_builder = _execution_backtest._build_daily_signal_tape
+    original_simulate_exit = _execution_backtest.simulate_exit
+    state: dict[str, Any] = {}
+
+    def build_tape(*args: Any, **kwargs: Any) -> Any:
+        tape = original_builder(*args, **kwargs)
+        state["signal_tape"] = tape
+        return tape
+
+    def simulate_entry_exit(*args: Any, **kwargs: Any) -> Any:
+        tape = state.get("signal_tape")
+        if tape is None:
+            raise RuntimeError("stage2 Stage3 entry-phase signal tape was not built before simulate_exit")
+        kwargs["entry_phase_exit"] = True
+        kwargs["entry_phase_signal_tape"] = tape
+        kwargs["entry_phase_max_holding_days"] = ENTRY_PHASE_MAX_HOLDING_DAYS
+        return original_simulate_exit(*args, **kwargs)
+
+    _execution_backtest._build_daily_signal_tape = build_tape
+    _execution_backtest.simulate_exit = simulate_entry_exit
+    try:
+        yield
+    finally:
+        _execution_backtest._build_daily_signal_tape = original_builder
+        _execution_backtest.simulate_exit = original_simulate_exit
+
+
+def run_stage3_entry_phase_backtest(
+    rulebook: Rulebook,
+    df: pd.DataFrame,
+    *,
+    start_date: str | None,
+    end_date: str | None,
+    kwargs: Mapping[str, Any],
+) -> Any:
+    """Stage2에서 Stage3 entry-phase semantics로 학습/검증을 실행한다."""
+    with _stage3_entry_phase_execution_context():
+        return run_backtest_execution_mode(
+            rulebook,
+            df,
+            start_date=start_date,
+            end_date=end_date,
+            **dict(kwargs),
+            entry_execution_mode=ENTRY_EXECUTION_MODE,
+            exit_execution_mode=EXIT_EXECUTION_MODE,
+            fold_exit_policy=FOLD_EXIT_POLICY,
+            live_hard_stop_guard=LIVE_HARD_STOP_GUARD,
+        )
+
+
 def _train_one_split_worker(payload: dict[str, Any]) -> dict[str, Any]:
     return train_one_split(
         ticker=payload["ticker"],
@@ -453,6 +604,11 @@ def train_one_split(
     ctx = prepare_ticker_context(ticker)
     df = ctx["df"]
     kwargs = base_kwargs(ctx)
+    entry_feature_domain = build_entry_feature_domain(
+        ctx,
+        start=split["train_start"],
+        end=split["train_end"],
+    )
     history: list[dict[str, Any]] = []
 
     def evaluate_fn(rulebook: Rulebook) -> float:
@@ -503,16 +659,12 @@ def train_one_split(
                 return False
 
         with _Stage2EntryScopeFitnessMarker(rulebook):
-            result = run_backtest_execution_mode(
+            result = run_stage3_entry_phase_backtest(
                 rulebook,
                 df,
                 start_date=split["train_start"],
                 end_date=split["train_end"],
-                **kwargs,
-                entry_execution_mode=ENTRY_EXECUTION_MODE,
-                exit_execution_mode=EXIT_EXECUTION_MODE,
-                fold_exit_policy=FOLD_EXIT_POLICY,
-                live_hard_stop_guard=LIVE_HARD_STOP_GUARD,
+                kwargs=kwargs,
             )
         return result.fitness
 
@@ -523,11 +675,11 @@ def train_one_split(
             cache=fitness_cache,
             key_ctx=make_cache_key_context(
                 ticker=ticker,
-                period_label=split["label"],
+                period_label=f"{split['label']}|{ENTRY_PHASE_CACHE_MODE}",
                 start_date=split["train_start"],
                 end_date=split["train_end"],
                 entry_execution_mode=ENTRY_EXECUTION_MODE,
-                exit_execution_mode=EXIT_EXECUTION_MODE,
+                exit_execution_mode=ENTRY_PHASE_CACHE_MODE,
                 fold_exit_policy=FOLD_EXIT_POLICY,
                 fitness_mode=str(kwargs.get("fitness_mode", "swing")),
                 code_commit=code_commit or resolve_code_commit(PROJECT_ROOT),
@@ -560,7 +712,14 @@ def train_one_split(
         early_stop_no_improve=PATIENCE,
         random_seed=seed_base + split_idx,
     )
-    result = run_ga(base_rulebook=ctx["base_rulebook"], evaluate_fn=evaluate_fn, ga_config=ga_config, on_generation=on_generation)
+    result = run_ga(
+        base_rulebook=ctx["base_rulebook"],
+        evaluate_fn=evaluate_fn,
+        ga_config=ga_config,
+        on_generation=on_generation,
+        gene_scope="entry",
+        entry_feature_domain=entry_feature_domain,
+    )
     elapsed = time.time() - started
     generations_run = safe_int(getattr(result, "generations_run", 0))
     early_stop = generations_run < GENERATIONS
@@ -731,16 +890,12 @@ def evaluate_periods(
         results_by_hash: dict[str, Any] = {}
         for rank_is, rulebook_hash in enumerate(reached_hashes, 1):
             rulebook = representative_by_hash[rulebook_hash]
-            result = run_backtest_execution_mode(
+            result = run_stage3_entry_phase_backtest(
                 rulebook,
                 df,
                 start_date=period["start"],
                 end_date=period["end"],
-                **kwargs,
-                entry_execution_mode=ENTRY_EXECUTION_MODE,
-                exit_execution_mode=EXIT_EXECUTION_MODE,
-                fold_exit_policy=FOLD_EXIT_POLICY,
-                live_hard_stop_guard=LIVE_HARD_STOP_GUARD,
+                kwargs=kwargs,
             )
             eval_count += 1
             evaluated_periods_by_hash[rulebook_hash].append(period["label"])
@@ -990,6 +1145,22 @@ def build_config(
             "tournament_size": 3,
             "seed_pattern_ratio": 0.33,
             "random_seed_base": seed_base,
+            "gene_scope": "entry",
+            "entry_feature_domain": "Stage3 D-5 strict interval domain per train fold",
+        },
+        "execution_semantics": {
+            "source": "Stage3 rework",
+            "mode": STAGE2_EXECUTION_SEMANTICS,
+            "entry_execution_mode": ENTRY_EXECUTION_MODE,
+            "exit_execution_mode_runtime": EXIT_EXECUTION_MODE,
+            "entry_phase_cache_mode": ENTRY_PHASE_CACHE_MODE,
+            "entry_phase_exit": True,
+            "entry_phase_max_holding_days": ENTRY_PHASE_MAX_HOLDING_DAYS,
+            "technical_feature_lag_mode": TECHNICAL_FEATURE_LAG_MODE,
+            "technical_feature_lag_trading_days": TECHNICAL_FEATURE_LAG_TRADING_DAYS,
+            "rolling_gate_uses_same_entry_phase_execution": True,
+            "interval_break_fill": "strict interval break observed at day close, filled next trading day open",
+            "atr_stop_fill": "intraday low touch, gap-down open or stop_price per exit_simulator",
         },
         "parallel": {
             "enabled": bool(parallel),

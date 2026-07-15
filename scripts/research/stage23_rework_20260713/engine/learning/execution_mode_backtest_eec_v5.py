@@ -12,8 +12,8 @@ import os
 from collections import Counter
 from typing import Any, Mapping
 
-ENTRY_FITNESS_EEC_TARGET = 6.0
-ENTRY_FITNESS_EEC_FLOOR = 0.5
+ENTRY_FITNESS_EEC_TARGET = 4.0
+ENTRY_FITNESS_EEC_FLOOR = 0.7
 ENTRY_FITNESS_EEC_CLUSTER_GAP_TRADING_DAYS = 8
 PATCH_TOKEN = "entry_scope_eec_penalty_v5_20260715"
 

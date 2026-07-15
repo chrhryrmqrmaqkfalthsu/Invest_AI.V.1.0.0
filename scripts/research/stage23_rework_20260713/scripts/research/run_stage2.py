@@ -49,8 +49,14 @@ from engine.learning.fitness_cache import (
     resolve_code_commit,
     summarize_fitness_cache,
 )
-from engine.pipeline.context import prepare_ticker_context
 from engine.pipeline.stage2_gate import DEFAULT_STAGE2_GATE, stage2_fail_reasons
+from scripts.research import run_stage3_aggressive as _stage3_entry_reference
+
+# Stage3 rework uses a SHA-pinned/fail-closed research market snapshot context.
+# Stage2 must share the same context so entry/holding signals see identical
+# market/sector/VIX/event inputs.  If Stage3 would fail because the snapshot is
+# stale or SHA-mismatched, Stage2 fails the same way.
+prepare_ticker_context = _stage3_entry_reference.prepare_research_ticker_context
 from engine.pipeline.topn_survivor import _score_period_candidates
 from engine.strategies.evaluator import TECHNICAL_FEATURE_LAG_TRADING_DAYS
 from engine.strategies.rulebook import ENTRY_INTERVAL_MIN_FEATURE_SUPPORT, ENTRY_INTERVAL_SPECS, Rulebook
@@ -1134,6 +1140,7 @@ def build_config(
             "adv_usd_252d": safe_float(ctx.get("adv_usd_252d")),
             "sentiment_days": safe_int(ctx.get("sentiment_days")),
             "sell_omen_score": json_safe(ctx.get("sell_omen_score")),
+            "market_history_snapshot": json_safe(ctx.get("market_history_snapshot")),
         },
         "ga": {
             "population": POPULATION,

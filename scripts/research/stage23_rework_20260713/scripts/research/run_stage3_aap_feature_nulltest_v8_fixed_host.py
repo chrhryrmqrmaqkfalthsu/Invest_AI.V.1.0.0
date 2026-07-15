@@ -2,9 +2,9 @@
 """Fixed entrypoint for AAP feature null-test v8.
 
 The implementation module is run_stage3_aap_feature_nulltest_v8_host.py.  This
-entrypoint corrects repository-root discovery using the .git directory before
-calling the implementation, so peer OHLCV cache paths work on both VM and the
-Windows notebook checkout.
+entrypoint corrects repository-root discovery before calling the implementation,
+so peer OHLCV cache paths work on both the VM checkout and a notebook-local
+staging bundle that may not contain a .git directory.
 """
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ IMPL = HERE.with_name("run_stage3_aap_feature_nulltest_v8_host.py")
 
 
 def _repo_root() -> Path:
+    for parent in HERE.parents:
+        if (parent / "data/_system").exists() and (parent / "scripts/research/stage23_rework_20260713").exists():
+            return parent
     for parent in HERE.parents:
         if (parent / ".git").exists() and (parent / "data/_system").exists():
             return parent

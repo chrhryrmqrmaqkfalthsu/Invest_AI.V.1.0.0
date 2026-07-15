@@ -1,0 +1,40 @@
+{
+  "host": "DESKTOP-TO74AR2",
+  "pid": 25048,
+  "state": "finished",
+  "completed": [
+    {
+      "index": 1,
+      "ticker": "LASR",
+      "returncode": 0,
+      "elapsed_seconds": 339.808810710907,
+      "out_dir": "C:\\kingmaker_multiticker_v5\\data\\_system\\analysis\\stage3_multiticker_v5_probe_20260715\\LASR",
+      "log_path": "C:\\kingmaker_multiticker_v5\\data\\_system\\analysis\\stage3_multiticker_v5_probe_20260715\\logs\\LASR_stdout.log"
+    },
+    {
+      "index": 2,
+      "ticker": "BTBT",
+      "returncode": 0,
+      "elapsed_seconds": 345.97309589385986,
+      "out_dir": "C:\\kingmaker_multiticker_v5\\data\\_system\\analysis\\stage3_multiticker_v5_probe_20260715\\BTBT",
+      "log_path": "C:\\kingmaker_multiticker_v5\\data\\_system\\analysis\\stage3_multiticker_v5_probe_20260715\\logs\\BTBT_stdout.log"
+    },
+    {
+      "index": 3,
+      "ticker": "ADPT",
+      "returncode": 0,
+      "elapsed_seconds": 308.5806972980499,
+      "out_dir": "C:\\kingmaker_multiticker_v5\\data\\_system\\analysis\\stage3_multiticker_v5_probe_20260715\\ADPT",
+      "log_path": "C:\\kingmaker_multiticker_v5\\data\\_system\\analysis\\stage3_multiticker_v5_probe_20260715\\logs\\ADPT_stdout.log"
+    },
+    {
+      "index": 4,
+      "ticker": "FIX",
+      "returncode": 0,
+      "elapsed_seconds": 345.17441749572754,
+      "out_dir": "C:\\kingmaker_multiticker_v5\\data\\_system\\analysis\\stage3_multiticker_v5_probe_20260715\\FIX",
+      "log_path": "C:\\kingmaker_multiticker_v5\\data\\_system\\analysis\\stage3_multiticker_v5_probe_20260715\\logs\\FIX_stdout.log"
+    }
+  ],
+  "updated_at": "2026-07-15T12:14:00Z"
+}

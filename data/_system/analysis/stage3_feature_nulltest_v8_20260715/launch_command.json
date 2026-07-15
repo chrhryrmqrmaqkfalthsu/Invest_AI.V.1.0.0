@@ -1,0 +1,63 @@
+{
+  "run_id": "stage3_feature_nulltest_v8_20260715",
+  "actual_execution_host": {
+    "host": "DESKTOP-TO74AR2",
+    "os": "Windows",
+    "python": "C:\\dask310\\Scripts\\python.exe",
+    "staging_root": "C:\\kingmaker_nulltest_v8",
+    "stage_cwd": "C:\\kingmaker_nulltest_v8\\scripts\\research\\stage23_rework_20260713",
+    "worker_processes_per_run": 28,
+    "execution_mode": "notebook-local subprocess launched through connected Dask worker",
+    "dask_scheduler": "tcp://localhost:8786",
+    "dask_note": "Dask was used only to verify notebook connectivity, stage files, launch the notebook-local driver, and retrieve artifacts. Each GA run itself used notebook-local 28 process workers."
+  },
+  "vm_observer_host": "invest-bot",
+  "source_commits": {
+    "prework_backup": "7d49fd2",
+    "dynamic_runner_added": "71ba4f1",
+    "notebook_root_fixed": "9847a53",
+    "windows_spawn_import_shim": "e431191",
+    "private_module_shim": "c5f6484",
+    "qualify_only_patch": "ca1154d"
+  },
+  "staging_notes": {
+    "notebook_full_git_checkout_available": false,
+    "notebook_staging_bundle": "minimal stage23 + required data + peer cache bundle",
+    "fetch_stubs": ["yfinance.py", "requests.py"],
+    "fetch_stub_policy": "stubs exist only inside notebook staging; they raise if network fetch is attempted. auto-fetch/regenerate was disabled.",
+    "env_file_transferred": false
+  },
+  "common_args": {
+    "ticker": "AAP",
+    "seed_base": 2026071401,
+    "shuffle_seed": 2026071501,
+    "workers": 28,
+    "host_role": "notebook",
+    "market_cutoff_date": "2026-07-10",
+    "baseline_dir": "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+    "qualify_population": 100,
+    "qualify_generations": 40,
+    "folds": ["train_1", "train_2", "train_3"],
+    "execution_scope": "qualify-only null-test; downstream entry/exit/validate stubbed after qualify"
+  },
+  "runs": [
+    {"index": 1, "feature": "trend_chop20", "variant": "REAL", "elapsed_seconds": 325.8306088447571},
+    {"index": 2, "feature": "trend_chop20", "variant": "SHUFFLED", "elapsed_seconds": 325.842200756073},
+    {"index": 3, "feature": "atr14_pct", "variant": "REAL", "elapsed_seconds": 326.9208793640137},
+    {"index": 4, "feature": "atr14_pct", "variant": "SHUFFLED", "elapsed_seconds": 327.37942910194397},
+    {"index": 5, "feature": "range_pct_rank60", "variant": "REAL", "elapsed_seconds": 326.8358197212219},
+    {"index": 6, "feature": "range_pct_rank60", "variant": "SHUFFLED", "elapsed_seconds": 328.22660064697266},
+    {"index": 7, "feature": "rs_peer3_ret20", "variant": "REAL", "elapsed_seconds": 326.5443115234375},
+    {"index": 8, "feature": "rs_peer3_ret20", "variant": "SHUFFLED", "elapsed_seconds": 341.0903522968292}
+  ],
+  "protected_snapshot": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+  },
+  "daemon_snapshot": {
+    "pid": 494330,
+    "starttime_ticks": "36014393",
+    "cmdline": "/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60"
+  }
+}

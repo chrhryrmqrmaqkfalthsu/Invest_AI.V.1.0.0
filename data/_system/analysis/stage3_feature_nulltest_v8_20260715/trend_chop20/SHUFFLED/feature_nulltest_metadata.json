@@ -1,0 +1,38 @@
+{
+  "patch_token": "entry_strict_extra_feature_v8_20260715",
+  "feature": "trend_chop20",
+  "variant": "SHUFFLED",
+  "shuffle_seed": 2026071501,
+  "strict_and_feature_count": 6,
+  "added_low_field": "entry_extra_feature_low",
+  "added_high_field": "entry_extra_feature_high",
+  "candidate_series_d5": {
+    "feature": "trend_chop20",
+    "variant": "SHUFFLED",
+    "shuffle_seed": 2026071501,
+    "sha256": "1e6dfa428898bdb17fae020c14b187d13f86e82f46ce91a4b6fb1faf1eb4596b",
+    "valid_count": 1501,
+    "first_valid_date": "2020-06-23",
+    "last_valid_date": "2026-06-12"
+  },
+  "peer_cache": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache",
+  "peer_inputs": {
+    "AAP": {
+      "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\AAP.pkl",
+      "sha256": "f3982ccac813b9932b58059afe30dc554b66964dd01e312fca771f7d96f719da"
+    },
+    "GPC": {
+      "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\GPC.pkl",
+      "sha256": "172528a07786e0e204ddeafb7570a185c465f13570ae19e50d6aecaa696bfeda"
+    },
+    "ORLY": {
+      "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\ORLY.pkl",
+      "sha256": "e37d9b5da83d517e6e77ba0f2d55ef4f07869815b24e73cc4f7259df01f8d75a"
+    },
+    "AZO": {
+      "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\AZO.pkl",
+      "sha256": "42006c75744935719992fe0c423580541ba560e4ba67d3cd894d130690bd36d1"
+    }
+  },
+  "entry_exit_impact_note": "The added feature is part of strict-AND, so entry_interval_break can occur when this feature exits its learned interval. This is recorded, not blocked."
+}

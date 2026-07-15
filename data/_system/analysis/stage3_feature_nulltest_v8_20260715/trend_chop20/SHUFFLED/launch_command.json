@@ -1,0 +1,88 @@
+{
+  "python_executable": "C:\\dask310\\Scripts\\python.exe",
+  "cwd": "C:\\kingmaker_nulltest_v8\\scripts\\research\\stage23_rework_20260713",
+  "argv": [
+    "C:\\dask310\\Scripts\\python.exe",
+    "C:\\kingmaker_nulltest_v8\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_tradecount_factor_v3_host.py",
+    "--baseline-dir",
+    "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+    "--out-dir",
+    "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_feature_nulltest_v8_20260715\\trend_chop20\\SHUFFLED",
+    "--seed-base",
+    "2026071401",
+    "--workers",
+    "28",
+    "--host-role",
+    "notebook",
+    "--market-cutoff-date",
+    "2026-07-10",
+    "--protected-snapshot-json",
+    "{\".env\": \"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\", \"data/_system/market_history.csv\": \"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\", \"data/_system/market_history_v2.csv\": \"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}",
+    "--daemon-snapshot-json",
+    "{\"cmdline\": \"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\", \"pid\": 494330, \"snapshot_source\": \"VM_snapshot_for_notebook_staging_run\", \"starttime_ticks\": \"36014393\", \"state\": \"Sl\"}",
+    "--source-git-commit",
+    "ca1154d"
+  ],
+  "environment": {
+    "PYTHONPATH": "C:\\kingmaker_nulltest_v8\\scripts\\research\\stage23_rework_20260713;C:\\kingmaker;C:\\kingmaker\\vendor",
+    "PATH": "C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\;C:\\WINDOWS\\System32\\OpenSSH\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python310\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python312\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Launcher\\;C:\\Users\\1000k\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Users\\1000k\\AppData\\Local\\GitHubDesktop\\bin;C:\\Users\\1000k\\AppData\\Local\\Programs\\Ollama;C:\\Users\\1000k\\AppData\\Local\\Google\\Cloud SDK\\google-cloud-sdk\\bin",
+    "PYTHONUTF8": "1",
+    "PYTHONUNBUFFERED": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1"
+  },
+  "powershell_command": "& 'C:\\dask310\\Scripts\\python.exe' 'C:\\kingmaker_nulltest_v8\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_tradecount_factor_v3_host.py' '--baseline-dir' 'C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX' '--out-dir' 'C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_feature_nulltest_v8_20260715\\trend_chop20\\SHUFFLED' '--seed-base' '2026071401' '--workers' '28' '--host-role' 'notebook' '--market-cutoff-date' '2026-07-10' '--protected-snapshot-json' '{\".env\": \"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\", \"data/_system/market_history.csv\": \"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\", \"data/_system/market_history_v2.csv\": \"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}' '--daemon-snapshot-json' '{\"cmdline\": \"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\", \"pid\": 494330, \"snapshot_source\": \"VM_snapshot_for_notebook_staging_run\", \"starttime_ticks\": \"36014393\", \"state\": \"Sl\"}' '--source-git-commit' 'ca1154d'",
+  "host_local_parent": true,
+  "local_process_workers": 28,
+  "inter_machine_candidate_communication": false,
+  "environment_recording_scope": "execution-relevant whitelist; secrets excluded",
+  "entry_concurrency_mode": "entry_scope_independent_overlapping_positions",
+  "legacy_concurrency_mode": "single_position_exit_plus_cooldown",
+  "eec_penalty_patch_token": "entry_scope_eec_penalty_v5_20260715",
+  "eec_target": 4.0,
+  "eec_floor": 0.7,
+  "eec_cluster_gap_trading_days": 8,
+  "remote_fetch_regenerate_disabled": true,
+  "logged_at_utc": "2026-07-15T10:24:23.070575+00:00",
+  "feature_nulltest_v8": {
+    "patch_token": "entry_strict_extra_feature_v8_20260715",
+    "feature": "trend_chop20",
+    "variant": "SHUFFLED",
+    "shuffle_seed": 2026071501,
+    "strict_and_feature_count": 6,
+    "added_low_field": "entry_extra_feature_low",
+    "added_high_field": "entry_extra_feature_high",
+    "candidate_series_d5": {
+      "feature": "trend_chop20",
+      "variant": "SHUFFLED",
+      "shuffle_seed": 2026071501,
+      "sha256": "1e6dfa428898bdb17fae020c14b187d13f86e82f46ce91a4b6fb1faf1eb4596b",
+      "valid_count": 1501,
+      "first_valid_date": "2020-06-23",
+      "last_valid_date": "2026-06-12"
+    },
+    "peer_cache": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache",
+    "peer_inputs": {
+      "AAP": {
+        "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\AAP.pkl",
+        "sha256": "f3982ccac813b9932b58059afe30dc554b66964dd01e312fca771f7d96f719da"
+      },
+      "GPC": {
+        "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\GPC.pkl",
+        "sha256": "172528a07786e0e204ddeafb7570a185c465f13570ae19e50d6aecaa696bfeda"
+      },
+      "ORLY": {
+        "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\ORLY.pkl",
+        "sha256": "e37d9b5da83d517e6e77ba0f2d55ef4f07869815b24e73cc4f7259df01f8d75a"
+      },
+      "AZO": {
+        "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\AZO.pkl",
+        "sha256": "42006c75744935719992fe0c423580541ba560e4ba67d3cd894d130690bd36d1"
+      }
+    },
+    "entry_exit_impact_note": "The added feature is part of strict-AND, so entry_interval_break can occur when this feature exits its learned interval. This is recorded, not blocked."
+  },
+  "actual_launcher_note": "run_stage3_aap_feature_nulltest_v8_host.py delegates to v5 runner after installing one strict-AND feature patch"
+}

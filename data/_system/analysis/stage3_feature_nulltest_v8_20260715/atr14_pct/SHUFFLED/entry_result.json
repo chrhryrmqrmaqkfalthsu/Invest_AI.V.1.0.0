@@ -1,0 +1,11 @@
+{
+  "ticker": "AAP",
+  "stage": "entry",
+  "skipped_by_feature_nulltest_v8": true,
+  "skip_reason": "qualify_only_nulltest_pop100_gen40_x3fold",
+  "selected_count": 0,
+  "pool_count": 0,
+  "seed_base": 2026071401,
+  "call_index": 4,
+  "elapsed_seconds": 0.0
+}

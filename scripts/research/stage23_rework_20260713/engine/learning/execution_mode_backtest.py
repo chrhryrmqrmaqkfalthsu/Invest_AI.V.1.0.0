@@ -56,6 +56,11 @@ ENTRY_FITNESS_REALIZED_LOSS_THRESHOLD_PCT = -1.0
 ENTRY_FITNESS_REALIZED_LOSS_PENALTY_WEIGHT = 1.0
 ENTRY_FITNESS_DISQUALIFIED = -1_000_000_000.0
 ENTRY_EXIT_LOCAL_SEARCH_MAX_HOLDING_DAYS = 7
+ENTRY_FITNESS_EVENT_CLUSTER_GAP_TRADING_DAYS = ENTRY_EXIT_LOCAL_SEARCH_MAX_HOLDING_DAYS + 1
+ENTRY_FITNESS_EEC_TARGET = 6.0
+ENTRY_FITNESS_EEC_FLOOR = 0.5
+ENTRY_FITNESS_EEC_TARGET_ATTR = "_entry_fitness_eec_target"
+ENTRY_FITNESS_EEC_FLOOR_ATTR = "_entry_fitness_eec_floor"
 ENTRY_EXIT_MUTATION_HINT_ATTR = "_entry_exit_mutation_hint"
 ENTRY_FITNESS_DIAGNOSTICS_ATTR = "_entry_fitness_diagnostics"
 
@@ -155,6 +160,139 @@ def _entry_fitness_trade_factor(trade_count: int) -> float:
     if count <= 80:
         return 1.00
     return float(max(0.65, 1.0 - (count - 80) / 250.0))
+
+
+def _entry_fitness_eec_settings(rb: Rulebook) -> tuple[float, float]:
+    """Return logged, non-gene EEC target/floor settings for entry fitness."""
+    target = max(
+        _safe_float(
+            getattr(rb, ENTRY_FITNESS_EEC_TARGET_ATTR, ENTRY_FITNESS_EEC_TARGET),
+            ENTRY_FITNESS_EEC_TARGET,
+        ),
+        1e-12,
+    )
+    floor = min(
+        max(
+            _safe_float(
+                getattr(rb, ENTRY_FITNESS_EEC_FLOOR_ATTR, ENTRY_FITNESS_EEC_FLOOR),
+                ENTRY_FITNESS_EEC_FLOOR,
+            ),
+            0.0,
+        ),
+        1.0,
+    )
+    return float(target), float(floor)
+
+
+def _entry_fitness_eec_multiplier(
+    effective_event_count: Any,
+    *,
+    target: float = ENTRY_FITNESS_EEC_TARGET,
+    floor: float = ENTRY_FITNESS_EEC_FLOOR,
+) -> float:
+    """Return clamp(EEC / target, floor, 1.0)."""
+    target_value = max(_safe_float(target, ENTRY_FITNESS_EEC_TARGET), 1e-12)
+    floor_value = min(max(_safe_float(floor, ENTRY_FITNESS_EEC_FLOOR), 0.0), 1.0)
+    ratio = _safe_float(effective_event_count, 0.0) / target_value
+    return float(min(max(ratio, floor_value), 1.0))
+
+
+def _entry_fitness_event_concentration(trades: list[dict[str, Any]]) -> dict[str, Any]:
+    """Cluster unique executed signal rows with the existing gap<=8 definition.
+
+    Entry-scope trades persist the original daily-tape ``row_index`` inside
+    ``entry_signal_tape``.  Using that trading-row index exactly matches the
+    existing concentration probe and avoids calendar-day approximations.
+    Missing indices fail closed because silently changing the clustering basis
+    would make candidate fitness incomparable.
+    """
+    if not trades:
+        return {
+            "nonduplicate_trade_count": 0,
+            "duplicate_signal_trade_count": 0,
+            "event_cluster_gap_trading_days": ENTRY_FITNESS_EVENT_CLUSTER_GAP_TRADING_DAYS,
+            "event_cluster_count": 0,
+            "event_cluster_sizes": [],
+            "event_clusters": [],
+            "max_event_cluster_share": 0.0,
+            "event_concentration_sum_share_squared": 0.0,
+            "effective_event_count": 0.0,
+        }
+
+    trades_by_signal_index: dict[int, list[dict[str, Any]]] = {}
+    signal_date_by_index: dict[int, str] = {}
+    for trade in trades:
+        tape = trade.get("entry_signal_tape")
+        if not isinstance(tape, dict):
+            raise RuntimeError("entry-scope EEC requires trade.entry_signal_tape")
+        raw_index = tape.get("row_index")
+        index_value = _safe_float(raw_index, float("nan"))
+        if not np.isfinite(index_value) or int(index_value) != index_value:
+            raise RuntimeError(
+                "entry-scope EEC requires an integer entry_signal_tape.row_index"
+            )
+        signal_index = int(index_value)
+        trades_by_signal_index.setdefault(signal_index, []).append(trade)
+        signal_date_by_index.setdefault(
+            signal_index,
+            str(trade.get("entry_signal_date") or tape.get("date") or signal_index),
+        )
+
+    unique_indices = sorted(trades_by_signal_index)
+    clusters: list[list[int]] = []
+    for signal_index in unique_indices:
+        if (
+            not clusters
+            or signal_index - clusters[-1][-1]
+            > ENTRY_FITNESS_EVENT_CLUSTER_GAP_TRADING_DAYS
+        ):
+            clusters.append([signal_index])
+        else:
+            clusters[-1].append(signal_index)
+
+    unique_count = len(unique_indices)
+    public_clusters: list[dict[str, Any]] = []
+    concentration = 0.0
+    max_share = 0.0
+    for cluster_number, cluster_indices in enumerate(clusters, 1):
+        cluster_size = len(cluster_indices)
+        trade_share = cluster_size / unique_count if unique_count else 0.0
+        contribution = trade_share * trade_share
+        concentration += contribution
+        max_share = max(max_share, trade_share)
+        cluster_row = {
+            "cluster_index": int(cluster_number),
+            "start": signal_date_by_index[cluster_indices[0]],
+            "end": signal_date_by_index[cluster_indices[-1]],
+            "trade_count": int(cluster_size),
+            "trade_share": float(trade_share),
+            "concentration_contribution": float(contribution),
+            "signal_row_indices": [int(value) for value in cluster_indices],
+        }
+        public_clusters.append(cluster_row)
+        for signal_index in cluster_indices:
+            for trade in trades_by_signal_index[signal_index]:
+                trade["entry_fitness_event_cluster_index"] = int(cluster_number)
+                trade["entry_fitness_event_cluster_start"] = cluster_row["start"]
+                trade["entry_fitness_event_cluster_end"] = cluster_row["end"]
+                trade["entry_fitness_event_cluster_trade_count"] = int(cluster_size)
+                trade["entry_fitness_event_cluster_trade_share"] = float(trade_share)
+                trade["entry_fitness_event_cluster_concentration_contribution"] = float(
+                    contribution
+                )
+
+    effective = 1.0 / concentration if concentration > 0.0 else 0.0
+    return {
+        "nonduplicate_trade_count": int(unique_count),
+        "duplicate_signal_trade_count": int(len(trades) - unique_count),
+        "event_cluster_gap_trading_days": ENTRY_FITNESS_EVENT_CLUSTER_GAP_TRADING_DAYS,
+        "event_cluster_count": int(len(public_clusters)),
+        "event_cluster_sizes": [int(row["trade_count"]) for row in public_clusters],
+        "event_clusters": public_clusters,
+        "max_event_cluster_share": float(max_share),
+        "event_concentration_sum_share_squared": float(concentration),
+        "effective_event_count": float(effective),
+    }
 
 
 def _entry_scope_active(rb: Rulebook) -> bool:
@@ -491,9 +629,11 @@ def _apply_entry_scope_fitness(
 
     본체는 거래별 ``비용 차감 pnl_pct / max(holding_days, 1)``의 평균이다.
     거래수 8건 미만은 fail-safe로 실격하고, 8건부터 20건까지 원본 swing
-    anchor를 선형 연결한 거래수 factor를 raw primary에 곱한다. MAE -2%
-    이탈분 평균과 비용 차감 실현손실 -1% 초과분 평균은 기존대로 감산한다.
-    비용 차감 실현수익 > 0.5% 기준 승률 60% 이상도 그대로 유지한다.
+    anchor를 선형 연결한 거래수 factor를 raw primary에 곱한다. 이어서
+    gap<=8 거래일 사건 cluster의 effective event count를 target 6 대비
+    [0.5, 1.0] 배수로 곱한다. MAE -2% 이탈분 평균과 비용 차감 실현손실
+    -1% 초과분 평균은 기존대로 감산한다. 비용 차감 실현수익 > 0.5% 기준
+    승률 60% 이상 gate도 그대로 유지한다.
     """
     trades = [trade for trade in list(result.trades or []) if isinstance(trade, dict)]
     per_trade_daily_returns: list[float] = []
@@ -533,6 +673,23 @@ def _apply_entry_scope_fitness(
     )
     trade_count_factor = _entry_fitness_trade_factor(trade_count)
     trade_count_adjusted_primary = primary_objective * trade_count_factor
+    event_concentration = _entry_fitness_event_concentration(trades)
+    eec_target, eec_floor = _entry_fitness_eec_settings(rb)
+    effective_event_count = _safe_float(
+        event_concentration.get("effective_event_count"),
+        0.0,
+    )
+    eec_multiplier = _entry_fitness_eec_multiplier(
+        effective_event_count,
+        target=eec_target,
+        floor=eec_floor,
+    )
+    eec_adjusted_primary = trade_count_adjusted_primary * eec_multiplier
+    for trade in trades:
+        trade["entry_fitness_effective_event_count"] = float(effective_event_count)
+        trade["entry_fitness_eec_target"] = float(eec_target)
+        trade["entry_fitness_eec_floor"] = float(eec_floor)
+        trade["entry_fitness_eec_multiplier"] = float(eec_multiplier)
     mean_mae_excess = (
         float(np.mean(np.asarray(mae_excesses, dtype=float)))
         if mae_excesses
@@ -548,7 +705,7 @@ def _apply_entry_scope_fitness(
         mean_realized_loss_excess * ENTRY_FITNESS_REALIZED_LOSS_PENALTY_WEIGHT
     )
     pre_complexity_fitness = (
-        trade_count_adjusted_primary
+        eec_adjusted_primary
         - mae_penalty
         - realized_loss_penalty
     )
@@ -579,6 +736,16 @@ def _apply_entry_scope_fitness(
         "trade_count_factor": float(trade_count_factor),
         "primary_after_trade_count_factor": float(trade_count_adjusted_primary),
         "trade_count_factor_discontinuity": None,
+        "eec_penalty_active": True,
+        "eec_source": "unique executed entry_signal_tape.row_index clustered at trading-index gap<=8",
+        "eec_method": "1 / sum(cluster_trade_share ** 2)",
+        "eec_multiplier_method": "clamp(effective_event_count / target, floor, 1.0)",
+        "eec_target": float(eec_target),
+        "eec_floor": float(eec_floor),
+        "eec_multiplier": float(eec_multiplier),
+        "effective_event_count": float(effective_event_count),
+        "primary_after_eec_multiplier": float(eec_adjusted_primary),
+        **event_concentration,
         "mae_source": "trade.max_loss_during_hold from holding-period daily lows",
         "mae_threshold_pct": ENTRY_FITNESS_MAE_THRESHOLD_PCT,
         "mae_penalty_method": "mean(max(0, -2.0 - mae_pct)) * 1.0",
@@ -589,8 +756,8 @@ def _apply_entry_scope_fitness(
         "realized_loss_penalty_method": "mean(max(0, -1.0 - net_realized_pnl_pct)) * 1.0",
         "realized_loss_penalty": float(realized_loss_penalty),
         "realized_loss_breach_trade_count": int(
-            sum(value > 0.0 for value in realized_loss_excesses)
-        ),
+            sum(value > 0.0 for value in realized_loss_excesses
+        )),
         "total_risk_penalty": float(mae_penalty + realized_loss_penalty),
         "total_entry_penalty": float(mae_penalty + realized_loss_penalty),
         "worst_mae_pct": min(

@@ -471,7 +471,7 @@ v4 source commit:
 faed59a43761076b9a1544d5f48c0bcf2d867ec8
 
 분석 산출물 commit:
-PENDING_AFTER_FIRST_COMMIT
+68b59d3168b5ef832ff15dfeea8bdc9e5b16cf4f
 ```
 
 분석 산출물 commit SHA를 이 문서에 반영하는 메타데이터 commit은 최종 제출 메시지에 함께 기록한다. 동일 commit 내부에 자기 SHA를 넣는 것은 self-reference라 불가능하다.

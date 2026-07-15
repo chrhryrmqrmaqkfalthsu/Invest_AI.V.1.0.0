@@ -456,17 +456,64 @@ def train_one_split(
     history: list[dict[str, Any]] = []
 
     def evaluate_fn(rulebook: Rulebook) -> float:
-        result = run_backtest_execution_mode(
-            rulebook,
-            df,
-            start_date=split["train_start"],
-            end_date=split["train_end"],
-            **kwargs,
-            entry_execution_mode=ENTRY_EXECUTION_MODE,
-            exit_execution_mode=EXIT_EXECUTION_MODE,
-            fold_exit_policy=FOLD_EXIT_POLICY,
-            live_hard_stop_guard=LIVE_HARD_STOP_GUARD,
-        )
+        from engine.learning import execution_mode_backtest as _entry_scope_bt
+
+        class _Stage2EntryScopeFitnessMarker:
+            def __init__(self, rb: Rulebook):
+                self.rb = rb
+                self.marker_attr = _entry_scope_bt.ENTRY_GA_SCOPE_MARKER
+                self.marker_value = _entry_scope_bt.ENTRY_GA_SCOPE_VALUE
+                self.target_attr = _entry_scope_bt.ENTRY_FITNESS_EEC_TARGET_ATTR
+                self.floor_attr = _entry_scope_bt.ENTRY_FITNESS_EEC_FLOOR_ATTR
+                self.old_marker_exists = hasattr(rb, self.marker_attr)
+                self.old_marker_value = getattr(rb, self.marker_attr, None)
+                self.old_target_exists = hasattr(rb, self.target_attr)
+                self.old_target_value = getattr(rb, self.target_attr, None)
+                self.old_floor_exists = hasattr(rb, self.floor_attr)
+                self.old_floor_value = getattr(rb, self.floor_attr, None)
+
+            def __enter__(self) -> Rulebook:
+                setattr(self.rb, self.marker_attr, self.marker_value)
+                setattr(self.rb, self.target_attr, 6.0)
+                setattr(self.rb, self.floor_attr, 0.5)
+                return self.rb
+
+            def __exit__(self, exc_type: Any, exc: BaseException | None, tb: Any) -> bool:
+                if self.old_marker_exists:
+                    setattr(self.rb, self.marker_attr, self.old_marker_value)
+                else:
+                    try:
+                        delattr(self.rb, self.marker_attr)
+                    except AttributeError:
+                        pass
+                if self.old_target_exists:
+                    setattr(self.rb, self.target_attr, self.old_target_value)
+                else:
+                    try:
+                        delattr(self.rb, self.target_attr)
+                    except AttributeError:
+                        pass
+                if self.old_floor_exists:
+                    setattr(self.rb, self.floor_attr, self.old_floor_value)
+                else:
+                    try:
+                        delattr(self.rb, self.floor_attr)
+                    except AttributeError:
+                        pass
+                return False
+
+        with _Stage2EntryScopeFitnessMarker(rulebook):
+            result = run_backtest_execution_mode(
+                rulebook,
+                df,
+                start_date=split["train_start"],
+                end_date=split["train_end"],
+                **kwargs,
+                entry_execution_mode=ENTRY_EXECUTION_MODE,
+                exit_execution_mode=EXIT_EXECUTION_MODE,
+                fold_exit_policy=FOLD_EXIT_POLICY,
+                live_hard_stop_guard=LIVE_HARD_STOP_GUARD,
+            )
         return result.fitness
 
     fitness_cache = FitnessCache() if use_fitness_cache else None

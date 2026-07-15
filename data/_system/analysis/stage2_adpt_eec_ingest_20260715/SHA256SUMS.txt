@@ -1,0 +1,41 @@
+# stage2_adpt_eec_ingest_20260715 SHA / audit
+
+# output files
+f93c91241b3ed0e52ff71d1db0acc9fb6a9a1857cf3d7dc8f7d6bf29d8904983  readout.md
+d667efd15b0abfd225067b8791004e84fad2d65d77f6ce8454ca0717c1ec8e31  launch_command.json
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  stage2_survivors.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  stage2_period_results.jsonl
+a60e9ea7ad97e843e8bbc8a2692e8ed657eaed2502348636ad980c68548182ab  run_stage2_adpt_eec_launch.py
+a72662963c4874bd9cf5ca82b24623c939edb8c174471e25b56daa63d5e480cd  notebook_attempt_logs.zip
+
+# code change
+9a83b1490b669176fbfdd50d6ce48c1fbdfdd9fa1c6525d91ed83af82c70165c  run_stage2.py.pre
+ a5e7b7547caaf3b359282ad5b044bcbee988577aca4e3770bbda43540766aa33  scripts/research/stage23_rework_20260713/scripts/research/run_stage2.py
+# py_compile: PASS
+# marker OFF equivalence: PASS
+# marker scope leak smoke: PASS
+# mutation helper AST SHA: aab7163f9194cf5f989ad01973e8d2967dad48be53f7d52ee09747eea502077d
+
+# unchanged Stage2 core files except run_stage2.py
+b3018f9323fb7f0194990ce726979841b9db5c5a852711dac3fb7a1d3357f15a  scripts/research/stage23_rework_20260713/engine/pipeline/stage2_gate.py
+95511ca90c769dc3338fe99659e09720d01760a053b5d20a220c9c2ac0dbc7ce  scripts/research/stage23_rework_20260713/engine/pipeline/rolling_validation.py
+d457da84972078087dceec6260dad66273229bfb657c152a9725f6fb07cbc306  scripts/research/stage23_rework_20260713/engine/pipeline/topn_survivor.py
+4fd9d72a28db823ce6a5bd375758dc657abb9d7ba28fe52a0dbf52448a005187  scripts/research/stage23_rework_20260713/engine/pipeline/full_training.py
+2718a3e12eb8eea71011543efa41d435850402aeaa70c5517d5eded9761a00e3  scripts/research/stage23_rework_20260713/scripts/research/run_stage23_batch.py
+
+# data inputs
+13fb9f982e8efa29e4ee6dd3ffb585d7fb5d578c3c5099e8c76409ca0ada9503  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/ADPT.pkl
+
+# protected files: start == end confirmed
+da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce  .env
+35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38  data/_system/market_history.csv
+b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611  data/_system/market_history_v2.csv
+
+# daemon end-state
+# PID PPID STAT STARTED CMD
+# 494330 1 Rl Sat Jul 11 20:16:00 2026 /home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60
+
+# execution status
+# EXECUTION_INCOMPLETE_NOTEBOOK_ENV_LIMIT
+# No VM fallback. Notebook attempts logged in notebook_attempt_logs.zip.
+# pre-output backup commit: 7114943

@@ -1,0 +1,68 @@
+{
+  "run_id": "stage3_adpt_feature_nulltest_v9_20260715",
+  "created_at_utc": "2026-07-15T16:27:20Z",
+  "workdir_vm": "kingmaker/scripts/research/stage23_rework_20260713",
+  "staging_root_notebook": "C:\\kingmaker_adpt_feature_nulltest_v9",
+  "output_dir_vm": "data/_system/analysis/stage3_adpt_feature_nulltest_v9_20260715",
+  "actual_compute_host": "DESKTOP-TO74AR2",
+  "vm_role": "Dask scheduler connection, launch/status/retrieve, final readout/SHA/git",
+  "notebook_python": "C:\\dask310\\Scripts\\python.exe",
+  "dask_scheduler": "tcp://localhost:8786",
+  "execution_mode": "notebook-local subprocess, sequential 10 run driver, each run --workers 28",
+  "silent_fallback": false,
+  "recent_1y_excluded": true,
+  "train_periods": {
+    "train_1": ["2022-07-01", "2023-06-30"],
+    "train_2": ["2023-07-01", "2024-06-30"],
+    "train_3": ["2024-07-01", "2025-06-30"]
+  },
+  "ga_config": {
+    "ticker": "ADPT",
+    "population": 100,
+    "generations": 40,
+    "folds": 3,
+    "seed_base": 2026071401,
+    "workers_per_run": 28,
+    "eec_target": 6.0,
+    "eec_floor": 0.5,
+    "eec_cluster_gap_trading_days": 8
+  },
+  "entrypoint": "data/_system/analysis/stage3_adpt_feature_nulltest_v9_20260715/run_adpt_feature_nulltest_v9.py",
+  "source_git_commit_at_launch": "e3bfb7c",
+  "helper_sha256": "6da5a6097bcaf589c9a4d5e36e715cf8a3ca7ba6f1921b10b01bd3fe746512ba",
+  "driver_sha256": "2ee3f193a93154debdaf75ec9ddb1dd6790970b8b7a7d3aa9df7c2f4e9005d1e",
+  "runs": [
+    {"index": 1, "feature": "trend_chop20", "variant": "REAL", "elapsed_seconds": 872.154233455658, "returncode": 0, "out_dir": "trend_chop20/REAL"},
+    {"index": 2, "feature": "trend_chop20", "variant": "SHUFFLED", "elapsed_seconds": 884.5376975536346, "returncode": 0, "out_dir": "trend_chop20/SHUFFLED"},
+    {"index": 3, "feature": "atr14_pct", "variant": "REAL", "elapsed_seconds": 885.6463785171509, "returncode": 0, "out_dir": "atr14_pct/REAL"},
+    {"index": 4, "feature": "atr14_pct", "variant": "SHUFFLED", "elapsed_seconds": 850.7953498363495, "returncode": 0, "out_dir": "atr14_pct/SHUFFLED"},
+    {"index": 5, "feature": "range_pct_rank60", "variant": "REAL", "elapsed_seconds": 808.1847784519196, "returncode": 0, "out_dir": "range_pct_rank60/REAL"},
+    {"index": 6, "feature": "range_pct_rank60", "variant": "SHUFFLED", "elapsed_seconds": 818.6769938468933, "returncode": 0, "out_dir": "range_pct_rank60/SHUFFLED"},
+    {"index": 7, "feature": "rs_peer_ret20", "variant": "REAL", "elapsed_seconds": 802.7696263790131, "returncode": 0, "out_dir": "rs_peer_ret20/REAL"},
+    {"index": 8, "feature": "rs_peer_ret20", "variant": "SHUFFLED", "elapsed_seconds": 609.7956640720367, "returncode": 0, "out_dir": "rs_peer_ret20/SHUFFLED"},
+    {"index": 9, "feature": "rs_xbi_ret20", "variant": "REAL", "elapsed_seconds": 422.2508020401001, "returncode": 0, "out_dir": "rs_xbi_ret20/REAL"},
+    {"index": 10, "feature": "rs_xbi_ret20", "variant": "SHUFFLED", "elapsed_seconds": 398.1535062789917, "returncode": 0, "out_dir": "rs_xbi_ret20/SHUFFLED"}
+  ],
+  "env_subset": {
+    "KINGMAKER_MARKET_CUTOFF_DATE": "2026-07-10",
+    "KINGMAKER_ENTRY_EEC_TARGET": "6",
+    "KINGMAKER_ENTRY_EEC_FLOOR": "0.5",
+    "KINGMAKER_ENTRY_EEC_CLUSTER_GAP_TRADING_DAYS": "8",
+    "PYTHONUTF8": "1",
+    "PYTHONIOENCODING": "utf-8",
+    "PYTHONUNBUFFERED": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1"
+  },
+  "protected_start_sha256": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6dbb86c6347548e9f4c611"
+  },
+  "daemon_snapshot": {
+    "pid": 494330,
+    "cmd": "/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60"
+  }
+}

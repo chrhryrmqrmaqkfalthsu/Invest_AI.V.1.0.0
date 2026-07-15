@@ -336,10 +336,13 @@ C1-S 명시화 리팩터링 전 기준점 백업: evaluator 진입 분기·threa
 없음 — bitwise mismatch로 임시 변경 철회
 
 분석 산출물 commit:
-PENDING_AFTER_FIRST_COMMIT
+a869fa61c3261428b5bb0f5bf30f73ab9d9dc98f
+
+산출물 commit 메시지:
+C1-S 명시화 리팩터링 중단 보고: train_3 청산·손익·fitness bitwise 불일치를 확인해 코드 원복과 실패 원인을 기록
 ```
 
-최종 작업 트리는 분석 제출물 외 코드 diff가 없어야 한다. 산출물 commit SHA는 후속 메타데이터 commit에서 문서에 반영한다.
+최종 작업 트리는 분석 제출물 외 코드 diff가 없어야 한다. 위 산출물 commit SHA를 반영한 메타데이터 commit은 최종 제출 메시지에 기록한다.
 
 ## 산출물 SHA
 

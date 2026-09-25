@@ -1,0 +1,9 @@
+live_ticker_flag,block_v3_ticker_flag,block_boil_ticker_flag,unique_ticker_n,candidate_n,interpretation
+false,false,false,237,4823,비LIVE·비BLOCK 일반 후보 ticker
+false,false,true,9,422,BOIL형만 존재하는 ticker
+false,true,false,197,6885,v3 BLOCK만 존재하는 ticker
+false,true,true,5,300,v3와 BOIL 후보가 함께 있으나 LIVE는 없는 ticker
+true,false,false,37,1969,LIVE 후보만 있고 v3·BOIL 후보는 없는 ticker
+true,false,true,1,60,LIVE와 BOIL 후보가 같은 ticker에 공존
+true,true,false,42,2432,LIVE와 v3 BLOCK 후보가 같은 ticker에 공존
+true,true,true,3,180,LIVE·v3·BOIL 후보가 모두 같은 ticker에 공존

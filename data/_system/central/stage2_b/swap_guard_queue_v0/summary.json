@@ -1,0 +1,149 @@
+{
+  "run_meta": {
+    "code_change_scope": "engine/central/backtester.py only",
+    "pushed": false,
+    "local_commit_required": true,
+    "mode": "no learning; fixed guard + queue rule; existing backtester only",
+    "universe": "first 533 Stage2 survivor entities",
+    "capital": 10000.0,
+    "max_positions": 8,
+    "position_sizing": "score_weighted",
+    "confidence_metric": "profit_factor",
+    "confidence_weight": 0.5,
+    "signal_strength_weight": 0.5,
+    "sell_omen": "OFF",
+    "params": {
+      "swap_guard_queue_enabled": true,
+      "exit_imminence_threshold": 0.75,
+      "turnover_guard": 8.0,
+      "queue_signal_ttl": 5
+    },
+    "regression_passed": true,
+    "py_compile_passed": true,
+    "git_diff_check_passed": true
+  },
+  "implementation": {
+    "new_backtester_args": [
+      "swap_guard_queue_enabled",
+      "exit_imminence_threshold",
+      "turnover_guard",
+      "queue_signal_ttl"
+    ],
+    "off_behavior": "guard queue state is not allocated unless swap_guard_queue_enabled=true; default/off result has no swap_guard_queue_stats dynamic attribute",
+    "proxy_no_future_data": true,
+    "proxy_inputs": [
+      "position entry_date",
+      "position max_holding_days",
+      "current-day close",
+      "current-day ATR",
+      "position stop_price",
+      "position target_price",
+      "position trailing_stop"
+    ],
+    "proxy_excluded_inputs": [
+      "future close",
+      "future natural exit date",
+      "future high after sell",
+      "future B return"
+    ]
+  },
+  "segments": {
+    "OOS": {
+      "period": {"start": "2025-07-01", "end": "2026-06-15"},
+      "baseline": {
+        "return_pct": 64.66211670427089,
+        "mdd_pct": -5.807895076304301,
+        "trades": 476,
+        "turnover_pct": 7609.013959071196,
+        "rejected": 3,
+        "reconcile": 0
+      },
+      "v0": {
+        "return_pct": 53.6613232554814,
+        "mdd_pct": -8.786971589566232,
+        "trades": 548,
+        "turnover_pct": 8600.686601306526,
+        "rejected": 2,
+        "reconcile": 0,
+        "swap_executed": 27,
+        "queue_registered": 64,
+        "queue_converted": 22,
+        "queue_conversion_rate": 0.34375,
+        "queue_signal_lost": 41,
+        "queue_expired": 1,
+        "queued_entry_trades": 22,
+        "swap_blocked_churn": 31,
+        "swap_blocked_score_gap": 16,
+        "swap_blocked_turnover": 21,
+        "swap_blocked_no_safe_a": 0,
+        "normal_decisions_skipped_after_queue": 22,
+        "winner_clip_ge_15_rate": 0.6666666666666666,
+        "winner_clip_ge_10_rate": 0.7777777777777778,
+        "premature_exit_within10_rate": 0.65,
+        "premature_exit_within5_rate": 0.35,
+        "premature_median_days_to_baseline_exit": 7.0,
+        "proxy_precision_high_predicts_within10": 0.9642857142857143,
+        "proxy_recall_within10_caught": 0.25
+      },
+      "delta": {
+        "return_pp": -11.000793448789487,
+        "mdd_pp": -2.979076513261931,
+        "trades": 72,
+        "turnover_pp": 991.6726422353304
+      }
+    },
+    "Stress": {
+      "period": {"start": "2022-01-01", "end": "2022-06-30"},
+      "baseline": {
+        "return_pct": 0.4886541679346374,
+        "mdd_pct": -12.972470198640373,
+        "trades": 264,
+        "turnover_pct": 3597.410175741744,
+        "rejected": 9,
+        "reconcile": 0
+      },
+      "v0": {
+        "return_pct": 0.2676232753563818,
+        "mdd_pct": -12.79580747219193,
+        "trades": 292,
+        "turnover_pct": 3878.8211642854335,
+        "rejected": 6,
+        "reconcile": 0,
+        "swap_executed": 8,
+        "queue_registered": 32,
+        "queue_converted": 12,
+        "queue_conversion_rate": 0.375,
+        "queue_signal_lost": 19,
+        "queue_expired": 0,
+        "queued_entry_trades": 12,
+        "swap_blocked_churn": 6,
+        "swap_blocked_score_gap": 6,
+        "swap_blocked_turnover": 18,
+        "swap_blocked_no_safe_a": 4,
+        "normal_decisions_skipped_after_queue": 12,
+        "winner_clip_ge_15_rate": 0.125,
+        "winner_clip_ge_10_rate": 0.375,
+        "premature_exit_within10_rate": 0.6666666666666666,
+        "premature_exit_within5_rate": 0.5,
+        "premature_median_days_to_baseline_exit": 5.5,
+        "proxy_precision_high_predicts_within10": 0.875,
+        "proxy_recall_within10_caught": 0.25925925925925924
+      },
+      "delta": {
+        "return_pp": -0.2210308925782556,
+        "mdd_pp": 0.17666272644844305,
+        "trades": 28,
+        "turnover_pp": 281.41098854368965
+      }
+    }
+  },
+  "gate_verdict": {
+    "stress_non_inferiority": "partial_pass_return_small_loss_mdd_better",
+    "oos_non_inferiority": "fail_return_minus_11pp_and_mdd_worse",
+    "winner_clipping_reduction": "partial_pass_oos_15pct_rate_66.7pct_below_prior_76.9_to_100pct_but_still_high; stress_12.5pct_near_prior_0_to_10pct",
+    "premature_exit_reduction": "fail_v0_still_65_to_66.7pct_within10d",
+    "queue_operational": "pass_queue_registered_and_converted_in_both_segments",
+    "turnover_net_effect": "fail_turnover_increased_and_return_not_improved",
+    "overall": "fail_do_not_layer_learning_on_this_v0"
+  }
+}

@@ -1,0 +1,314 @@
+{
+  "train_1": {
+    "largest_rank_shifts": [
+      {
+        "hash": null,
+        "before": 1.2301207961686544,
+        "after": 1.2301207961686544,
+        "eec": 5.12121212121212,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.2301207961686544,
+        "after": 1.2301207961686544,
+        "eec": 5.12121212121212,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.2301207961686544,
+        "after": 1.2301207961686544,
+        "eec": 5.12121212121212,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.2301207961686544,
+        "after": 1.2301207961686544,
+        "eec": 5.12121212121212,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.2301207961686544,
+        "after": 1.2301207961686544,
+        "eec": 5.12121212121212,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.2301207961686544,
+        "after": 1.2301207961686544,
+        "eec": 5.12121212121212,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.2301207961686544,
+        "after": 1.2301207961686544,
+        "eec": 5.12121212121212,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.2301207961686544,
+        "after": 1.2301207961686544,
+        "eec": 5.12121212121212,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.2301207961686544,
+        "after": 1.2301207961686544,
+        "eec": 5.12121212121212,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.2301207961686544,
+        "after": 1.2301207961686544,
+        "eec": 5.12121212121212,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      }
+    ]
+  },
+  "train_2": {
+    "largest_rank_shifts": [
+      {
+        "hash": null,
+        "before": 1.969858541208204,
+        "after": 1.969858541208204,
+        "eec": 6.259259259259259,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.969858541208204,
+        "after": 1.969858541208204,
+        "eec": 6.259259259259259,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.969858541208204,
+        "after": 1.969858541208204,
+        "eec": 6.259259259259259,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.969858541208204,
+        "after": 1.969858541208204,
+        "eec": 6.259259259259259,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.737188291118361,
+        "after": 1.737188291118361,
+        "eec": 5.538461538461537,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.7293917364827618,
+        "after": 1.7293917364827618,
+        "eec": 6.0,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.7293917364827618,
+        "after": 1.7293917364827618,
+        "eec": 6.0,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.7293917364827618,
+        "after": 1.7293917364827618,
+        "eec": 6.0,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.713214189077021,
+        "after": 1.713214189077021,
+        "eec": 5.142857142857142,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 1.6925640467465766,
+        "after": 1.6925640467465766,
+        "eec": 5.999999999999999,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      }
+    ]
+  },
+  "train_3": {
+    "largest_rank_shifts": [
+      {
+        "hash": null,
+        "before": 3.268616454023101,
+        "after": 3.268616454023101,
+        "eec": 6.1489361702127665,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 3.268616454023101,
+        "after": 3.268616454023101,
+        "eec": 6.1489361702127665,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 3.268616454023101,
+        "after": 3.268616454023101,
+        "eec": 6.1489361702127665,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 3.268616454023101,
+        "after": 3.268616454023101,
+        "eec": 6.1489361702127665,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 3.268616454023101,
+        "after": 3.268616454023101,
+        "eec": 6.1489361702127665,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 3.268616454023101,
+        "after": 3.268616454023101,
+        "eec": 6.1489361702127665,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 3.268616454023101,
+        "after": 3.268616454023101,
+        "eec": 6.1489361702127665,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 3.268616454023101,
+        "after": 3.268616454023101,
+        "eec": 6.1489361702127665,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 3.268616454023101,
+        "after": 3.268616454023101,
+        "eec": 6.1489361702127665,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      },
+      {
+        "hash": null,
+        "before": 3.268616454023101,
+        "after": 3.268616454023101,
+        "eec": 6.1489361702127665,
+        "multiplier": 1.0,
+        "rank_before_eec": 100,
+        "rank_after_eec": 100,
+        "rank_delta_after_minus_before": 0
+      }
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+{"period_label":"stress_pre_2022h1","status":"evaluated","passed_gate":false,"count":300,"stress_expectancy_max":3.54390547806252,"stress_expectancy_mean":-3.9627785899652115,"stress_mdd_median":-43.799103379116644,"stress_mdd_min":-153.9525235815852,"stress_trade_count_max":31,"stress_trade_count_mean":10.896666666666667,"fail_metric_counts":{"stress_return_mdd_ratio":300,"expectancy_pct":296,"max_drawdown_pct":275}}
+{"period_label":"train_3_eval","status":"skipped_after_early_cut","passed_gate":false,"count":300}
+{"period_label":"train_2_eval","status":"skipped_after_early_cut","passed_gate":false,"count":300}
+{"period_label":"train_1_eval","status":"skipped_after_early_cut","passed_gate":false,"count":300}
+{"period_label":"oos_2025h2","status":"skipped_after_early_cut","passed_gate":false,"count":300}

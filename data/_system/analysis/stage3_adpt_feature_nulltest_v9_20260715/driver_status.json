@@ -1,0 +1,98 @@
+{
+  "host": "DESKTOP-TO74AR2",
+  "pid": 22644,
+  "state": "finished",
+  "completed": [
+    {
+      "index": 1,
+      "feature": "trend_chop20",
+      "variant": "REAL",
+      "returncode": 0,
+      "elapsed_seconds": 872.154233455658,
+      "out_dir": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\trend_chop20\\REAL",
+      "log_path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\logs\\trend_chop20_REAL.log"
+    },
+    {
+      "index": 2,
+      "feature": "trend_chop20",
+      "variant": "SHUFFLED",
+      "returncode": 0,
+      "elapsed_seconds": 884.5376975536346,
+      "out_dir": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\trend_chop20\\SHUFFLED",
+      "log_path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\logs\\trend_chop20_SHUFFLED.log"
+    },
+    {
+      "index": 3,
+      "feature": "atr14_pct",
+      "variant": "REAL",
+      "returncode": 0,
+      "elapsed_seconds": 885.6463785171509,
+      "out_dir": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\atr14_pct\\REAL",
+      "log_path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\logs\\atr14_pct_REAL.log"
+    },
+    {
+      "index": 4,
+      "feature": "atr14_pct",
+      "variant": "SHUFFLED",
+      "returncode": 0,
+      "elapsed_seconds": 850.7953498363495,
+      "out_dir": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\atr14_pct\\SHUFFLED",
+      "log_path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\logs\\atr14_pct_SHUFFLED.log"
+    },
+    {
+      "index": 5,
+      "feature": "range_pct_rank60",
+      "variant": "REAL",
+      "returncode": 0,
+      "elapsed_seconds": 808.1847784519196,
+      "out_dir": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\range_pct_rank60\\REAL",
+      "log_path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\logs\\range_pct_rank60_REAL.log"
+    },
+    {
+      "index": 6,
+      "feature": "range_pct_rank60",
+      "variant": "SHUFFLED",
+      "returncode": 0,
+      "elapsed_seconds": 818.6769938468933,
+      "out_dir": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\range_pct_rank60\\SHUFFLED",
+      "log_path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\logs\\range_pct_rank60_SHUFFLED.log"
+    },
+    {
+      "index": 7,
+      "feature": "rs_peer_ret20",
+      "variant": "REAL",
+      "returncode": 0,
+      "elapsed_seconds": 802.7696263790131,
+      "out_dir": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\rs_peer_ret20\\REAL",
+      "log_path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\logs\\rs_peer_ret20_REAL.log"
+    },
+    {
+      "index": 8,
+      "feature": "rs_peer_ret20",
+      "variant": "SHUFFLED",
+      "returncode": 0,
+      "elapsed_seconds": 609.7956640720367,
+      "out_dir": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\rs_peer_ret20\\SHUFFLED",
+      "log_path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\logs\\rs_peer_ret20_SHUFFLED.log"
+    },
+    {
+      "index": 9,
+      "feature": "rs_xbi_ret20",
+      "variant": "REAL",
+      "returncode": 0,
+      "elapsed_seconds": 422.2508020401001,
+      "out_dir": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\rs_xbi_ret20\\REAL",
+      "log_path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\logs\\rs_xbi_ret20_REAL.log"
+    },
+    {
+      "index": 10,
+      "feature": "rs_xbi_ret20",
+      "variant": "SHUFFLED",
+      "returncode": 0,
+      "elapsed_seconds": 398.1535062789917,
+      "out_dir": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\rs_xbi_ret20\\SHUFFLED",
+      "log_path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\analysis\\stage3_adpt_feature_nulltest_v9_20260715\\logs\\rs_xbi_ret20_SHUFFLED.log"
+    }
+  ],
+  "updated_at": "2026-07-15T16:27:20Z"
+}

@@ -1,0 +1,15 @@
+ticker,period_label,issue,detail,impact
+ANET,stress_pre_2022h1,REPRODUCTION_MISMATCH,original=23; rerun=22; entry_date_match=20; exact=15; missing=3; rerun_only=2,현재 재실행 거래를 원래 Stage3 거래와 동일시할 수 없음
+ANET,train_1,REPRODUCTION_MISMATCH,original=19; rerun=18; entry_date_match=15; exact=11; missing=4; rerun_only=3,현재 재실행 거래를 원래 Stage3 거래와 동일시할 수 없음
+ANET,train_2,REPRODUCTION_MISMATCH,original=17; rerun=17; entry_date_match=14; exact=10; missing=3; rerun_only=3,현재 재실행 거래를 원래 Stage3 거래와 동일시할 수 없음
+ANET,recent_1y,REPRODUCTION_MISMATCH,original=22; rerun=22; entry_date_match=22; exact=19; missing=0; rerun_only=0,현재 재실행 거래를 원래 Stage3 거래와 동일시할 수 없음
+BB,stress_pre_2022h1,REPRODUCTION_MISMATCH,original=12; rerun=11; entry_date_match=9; exact=6; missing=3; rerun_only=2,현재 재실행 거래를 원래 Stage3 거래와 동일시할 수 없음
+BB,train_1,REPRODUCTION_MISMATCH,original=11; rerun=9; entry_date_match=6; exact=3; missing=5; rerun_only=3,현재 재실행 거래를 원래 Stage3 거래와 동일시할 수 없음
+BB,train_2,REPRODUCTION_MISMATCH,original=11; rerun=11; entry_date_match=10; exact=9; missing=1; rerun_only=1,현재 재실행 거래를 원래 Stage3 거래와 동일시할 수 없음
+BB,recent_1y,REPRODUCTION_MISMATCH,original=12; rerun=10; entry_date_match=9; exact=6; missing=3; rerun_only=1,현재 재실행 거래를 원래 Stage3 거래와 동일시할 수 없음
+CE,stress_pre_2022h1,REPRODUCTION_MISMATCH,original=23; rerun=22; entry_date_match=22; exact=20; missing=1; rerun_only=0,현재 재실행 거래를 원래 Stage3 거래와 동일시할 수 없음
+CE,train_1,REPRODUCTION_MISMATCH,original=20; rerun=17; entry_date_match=14; exact=11; missing=6; rerun_only=3,현재 재실행 거래를 원래 Stage3 거래와 동일시할 수 없음
+all,all,FROZEN_INPUT_UNAVAILABLE,원래 실행 시점 frozen market_history/market_history_v2 snapshot 부재,완전 재현 제한
+all,all,FROZEN_INPUT_UNAVAILABLE,원래 실행 시점 frozen ticker_sentiment snapshot 부재,완전 재현 제한
+all,all,FROZEN_INPUT_UNAVAILABLE,원래 실행 시점 frozen sell_omen_scores snapshot 부재,완전 재현 제한
+all,all,FROZEN_INPUT_UNAVAILABLE,OHLC는 원래 manifest 날짜를 exclusive end로 yfinance 재조회; 공급자 과거 수정 가능,완전 재현 제한

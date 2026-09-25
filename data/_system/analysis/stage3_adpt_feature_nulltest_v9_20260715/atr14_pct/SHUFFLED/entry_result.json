@@ -1,0 +1,12 @@
+{
+  "ticker": "ADPT",
+  "stage": "entry",
+  "skipped_by_adpt_feature_nulltest_v9": true,
+  "skip_reason": "qualify_only_nulltest_metrics_all3_all2_foldbest",
+  "feature": "atr14_pct",
+  "variant": "SHUFFLED",
+  "selected_count": 0,
+  "pool_count": 0,
+  "seed_base": 2026071401,
+  "call_index": 4
+}

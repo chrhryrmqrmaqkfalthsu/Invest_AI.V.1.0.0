@@ -1,0 +1,49 @@
+{
+  "verdict": "DISTRIBUTION_MEASURED",
+  "workspace": "scripts/research/stage23_rework_20260713/",
+  "tickers": ["AAP", "POWI"],
+  "splits": {
+    "train_1": ["2022-07-01", "2023-06-30"],
+    "train_2": ["2023-07-01", "2024-06-30"],
+    "train_3": ["2024-07-01", "2025-06-30"]
+  },
+  "rows_per_fold": {"250": 4, "251": 2},
+  "features": {
+    "ma_relation_pct": "0.5*((MA5/MA20-1)+(MA20/MA60-1))*100",
+    "macd_hist_close_pct": "MACD_hist/Close*100",
+    "rsi": "RSI(14)",
+    "bb_position": "(Close-BB_lower)/(BB_upper-BB_lower)",
+    "volume_ratio": "Volume/Volume_MA5"
+  },
+  "quality": {
+    "continuous_feature_fold_count": 30,
+    "nan_rate_max": 0.0,
+    "inf_count_total": 0,
+    "continuous_unique_ratio_min": 0.996
+  },
+  "recommendations_not_final": {
+    "empirical_domain": "per-fold q01~q99 for generation and OOD guard; min/max retained for audit",
+    "minimum_support": "per-feature at least 25 rows and joint strict-AND at least 12 rows in an approximately 250-row fold",
+    "minimum_width": "10~20% of each feature's fold IQR",
+    "near_full": "flag interval width >=80% of that fold q01~q99 span",
+    "pair_generation": "center/width or observed quantile-pair generation; never independent low/high sampling"
+  },
+  "interval_unsuitable": {
+    "Aligned_bull": "binary state; dominant value median share about 78%",
+    "MACD_golden": "binary sparse event; positive frequency approximately 2.8~4.8%"
+  },
+  "important_caveats": [
+    "BB position must not be clipped to [0,1] before OOD checks because values outside the bands are valid.",
+    "MA relation, normalized MACD and volume ratio are not mathematically upper-bounded; hard sanity bounds require a separate policy decision.",
+    "The recommended values are implementation candidates, not finalized production constants."
+  ],
+  "ga_or_training_run": false,
+  "fetch_used": false,
+  "input_sha256": {
+    "indicators.py": "21c82425537e32600821e4460bdea53b09dc90597971b9a7fbdc4f3dfa50db38",
+    "evaluator.py": "d7ce157564c3311d95ba73de79f41dfad3d7d1134727dd8a5fa776487cd83584",
+    "rulebook.py": "c7b2892f410cd1b25b8090fe26b2b6daaa0aa4bfeaa28555cf4c8b6d12cb15dc",
+    "AAP_ohlcv.csv": "6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717",
+    "POWI_ohlcv.csv": "bd683b376899ff9784eb86a807bd154f74502c8f0bb025ceb120b3e16b8fb400"
+  }
+}

@@ -1,0 +1,10 @@
+snapshot_at,market_score,event_adjustment,estimated_price_score,ticker,use_event_block,use_market_entry_adjustment,crash_buy_enabled,direct_event_component,current_market_adjustment,price_only_market_adjustment,market_adjustment_delta_due_event,current_crash_bonus,price_only_crash_bonus,observation
+2026-07-10T19:34:03.640405,71.5,-18.41,89.91,BMA,true,false,true,10.244264156,1.0,1.0,0.0,0.0,0.0,"direct Event only; market multiplier disabled"
+2026-07-10T19:34:03.640405,71.5,-18.41,89.91,BNTX,true,false,true,5.044743845,1.0,1.0,0.0,0.0,0.0,"direct Event only; market multiplier disabled"
+2026-07-10T19:34:03.640405,71.5,-18.41,89.91,BTBT,true,true,true,11.810563103,1.104464952,1.057617524,0.046847428,0.0,0.0,"same active_events affect direct additive and whole-score multiplier"
+2026-07-10T19:34:03.640405,71.5,-18.41,89.91,CMC,true,false,true,3.374263181,1.0,1.0,0.0,0.0,0.0,"direct Event only; market multiplier disabled"
+2026-07-10T19:34:03.640405,71.5,-18.41,89.91,BWXT,true,false,true,2.776208143,1.0,1.0,0.0,0.0,0.0,"direct Event only; market multiplier disabled"
+2026-07-10T19:34:03.640405,71.5,-18.41,89.91,BMI,true,true,true,5.170814407,1.494896478,1.356555774,0.138340704,0.0,0.0,"same active_events affect direct additive and whole-score multiplier"
+2026-07-10T19:34:03.640405,71.5,-18.41,89.91,BGC,true,false,true,1.312184811,1.0,1.0,0.0,0.0,0.0,"direct Event only; market multiplier disabled"
+2026-07-10T19:34:03.640405,71.5,-18.41,89.91,CE,true,false,true,-3.108777706,1.0,1.0,0.0,0.0,0.0,"market multiplier disabled; crash threshold not reached"
+2026-07-10T19:34:03.640405,71.5,-18.41,89.91,ACMR,true,true,false,1.395218801,1.106588898,1.080287049,0.026301849,0.0,0.0,"same active_events affect direct additive and whole-score multiplier"

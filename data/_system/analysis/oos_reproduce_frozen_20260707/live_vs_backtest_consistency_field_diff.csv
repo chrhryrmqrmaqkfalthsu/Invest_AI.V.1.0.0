@@ -1,0 +1,60 @@
+part,item,backtest_value,live_value,match_or_status,source_note,default_or_missing_note,impact
+A_rulebook,load_path,exp_batch_stage123_2009_20260616_full/tickers/CE/stage3/final_rulebooks.jsonl,exp_batch_stage123_2009_20260616_full/tickers/CE/stage3/final_rulebooks.jsonl,SAME_FILE,backtest_frozen_and_live_candidate_slots_full_revalidation,NONE,NONE
+A_rulebook,load_format,full final_rulebooks.jsonl row['rulebook'],full final_rulebooks.jsonl row['rulebook'],MATCH,Rulebook.from_dict(full dict),NONE,NONE
+A_rulebook,real_dashboard_snapshot_format,full final_rulebooks.jsonl row['rulebook'],data/_system/live_slots_state.json compact candidate snapshot,DIFFERENT_FILE,real_dashboard direct buy fallback candidate payload,selected_rulebook/rulebook dict missing,AFFECTS_FULL_REVALIDATION_AVAILABILITY
+A_rulebook,sector_name,tech,tech,MATCH,full_rulebook,NONE,NONE
+A_rulebook,use_market_entry_adjustment,False,False,MATCH,full_rulebook,NONE,NONE
+A_rulebook,sector_strength_weight,-0.6208615991099308,-0.6208615991099308,MATCH,full_rulebook,NONE,NONE
+A_rulebook,market_adjustment_strength,0.10684213221952549,0.10684213221952549,MATCH,full_rulebook,NONE,NONE
+A_rulebook,market_score_weight,0.008840218406678813,0.008840218406678813,MATCH,full_rulebook,NONE,NONE
+A_rulebook,vix_sensitivity,-1.0,-1.0,MATCH,full_rulebook,NONE,NONE
+A_rulebook,signal_threshold,2.6541866643896674,2.6541866643896674,MATCH,full_rulebook,NONE,NONE
+A_rulebook,use_event_block,True,True,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_war,0.5423230960412313,0.5423230960412313,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_rate_hike,1.4331502126146771,1.4331502126146771,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_rate_cut,-0.8925811195689358,-0.8925811195689358,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_geopolitical,-1.931246851347001,-1.931246851347001,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_tariff,-1.214004165245134,-1.214004165245134,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_export_ban,-0.3083143715618548,-0.3083143715618548,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_earnings_shock,0.795132287842401,0.795132287842401,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_oil_surge,0.17298181855571837,0.17298181855571837,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_banking_crisis,-0.019268752211724027,-0.019268752211724027,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_inflation,1.275430750797145,1.275430750797145,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_response_fed_statement,0.16053340841158248,0.16053340841158248,MATCH,full_rulebook,NONE,NONE
+A_rulebook,event_strength_multiplier,2.3387436247691396,2.3387436247691396,MATCH,full_rulebook,NONE,NONE
+A_rulebook,weight_ma_align,1.2272413237358344,1.2272413237358344,MATCH,full_rulebook,NONE,NONE
+A_rulebook,weight_macd_golden,1.167787881408684,1.167787881408684,MATCH,full_rulebook,NONE,NONE
+A_rulebook,macd_min_hist,0.0,0.0,MATCH,full_rulebook,NONE,NONE
+A_rulebook,weight_rsi_zone,1.725077524288451,1.725077524288451,MATCH,full_rulebook,NONE,NONE
+A_rulebook,rsi_low,36.93850271203499,36.93850271203499,MATCH,full_rulebook,NONE,NONE
+A_rulebook,rsi_high,80.0,80.0,MATCH,full_rulebook,NONE,NONE
+A_rulebook,weight_bb_near_lower,0.8477763470822091,0.8477763470822091,MATCH,full_rulebook,NONE,NONE
+A_rulebook,bb_proximity,1.1324786725411682,1.1324786725411682,MATCH,full_rulebook,NONE,NONE
+A_rulebook,weight_volume_surge,0.08876924593819482,0.08876924593819482,MATCH,full_rulebook,NONE,NONE
+A_rulebook,volume_surge_ratio,1.5597496113352145,1.5597496113352145,MATCH,full_rulebook,NONE,NONE
+A_rulebook,exit_strategy,hybrid,hybrid,MATCH,full_rulebook,NONE,NONE
+A_rulebook,stop_loss_atr,2.9488902763720244,2.9488902763720244,MATCH,full_rulebook,NONE,NONE
+A_rulebook,stop_loss_atr_bear,1.0,1.0,MATCH,full_rulebook,NONE,NONE
+A_rulebook,take_profit_atr,3.7074125087814065,3.7074125087814065,MATCH,full_rulebook,NONE,NONE
+A_rulebook,take_profit_atr_bull,4.624680318759831,4.624680318759831,MATCH,full_rulebook,NONE,NONE
+A_rulebook,trailing_atr,2.53183095624166,2.53183095624166,MATCH,full_rulebook,NONE,NONE
+A_rulebook,trailing_atr_volatile,3.9792912492513057,3.9792912492513057,MATCH,full_rulebook,NONE,NONE
+A_rulebook,trailing_activation_profit_pct,6.568834477074429,6.568834477074429,MATCH,full_rulebook,NONE,NONE
+A_rulebook,max_holding_days_timeout,10,10,MATCH,full_rulebook,NONE,NONE
+A_rulebook,breakeven_enabled,False,False,MATCH,full_rulebook,NONE,NONE
+A_rulebook,breakeven_trigger_profit_pct,4.0,4.0,MATCH,full_rulebook,NONE,NONE
+A_rulebook,breakeven_floor_profit_pct,1.27673918687813,1.27673918687813,MATCH,full_rulebook,NONE,NONE
+A_rulebook,sell_omen_enabled,True,True,MATCH,full_rulebook,NONE,NONE
+A_rulebook,sell_omen_threshold,0.6168550131605416,0.6168550131605416,MATCH,full_rulebook,NONE,NONE
+A_snapshot_if_reconstructed,use_market_entry_adjustment,False,True,DIFF,compact_snapshot_reconstructed_default,MISSING_IN_LIVE_SLOT_IF_RECONSTRUCTED_DEFAULT,AFFECTS_SHOULD_BUY_OR_FINAL_SCORE
+A_snapshot_if_reconstructed,vix_sensitivity,-1.0,0.0,DIFF,compact_snapshot_reconstructed_default,MISSING_IN_LIVE_SLOT_IF_RECONSTRUCTED_DEFAULT,AFFECTS_SHOULD_BUY_OR_FINAL_SCORE
+A_snapshot_if_reconstructed,event_response_all,nonzero_mixed,0.0,DIFF,compact_snapshot_reconstructed_default,MISSING_IN_LIVE_SLOT_IF_RECONSTRUCTED_DEFAULT,AFFECTS_SHOULD_BUY_OR_FINAL_SCORE
+A_snapshot_if_reconstructed,rsi_low_high,36.93850271203499..80.0,30.0..70.0,DIFF,compact_snapshot_reconstructed_default,MISSING_IN_LIVE_SLOT_IF_RECONSTRUCTED_DEFAULT,AFFECTS_SHOULD_BUY_OR_FINAL_SCORE
+A_snapshot_if_reconstructed,bb_weight_proximity,0.8477763470822091/1.1324786725411682,1.0/1.05,DIFF,compact_snapshot_reconstructed_default,MISSING_IN_LIVE_SLOT_IF_RECONSTRUCTED_DEFAULT,AFFECTS_SHOULD_BUY_OR_FINAL_SCORE
+B_gate,oos_reproduce_frozen_build_signal_history_call,NOT_FOUND,NOT_FOUND,MATCH_ABSENT,grep/run_candidate code path,NONE,NONE
+B_gate,oos_reproduce_frozen_judge_buy_gate_call,NOT_FOUND,NOT_FOUND,MATCH_ABSENT,grep/run_candidate code path,NONE,NONE
+B_gate,oos_reproduce_frozen_entry_gate,should_buy only,should_buy only,MATCH,run_candidate lines 386-393 vs live_slots lines 403-418,NONE,NONE
+B_gate,live_candidate_slots_first_signal_at_usage,NOT_USED_FOR_ENTRY,NOT_USED_FOR_ENTRY,MATCH,live_slots lines 419-450,metadata only,NONE
+B_gate,elite_strategy_sim_judge_buy_gate,APPLIED_IN_ELITE_STRATEGY_SIM,NOT_APPLIED_IN_LIVE_CANDIDATE_SLOTS,DIFF_NON_FROZEN_PATH,elite_strategy_sim lines 169-213 and 460,not part of oos_reproduce_frozen,HARMFUL_ONLY_IF_THIS_SIM_IS_REFERENCE_BACKTEST
+B_gate,gate_filtered_case_count_in_oos_reproduce_frozen,0,0,MATCH_NO_RECORDED_GATE,CSV columns/grep no gate fields,not applied,NONE
+B_gate,gate_pass_vs_gate_ignored_count_delta_in_oos_reproduce_frozen,0,0,MATCH_NO_RECORDED_GATE,not computable as filtered gate because gate absent,not applied,NONE

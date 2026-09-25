@@ -1,0 +1,25 @@
+category,metric,reference_value,signal_value,difference_pct,source,interpretation
+intraday,previous_completed_close,587.03,600.8599853515625,2.3559247996801647,Alpaca IEX 2026-07-08 daily close,signal was 2.36% above previous close
+intraday,signal_day_open,595.82,600.8599853515625,0.845890596415444,Alpaca IEX 2026-07-09 daily bar,signal was 0.85% above session open
+intraday,signal_day_high,601.61,600.8599853515625,-0.12466791583209957,Alpaca IEX 2026-07-09 daily/minute bars,signal was within 0.125% of the eventual session high
+multi_day,prior_5_session_high,625.94,600.8599853515625,-4.006776152416769,Alpaca IEX completed daily bars,not a 5-session high
+multi_day,prior_10_session_high,625.94,600.8599853515625,-4.006776152416769,Alpaca IEX completed daily bars,not a 10-session high
+multi_day,prior_20_session_high,625.94,600.8599853515625,-4.006776152416769,Alpaca IEX completed daily bars,not a 20-session high
+multi_day,5_session_range_position_pct,48.17107946179478,600.8599853515625,,Alpaca IEX completed daily bars,near middle of recent 5-session range
+multi_day,10_session_range_position_pct,52.998473297530836,600.8599853515625,,Alpaca IEX completed daily bars,near middle of recent 10-session range
+multi_day,20_session_range_position_pct,80.13464186262372,600.8599853515625,,Alpaca IEX completed daily bars,in upper fifth of 20-session range
+runup,return_from_first_close_of_5_session_window_pct,-1.527420539584623,600.8599853515625,,Alpaca IEX completed daily bars,no 5-session chase by this measure
+runup,return_from_first_close_of_10_session_window_pct,3.3470907037431274,600.8599853515625,,Alpaca IEX completed daily bars,moderate 10-session rise
+runup,return_from_first_close_of_20_session_window_pct,14.678878776899019,600.8599853515625,,Alpaca IEX completed daily bars,meaningful 20-session run-up before signal
+moving_average,MA5,600.9259887695313,600.8599853515625,-0.010983618482518498,yfinance evaluator-input reconstruction through 2026-07-08,signal price approximately at MA5
+moving_average,MA20,581.2125,600.8599853515625,3.38043062590061,yfinance evaluator-input reconstruction through 2026-07-08,signal price 3.38% above MA20
+moving_average,MA60,488.610834757487,600.8599853515625,22.97311942535787,yfinance evaluator-input reconstruction through 2026-07-08,signal price 22.97% above MA60
+moving_average,alignment,"MA5>MA20>MA60",600.8599853515625,,engine/core/indicators.py and reconstructed input,bullish alignment was true
+bollinger,BB_lower,528.3553681607892,600.8599853515625,,yfinance evaluator-input reconstruction through 2026-07-08,
+bollinger,BB_middle,581.2125,600.8599853515625,,yfinance evaluator-input reconstruction through 2026-07-08,
+bollinger,BB_upper,634.0696318392107,600.8599853515625,-5.237539352155829,yfinance evaluator-input reconstruction through 2026-07-08,signal was 5.24% below upper band
+bollinger,signal_band_position_pct,68.5854629904337,600.8599853515625,,derived from reconstructed bands,signal was in upper third of the band but not at upper band
+bollinger,evaluator_last_close_band_position_pct,56.07061399238831,587.6300048828125,,derived from 2026-07-08 evaluator row,actual BB test used the daily row close rather than live signal price
+bollinger,lower_band_times_proximity,602.4486334100584,600.8599853515625,-0.26369850812070217,"BB_lower × rulebook bb_proximity 1.1402337701369225",condition was permissive enough to pass near the upper half of the band
+bollinger,rule_semantics,"Close <= BB_lower × bb_proximity",600.8599853515625,,engine/core/indicators.py and engine/strategies/evaluator.py,BB근접 is a lower-band proximity condition and not an upper-breakout buy signal
+verdict,high_entry_hypothesis,PARTIAL_SUPPORT,600.8599853515625,,combined evidence,"near intraday high and after a 20-session run-up; not near 5/10/20-session high"

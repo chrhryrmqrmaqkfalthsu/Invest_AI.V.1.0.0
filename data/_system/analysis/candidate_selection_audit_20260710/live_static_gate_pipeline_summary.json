@@ -1,0 +1,129 @@
+{
+  "created_at_kst": "2026-07-11",
+  "audit_mode": "READ_ONLY",
+  "implementation_performed": false,
+  "design_change": false,
+  "operational_code_change": false,
+  "config_change": false,
+  "retraining": false,
+  "order": false,
+  "delete": false,
+  "conclusion": {
+    "primary_insertion": "engine/live/elite_shadow_report.py raw Stage2/Stage3 collector, after candidate_id/full source row is known and before elite sort/ticker dedup/stage cap",
+    "stage2_line_range": "collect_stage2_elite 382-384",
+    "stage3_line_range": "collect_stage3_elite 472-473",
+    "entry_exit_separation": "CONFIRMED",
+    "dryrun_live_input_parity": "NOT_CURRENTLY_EQUAL",
+    "shadow_compare_possible": true,
+    "current_report_can_use_precomputed_catalog_by_candidate_id": true,
+    "current_report_catalog_coverage": "82/82",
+    "safe_to_implement_now_without_parity_work": false
+  },
+  "current_live_flow": {
+    "daemon": "data/_system/ops/live_candidate_slots.py daemon --interval 60",
+    "candidate_builder": "engine.live.elite_shadow_report.build_elite_shadow_report(stage2_limit=60, stage3_limit=80)",
+    "dynamic_evaluator": "engine.live.elite_shadow_trader.evaluate_candidate",
+    "candidate_state": "data/_system/live_slots_state.json",
+    "real_entry_consumer": "engine.live.s2_auto_trader.S2AutoTrader",
+    "real_exit_authority": "engine.live.position_manager.PositionManager",
+    "shadow_entry_exit_consumer": "engine.live.elite_shadow_trader.run_shadow_tick"
+  },
+  "filter_order": [
+    "Stage2 central_index eligible / Stage3 final_rulebooks presence",
+    "stage-specific historical/elite metrics",
+    "anti-pattern filter",
+    "recommended v3+BOIL static hook",
+    "elite sort",
+    "ticker dedup",
+    "stage cap 60/80",
+    "stage concatenate",
+    "candidate denylist",
+    "bucket/elite report sort",
+    "legacy 20260707 KEEP/DROP_BAD_MAE gate",
+    "held candidate exclusion",
+    "current evaluate_candidate",
+    "should_buy",
+    "candidate_pool priority sort",
+    "S2 execution revalidation",
+    "BUY safety/order"
+  ],
+  "critical_order_findings": {
+    "denylist_current_position": "after stage ticker dedup and cap",
+    "denylist_dryrun_position": "before ticker dedup and cap",
+    "post_report_static_filter_problem": "blocked ticker's next rule cannot be restored and stage cap is not refilled",
+    "required_for_v3_boil_fallback": "apply static block in each raw stage collector before sort/dedup/cap",
+    "full_dryrun_parity_requires_more_than_two_gates": true
+  },
+  "entry_exit_isolation": {
+    "real_entry": {
+      "source": "live_slots_state.candidate_pool",
+      "selection": "S2AutoTrader.candidate_pool and compute_order_plan",
+      "final_check": "_candidate_full_payload + _validate_candidate_signal",
+      "buy": "SafetyLayer purpose=entry then broker.place_buy"
+    },
+    "real_exit": {
+      "source": "data/_system/positions.json and broker holdings",
+      "authority": "PositionManager.check_exits/_check_one",
+      "rulebook": "immutable position rulebook_snapshot or legacy path",
+      "candidate_report_dependency": false,
+      "static_catalog_dependency": false
+    },
+    "shadow": {
+      "open_position_processing_before_candidate_entry": true,
+      "open_position_lines": "elite_shadow_trader.py 757-770",
+      "new_entry_lines": "elite_shadow_trader.py 792-853",
+      "report_membership_removes_existing_position": false
+    },
+    "retroactive_position_risk": "NONE_FOUND when gate is confined to candidate collectors and execution entry recheck",
+    "prohibited_location": "PositionManager exit path and shadow open-position loop"
+  },
+  "dryrun_live_parity": {
+    "v3_rulebook_thresholds_weights": "same original source rows are accessible before dedup, but not exposed in compact report payload",
+    "v3_training_distribution": "dry-run uses immutable training-window stage0 OHLCV cache; live evaluator uses current rolling one-year OHLCV",
+    "boil_structure_inputs": "dry-run uses precomputed HIGH_VOL/nonvolume-entry/near-zero catalog; live has no equivalent runtime calculation",
+    "recommended_identity": "candidate_id-keyed immutable static decision catalog with policy version and source fingerprints",
+    "do_not_substitute": "current live OHLCV distribution for frozen training distribution"
+  },
+  "candidate_set_comparison": {
+    "current_report_total": 82,
+    "current_report_stage2": 12,
+    "current_report_stage3": 70,
+    "dryrun_final_total": 84,
+    "dryrun_final_stage2": 10,
+    "dryrun_final_stage3": 74,
+    "id_overlap": 16,
+    "current_only": 66,
+    "dryrun_only": 68,
+    "current_report_v3_catalog_covered": 82,
+    "current_report_v3_fail": 23,
+    "current_report_boil_fail": 2,
+    "current_report_block_union": 25,
+    "posthoc_survivor_without_fallback": 57,
+    "interpretation": "post-report filtering is not the dry-run 84 pipeline and cannot be used as parity evidence"
+  },
+  "feature_flag_shadow_rollback": {
+    "preferred_flag_location": "data/_system/live_auto_config.json selection subtree",
+    "preferred_modes": [
+      "off",
+      "shadow",
+      "block"
+    ],
+    "existing_candidate_daemon_reads_this_config": false,
+    "shadow_hook": "same pre-dedup static decision call; record but do not continue",
+    "observability": "elite report summary then live_slots_state.last_refresh/events",
+    "secondary_fail_closed": "S2AutoTrader execution recheck",
+    "normal_rollback": "block to shadow/off; next regular-hours refresh if config is loaded per call",
+    "outside_hours_caveat": "live_candidate_slots reuses cached pool outside regular hours unless forced refresh or restart",
+    "code_rollback_restart": "scripts/live_candidate_slots_guard.sh restart_daemon",
+    "exit_restart_required": false
+  },
+  "implementation_preconditions": [
+    "Freeze a candidate_id-keyed v3+BOIL decision catalog from the exact dry-run inputs",
+    "Validate catalog policy_version and source fingerprints",
+    "Insert identical lookup before Stage2 and Stage3 dedup/cap",
+    "Run shadow compare without changing candidate membership",
+    "Decide whether denylist ordering and live elite thresholds must also be aligned to reproduce dry-run 84",
+    "Add execution-time fail-closed recheck for stale candidate_pool",
+    "Prove real PositionManager path remains untouched"
+  ]
+}

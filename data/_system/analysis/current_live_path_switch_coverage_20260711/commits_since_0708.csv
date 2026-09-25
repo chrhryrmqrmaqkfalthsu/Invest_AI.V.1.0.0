@@ -1,0 +1,11 @@
+commit,timestamp_utc,subject,affected_area,path_effect,direct_event_switch_effect
+fd2400d,2026-07-08T04:43:31Z,"라이브 후보 슬롯 EQ 판단 배제 및 검증 로직 고정",data/_system/ops/live_candidate_slots.py,"live slot evaluator source committed; uses elite_shadow_trader.evaluate_candidate",none_at_that_time
+75faf9a,2026-07-08T06:21:18Z,"S2 자동매매 dry-run 경로와 no-TP 청산 토글 구현",engine/live/s2_auto_trader.py; scripts/run_s2_auto_live.py,"new dry-run/possible real execution validation path; reuses elite evaluate_candidate",covered_by_elite_source_after_e5cd786
+1b42954,2026-07-08T13:33:49Z,"실거래 대시보드 매수 후보 조회와 주문금액 입력값 오류 수정",engine/live/real_dashboard_holding_days_patch.py,"dashboard real candidate fallback consumes live_slots_state",no_new_event_generation
+5334c5e,2026-07-08T13:39:55Z,"실거래 대시보드 분봉 차트 갱신 주기 단축",engine/live/real_dashboard_holding_days_patch.py,"UI refresh only",no_new_event_generation
+bd88c97,2026-07-09T13:51:07Z,"대시보드 연결 재발 방지용 8001 감시와 Caddy 라우트 자동복구 추가",config/cron/kingmaker_crontab; dashboard guard,"dashboard process supervision",no_new_event_generation
+e589e57,2026-07-09T14:21:27Z,"실거래 후보 슬롯 데몬 재가동 및 자동 감시 추가",config/cron/kingmaker_crontab; scripts/live_candidate_slots_guard.sh,"live slot daemon becomes continuously supervised active selector",runtime_restart_required_for_future_code_changes
+ea2ae57,2026-07-09T16:16:13Z,"real_dashboard 정규 후보 export 스크립트 구현 및 temp 검증",scripts/export_real_dashboard_buy_candidates.py,"new export revalidation path; reuses elite evaluate_candidate",covered_by_elite_source_after_e5cd786
+92e737a,2026-07-09T15:37:19Z,"SAFETY dashboard-real fallback 직접 매수 차단 guard 추가",engine/live/real_dashboard_api.py,"order guard only",no_new_event_generation
+cbc3e77,2026-07-09T16:55:24Z,"dashboard-real 직접 매수 청산 배관 구현 및 FakeBroker 검증",engine/live/real_dashboard_holding_days_patch.py,"manual real order plumbing; consumes candidate snapshot",no_new_event_generation
+e5cd786,2026-07-11T12:09:28Z,"라이브 direct Event 단일 스위치와 shadow 비교 도입: 기본값 ON으로 동작 불변",event_policy; central; learned_rulebook; elite_shadow_trader,"source-level switch and shadow logging added to three direct Event roots",not_loaded_by_preexisting_live_slot_daemon

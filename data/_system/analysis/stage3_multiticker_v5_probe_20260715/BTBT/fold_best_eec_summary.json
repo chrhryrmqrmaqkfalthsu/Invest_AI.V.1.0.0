@@ -1,0 +1,281 @@
+{
+  "train_1": {
+    "trade_count": 17,
+    "effective_event_count": 4.587301587301587,
+    "eec_multiplier": 0.7645502645502645,
+    "max_cluster_trade_share": 0.29411764705882354,
+    "event_clusters": [
+      {
+        "cluster_index": 1,
+        "start": "2022-07-06",
+        "end": "2022-07-18",
+        "event_count": 5,
+        "trade_share": 0.29411764705882354,
+        "share_squared": 0.08650519031141869,
+        "monthly_distribution": {
+          "2022-07": 5
+        }
+      },
+      {
+        "cluster_index": 2,
+        "start": "2022-08-22",
+        "end": "2022-08-23",
+        "event_count": 2,
+        "trade_share": 0.11764705882352941,
+        "share_squared": 0.01384083044982699,
+        "monthly_distribution": {
+          "2022-08": 2
+        }
+      },
+      {
+        "cluster_index": 3,
+        "start": "2022-11-02",
+        "end": "2022-11-11",
+        "event_count": 3,
+        "trade_share": 0.17647058823529413,
+        "share_squared": 0.031141868512110732,
+        "monthly_distribution": {
+          "2022-11": 3
+        }
+      },
+      {
+        "cluster_index": 4,
+        "start": "2023-01-10",
+        "end": "2023-01-12",
+        "event_count": 3,
+        "trade_share": 0.17647058823529413,
+        "share_squared": 0.031141868512110732,
+        "monthly_distribution": {
+          "2023-01": 3
+        }
+      },
+      {
+        "cluster_index": 5,
+        "start": "2023-03-29",
+        "end": "2023-04-11",
+        "event_count": 4,
+        "trade_share": 0.23529411764705882,
+        "share_squared": 0.05536332179930796,
+        "monthly_distribution": {
+          "2023-03": 1,
+          "2023-04": 3
+        }
+      }
+    ],
+    "entry_time_concurrency_distribution": {
+      "1": 8,
+      "2": 6,
+      "3": 2,
+      "4": 1
+    },
+    "active_day_concurrency_distribution": {
+      "1": 19,
+      "2": 6,
+      "3": 2,
+      "4": 1
+    }
+  },
+  "train_2": {
+    "trade_count": 18,
+    "effective_event_count": 5.7857142857142865,
+    "eec_multiplier": 0.9642857142857144,
+    "max_cluster_trade_share": 0.2222222222222222,
+    "event_clusters": [
+      {
+        "cluster_index": 1,
+        "start": "2023-09-07",
+        "end": "2023-09-11",
+        "event_count": 3,
+        "trade_share": 0.16666666666666666,
+        "share_squared": 0.027777777777777776,
+        "monthly_distribution": {
+          "2023-09": 3
+        }
+      },
+      {
+        "cluster_index": 2,
+        "start": "2023-09-25",
+        "end": "2023-09-27",
+        "event_count": 3,
+        "trade_share": 0.16666666666666666,
+        "share_squared": 0.027777777777777776,
+        "monthly_distribution": {
+          "2023-09": 3
+        }
+      },
+      {
+        "cluster_index": 3,
+        "start": "2023-10-11",
+        "end": "2023-10-19",
+        "event_count": 4,
+        "trade_share": 0.2222222222222222,
+        "share_squared": 0.04938271604938271,
+        "monthly_distribution": {
+          "2023-10": 4
+        }
+      },
+      {
+        "cluster_index": 4,
+        "start": "2024-02-07",
+        "end": "2024-02-12",
+        "event_count": 4,
+        "trade_share": 0.2222222222222222,
+        "share_squared": 0.04938271604938271,
+        "monthly_distribution": {
+          "2024-02": 4
+        }
+      },
+      {
+        "cluster_index": 5,
+        "start": "2024-03-11",
+        "end": "2024-03-11",
+        "event_count": 1,
+        "trade_share": 0.05555555555555555,
+        "share_squared": 0.0030864197530864196,
+        "monthly_distribution": {
+          "2024-03": 1
+        }
+      },
+      {
+        "cluster_index": 6,
+        "start": "2024-03-26",
+        "end": "2024-03-26",
+        "event_count": 1,
+        "trade_share": 0.05555555555555555,
+        "share_squared": 0.0030864197530864196,
+        "monthly_distribution": {
+          "2024-03": 1
+        }
+      },
+      {
+        "cluster_index": 7,
+        "start": "2024-04-17",
+        "end": "2024-04-18",
+        "event_count": 2,
+        "trade_share": 0.1111111111111111,
+        "share_squared": 0.012345679012345678,
+        "monthly_distribution": {
+          "2024-04": 2
+        }
+      }
+    ],
+    "entry_time_concurrency_distribution": {
+      "1": 8,
+      "2": 6,
+      "3": 3,
+      "4": 1
+    },
+    "active_day_concurrency_distribution": {
+      "1": 14,
+      "2": 7,
+      "3": 3,
+      "4": 2
+    }
+  },
+  "train_3": {
+    "trade_count": 12,
+    "effective_event_count": 6.545454545454545,
+    "eec_multiplier": 1.0,
+    "max_cluster_trade_share": 0.25,
+    "event_clusters": [
+      {
+        "cluster_index": 1,
+        "start": "2024-08-07",
+        "end": "2024-08-07",
+        "event_count": 1,
+        "trade_share": 0.08333333333333333,
+        "share_squared": 0.006944444444444444,
+        "monthly_distribution": {
+          "2024-08": 1
+        }
+      },
+      {
+        "cluster_index": 2,
+        "start": "2024-08-20",
+        "end": "2024-08-20",
+        "event_count": 1,
+        "trade_share": 0.08333333333333333,
+        "share_squared": 0.006944444444444444,
+        "monthly_distribution": {
+          "2024-08": 1
+        }
+      },
+      {
+        "cluster_index": 3,
+        "start": "2024-09-18",
+        "end": "2024-09-23",
+        "event_count": 2,
+        "trade_share": 0.16666666666666666,
+        "share_squared": 0.027777777777777776,
+        "monthly_distribution": {
+          "2024-09": 2
+        }
+      },
+      {
+        "cluster_index": 4,
+        "start": "2024-10-14",
+        "end": "2024-10-14",
+        "event_count": 1,
+        "trade_share": 0.08333333333333333,
+        "share_squared": 0.006944444444444444,
+        "monthly_distribution": {
+          "2024-10": 1
+        }
+      },
+      {
+        "cluster_index": 5,
+        "start": "2024-12-12",
+        "end": "2024-12-23",
+        "event_count": 2,
+        "trade_share": 0.16666666666666666,
+        "share_squared": 0.027777777777777776,
+        "monthly_distribution": {
+          "2024-12": 2
+        }
+      },
+      {
+        "cluster_index": 6,
+        "start": "2025-01-10",
+        "end": "2025-01-14",
+        "event_count": 3,
+        "trade_share": 0.25,
+        "share_squared": 0.0625,
+        "monthly_distribution": {
+          "2025-01": 3
+        }
+      },
+      {
+        "cluster_index": 7,
+        "start": "2025-02-10",
+        "end": "2025-02-10",
+        "event_count": 1,
+        "trade_share": 0.08333333333333333,
+        "share_squared": 0.006944444444444444,
+        "monthly_distribution": {
+          "2025-02": 1
+        }
+      },
+      {
+        "cluster_index": 8,
+        "start": "2025-04-30",
+        "end": "2025-04-30",
+        "event_count": 1,
+        "trade_share": 0.08333333333333333,
+        "share_squared": 0.006944444444444444,
+        "monthly_distribution": {
+          "2025-04": 1
+        }
+      }
+    ],
+    "entry_time_concurrency_distribution": {
+      "1": 10,
+      "2": 1,
+      "3": 1
+    },
+    "active_day_concurrency_distribution": {
+      "1": 21,
+      "2": 1,
+      "3": 1
+    }
+  }
+}

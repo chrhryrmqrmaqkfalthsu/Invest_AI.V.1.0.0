@@ -1,0 +1,94 @@
+{
+  "created_at": "2026-07-10T16:55:32.334628+00:00",
+  "policy": "stage1-high-vol-entry-without-volume-market-cap",
+  "origin_count": 17071,
+  "origin_ticker_count": 531,
+  "classification": {
+    "exact_tickers": 91,
+    "proxy_tickers": 440,
+    "exact_origin_candidates": 4966,
+    "proxy_origin_candidates": 12105,
+    "ticker_group_counts": {
+      "LOW_VOL": 382,
+      "MID_VOL": 89,
+      "HIGH_VOL": 60
+    },
+    "candidate_group_counts": {
+      "LOW_VOL": 10263,
+      "MID_VOL": 3724,
+      "HIGH_VOL": 3084
+    },
+    "frozen_is_std20_edges": [
+      0.01253285764551156,
+      0.024276749601364084,
+      0.03447246492476784,
+      0.07360942474911485
+    ],
+    "reference_atr_group_medians_pct": {
+      "HIGH_VOL": 6.11455808208,
+      "LOW_VOL": 3.45116652873,
+      "MID_VOL": 4.93645767724
+    },
+    "proxy_low_mid_boundary_pct": 4.1938121029849995,
+    "proxy_mid_high_boundary_pct": 5.52550787966,
+    "unjudged_tickers": 0,
+    "limitation": "Only 91 tickers have exact frozen IS avg_std20 groups. Remaining 440 use ticker-median candidate history ATR proxy."
+  },
+  "risk": {
+    "high_vol_candidates": 3084,
+    "risk_candidates": 3036,
+    "safe_high_vol_candidates": 48,
+    "risk_pct_all_origins": 17.784546892390605,
+    "risk_pct_high_vol": 98.44357976653697,
+    "risk_stage_counts": {
+      "stage3": 3012,
+      "stage2": 24
+    },
+    "nonvolume_min_count_distribution_high_vol": {
+      "2.0": 1468,
+      "1.0": 1401,
+      "3.0": 163,
+      "nan": 48,
+      "4.0": 4
+    }
+  },
+  "parity": {
+    "BOIL": {
+      "total": 444,
+      "final_high_vol": 404,
+      "final_mid_low_out_of_scope": 40,
+      "captured_total": 404,
+      "captured_within_high_vol": 404,
+      "capture_rate_within_high_vol_pct": 100.0,
+      "final_group_distribution": {
+        "HIGH_VOL": 404,
+        "MID_VOL": 31,
+        "LOW_VOL": 9
+      }
+    },
+    "CE": {
+      "total": 7,
+      "final_high_vol": 4,
+      "final_mid_low_out_of_scope": 3,
+      "captured_total": 4,
+      "captured_within_high_vol": 4,
+      "capture_rate_within_high_vol_pct": 100.0,
+      "final_group_distribution": {
+        "HIGH_VOL": 4,
+        "LOW_VOL": 2,
+        "MID_VOL": 1
+      }
+    }
+  },
+  "assumptions": {
+    "market_multiplier": "1 + clamp(market_adjustment_strength,0,1) when enabled; else 1.0",
+    "noncore_additives": "news/topic/event/crash bonus fixed at zero",
+    "risk_condition": "final HIGH_VOL and any MA/MACD/RSI/BB subset reaches threshold without volume",
+    "N_independent": true
+  },
+  "no_source_mutation": true,
+  "no_live_candidate_change": true,
+  "no_training": true,
+  "no_order": true,
+  "no_delete": true
+}

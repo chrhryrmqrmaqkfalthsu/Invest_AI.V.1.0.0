@@ -1,0 +1,11 @@
+source,path,coverage,score,raw_score,threshold,ratio,market_adjustment,components,news_event_context,outcome,quality,interpretation
+live candidate current state,data/_system/live_slots_state.json,current candidate pool only,yes,yes,yes,yes,no,no,"market/sector/VIX yes; news/event no",no,point snapshot,"PARTIAL; overwritten current state"
+live slot events,data/_system/live_slots_events.jsonl,event-dependent,"some snapshots/events",some,some,some,no,no,no,no,mixed,"not a systematic entry snapshot stream"
+execution plan state,engine/live/s2_auto_trader.py last_plan/current state,latest plan only,yes,no,yes,yes,no,no,no,no,partial,"evaluation_summary projection only"
+order intents,s2_auto_trader order intent path / live intent events,submitted intents,no,no,no,no,no,no,no,no,order metadata,"entry signal discarded before persistence"
+pending broker orders,data/_system/pending_orders.json,orders known to pending manager,no,no,"rulebook signal_threshold only; not realized entry threshold snapshot",no,no,no,"market/sector/VIX context only",fill status,order state,"rulebook config is not realized signal snapshot"
+shadow open state,data/_system/elite_shadow_state.json,open/recent shadow positions,yes,no,yes,yes,no,no,"entry reasons only",unrealized/closed state,position history,"ratio and outcome joinable; Top2 impossible"
+shadow closed trades,data/_system/elite_shadow_trades.jsonl,closed shadow trades,yes,no,yes,yes,no,no,no,yes,good for ratio,"component decomposition absent"
+Stage3 canonical exits,*/stage3/exit_trades.jsonl,975118 rows,no,no,no,no,no,no,no,yes,complete outcome,"entry snapshot fully absent"
+Stage2 canonical trades,*/stage2*/trades.jsonl,2439619 rows,yes,yes,yes,derivable,yes,yes,yes,yes,full,"historical CE backtestable"
+real dashboard point snapshot,data/_system/real_dashboard_buy_candidates.json,current point only,yes,yes,yes,yes,implicit via score/raw,yes,"news/event components included",no,full point,"not historical entry-time durable log"

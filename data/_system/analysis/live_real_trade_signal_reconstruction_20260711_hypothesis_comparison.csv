@@ -1,0 +1,5 @@
+scope,trade_count,realized_outcome_count,loss_count,win_count,avg_positive_component_count,bb_absent_count,macd_rsi_without_bb_count,ratio_tight_le_1_15_count,observed_pattern,conclusion
+confirmed_closed_alpaca_live_trades,0,0,0,0,,,,,,"실현 손익 표본이 없어 손실 대 수익 비교 불가"
+confirmed_open_alpaca_live_positions,1,0,0,0,4,0,0,0,"CE: MACD+RSI+BB+Event, ratio=3.15096, snapshot unrealized pnl=-1.31044%","소수 지표·BB 부재·턱걸이 패턴은 보이지 않지만 미실현 1건이므로 가설 지지/반박 불가"
+confirmed_realized_losses,0,0,0,0,,,,,,"과거 재실행의 BB 부재 가설을 라이브 손실 진입에서 대조할 수 없음"
+confirmed_realized_wins,0,0,0,0,,,,,,"수익 진입 대조군도 없음"

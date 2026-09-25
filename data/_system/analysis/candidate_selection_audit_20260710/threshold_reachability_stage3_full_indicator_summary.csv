@@ -1,0 +1,7 @@
+component,condition_form,active_candidate_count,unreachable_candidate_count,unreachable_rate_pct
+ma,BOOLEAN_EVENT,15393,0,0.0
+macd,BOOLEAN_CROSS_EVENT,15578,0,0.0
+rsi,BAND_INCLUSIVE,16243,0,0.0
+bb,ONE_SIDED_LE,16094,0,0.0
+volume,ONE_SIDED_GE,15226,1094,7.185078155786155
+ANY_ACTIVE_CORE,ANY,17071,1094,6.4085290844121605

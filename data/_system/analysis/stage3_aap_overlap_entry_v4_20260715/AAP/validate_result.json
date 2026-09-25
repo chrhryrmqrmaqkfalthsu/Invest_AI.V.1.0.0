@@ -1,0 +1,235 @@
+{
+  "ticker": "AAP",
+  "stage": "validate",
+  "mode": "final_candidate_parallel_then_parent_merge",
+  "max_workers": 6,
+  "candidate_count": 36,
+  "eligible_count": 4,
+  "ineligible_count": 32,
+  "worker_results": [
+    {
+      "candidate_index": 1,
+      "rulebook_hash": "e4ea82deb1c8b90f65471f12112191e9211f2cb35f7b88f7bda2ee6469354d0f",
+      "elapsed_seconds": 1.7398276329040527,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_001\\worker.log"
+    },
+    {
+      "candidate_index": 2,
+      "rulebook_hash": "1be9fcdf14148609c45dd62460a4c038bced5f5c46fc585c5ccfae5ab1dccc4b",
+      "elapsed_seconds": 1.739447832107544,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_002\\worker.log"
+    },
+    {
+      "candidate_index": 3,
+      "rulebook_hash": "e00aee9677aa859c00107d6b4f60a2da6d08b53bc47b6b9a97573fec968483ba",
+      "elapsed_seconds": 1.7438254356384277,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_003\\worker.log"
+    },
+    {
+      "candidate_index": 4,
+      "rulebook_hash": "bf08d8d13e26c1028bfe103a488e9587f7535fed3aff3f3009ce23b5c2c5e85b",
+      "elapsed_seconds": 1.7418324947357178,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_004\\worker.log"
+    },
+    {
+      "candidate_index": 5,
+      "rulebook_hash": "fcf6517fea504a298e2653a0466c7fb51de631c56371518cbef2a973059fd0fe",
+      "elapsed_seconds": 1.7118303775787354,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_005\\worker.log"
+    },
+    {
+      "candidate_index": 6,
+      "rulebook_hash": "881acb5b4df517175a315850956cbab433751699746871052544a8a33d233530",
+      "elapsed_seconds": 1.700850486755371,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_006\\worker.log"
+    },
+    {
+      "candidate_index": 7,
+      "rulebook_hash": "5a925a81a6d88e3ff619260faf58785c14ced1a6053515ae097531c0598e99a1",
+      "elapsed_seconds": 1.7210698127746582,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_007\\worker.log"
+    },
+    {
+      "candidate_index": 8,
+      "rulebook_hash": "df91cdf7332582a2f93d8acbc170a5c0889c9e03cfa5f4d54b74187caeabf584",
+      "elapsed_seconds": 1.7105584144592285,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_008\\worker.log"
+    },
+    {
+      "candidate_index": 9,
+      "rulebook_hash": "a3dc46a2a2323d0d20e34179075654d769660ad621f4f8da401ccc2eae84ff0e",
+      "elapsed_seconds": 1.743558406829834,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_009\\worker.log"
+    },
+    {
+      "candidate_index": 10,
+      "rulebook_hash": "4798972ef2f761d29e9f7fa0169bc69d9fc4839e0657b6c9b407bf73164601c3",
+      "elapsed_seconds": 1.7616689205169678,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_010\\worker.log"
+    },
+    {
+      "candidate_index": 11,
+      "rulebook_hash": "f318a8b4e9bfffcab294ff94a9bf17c782181c72ef57f97497fe2e8fb8c9efeb",
+      "elapsed_seconds": 1.765160322189331,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_011\\worker.log"
+    },
+    {
+      "candidate_index": 12,
+      "rulebook_hash": "c21fe94ce711bbd27418786849cfa2d9828459ba0fa32558da011176fb88baeb",
+      "elapsed_seconds": 1.775670051574707,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_012\\worker.log"
+    },
+    {
+      "candidate_index": 13,
+      "rulebook_hash": "50f0ad732dad61ae61917faa735bed0883421f728a6197fed10ec78454bb932d",
+      "elapsed_seconds": 1.7109403610229492,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_013\\worker.log"
+    },
+    {
+      "candidate_index": 14,
+      "rulebook_hash": "d71471b0f4462166709decbea4b2c45721d22385da57cb6a49a77df853a47440",
+      "elapsed_seconds": 1.7514288425445557,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_014\\worker.log"
+    },
+    {
+      "candidate_index": 15,
+      "rulebook_hash": "d3005888580b6c8b5e905d590709e3c32809aab751a6a201d3d4eb2c685d1b2d",
+      "elapsed_seconds": 1.8033459186553955,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_015\\worker.log"
+    },
+    {
+      "candidate_index": 16,
+      "rulebook_hash": "f8b9ac54124a4539b19f67773dbc5b7db240774966124fc0e2bb541b4fc2144e",
+      "elapsed_seconds": 1.6858270168304443,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_016\\worker.log"
+    },
+    {
+      "candidate_index": 17,
+      "rulebook_hash": "0f04760aaebe2673932354cad74dbd3854cab68b31b3dde5eba9f15b4f84a035",
+      "elapsed_seconds": 1.694828748703003,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_017\\worker.log"
+    },
+    {
+      "candidate_index": 18,
+      "rulebook_hash": "a0bfdd25c1fb4ad3ed6e490b179e45d51583fd9d13e6a0ed889f2c5672906a46",
+      "elapsed_seconds": 1.6978304386138916,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_018\\worker.log"
+    },
+    {
+      "candidate_index": 19,
+      "rulebook_hash": "ac49a9ff1f928e2dc7a09f6ff11aeae805a8b7ceb62bab007c6274529b5cefa1",
+      "elapsed_seconds": 1.6868524551391602,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_019\\worker.log"
+    },
+    {
+      "candidate_index": 20,
+      "rulebook_hash": "b5547459a7a59d67dec948097888bc895b6590e1b137974a065dc7f818c5d67a",
+      "elapsed_seconds": 1.7378456592559814,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_020\\worker.log"
+    },
+    {
+      "candidate_index": 21,
+      "rulebook_hash": "0771971649226326bcebd683bd1b55bd57501d93244b59a8ac279ad4b65ea7d0",
+      "elapsed_seconds": 1.7213680744171143,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_021\\worker.log"
+    },
+    {
+      "candidate_index": 22,
+      "rulebook_hash": "beeeba32ced76e292cacb8d37119a88823eaa8cc4ae014015ec2db54a48bd87e",
+      "elapsed_seconds": 1.692866563796997,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_022\\worker.log"
+    },
+    {
+      "candidate_index": 23,
+      "rulebook_hash": "9d32b994516810459a44515d219858aab99e936034e7454ea731753f5a9a0953",
+      "elapsed_seconds": 1.709886074066162,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_023\\worker.log"
+    },
+    {
+      "candidate_index": 24,
+      "rulebook_hash": "5d7626ffb2b1ec912fb3adc61805177290becca240682879557ed4412b4898ce",
+      "elapsed_seconds": 1.7048864364624023,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_024\\worker.log"
+    },
+    {
+      "candidate_index": 25,
+      "rulebook_hash": "c35ee4e2dd36514df93e41348c6630c2cfbbcf29c937655d38568dfcb19d7dcf",
+      "elapsed_seconds": 1.8415501117706299,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_025\\worker.log"
+    },
+    {
+      "candidate_index": 26,
+      "rulebook_hash": "8821bfcd83d264698c5d66af65c8810ab424bae317bcaa55c3d20228616b3c87",
+      "elapsed_seconds": 1.8265478610992432,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_026\\worker.log"
+    },
+    {
+      "candidate_index": 27,
+      "rulebook_hash": "d776bf8709042bd2bb257ad8b1aac35c0e9faf3a16d83f328a9011e9b47b819c",
+      "elapsed_seconds": 1.8115711212158203,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_027\\worker.log"
+    },
+    {
+      "candidate_index": 28,
+      "rulebook_hash": "c8d54232bf4a434a0a70ff74cab5c3ccf90be48d214b31d8a206efa9675948fb",
+      "elapsed_seconds": 1.7530412673950195,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_028\\worker.log"
+    },
+    {
+      "candidate_index": 29,
+      "rulebook_hash": "a534e8567714e61bde4bf97ad0128e40d0dfe2fc1e0b3b69382b3e8493522e10",
+      "elapsed_seconds": 1.729024887084961,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_029\\worker.log"
+    },
+    {
+      "candidate_index": 30,
+      "rulebook_hash": "4f4fbf73ce88719cfbfda2ab9f2a0a7bbe436927540f3fb2f323cd7cea2c1e60",
+      "elapsed_seconds": 1.7865641117095947,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_030\\worker.log"
+    },
+    {
+      "candidate_index": 31,
+      "rulebook_hash": "9745d5e0f428210875920471f5bc5b9a3c220b51a3e3876fdbaa99a1ccd0839c",
+      "elapsed_seconds": 1.8335845470428467,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_031\\worker.log"
+    },
+    {
+      "candidate_index": 32,
+      "rulebook_hash": "aa4047fffecc9978b4d334f3691e7205d42fcf00b64093537337de8aafd05a17",
+      "elapsed_seconds": 1.7985844612121582,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_032\\worker.log"
+    },
+    {
+      "candidate_index": 33,
+      "rulebook_hash": "63ba818e1aeb27793c2ca35aa9e317334d28c2193c2e19b52ce51725a270c2ce",
+      "elapsed_seconds": 1.7845830917358398,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_033\\worker.log"
+    },
+    {
+      "candidate_index": 34,
+      "rulebook_hash": "81887f1366de272e2a06a12e0ceb0327e887891cac3cb08909a17b2c442839d2",
+      "elapsed_seconds": 1.6640594005584717,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_034\\worker.log"
+    },
+    {
+      "candidate_index": 35,
+      "rulebook_hash": "7eb2eae297123668f6819debca67096cc0cccc67e519dad7018dc4baf1fda7e2",
+      "elapsed_seconds": 1.6495161056518555,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_035\\worker.log"
+    },
+    {
+      "candidate_index": 36,
+      "rulebook_hash": "29e52378bc271dc42e7f2592581497ae27635bee8c6b5052bde3339048f37c29",
+      "elapsed_seconds": 1.6783907413482666,
+      "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_036\\worker.log"
+    }
+  ],
+  "outputs": {
+    "exit_trades.jsonl": "exit_trades.jsonl",
+    "rl_replay_trades.jsonl": "rl_replay_trades.jsonl",
+    "validation_results.jsonl": "validation_results.jsonl",
+    "stage3_profile_catalog.jsonl": "stage3_profile_catalog.jsonl",
+    "stage3_ineligible.jsonl": "stage3_ineligible.jsonl"
+  },
+  "elapsed_seconds": 14.221206188201904
+}

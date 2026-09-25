@@ -36,7 +36,8 @@ def assert_close(actual: float, expected: float, message: str, tolerance: float 
 def make_rulebook(strategy: str = "hybrid") -> Rulebook:
     return Rulebook(
         ticker="TEST", asset_type="us_stock", direction="long", exit_strategy=strategy,
-        stop_loss_atr=2.0, take_profit_atr=3.0, trailing_atr=1.5, max_holding_days=20,
+        stop_loss_atr=2.0, take_profit_atr=3.0, trailing_atr=1.5,
+        trailing_activation_profit_pct=4.0, max_holding_days=20,
         stop_loss_atr_bear=1.0, take_profit_atr_bull=5.0, trailing_atr_volatile=3.0,
         sector_name="tech",
     )
@@ -87,7 +88,8 @@ def snapshot_position(target: float = 106.0, strategy: str = "hybrid") -> Positi
     return PositionEntry(
         ticker="TEST", entry_date=datetime.now().isoformat(), entry_price=100.0, shares=2.0,
         atr_at_entry=2.0, stop_price=96.0, target_price=target, trailing_distance=3.0,
-        trailing_stop=97.0, highest_price=100.0, exit_strategy=strategy, max_holding_days=20,
+        trailing_stop=97.0, highest_price=100.0, lowest_price=100.0,
+        exit_strategy=strategy, max_holding_days=20,
         rulebook_direction="long", rulebook_snapshot=rb.to_dict(), member_hash="a" * 64,
         entry_market_score=50.0, entry_vix_level=18.0, entry_sector_score=50.0,
     )
@@ -103,6 +105,7 @@ def test_register_entry_uses_entry_context_and_snapshot() -> None:
     assert_close(pos.target_price, 110.0, "bull target uses entry-time dynamic parameter")
     assert_close(pos.trailing_distance, 6.0, "volatile trailing uses entry-time dynamic parameter")
     assert_close(pos.trailing_stop, 94.0, "entry trailing stop")
+    assert_close(pos.lowest_price, 100.0, "entry lowest price starts at entry")
     assert_true(bool(pos.rulebook_snapshot), "snapshot must be stored")
     assert_true(len(pos.member_hash) == 64, "member hash must be stored")
     assert_close(pos.entry_market_score, 75.0, "entry market score")
@@ -122,6 +125,7 @@ def test_old_position_json_is_backward_compatible() -> None:
     assert_true(pos.rulebook_snapshot == {}, "old position defaults to no snapshot")
     assert_true(pos.member_hash == "", "old position hash default")
     assert_true(pos.add_buy_count == 0, "old position add count default")
+    assert_close(pos.lowest_price, 100.0, "old position lowest defaults to entry")
 
 
 def test_policy_on_uses_snapshot_and_actual_fill() -> None:
@@ -130,6 +134,7 @@ def test_policy_on_uses_snapshot_and_actual_fill() -> None:
     result = run_check(manager, pos, FakeBroker(price=95.0, fill_price=94.5))
     assert_true(result is not None and result["exit_reason"] == "stop_loss", "policy stop must place sell")
     assert_close(result["exit_price"], 94.5, "trade must use actual filled price")
+    assert_true("lowest_price" in result and "mae_pct" in result, "trade must include MAE fields")
     assert_true("TEST" not in manager._positions, "FILLED policy exit must unregister")
 
 
@@ -168,6 +173,7 @@ def test_policy_state_update_is_single_authority() -> None:
     result = run_check(manager, pos, broker)
     assert_true(result is None, "no exit expected")
     assert_close(pos.highest_price, 105.0, "policy updates highest")
+    assert_close(pos.lowest_price, 100.0, "policy preserves lowest when no new low")
     assert_close(pos.trailing_stop, 102.0, "policy ratchets trailing once")
     assert_true(len(broker.sell_calls) == 0, "no order expected")
 
@@ -178,6 +184,38 @@ def test_policy_off_keeps_legacy_authority() -> None:
     manager._evaluate_policy = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("policy must stay OFF"))
     result = run_check(manager, pos, FakeBroker(price=110.0), policy="0")
     assert_true(result is not None and result["exit_reason"] == "take_profit", "OFF must preserve legacy")
+
+
+def test_live_policy_passes_rulebook_trailing_activation_pct() -> None:
+    pos = snapshot_position(strategy="trailing")
+    rb, source = resolve_position_rulebook(pos)
+    assert_true(rb is not None, "snapshot rulebook must resolve")
+    evaluation = evaluate_live_policy(
+        ticker="TEST", pos=pos, price=98.0, rulebook=rb, raw_market_context=None,
+        holding_trading_days=3, timestamp="2026-06-04T00:00:00Z", rulebook_source=source,
+    )
+    diagnostics = evaluation.decision.diagnostics
+    assert_close(diagnostics.get("trailing_activation_profit_pct"), 4.0, "live must pass rulebook trailing activation")
+    assert_true(diagnostics.get("trailing_active") is False, "trailing must remain inactive below activation threshold")
+    assert_true(evaluation.decision.should_exit is False, "no exit when above stop and trailing inactive")
+
+
+def test_live_hard_stop_guard_backstops_trailing_strategy() -> None:
+    pos = snapshot_position(strategy="trailing")
+    pos.trailing_stop = 90.0
+    pos.highest_price = 100.0
+    rb, source = resolve_position_rulebook(pos)
+    assert_true(rb is not None, "snapshot rulebook must resolve")
+    evaluation = evaluate_live_policy(
+        ticker="TEST", pos=pos, price=95.0, rulebook=rb, raw_market_context=None,
+        holding_trading_days=3, timestamp="2026-06-04T00:00:00Z", rulebook_source=source,
+    )
+    diagnostics = evaluation.decision.diagnostics
+    assert_true(evaluation.decision.should_exit is True, "live guard must exit below stored stop")
+    assert_true(evaluation.decision.reason == "stop_loss", "live guard must report stop_loss")
+    assert_true(diagnostics.get("live_hard_stop_override") is True, "live guard override marker")
+    assert_true(diagnostics.get("live_hard_stop_hit") is True, "live guard hit marker")
+    assert_true(diagnostics.get("trailing_active") is False, "guard must work even before trailing activation")
 
 
 def test_shadow_record_uses_same_cutover_decision() -> None:
@@ -203,7 +241,7 @@ def test_learned_rulebook_caches_exact_signal_context() -> None:
     ctx = SimpleNamespace(score=73.0, vix_level=27.0, sector_strength={"tech": 64.0}, timestamp="ctx-ts", active_events={})
     result = SimpleNamespace(should_buy=True, score=3.0, raw_score=3.0, threshold=2.0, market_adjustment=1.0, reasons=[])
     with patch("engine.strategies.learned_rulebook.get_market_context", return_value=ctx), \
-         patch("engine.strategies.learned_rulebook.get_news_score", return_value={"normalized_score": 0.0}), \
+         patch.object(learned, "_lookup_lagged_news_context", return_value=(0.0, {}, "test")), \
          patch("engine.strategies.learned_rulebook.evaluate_signal", return_value=result):
         learned.evaluate("TEST", 100.0, df=df)
     cached = learned.get_last_market_context("TEST")
@@ -259,6 +297,8 @@ def run_all() -> None:
         test_policy_exception_falls_back_to_legacy,
         test_policy_state_update_is_single_authority,
         test_policy_off_keeps_legacy_authority,
+        test_live_policy_passes_rulebook_trailing_activation_pct,
+        test_live_hard_stop_guard_backstops_trailing_strategy,
         test_shadow_record_uses_same_cutover_decision,
         test_learned_rulebook_caches_exact_signal_context,
         test_runner_passes_cached_context_to_register_entry,

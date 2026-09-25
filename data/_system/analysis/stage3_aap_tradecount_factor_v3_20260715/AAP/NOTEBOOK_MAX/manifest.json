@@ -1,0 +1,1052 @@
+{
+  "description": "Stage 3 aggressive pipeline output; validate creates a profile catalog for eligible candidates instead of hard-killing by holding/MDD labels.",
+  "entry_selection_config": {
+    "entry_min_expectancy_pct": 2.0,
+    "entry_overlap_threshold": 0.7,
+    "max_entry_candidates": 20
+  },
+  "last_requested_stage": "all",
+  "periods": {
+    "bull_period": {
+      "end": "2025-06-30",
+      "label": "train_3",
+      "start": "2024-07-01"
+    },
+    "exit_check_period": {
+      "end": "2022-06-30",
+      "label": "stress_pre_2022h1",
+      "role": "exit_check",
+      "start": null
+    },
+    "pure_oos_validation_periods": [
+      {
+        "end": "2023-06-30",
+        "label": "train_1",
+        "start": "2022-07-01"
+      },
+      {
+        "end": "2024-06-30",
+        "label": "train_2",
+        "start": "2023-07-01"
+      },
+      {
+        "end": null,
+        "label": "recent_1y",
+        "start": "2025-07-01"
+      }
+    ],
+    "stress_period": {
+      "end": "2022-06-30",
+      "label": "stress_pre_2022h1",
+      "start": null
+    },
+    "train_splits": [
+      {
+        "end": "2023-06-30",
+        "label": "train_1",
+        "start": "2022-07-01"
+      },
+      {
+        "end": "2024-06-30",
+        "label": "train_2",
+        "start": "2023-07-01"
+      },
+      {
+        "end": "2025-06-30",
+        "label": "train_3",
+        "start": "2024-07-01"
+      }
+    ]
+  },
+  "research_market_snapshot": {
+    "auto_fetch_enabled": false,
+    "auto_regenerate_enabled": false,
+    "fail_closed": true,
+    "primary": {
+      "first_date": "2019-07-11",
+      "last_date": "2026-07-10",
+      "path": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\market_history.csv",
+      "required_columns": [
+        "date",
+        "score",
+        "vix",
+        "sector_tech",
+        "sector_finance",
+        "sector_energy",
+        "sector_healthcare",
+        "sector_consumer",
+        "sector_industrials"
+      ],
+      "row_count": 1759,
+      "sha256": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38"
+    },
+    "primary_freshness": {
+      "as_of_new_york_date": "2026-07-11",
+      "available_data_cutoff_date": "2026-07-10",
+      "basis": "user_approved_available_snapshot_last_session",
+      "calendar_path": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\calendars\\us_xnys_2020_2027.json",
+      "calendar_source": "cache",
+      "expected_latest_session": "2026-07-10",
+      "fresh": true,
+      "missing_session_count": 0,
+      "missing_sessions": [],
+      "snapshot_last_date": "2026-07-10",
+      "user_approved_available_data_only": true,
+      "wall_clock_new_york_date": "2026-07-15"
+    },
+    "source_mode": "repository_root_sha_pinned_single_source",
+    "v2": {
+      "first_date": "2020-06-01",
+      "freshness_applicable": false,
+      "freshness_policy": "sha_pinned_event_snapshot_no_stage3_auto_refresh",
+      "last_date": "2026-06-05",
+      "path": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\market_history_v2.csv",
+      "required_columns": [
+        "date",
+        "event_adjustment",
+        "active_events_count",
+        "av_sentiment_avg"
+      ],
+      "row_count": 2196,
+      "sha256": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+    }
+  },
+  "runner": "scripts/research/run_stage3_aap_newfitness_official.py",
+  "seed_base": 2026071401,
+  "stage3_final_oos_periods": [
+    "train_1",
+    "train_2",
+    "recent_1y"
+  ],
+  "stage3_profile_config": {
+    "eligibility_min_expectancy_pct": 1.0,
+    "high_exp_floor_pct": 4.0,
+    "holding_mid_max_days": 14.0,
+    "holding_ultra_short_max_days": 7.0,
+    "low_mdd_floor_pct": -10.0,
+    "mid_exp_floor_pct": 2.0,
+    "mid_mdd_floor_pct": -20.0
+  },
+  "stage3_qualify_config": {
+    "min_member_score": 10.0,
+    "min_trades": 5,
+    "qualify_min_expectancy_pct": 2.0,
+    "qualify_years": 3
+  },
+  "ticker": "AAP",
+  "updated_at": "2026-07-15T04:54:12",
+  "execution_scale": "OFFICIAL_FULL_STAGE3_NEW_FITNESS",
+  "official_config": {
+    "qualify_population": 100,
+    "qualify_generations": 40,
+    "entry_population": 100,
+    "entry_generations": 50,
+    "exit_population": 60,
+    "exit_generations": 25,
+    "top_n_qualify": 100,
+    "top_n_entry_pool": 100,
+    "max_entry_candidates": 20,
+    "top_n_exit_per_entry": 3,
+    "entry_min_expectancy_pct": 2.0,
+    "entry_overlap_threshold": 0.7
+  },
+  "parallel": {
+    "workers": 28,
+    "qualify_entry_axis": "population_fitness_evaluation",
+    "cross_fold_axis": "candidate_fold_backtest",
+    "exit_axis": "entry_candidate",
+    "validate_axis": "final_candidate",
+    "rng_location": "parent_process_only",
+    "merge_order": "input_index_order"
+  },
+  "parallel_reproducibility_probe": {
+    "passed": true,
+    "sequential_best_hash": "4c9db562068ce3e6ce66683ed933d9b49b76299e45bfb1089906c3bee6213677",
+    "parallel_best_hash": "4c9db562068ce3e6ce66683ed933d9b49b76299e45bfb1089906c3bee6213677",
+    "fitness_history_equal": true,
+    "final_population_equal": true,
+    "parallel_axis": "population_fitness_evaluation",
+    "workers": 12,
+    "merge_order": "input_index_order",
+    "random_generation_location": "parent_process_only",
+    "process_start_method": "spawn"
+  },
+  "new_fitness_activation_probe": {
+    "passed": true,
+    "checks": {
+      "gene_scope_marker": true,
+      "primary_formula": true,
+      "mae_threshold": true,
+      "realized_loss_threshold": true,
+      "realized_loss_penalty_present": true,
+      "profit_concentration_penalty_absent": true,
+      "win_threshold": true,
+      "minimum_trade_count": true,
+      "win_rate_gate": true,
+      "entry_gate_rule": true,
+      "trade_count_factor_active": true,
+      "factor_anchors": true,
+      "mutation_hint_only": true,
+      "stage2_legacy_defaults": true
+    },
+    "factor_checks": {
+      "7": true,
+      "8": true,
+      "10": true,
+      "12": true,
+      "15": true,
+      "20": true,
+      "81": true
+    },
+    "gene_scope_defaults": {
+      "random_rulebook": "legacy",
+      "mutate": "legacy",
+      "crossover": "legacy",
+      "run_ga": "legacy"
+    },
+    "sample_trade_count": 7,
+    "sample_final_fitness": -1000000000.0
+  },
+  "market_snapshot_manifest_gate": {
+    "passed": true,
+    "checks": {
+      "root_single_source": true,
+      "auto_fetch_blocked": true,
+      "auto_regenerate_blocked": true,
+      "fail_closed": true,
+      "fresh": true,
+      "primary_root_path": true,
+      "v2_root_path": true,
+      "primary_sha_fixed": true,
+      "v2_sha_fixed": true,
+      "primary_required_columns": true,
+      "v2_required_columns": true
+    },
+    "metadata": {
+      "primary": {
+        "path": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\market_history.csv",
+        "sha256": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+        "row_count": 1759,
+        "first_date": "2019-07-11",
+        "last_date": "2026-07-10",
+        "required_columns": [
+          "date",
+          "score",
+          "vix",
+          "sector_tech",
+          "sector_finance",
+          "sector_energy",
+          "sector_healthcare",
+          "sector_consumer",
+          "sector_industrials"
+        ]
+      },
+      "v2": {
+        "path": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\market_history_v2.csv",
+        "sha256": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611",
+        "row_count": 2196,
+        "first_date": "2020-06-01",
+        "last_date": "2026-06-05",
+        "required_columns": [
+          "date",
+          "event_adjustment",
+          "active_events_count",
+          "av_sentiment_avg"
+        ],
+        "freshness_applicable": false,
+        "freshness_policy": "sha_pinned_event_snapshot_no_stage3_auto_refresh"
+      },
+      "primary_freshness": {
+        "basis": "user_approved_available_snapshot_last_session",
+        "as_of_new_york_date": "2026-07-11",
+        "calendar_source": "cache",
+        "calendar_path": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\calendars\\us_xnys_2020_2027.json",
+        "expected_latest_session": "2026-07-10",
+        "snapshot_last_date": "2026-07-10",
+        "missing_session_count": 0,
+        "missing_sessions": [],
+        "fresh": true,
+        "user_approved_available_data_only": true,
+        "available_data_cutoff_date": "2026-07-10",
+        "wall_clock_new_york_date": "2026-07-15"
+      },
+      "auto_fetch_enabled": false,
+      "auto_regenerate_enabled": false,
+      "fail_closed": true,
+      "source_mode": "repository_root_sha_pinned_single_source"
+    }
+  },
+  "market_snapshot_preflight": {
+    "primary": {
+      "path": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\market_history.csv",
+      "sha256": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+      "row_count": 1759,
+      "first_date": "2019-07-11",
+      "last_date": "2026-07-10",
+      "required_columns": [
+        "date",
+        "score",
+        "vix",
+        "sector_tech",
+        "sector_finance",
+        "sector_energy",
+        "sector_healthcare",
+        "sector_consumer",
+        "sector_industrials"
+      ]
+    },
+    "v2": {
+      "path": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\market_history_v2.csv",
+      "sha256": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611",
+      "row_count": 2196,
+      "first_date": "2020-06-01",
+      "last_date": "2026-06-05",
+      "required_columns": [
+        "date",
+        "event_adjustment",
+        "active_events_count",
+        "av_sentiment_avg"
+      ],
+      "freshness_applicable": false,
+      "freshness_policy": "sha_pinned_event_snapshot_no_stage3_auto_refresh"
+    },
+    "primary_freshness": {
+      "basis": "user_approved_available_snapshot_last_session",
+      "as_of_new_york_date": "2026-07-11",
+      "calendar_source": "cache",
+      "calendar_path": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\calendars\\us_xnys_2020_2027.json",
+      "expected_latest_session": "2026-07-10",
+      "snapshot_last_date": "2026-07-10",
+      "missing_session_count": 0,
+      "missing_sessions": [],
+      "fresh": true,
+      "user_approved_available_data_only": true,
+      "available_data_cutoff_date": "2026-07-10",
+      "wall_clock_new_york_date": "2026-07-15"
+    },
+    "auto_fetch_enabled": false,
+    "auto_regenerate_enabled": false,
+    "fail_closed": true,
+    "source_mode": "repository_root_sha_pinned_single_source"
+  },
+  "ohlcv_snapshot": {
+    "path": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\analysis\\ohlc_snapshot_20260707\\AAP_ohlcv.csv",
+    "sha256": "6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717",
+    "rows": 1526,
+    "first_date": "2020-06-08",
+    "last_date": "2026-07-06",
+    "external_fetch": false,
+    "sell_omen_score_table": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\ml_sell_omen\\sell_omen_scores.csv",
+    "sell_omen_info": {
+      "available": false,
+      "matched_rows": 0,
+      "coverage": 0.0,
+      "reason": "score_table_missing_or_empty"
+    }
+  },
+  "entry_phase_exit_priority_gate": {
+    "passed": true,
+    "priority": [
+      "entry_provisional_atr_stop",
+      "entry_interval_break",
+      "entry_provisional_max_holding"
+    ],
+    "max_holding_days": 7
+  },
+  "protected_sha_start": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+  },
+  "daemon_start": {
+    "cmdline": "/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60",
+    "pid": 494330,
+    "snapshot_source": "VM_proxy_for_notebook_independent_run",
+    "starttime_ticks": "36014393",
+    "state": "R"
+  },
+  "external_fetch_enabled": false,
+  "auto_regenerate_enabled": false,
+  "qualify_individual_policy": "preserve_all_final_populations_and_full_cross_fold_matrix",
+  "stage2_executed": false,
+  "run_completed": true,
+  "stop_reason": "qualify_failed",
+  "protected_sha_end": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+  },
+  "protected_unchanged": true,
+  "daemon_end": {
+    "cmdline": "/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60",
+    "pid": 494330,
+    "snapshot_source": "VM_proxy_for_notebook_independent_run",
+    "starttime_ticks": "36014393",
+    "state": "R"
+  },
+  "daemon_unchanged": true,
+  "final_counts": {
+    "all3": 0,
+    "entry_survivor": 0,
+    "validate_survivor": 0
+  },
+  "ce_boil_audit": {
+    "candidate_count": 0,
+    "one_sided_count": 0,
+    "missing_domain_count": 0,
+    "validator_error_count": 0,
+    "validator_errors": {},
+    "quality_score_override_count": 0,
+    "ce_boil_zero": true
+  },
+  "independent_host_role": "notebook",
+  "host_name": "DESKTOP-TO74AR2",
+  "requested_local_workers": 28,
+  "market_available_cutoff_date": "2026-07-10",
+  "inter_machine_candidate_communication": false,
+  "notebook_exit_validate_workers": 1,
+  "source_git_commit": "e06b0add5149cf654223c105c16fe9994d7ae301",
+  "launch_command": {
+    "python_executable": "C:\\dask310\\Scripts\\python.exe",
+    "cwd": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\scripts\\research\\stage23_rework_20260713",
+    "argv": [
+      "C:\\dask310\\Scripts\\python.exe",
+      "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_tradecount_factor_v3_host.py",
+      "--baseline-dir",
+      "C:\\kingmaker_aap_v2_20260714\\data\\_system\\analysis\\stage3_aap_newfitness_v2_20260714\\AAP\\NOTEBOOK_MAX",
+      "--out-dir",
+      "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+      "--seed-base",
+      "2026071401",
+      "--workers",
+      "28",
+      "--host-role",
+      "notebook",
+      "--market-cutoff-date",
+      "2026-07-10",
+      "--protected-snapshot-json",
+      "{\".env\": \"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\", \"data/_system/market_history.csv\": \"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\", \"data/_system/market_history_v2.csv\": \"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}",
+      "--daemon-snapshot-json",
+      "{\"cmdline\": \"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\", \"pid\": 494330, \"snapshot_source\": \"VM_proxy_for_notebook_independent_run\", \"starttime_ticks\": \"36014393\", \"state\": \"R\"}",
+      "--source-git-commit",
+      "e06b0add5149cf654223c105c16fe9994d7ae301"
+    ],
+    "environment": {
+      "PYTHONPATH": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\scripts\\research\\stage23_rework_20260713;C:\\kingmaker\\vendor;C:\\kingmaker_aap_v2_swing_restore_20260715_r2\\vendor",
+      "PATH_prefix": [
+        "C:\\kingmaker\\vendor",
+        "C:\\kingmaker_aap_v2_swing_restore_20260715_r2\\vendor",
+        "C:\\WINDOWS\\system32",
+        "C:\\WINDOWS"
+      ]
+    },
+    "powershell_command": "& 'C:\\dask310\\Scripts\\python.exe' 'C:\\kingmaker_aap_tradecount_factor_v3_20260715\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_tradecount_factor_v3_host.py' '--baseline-dir' 'C:\\kingmaker_aap_v2_20260714\\data\\_system\\analysis\\stage3_aap_newfitness_v2_20260714\\AAP\\NOTEBOOK_MAX' '--out-dir' 'C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX' '--seed-base' '2026071401' '--workers' '28' '--host-role' 'notebook' '--market-cutoff-date' '2026-07-10' '--protected-snapshot-json' '{\".env\": \"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\", \"data/_system/market_history.csv\": \"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\", \"data/_system/market_history_v2.csv\": \"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}' '--daemon-snapshot-json' '{\"cmdline\": \"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\", \"pid\": 494330, \"snapshot_source\": \"VM_proxy_for_notebook_independent_run\", \"starttime_ticks\": \"36014393\", \"state\": \"R\"}' '--source-git-commit' 'e06b0add5149cf654223c105c16fe9994d7ae301'",
+    "host_local_parent": true,
+    "local_process_workers": 28,
+    "inter_machine_candidate_communication": false
+  },
+  "trade_count_factor_comparison": {
+    "baseline_dir": "C:\\kingmaker_aap_v2_20260714\\data\\_system\\analysis\\stage3_aap_newfitness_v2_20260714\\AAP\\NOTEBOOK_MAX",
+    "current_dir": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+    "seed_base": 2026071401,
+    "pass_count_distribution": {
+      "previous_v2": {
+        "all3": 0,
+        "all2": 0,
+        "all1": 191,
+        "all0": 109
+      },
+      "factor_restore": {
+        "all3": 0,
+        "all2": 2,
+        "all1": 192,
+        "all0": 106
+      }
+    },
+    "fold_pass_counts": {
+      "previous_v2": {
+        "train_1": 52,
+        "train_2": 78,
+        "train_3": 61
+      },
+      "factor_restore": {
+        "train_1": 48,
+        "train_2": 67,
+        "train_3": 81
+      }
+    },
+    "fold_best": {
+      "previous_v2": {
+        "train_1": {
+          "fitness": 0.9809299162049917,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 1.1214100249286763,
+          "mae_penalty": 0.14048010872368452,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666
+        },
+        "train_2": {
+          "fitness": 1.461869792790604,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 1.6315474513636632,
+          "mae_penalty": 0.11402226554522894,
+          "realized_loss_penalty": 0.05565539302783035,
+          "win_rate_pct": 91.66666666666666
+        },
+        "train_3": {
+          "fitness": 2.808396587502216,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 3.0312123078532145,
+          "mae_penalty": 0.12933719746950867,
+          "realized_loss_penalty": 0.09347852288149006,
+          "win_rate_pct": 91.66666666666666
+        }
+      },
+      "factor_restore": {
+        "train_1": {
+          "fitness": 0.6445069087263888,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 1.1214100249286763,
+          "mae_penalty": 0.14048010872368452,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666
+        },
+        "train_2": {
+          "fitness": 1.0460364481256468,
+          "trade_count": 11,
+          "trade_count_factor": 0.6124999999999999,
+          "primary_objective_pct_per_day": 1.8426002549290919,
+          "mae_penalty": 0.061449395135074525,
+          "realized_loss_penalty": 0.02110681288334735,
+          "win_rate_pct": 81.81818181818183
+        },
+        "train_3": {
+          "fitness": 2.091575610734492,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 3.1040362758923905,
+          "mae_penalty": 0.08124978239018137,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666
+        }
+      }
+    },
+    "final_generation": {
+      "previous_v2": {
+        "train_1": {
+          "event": "stage3_aap_newfitness_v2_ga_generation",
+          "stage": "qualify",
+          "fold": "train_1",
+          "call_index": 1,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "2b0b832ba63e45481c6e8ea0a70bc00638aa5f4ebd23397d57def6cf72bd0e67",
+          "best_fitness": 0.9809299162049917,
+          "mean_fitness": -259999999.40800014,
+          "best_primary_objective_pct_per_day": 1.1214100249286763,
+          "best_mae_penalty": 0.14048010872368452,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.14048010872368452,
+          "best_fitness_before_entry_gate": 0.9809299162049917,
+          "best_final_fitness": 0.9809299162049917,
+          "best_trade_count": 12,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 91.66666666666666,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T11:27:47.970544+00:00"
+        },
+        "train_2": {
+          "event": "stage3_aap_newfitness_v2_ga_generation",
+          "stage": "qualify",
+          "fold": "train_2",
+          "call_index": 2,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "e0a4e36ddeafcf2e6dd45a3595fe135472baed0de667d3c7a5b640450c93d0d6",
+          "best_fitness": 1.461869792790604,
+          "mean_fitness": -189999999.2481887,
+          "best_primary_objective_pct_per_day": 1.6315474513636632,
+          "best_mae_penalty": 0.11402226554522894,
+          "best_realized_loss_penalty": 0.05565539302783035,
+          "best_total_risk_penalty": 0.16967765857305928,
+          "best_fitness_before_entry_gate": 1.461869792790604,
+          "best_final_fitness": 1.461869792790604,
+          "best_trade_count": 12,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 91.66666666666666,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T11:31:44.288139+00:00"
+        },
+        "train_3": {
+          "event": "stage3_aap_newfitness_v2_ga_generation",
+          "stage": "qualify",
+          "fold": "train_3",
+          "call_index": 3,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "72145009418bac4964cce75f14aae5b9f50dae43f5b586fdf2b27c340d5c07a8",
+          "best_fitness": 2.808396587502216,
+          "mean_fitness": -319999998.6935311,
+          "best_primary_objective_pct_per_day": 3.0312123078532145,
+          "best_mae_penalty": 0.12933719746950867,
+          "best_realized_loss_penalty": 0.09347852288149006,
+          "best_total_risk_penalty": 0.22281572035099872,
+          "best_fitness_before_entry_gate": 2.808396587502216,
+          "best_final_fitness": 2.808396587502216,
+          "best_trade_count": 12,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 91.66666666666666,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T11:34:42.201597+00:00"
+        }
+      },
+      "factor_restore": {
+        "train_1": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_1",
+          "call_index": 1,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "a323a7da1507335d3e600d333ce53c281f0ecb5085b8d02d332cbc1a9086c7a4",
+          "best_fitness": 0.6445069087263888,
+          "mean_fitness": -219999999.69874397,
+          "best_primary_objective_pct_per_day": 1.1214100249286763,
+          "best_trade_count_factor": 0.7,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 0.7849870174500734,
+          "best_mae_penalty": 0.14048010872368452,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.14048010872368452,
+          "best_fitness_before_entry_gate": 0.6445069087263888,
+          "best_final_fitness": 0.6445069087263888,
+          "best_trade_count": 12,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 91.66666666666666,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T19:59:25.171559+00:00"
+        },
+        "train_2": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_2",
+          "call_index": 2,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "3458571c823af0daba0c97ab8a3fb6bc7278b6463628b6e28e574b678149d5f8",
+          "best_fitness": 1.0460364481256468,
+          "mean_fitness": -339999999.5572147,
+          "best_primary_objective_pct_per_day": 1.8426002549290919,
+          "best_trade_count_factor": 0.6124999999999999,
+          "best_trade_count_factor_bin": "8_11",
+          "best_primary_after_trade_count_factor": 1.1285926561440687,
+          "best_mae_penalty": 0.061449395135074525,
+          "best_realized_loss_penalty": 0.02110681288334735,
+          "best_total_risk_penalty": 0.08255620801842187,
+          "best_fitness_before_entry_gate": 1.0460364481256468,
+          "best_final_fitness": 1.0460364481256468,
+          "best_trade_count": 11,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 81.81818181818183,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T20:03:47.668245+00:00"
+        },
+        "train_3": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_3",
+          "call_index": 3,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "a099fd3046c9be09aaa6130887f08d1f2ec43240273cf5d48ddf125af63ab017",
+          "best_fitness": 2.091575610734492,
+          "mean_fitness": -169999999.07338226,
+          "best_primary_objective_pct_per_day": 3.1040362758923905,
+          "best_trade_count_factor": 0.7,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 2.1728253931246733,
+          "best_mae_penalty": 0.08124978239018137,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.08124978239018137,
+          "best_fitness_before_entry_gate": 2.091575610734492,
+          "best_final_fitness": 2.091575610734492,
+          "best_trade_count": 12,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 91.66666666666666,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T20:07:08.807458+00:00"
+        }
+      }
+    },
+    "strict_and_joint_pass": {
+      "train_1": {
+        "strict_and_entry_eligible_day_count": 251,
+        "strict_and_joint_pass_day_count": 25,
+        "strict_and_joint_pass_dates": [
+          "2022-07-01",
+          "2022-07-12",
+          "2022-07-19",
+          "2022-07-20",
+          "2022-07-25",
+          "2022-07-28",
+          "2022-08-03",
+          "2022-08-04",
+          "2022-10-12",
+          "2022-10-17",
+          "2022-10-18",
+          "2022-10-24",
+          "2022-10-26",
+          "2022-10-31",
+          "2023-01-06",
+          "2023-01-09",
+          "2023-01-10",
+          "2023-01-20",
+          "2023-01-23",
+          "2023-01-24",
+          "2023-02-07",
+          "2023-04-18",
+          "2023-04-20",
+          "2023-04-24",
+          "2023-04-26"
+        ]
+      },
+      "train_2": {
+        "strict_and_entry_eligible_day_count": 250,
+        "strict_and_joint_pass_day_count": 29,
+        "strict_and_joint_pass_dates": [
+          "2023-08-25",
+          "2023-11-27",
+          "2023-12-05",
+          "2023-12-06",
+          "2023-12-08",
+          "2023-12-11",
+          "2023-12-12",
+          "2024-01-04",
+          "2024-01-08",
+          "2024-01-09",
+          "2024-01-10",
+          "2024-01-18",
+          "2024-01-19",
+          "2024-01-22",
+          "2024-01-23",
+          "2024-01-25",
+          "2024-02-14",
+          "2024-02-15",
+          "2024-02-20",
+          "2024-02-21",
+          "2024-02-26",
+          "2024-04-29",
+          "2024-05-02",
+          "2024-05-06",
+          "2024-05-08",
+          "2024-05-13",
+          "2024-05-16",
+          "2024-05-21",
+          "2024-05-22"
+        ]
+      },
+      "train_3": {
+        "strict_and_entry_eligible_day_count": 250,
+        "strict_and_joint_pass_day_count": 32,
+        "strict_and_joint_pass_dates": [
+          "2024-07-01",
+          "2024-07-02",
+          "2024-07-05",
+          "2024-07-08",
+          "2024-07-19",
+          "2024-07-22",
+          "2024-07-25",
+          "2024-07-26",
+          "2024-07-29",
+          "2024-07-30",
+          "2024-08-02",
+          "2024-08-05",
+          "2024-08-09",
+          "2024-08-12",
+          "2024-08-21",
+          "2024-08-27",
+          "2024-10-30",
+          "2024-11-11",
+          "2025-03-26",
+          "2025-03-27",
+          "2025-03-28",
+          "2025-03-31",
+          "2025-04-02",
+          "2025-04-30",
+          "2025-05-01",
+          "2025-05-06",
+          "2025-05-07",
+          "2025-05-09",
+          "2025-05-12",
+          "2025-05-13",
+          "2025-05-20",
+          "2025-05-21"
+        ]
+      }
+    },
+    "gate_bottleneck": {
+      "train_1": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 30,
+        "trade_count_below_minimum_rate": 0.1,
+        "trade_count_met_but_win_rate_below_60_count": 118,
+        "trade_count_met_but_win_rate_below_60_rate": 0.3933333333333333,
+        "both_entry_gates_pass_count": 152,
+        "both_entry_gates_pass_rate": 0.5066666666666667,
+        "realized_loss_penalized_count": 204,
+        "realized_loss_penalized_rate": 0.68,
+        "mean_realized_loss_penalty_among_penalized": 1.4596965622024152,
+        "mean_realized_loss_penalty_all": 0.9925936622976423,
+        "mae_penalized_count": 258,
+        "mae_penalized_rate": 0.86,
+        "mean_mae_penalty_among_penalized": 0.6302592436807563,
+        "mean_mae_penalty_all": 0.5420229495654504,
+        "trade_count_distribution": {
+          "min": 1,
+          "median": 11.0,
+          "max": 19,
+          "histogram": {
+            "1": 1,
+            "2": 2,
+            "3": 1,
+            "4": 2,
+            "5": 5,
+            "6": 7,
+            "7": 12,
+            "8": 49,
+            "9": 36,
+            "10": 15,
+            "11": 64,
+            "12": 56,
+            "13": 17,
+            "14": 16,
+            "15": 8,
+            "16": 5,
+            "17": 2,
+            "18": 1,
+            "19": 1
+          },
+          "factor_bins": {
+            "lt_8": 30,
+            "8_11": 164,
+            "12_19": 106
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 8,
+          "median": 12.0,
+          "max": 13,
+          "histogram": {
+            "8": 1,
+            "9": 1,
+            "11": 5,
+            "12": 40,
+            "13": 1
+          },
+          "factor_bins": {
+            "12_19": 41,
+            "8_11": 7
+          }
+        },
+        "mean_primary_objective_pct_per_day": -0.052254649297481914,
+        "mean_fitness_before_entry_gate": -1.5575138640823136,
+        "qualify_pass_count": 48,
+        "fail_metric_counts": {
+          "entry_trade_count_below_8": 30,
+          "expectancy_pct": 251,
+          "entry_win_rate_below_60": 118,
+          "member_score": 25
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates."
+      },
+      "train_2": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 206,
+        "trade_count_below_minimum_rate": 0.6866666666666666,
+        "trade_count_met_but_win_rate_below_60_count": 24,
+        "trade_count_met_but_win_rate_below_60_rate": 0.08,
+        "both_entry_gates_pass_count": 70,
+        "both_entry_gates_pass_rate": 0.23333333333333334,
+        "realized_loss_penalized_count": 229,
+        "realized_loss_penalized_rate": 0.7633333333333333,
+        "mean_realized_loss_penalty_among_penalized": 0.5035887155788685,
+        "mean_realized_loss_penalty_all": 0.38440605289186963,
+        "mae_penalized_count": 289,
+        "mae_penalized_rate": 0.9633333333333334,
+        "mean_mae_penalty_among_penalized": 0.5685710778795197,
+        "mean_mae_penalty_all": 0.5477234716906039,
+        "trade_count_distribution": {
+          "min": 0,
+          "median": 6.0,
+          "max": 13,
+          "histogram": {
+            "0": 1,
+            "1": 1,
+            "2": 6,
+            "3": 12,
+            "4": 57,
+            "5": 65,
+            "6": 49,
+            "7": 15,
+            "8": 8,
+            "9": 8,
+            "10": 18,
+            "11": 50,
+            "12": 9,
+            "13": 1
+          },
+          "factor_bins": {
+            "lt_8": 206,
+            "12_19": 10,
+            "8_11": 84
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 8,
+          "median": 11,
+          "max": 13,
+          "histogram": {
+            "8": 5,
+            "10": 12,
+            "11": 46,
+            "12": 3,
+            "13": 1
+          },
+          "factor_bins": {
+            "12_19": 4,
+            "8_11": 63
+          }
+        },
+        "mean_primary_objective_pct_per_day": 0.9784231107837041,
+        "mean_fitness_before_entry_gate": -0.721090652239044,
+        "qualify_pass_count": 67,
+        "fail_metric_counts": {
+          "entry_trade_count_below_8": 206,
+          "expectancy_pct": 119,
+          "entry_win_rate_below_60": 24,
+          "member_score": 22
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates."
+      },
+      "train_3": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 170,
+        "trade_count_below_minimum_rate": 0.5666666666666667,
+        "trade_count_met_but_win_rate_below_60_count": 37,
+        "trade_count_met_but_win_rate_below_60_rate": 0.12333333333333334,
+        "both_entry_gates_pass_count": 93,
+        "both_entry_gates_pass_rate": 0.31,
+        "realized_loss_penalized_count": 290,
+        "realized_loss_penalized_rate": 0.9666666666666667,
+        "mean_realized_loss_penalty_among_penalized": 1.6550622345090886,
+        "mean_realized_loss_penalty_all": 1.5998934933587856,
+        "mae_penalized_count": 300,
+        "mae_penalized_rate": 1.0,
+        "mean_mae_penalty_among_penalized": 1.5020854932529926,
+        "mean_mae_penalty_all": 1.5020854932529926,
+        "trade_count_distribution": {
+          "min": 2,
+          "median": 7.0,
+          "max": 18,
+          "histogram": {
+            "2": 1,
+            "3": 2,
+            "4": 15,
+            "5": 61,
+            "6": 64,
+            "7": 27,
+            "8": 13,
+            "9": 12,
+            "10": 12,
+            "11": 6,
+            "12": 17,
+            "13": 32,
+            "14": 7,
+            "15": 13,
+            "16": 11,
+            "17": 5,
+            "18": 2
+          },
+          "factor_bins": {
+            "8_11": 43,
+            "lt_8": 170,
+            "12_19": 87
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 8,
+          "median": 13,
+          "max": 18,
+          "histogram": {
+            "8": 3,
+            "10": 5,
+            "11": 4,
+            "12": 10,
+            "13": 27,
+            "14": 4,
+            "15": 12,
+            "16": 9,
+            "17": 5,
+            "18": 2
+          },
+          "factor_bins": {
+            "8_11": 12,
+            "12_19": 69
+          }
+        },
+        "mean_primary_objective_pct_per_day": 0.11843549686687906,
+        "mean_fitness_before_entry_gate": -2.5908305485679977,
+        "qualify_pass_count": 81,
+        "fail_metric_counts": {
+          "entry_trade_count_below_8": 170,
+          "expectancy_pct": 209,
+          "entry_win_rate_below_60": 37,
+          "member_score": 13
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates."
+      }
+    },
+    "elapsed_seconds": {
+      "previous_v2": 762.9326047897339,
+      "factor_restore": 877.9297504425049
+    },
+    "verdict_code": "FACTOR_RESTORE_INSUFFICIENT",
+    "verdict_reason": "strict-AND joint pass day 여유가 있는데도 fold-best가 12건에 남아 factor 압력만으로는 부족하다."
+  },
+  "verdict_code": "FACTOR_RESTORE_INSUFFICIENT",
+  "verdict_reason": "strict-AND joint pass day 여유가 있는데도 fold-best가 12건에 남아 factor 압력만으로는 부족하다."
+}

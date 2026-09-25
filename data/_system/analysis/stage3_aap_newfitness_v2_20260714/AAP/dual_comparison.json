@@ -1,0 +1,258 @@
+{
+  "status": "COMPLETED",
+  "comparison_classification": "PHENOTYPE_EXACT_HASH_ULP_DIFFERENCE",
+  "date": "2026-07-14",
+  "ticker": "AAP",
+  "seed_base": 2026071401,
+  "market_available_cutoff_date": "2026-07-10",
+  "source_git_commit": "6338b91",
+  "runs": {
+    "VM_6PROC": {
+      "host": "Linux VM",
+      "parent_rng": true,
+      "local_fitness_processes": 6,
+      "process_start_method": "fork",
+      "elapsed_seconds": 1244.038718700409,
+      "qualified": false,
+      "stop_reason": "qualify_failed",
+      "readout_sha256": "b17afa29462c6fdbeb3fbefcce62107204da643e1523762a9581e4870951b3aa",
+      "sha_manifest_sha256": "f9c0875087c785a2f6bcc0d989c42e77062f6e3a83e9916cfbd3446737bc718d"
+    },
+    "NOTEBOOK_MAX": {
+      "host": "Windows notebook",
+      "parent_rng": true,
+      "local_fitness_processes": 28,
+      "process_start_method": "spawn",
+      "elapsed_seconds": 762.9326047897339,
+      "qualified": false,
+      "stop_reason": "qualify_failed",
+      "readout_sha256": "9ff1051d67c2daaee4d2347d4441044fb3d1f62ae1d57e36c6679561062d5950",
+      "sha_manifest_sha256_after_lf_normalization": "efc3d3d1cd3395e4047e3dca1ca12e0bda563277c92913b1d18606c5cfc6955a"
+    }
+  },
+  "performance": {
+    "notebook_speedup_vs_vm": 1.6306010660578192,
+    "notebook_wall_time_reduction_pct": 38.67292124261734,
+    "wall_time_difference_seconds": 481.10611391067505
+  },
+  "new_fitness": {
+    "primary": "mean(net realized pnl_pct / max(holding_days, 1))",
+    "mae_penalty": "mean(max(0, -2.0 - mae_pct))",
+    "realized_loss_penalty": "mean(max(0, -1.0 - net_realized_pnl_pct))",
+    "win_definition": "net realized pnl_pct > 0.5",
+    "hard_gate": "trade_count >= 12 AND win_rate_pct >= 60.0",
+    "stage2_legacy_default_unchanged": true,
+    "activation_probe_passed_both_hosts": true
+  },
+  "qualify": {
+    "all3": 0,
+    "all2": 0,
+    "all1": 191,
+    "all0": 109,
+    "all1_by_fold": {
+      "train_1_only": 52,
+      "train_2_only": 78,
+      "train_3_only": 61
+    },
+    "entry_survivor": 0,
+    "exit_candidate": 0,
+    "validate_survivor": 0,
+    "ce_boil_candidate_count": 0,
+    "ce_boil_zero": true
+  },
+  "fold_gate_bottleneck": {
+    "train_1": {
+      "candidate_count": 300,
+      "trade_count_below_12_count": 214,
+      "trade_count_below_12_rate": 0.7133333333333334,
+      "trade_count_met_but_win_rate_below_60_count": 17,
+      "trade_count_met_but_win_rate_below_60_rate": 0.056666666666666664,
+      "both_entry_gates_pass_count": 69,
+      "both_entry_gates_pass_rate": 0.23,
+      "realized_loss_penalized_count": 206,
+      "realized_loss_penalized_rate": 0.6866666666666666,
+      "mean_realized_loss_penalty_among_penalized": 8.89935900844697,
+      "mae_penalized_count": 290,
+      "mae_penalized_rate": 0.9666666666666667,
+      "mean_mae_penalty_among_penalized": 7.337503708092577,
+      "trade_count_min": 1,
+      "trade_count_median": 8,
+      "trade_count_max": 16,
+      "trade_count_12_13_count": 66,
+      "trade_count_12_13_rate": 0.22,
+      "qualify_pass_count": 52
+    },
+    "train_2": {
+      "candidate_count": 300,
+      "trade_count_below_12_count": 212,
+      "trade_count_below_12_rate": 0.7066666666666667,
+      "trade_count_met_but_win_rate_below_60_count": 5,
+      "trade_count_met_but_win_rate_below_60_rate": 0.016666666666666666,
+      "both_entry_gates_pass_count": 83,
+      "both_entry_gates_pass_rate": 0.27666666666666667,
+      "realized_loss_penalized_count": 214,
+      "realized_loss_penalized_rate": 0.7133333333333334,
+      "mean_realized_loss_penalty_among_penalized": 0.648502765148094,
+      "mae_penalized_count": 292,
+      "mae_penalized_rate": 0.9733333333333334,
+      "mean_mae_penalty_among_penalized": 0.5584497762387746,
+      "trade_count_min": 1,
+      "trade_count_median": 5,
+      "trade_count_max": 16,
+      "trade_count_12_13_count": 72,
+      "trade_count_12_13_rate": 0.24,
+      "qualify_pass_count": 78
+    },
+    "train_3": {
+      "candidate_count": 300,
+      "trade_count_below_12_count": 223,
+      "trade_count_below_12_rate": 0.7433333333333333,
+      "trade_count_met_but_win_rate_below_60_count": 10,
+      "trade_count_met_but_win_rate_below_60_rate": 0.03333333333333333,
+      "both_entry_gates_pass_count": 67,
+      "both_entry_gates_pass_rate": 0.22333333333333333,
+      "realized_loss_penalized_count": 298,
+      "realized_loss_penalized_rate": 0.9933333333333333,
+      "mean_realized_loss_penalty_among_penalized": 1.5814844534672265,
+      "mae_penalized_count": 300,
+      "mae_penalized_rate": 1.0,
+      "mean_mae_penalty_among_penalized": 1.7447344808609766,
+      "trade_count_min": 2,
+      "trade_count_median": 6,
+      "trade_count_max": 16,
+      "trade_count_12_13_count": 73,
+      "trade_count_12_13_rate": 0.24333333333333335,
+      "qualify_pass_count": 61
+    }
+  },
+  "fold_best": {
+    "train_1": {
+      "trades": 12,
+      "wins_over_0_5_pct": 11,
+      "win_rate_pct": 91.66666666666666,
+      "primary_objective_pct_per_day": 1.1214100249286763,
+      "mae_penalty": 0.14048010872368452,
+      "realized_loss_penalty": 0.0,
+      "final_fitness": 0.9809299162049917
+    },
+    "train_2": {
+      "trades": 12,
+      "wins_over_0_5_pct": 11,
+      "win_rate_pct": 91.66666666666666,
+      "primary_objective_pct_per_day": 1.6315474513636632,
+      "mae_penalty": 0.11402226554522894,
+      "realized_loss_penalty": 0.05565539302783035,
+      "final_fitness": 1.461869792790604
+    },
+    "train_3": {
+      "trades": 12,
+      "wins_over_0_5_pct": 11,
+      "win_rate_pct": 91.66666666666666,
+      "primary_objective_pct_per_day": 3.0312123078532145,
+      "mae_penalty": 0.12933719746950867,
+      "realized_loss_penalty": 0.09347852288149006,
+      "final_fitness": 2.808396587502216
+    },
+    "win_log_mismatch_count": 0,
+    "trade_outcome_fields_exact_between_hosts": true
+  },
+  "mutation_bias": {
+    "train_1": {
+      "hint_earlier": 325,
+      "hint_later": 3775,
+      "mean_interval_width_change": {
+        "ma_trend": -0.21747263588322419,
+        "macd_hist": -0.4617263524927675,
+        "rsi": 4.571929577511085,
+        "bb_position": -0.10659050440801443,
+        "volume_ratio": 0.1283369456161606
+      }
+    },
+    "train_2": {
+      "hint_earlier": 209,
+      "hint_later": 3891,
+      "mean_interval_width_change": {
+        "ma_trend": 10.665848030368489,
+        "macd_hist": 0.4343007979648563,
+        "rsi": -1.7055400052042806,
+        "bb_position": -0.21543473409071984,
+        "volume_ratio": 0.14045239517804287
+      }
+    },
+    "train_3": {
+      "hint_earlier": 57,
+      "hint_later": 4043,
+      "mean_interval_width_change": {
+        "ma_trend": -3.0949575304607126,
+        "macd_hist": -0.48482443442583545,
+        "rsi": 3.020871721076471,
+        "bb_position": -0.0689414449000566,
+        "volume_ratio": -0.0911427951404048
+      }
+    }
+  },
+  "host_equivalence": {
+    "generation_numeric_semantics_equal": true,
+    "cross_fold_phenotype_multiset_equal": true,
+    "pass_vector_multiset_equal": true,
+    "gate_summary_semantically_equal": true,
+    "mutation_summary_semantically_equal": true,
+    "fold_best_trade_outcomes_exact": true,
+    "byte_for_byte_exact": false,
+    "rulebook_float_difference_count": 574,
+    "max_absolute_rulebook_float_difference": 1.4210854715202004e-14,
+    "difference_cause": "Linux Python 3.10.12/fork versus Windows Python 3.10.11/spawn floating-point last-bit differences in full rulebook fields; no observed change in signals, trades, fitness, gates or aggregate conclusions.",
+    "best_hashes": {
+      "VM_6PROC": {
+        "train_1": "2b0b832ba63e45481c6e8ea0a70bc00638aa5f4ebd23397d57def6cf72bd0e67",
+        "train_2": "ddcca16bc6183d74cc5c2f57ae24501aedcf4637743c41ac75fba7815975d54d",
+        "train_3": "39a3ce724892f3e257bd941fe4263b268508f01439d4a045eb7512e10257ba15"
+      },
+      "NOTEBOOK_MAX": {
+        "train_1": "2b0b832ba63e45481c6e8ea0a70bc00638aa5f4ebd23397d57def6cf72bd0e67",
+        "train_2": "e0a4e36ddeafcf2e6dd45a3595fe135472baed0de667d3c7a5b640450c93d0d6",
+        "train_3": "72145009418bac4964cce75f14aae5b9f50dae43f5b586fdf2b27c340d5c07a8"
+      }
+    }
+  },
+  "old_a_comparison": {
+    "old": {
+      "all3": 0,
+      "all2": 44,
+      "all1": 164,
+      "all0": 92,
+      "fold_pass_counts": {
+        "train_1": 52,
+        "train_2": 65,
+        "train_3": 135
+      }
+    },
+    "new": {
+      "all3": 0,
+      "all2": 0,
+      "all1": 191,
+      "all0": 109,
+      "fold_pass_counts": {
+        "train_1": 52,
+        "train_2": 78,
+        "train_3": 61
+      }
+    },
+    "interpretation": "The new pressure removed all cross-fold all2 survivors. Train_1 pass count stayed unchanged, train_2 rose by 13, and train_3 fell by 74."
+  },
+  "protected_sha256_start_end": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+  },
+  "daemon": {
+    "pid": 494330,
+    "starttime_ticks": "36014393",
+    "unchanged": true
+  },
+  "execution_notes": [
+    "The first VM supervisor attempt exited before any evaluation because cloudpickle was absent from the venv-only PYTHONPATH. The same empty output directory and seed were restarted with the existing user site-packages path; official elapsed time is the successful run only.",
+    "The notebook received a one-time fixed source/data bundle, pure-Python runtime dependencies, and a fail-closed yfinance stub. It received no .env and performed no network fetch.",
+    "Notebook SHA256SUMS line endings were normalized from CRLF to LF after collection; listed file hashes were unchanged and revalidated on Linux."
+  ]
+}

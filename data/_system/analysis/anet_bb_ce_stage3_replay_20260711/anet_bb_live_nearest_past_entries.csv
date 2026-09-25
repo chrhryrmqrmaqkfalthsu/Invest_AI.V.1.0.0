@@ -1,0 +1,12 @@
+ticker,similarity_group,entry_date,exit_date,active_combo,confidence_tier,period_label,pnl_pct,score,ratio,difference_from_live
+ANET,contains_live_plus_extra,2025-10-27,2025-10-31,MA+MACD+RSI+NewsTopics,B_trade_exact,recent_1y,1.27598705,5.32617587,2.01818631,"live set plus NewsTopics; no exact MA+MACD+RSI past case"
+ANET,overlap_2_of_3,2022-11-14,2022-11-16,MA+RSI,D_low_partial_or_rerun_only,train_1,1.27598705,5.02509707,1.90410200,"same score and ratio but MACD absent; likely other reconstruction context difference"
+ANET,overlap_2_of_3,2023-01-18,2023-02-10,MACD+RSI,C_signal_exact_exit_diff,train_1,12.65005323,3.71024754,1.40588125,"MA absent"
+ANET,overlap_2_of_3,2024-05-03,2024-05-21,MACD+RSI,C_signal_exact_exit_diff,train_2,14.59537814,3.71024754,1.40588125,"MA absent"
+ANET,overlap_2_of_3,2023-05-22,2023-05-31,MACD+RSI,C_signal_exact_exit_diff,train_1,16.94174596,3.66488208,1.38869144,"MA absent"
+BB,exact,2021-06-16,2021-07-13,MA+RSI,D_low_partial_or_rerun_only,stress_pre_2022h1,-18.47447219,2.96811104,1.06309561,"same active set; lower score and ratio"
+BB,exact,2021-11-02,2021-11-26,MA+RSI,B_trade_exact,stress_pre_2022h1,-13.04018783,3.29090347,1.17871097,"exact active set and exact score ratio"
+BB,exact,2022-07-22,2022-08-17,MA+RSI,C_signal_exact_exit_diff,train_1,8.42822983,3.29090347,1.17871097,"exact active set and exact score ratio"
+BB,exact,2023-05-30,2023-06-21,MA+RSI,D_low_partial_or_rerun_only,train_1,-9.84898300,3.29090347,1.17871097,"exact active set and exact score ratio"
+BB,exact,2026-04-27,2026-05-21,MA+RSI,C_signal_exact_exit_diff,recent_1y,32.88115176,3.19542055,1.14451161,"same active set; slightly lower score and ratio"
+BB,exact,2026-06-11,2026-06-26,MA+RSI,B_trade_exact,recent_1y,30.07944430,3.29090347,1.17871097,"exact active set and exact score ratio"

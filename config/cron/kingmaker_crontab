@@ -1,0 +1,13 @@
+0 10 * * * cd /home/g3000kkw/kingmaker && PYTHONPATH=. /home/g3000kkw/kingmaker/venv/bin/python3 scripts/build_sentiment_history.py >> /tmp/sentiment_cron.log 2>&1
+# KINGMAKER_DASHBOARD_GUARD_BEGIN
+* * * * * /usr/bin/flock -n /tmp/kingmaker_dashboard_guard.lock /home/g3000kkw/kingmaker/scripts/dashboard_guard.sh
+@reboot /usr/bin/flock -n /tmp/kingmaker_dashboard_guard.lock /home/g3000kkw/kingmaker/scripts/dashboard_guard.sh
+# KINGMAKER_DASHBOARD_GUARD_END
+# KINGMAKER_LIVE_CANDIDATE_SLOTS_GUARD_BEGIN
+* * * * * /usr/bin/flock -n /tmp/kingmaker_live_candidate_slots_guard.lock /home/g3000kkw/kingmaker/scripts/live_candidate_slots_guard.sh
+@reboot /usr/bin/flock -n /tmp/kingmaker_live_candidate_slots_guard.lock /home/g3000kkw/kingmaker/scripts/live_candidate_slots_guard.sh
+# KINGMAKER_LIVE_CANDIDATE_SLOTS_GUARD_END
+# KINGMAKER_LIGHTWEIGHT_TICKER_NEWS_BEGIN
+15 10 * * * cd /home/g3000kkw/kingmaker && /usr/bin/flock -n /tmp/kingmaker_lightweight_ticker_news.lock env PYTHONPATH=. /home/g3000kkw/kingmaker/venv/bin/python3 data/_system/ops/lightweight_ticker_news_updater.py --mode daily >> logs/lightweight_ticker_news_updater.log 2>&1
+* * * * * cd /home/g3000kkw/kingmaker && /usr/bin/flock -n /tmp/kingmaker_lightweight_ticker_news.lock env PYTHONPATH=. /home/g3000kkw/kingmaker/venv/bin/python3 data/_system/ops/lightweight_ticker_news_updater.py --mode on-demand >> logs/lightweight_ticker_news_updater.log 2>&1
+# KINGMAKER_LIGHTWEIGHT_TICKER_NEWS_END

@@ -1,0 +1,20 @@
+search_scope,artifact_or_command,time_coverage,result,active_events_payload,notes
+current_file,data/_system/market_state.json,2026-07-10T19:34:03Z,FOUND_WRONG_TIME,yes,CE 진입 후 state라 당시 증거로 사용 불가
+filesystem_backup,data/_system/market_state.json.bak_event_decay_20260612_171945,2026-06-12T16:58:44Z,FOUND_WRONG_TIME,yes,CE 진입 전 state라 당시 active set 아님
+isolated_dashboard_state,data/_system/real_dashboard_market_state.json,2026-07-07 mtime,FOUND_NOT_SOURCE,no,active_events 빈 dict이며 paper/live state와 분리된 격리용 파일
+market_history,data/_system/market_history_v2.csv 및 before/old/bak 계열,through_2026-06-05,FOUND_WRONG_TIME,flags_only,7월 7~8일 행 없음; 기사 payload 없음
+filesystem_name_scan,find all market_state variants,all repository,NOT_FOUND,,위 3개 외 7월 7~8일 market_state 파일 없음
+logs_scan,logs 및 data/_system/logs,available logs,NOT_FOUND,,active_events 또는 CE 4.62260455 payload 없음
+archived_logs,backup/pre_cleanup_20260710/data__system__logs.tar.gz,through_2026-07-10,NOT_FOUND,,market_state/active_events/4.62260455 기록 없음
+tar_backup_members,backup/*.tar.gz 및 pre_cleanup archives,2026-07-09_to_2026-07-10,PARTIAL,no,여러 archive에 live_slots_state.json은 있으나 market_state.json은 없음
+archived_live_slots,7개 2026-07-09 tar의 live_slots_state.json,2026-07-09,FOUND_AGGREGATE_ONLY,no,CE 이벤트반응 +4.62와 first score는 보존됐으나 event flags와 active_events 없음
+archived_events,pre_fallback_live_execution_readout live_slots_events.jsonl,2026-07-08_to_2026-07-09,FOUND_ORDER_ONLY,no,CE 주문 intent만 있고 Event payload 없음
+current_candidate_raw,live_slots_state.json 및 live_slots_events.jsonl,2026-07-07_onward,FOUND_AGGREGATE_ONLY,no,reason의 이벤트반응 합계만 보존
+central_candidate_raw,central_buy_candidates.json 및 dashboard exports,2026-07-08_onward,NOT_FOUND,,CE active_events payload 없음
+git_path_history,git log --all -- data/_system/market_state.json,all history,NOT_FOUND,,data/_system가 ignore되어 운영 state path history 없음
+git_reachable_objects,git rev-list --all --objects,all reachable objects,NOT_FOUND,,운영 market_state/live_slots state blob 없음
+git_unreachable_blobs,git fsck --full --no-reflogs --unreachable; 185 blobs,unreachable objects,NOT_FOUND,,active_events match는 2026-06-05까지 market_history/research 자료뿐
+git_unreachable_commits,git fsck unreachable; 12 commits,unreachable objects,NOT_FOUND,,tree에 market_state/live_slots/central candidate path 없음
+git_reflog_stash,git reflog --all 및 git stash list,2026-07-07_to_2026-07-08,NOT_FOUND,,운영 state는 커밋·stash 대상이 아니었음
+existing_analysis,CE/Event 기존 분석 산출물,2026-07-11,FOUND_AGGREGATE_ONLY,no,+4.62260455와 룰북 계수만 있고 원본 flags/payload 없음
+final,all searched sources,2026-07-07_to_2026-07-08,UNRECOVERABLE,no,실제 Event key·기사·fresh/decay 구성 복원 불가

@@ -1,0 +1,33 @@
+{
+  "source": "qualify_cross_fold_matrix.jsonl",
+  "note": "Corrected from candidate_hash/final_fitness_before_eec/final_fitness fields after v5 postprocess display bug produced None candidates.",
+  "folds": {
+    "train_1": {
+      "largest_rank_shifts": [
+        {"candidate_hash":"875a224eebc894ba0607ebbbd7d2b0d27971220221c142afb7a79e16ecc08cfa","eec":2.9793814432989687,"multiplier":0.5,"fitness_before_eec":1.0701844193221857,"fitness_after_eec":0.5350922096610928,"rank_before_eec":1,"rank_after_eec":70,"rank_delta_after_minus_before":69,"trade_count":17,"win_rate_pct":88.23529411764706,"pass":true},
+        {"candidate_hash":"1f2a2bc1d27e59d1112c823a4a905f7ce2164cdb651d476a4d167a086f3b3b91","eec":4.6,"multiplier":0.7666666666666666,"fitness_before_eec":1.0594720348983855,"fitness_after_eec":0.8122618934220954,"rank_before_eec":2,"rank_after_eec":43,"rank_delta_after_minus_before":41,"trade_count":23,"win_rate_pct":86.95652173913044,"pass":true},
+        {"candidate_hash":"411168761e8d7e3b07c38c3346b27152c0993dea674f8d3418128afb0ab25191","eec":2.4285714285714284,"multiplier":0.5,"fitness_before_eec":0.9182194654534377,"fitness_after_eec":0.45509586631796983,"rank_before_eec":52,"rank_after_eec":80,"rank_delta_after_minus_before":28,"trade_count":17,"win_rate_pct":88.23529411764706,"pass":true},
+        {"candidate_hash":"02ee6eb74cb943c71a24b1c482bab7614f079ff3d1a7976f6ba4d28f36a44dd7","eec":2.6666666666666665,"multiplier":0.5,"fitness_before_eec":0.799073338637243,"fitness_after_eec":0.34917121450661737,"rank_before_eec":61,"rank_after_eec":88,"rank_delta_after_minus_before":27,"trade_count":12,"win_rate_pct":100.0,"pass":true},
+        {"candidate_hash":"0e40d90797ef16fd339c920ab1a34ea044c2cdc209813bf73aaaa5fd04f65e6e","eec":2.5280898876404496,"multiplier":0.5,"fitness_before_eec":0.7420326847657623,"fitness_after_eec":0.33072397853327784,"rank_before_eec":70,"rank_after_eec":89,"rank_delta_after_minus_before":19,"trade_count":15,"win_rate_pct":86.66666666666667,"pass":true}
+      ]
+    },
+    "train_2": {
+      "largest_rank_shifts": [
+        {"candidate_hash":"3c5e2c37da756d53d8b52c4a16cf610e06478a9808e215597513ba4cdf57d94a","eec":4.800000000000001,"multiplier":0.8000000000000002,"fitness_before_eec":1.5447970126954202,"fitness_after_eec":1.21457875617372,"rank_before_eec":2,"rank_after_eec":53,"rank_delta_after_minus_before":51,"trade_count":12,"win_rate_pct":83.33333333333334,"pass":true},
+        {"candidate_hash":"bac992dc3e866e9b8d173ed4a5065e326af706c157e035fcc5b44b897ff59e5e","eec":4.8,"multiplier":0.7999999999999999,"fitness_before_eec":1.5214797988071969,"fitness_after_eec":1.1991431785871665,"rank_before_eec":5,"rank_after_eec":54,"rank_delta_after_minus_before":49,"trade_count":12,"win_rate_pct":83.33333333333334,"pass":true},
+        {"candidate_hash":"d3886847f58bd78e25fef2d33f8b1c3a301aaf5c170bddf071d70191f07fe933","eec":5.388059701492538,"multiplier":0.8980099502487563,"fitness_before_eec":1.5479424939656308,"fitness_after_eec":1.3506497862782971,"rank_before_eec":1,"rank_after_eec":48,"rank_delta_after_minus_before":47,"trade_count":19,"win_rate_pct":78.94736842105263,"pass":true},
+        {"candidate_hash":"595ca02f67cd6e5c80a2fb8ca26d83132be2329908e1e34434676d5c8cd73b74","eec":5.88235294117647,"multiplier":0.9803921568627451,"fitness_before_eec":1.5287039227387629,"fitness_after_eec":1.4908328575722376,"rank_before_eec":4,"rank_after_eec":45,"rank_delta_after_minus_before":41,"trade_count":20,"win_rate_pct":80.0,"pass":true},
+        {"candidate_hash":"d5711593aa94fd4d45a73b469245bb241825a958bef7d6882338e34545301a1e","eec":5.877551020408162,"multiplier":0.9795918367346936,"fitness_before_eec":1.5312393747318642,"fitness_after_eec":1.4931406051666893,"rank_before_eec":3,"rank_after_eec":44,"rank_delta_after_minus_before":41,"trade_count":24,"win_rate_pct":83.33333333333334,"pass":true}
+      ]
+    },
+    "train_3": {
+      "largest_rank_shifts": [
+        {"candidate_hash":"ef10ff675e3f8fc9a2d7b085b73725055f1f56fdfc7109052ef956a5697563ca","eec":5.4,"multiplier":0.9,"fitness_before_eec":0.6951673418360086,"fitness_after_eec":0.625211260725372,"rank_before_eec":66,"rank_after_eec":62,"rank_delta_after_minus_before":-4,"trade_count":9,"win_rate_pct":100.0,"pass":true},
+        {"candidate_hash":"a7e0272a4b90b3cb83f78e2acae35f69c799003b351dab8d59991323cf50d094","eec":3.374999999999999,"multiplier":0.5624999999999999,"fitness_before_eec":0.8239551797246885,"fitness_after_eec":0.3143553780750007,"rank_before_eec":62,"rank_after_eec":65,"rank_delta_after_minus_before":3,"trade_count":18,"win_rate_pct":72.22222222222221,"pass":true},
+        {"candidate_hash":"dc9d7433fcb2f1a089f2bd97a5a2d573fa4b57f17d224bc0d6e2ec92df4f91b9","eec":3.374999999999999,"multiplier":0.5624999999999999,"fitness_before_eec":0.8239551797246883,"fitness_after_eec":0.3143553780750006,"rank_before_eec":63,"rank_after_eec":66,"rank_delta_after_minus_before":3,"trade_count":18,"win_rate_pct":72.22222222222221,"pass":true},
+        {"candidate_hash":"8159c2fe8000f756a0be32412e4f030a5ab6b5f2f43579dccddf5caaecf41ac2","eec":4.270935960591133,"multiplier":0.7118226600985221,"fitness_before_eec":-1.2850379727989625,"fitness_after_eec":-1.4759075859740722,"rank_before_eec":83,"rank_after_eec":85,"rank_delta_after_minus_before":2,"trade_count":51,"win_rate_pct":64.70588235294117,"pass":true},
+        {"candidate_hash":"91a35b58a87b2248cf6bd07b8ed087158b350356d88d9bc2cec2ad7009ae4ace","eec":8.0,"multiplier":1.0,"fitness_before_eec":-1.5077314420546286,"fitness_after_eec":-1.5077314420546286,"rank_before_eec":88,"rank_after_eec":86,"rank_delta_after_minus_before":-2,"trade_count":12,"win_rate_pct":83.33333333333334,"pass":true}
+      ]
+    }
+  }
+}

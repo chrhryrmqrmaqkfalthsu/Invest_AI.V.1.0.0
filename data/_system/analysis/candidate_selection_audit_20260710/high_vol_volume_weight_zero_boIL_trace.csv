@@ -1,0 +1,7 @@
+step,artifact_or_code,identifier,weight_volume_surge,volume_surge_ratio,finding
+1,engine/strategies/rulebook.py,Rulebook_default_and_PARAM_RANGES,1.0,,"기본값은 1.0이고 GA 허용범위는 0.0~2.0; HIGH_VOL 전용 강제 0 경로 없음"
+2,engine/learning/genetic.py,mutate_lower_bound_clip,,,"가우시안 변이 후 max(lo,min(hi,val))로 하한 클리핑; 음수 방향 변이가 정확한 0 점질량을 만들 수 있음"
+3,exp_batch_stage123_2009_20260616_full/tickers/BOIL/stage3/entry_rulebooks.jsonl,5e5a7b98d720ead8051a143672006b09eef095e0445780869fbcd03f0874b6e9,0.0,2.5,"첫 영속 확인 지점; pool_rank=85 selected_rank=17 train_expectancy=6.4516268424 trade_count=19"
+4,exp_batch_stage123_2009_20260616_full/tickers/BOIL/stage3/final_rulebooks.jsonl,9044dc2c67a3d3bc0c5d93cece5f266c162c4f0ecf3ed5bc8ded1edbafb4bd67,0.0,2.5,"Stage3 exit 학습은 exit 필드만 덮어써 진입 가중치 0을 그대로 보존"
+5,engine/strategies/evaluator.py,runtime_volume_component,0.0,2.5,"is_volume_surge가 참이어도 s_vol=weight_volume_surge*1.0이므로 기여도는 0; 정규화·클리핑·HIGH_VOL 분기 없음"
+6,data/_system/analysis/ohlc_snapshot_20260707/BOIL_ohlcv.csv,train_3_activity_check,0.0,2.5,"2024-07-01~2025-06-30 임계값 충족 0/250일; 선택 진입 19건의 신호일 충족 0건; 유전자가 학습 적합도에서 비식별"

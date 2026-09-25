@@ -1,0 +1,10 @@
+source_path,record_type,account_mode_evidence,observed_count,accepted_as_confirmed_alpaca_live,reason
+"data/_system/real_dashboard_trades_history.json","closed live trades","account_source=alpaca_live; isolated=true",0,"yes as authoritative source; no records","실거래 전용 거래내역이 비어 있어 확정 청산 거래 0건"
+"data/_system/real_dashboard_manual_buy_intent.json","direct live buy intents","execution_mode=direct_alpaca_live_market_order; live-specific credentials",8,"intent only","8건 모두 로컬 broker_order가 pending_new/filled_shares=0으로 남아 있어 단독으로 체결 확정 불가"
+"data/_system/real_dashboard_alpaca_exit_orders.json","live broker position and exit order snapshot","position_snapshot.account_source=alpaca_live",1,"yes","CE 보유 수량·평균단가·candidate_id가 확인되어 매수 체결 1건 확정; 매도 주문은 미체결"
+"data/_system/live_slots_events.jsonl","live slot and direct-order events","DASHBOARD_REAL_BUY_INTENT/direct_alpaca_live_market_order",8,"no","submitted 이벤트는 주문 의도/제출 증거이며 fill 이벤트가 아님"
+"data/_system/pending_orders.json","order journal","entry orders; state=OPEN",6,"no","ALGT·BCS·ADPT·BB·CDE·ANET 모두 filled_shares=0, filled_avg_price=0"
+"data/_system/trade_log.csv","closed trades","telegram dashboard identifies alpaca_paper",11,"no","paper 계정 거래로 실거래 표본에서 제외"
+"data/_system/positions.json","open positions","telegram dashboard identifies alpaca_paper",3,"no","MPLX·CAKE·WPM paper 보유로 제외"
+"data/_system/broker_snapshot_20260625.txt","broker snapshot","account type/source field absent",3,"no","ANET·FNDF·ICHR 매수는 존재하지만 live/paper 계정 식별이 없어 확정 실거래로 채택하지 않음"
+"data/_system/telegram_position_dashboard.json","paper-mode corroboration","mode=alpaca_paper",3,"no","positions.json 및 trade_log.csv 계정 모드 확인용"

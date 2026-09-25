@@ -1,0 +1,8 @@
+question,code_location,observed_logic,CE_observation,verdict
+negative_news_hard_block,engine/strategies/evaluator.py,"news sentiment is multiplied by a learned weight and added to score; no hard rejection branch exists",news contribution 0.0,no_hard_block
+negative_topic_news_hard_block,engine/strategies/evaluator.py,"topic contributions are summed and clamped, then added to score; no hard rejection branch exists",NewsTopics contribution 0.0,no_hard_block
+negative_event_hard_block,engine/strategies/evaluator.py,"active event flags are multiplied by ticker-specific learned response coefficients and event_strength_multiplier, then added to score",Event contribution +4.62260455,no_hard_block
+falling_trend_hard_block,engine/strategies/evaluator.py,"MA alignment only contributes a positive component when true; false does not reject the candidate",MA contribution 0.0 but should_buy remained true,no_hard_block
+recovery_or_followthrough_gate,engine/live/central_control.py and engine/strategies/evaluator.py,"candidate decision uses evaluate_signal threshold; no entry-time failed-followthrough or recovery-quality hard gate in this path",later shadow exit lab identified weak follow-through but that is an exit-side analysis,no_entry_gate_in_observed_path
+event_sign_direction,engine/strategies/evaluator.py,"event coefficient signs are rulebook parameters; positive coefficients strengthen long entry and negative coefficients weaken it",CE event added +4.62 and raised score above the technical-only subtotal,entry_strengthening
+market_adjustment,engine/strategies/evaluator.py,"market adjustment can scale score unless disabled by rulebook",CE snapshot market adjustment 1.0,no_effect_for_observed_snapshot

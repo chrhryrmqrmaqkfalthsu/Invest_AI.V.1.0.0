@@ -1,0 +1,85 @@
+{
+  "status": "CONFIRMED",
+  "confirmed_at_kst": "2026-07-11",
+  "decision": "BLOCK_JUSTIFIED",
+  "checker": "high_vol_volume_blind_near_zero_v3_exclusive",
+  "phase": "STATIC",
+  "enforcement": "BLOCK",
+  "operational_implementation": false,
+  "definition": {
+    "high_vol": true,
+    "entry_possible_without_volume": true,
+    "abs_weight_volume_surge_lte": 0.05,
+    "v3_reachability_status": "PASS",
+    "v3_overlap": "EXCLUDED"
+  },
+  "incremental_block": {
+    "candidate_n": 371,
+    "exact_zero_n": 356,
+    "near_nonzero_n": 15,
+    "unique_entry_rule_n": 125,
+    "ticker_n": 18,
+    "stage2_n": 2,
+    "stage3_n": 369
+  },
+  "performance_evidence": {
+    "boil_avg_pnl_pct": 0.4005955366933011,
+    "normal_high_vol_avg_pnl_pct": 3.0484448685789456,
+    "boil_win_rate_pct": 47.38511451639707,
+    "normal_high_vol_win_rate_pct": 53.637408622975265,
+    "boil_avg_mae_pct": -7.6930139045310515,
+    "normal_high_vol_avg_mae_pct": -7.861124906858066,
+    "boil_avg_mfe_pct": 10.364960467419907,
+    "normal_high_vol_avg_mfe_pct": 14.32837047405262,
+    "entry_rule_pnl_difference_pct_point": -2.7061794860506043,
+    "entry_rule_pnl_difference_ci95": [
+      -3.469930310835617,
+      -1.9336631496930092
+    ],
+    "frozen_live93_prior_ci95": [
+      -4.521407100953219,
+      -0.8894192468666403
+    ],
+    "frozen_live93_v3_survivor_ci95": [
+      -5.9438499531976925,
+      -1.7373438323674637
+    ]
+  },
+  "overfilter_risk": {
+    "absolute_good_n": 129,
+    "absolute_good_rate_pct": 34.77088948787062,
+    "relative_good_n": 61,
+    "relative_good_rate_pct": 16.442048517520217,
+    "relative_good_unique_entry_rule_n": 25,
+    "decision_note": "양호 예외는 holdout 사후 분류이며 누수 없는 정적 예외조건이 확인되지 않아 BLOCK을 유지한다."
+  },
+  "final_candidate_effect": {
+    "before": 85,
+    "after": 84,
+    "stage2_after": 10,
+    "stage3_after": 74,
+    "dropped_candidate_ids": [
+      "stage3:CVNA:2f6d067a7826"
+    ],
+    "fallback_added": 0
+  },
+  "parallel_structure": {
+    "v3": "도달불가 임계는 v3가 먼저 차단하고 BOIL형 BLOCK에서는 제외",
+    "boil": "v3 PASS 중 HIGH_VOL 거래량 무시 near-zero 구조만 순증 차단",
+    "ce": "동적 점수여유·소수지표 집중 검사는 evaluate_candidate 단계에서 병렬 유지"
+  },
+  "source_artifacts": [
+    "boil_block_exclusive_targets.csv",
+    "boil_block_overfilter_good_cases.csv",
+    "boil_block_performance_comparison.csv",
+    "boil_block_bootstrap_summary.csv",
+    "boil_block_final_candidate_summary.csv",
+    "boil_block_enforcement_decision.json",
+    "boil_block_enforcement_readout.md"
+  ],
+  "source_rule_mutation": false,
+  "live_change": false,
+  "retraining": false,
+  "order": false,
+  "delete": false
+}

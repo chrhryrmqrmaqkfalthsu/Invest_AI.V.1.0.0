@@ -1,0 +1,12 @@
+event_flag,event_type_ko,classification,ticker_specific_at_source,notes
+has_war,전쟁,MACRO,false,시장 공통 뉴스에서 S&P500 영향 기준으로 분류
+has_rate_hike,금리정책_인상,MACRO,false,시장 공통 금리 이벤트
+has_rate_cut,금리정책_인하,MACRO,false,시장 공통 금리 이벤트
+has_geopolitical,지정학_긴장,MACRO,false,시장 공통 지정학 이벤트
+has_tariff,관세,MACRO,false,시장 공통 정책 이벤트
+has_export_ban,수출규제,MACRO_OR_SECTOR,false,시장 공통 뉴스 집계이며 특정 ticker 매칭 없음
+has_earnings_shock,실적쇼크,CORPORATE_EVENT_BUT_GLOBALIZED,false,개별 기업 실적 기사일 수 있으나 MarketContext 전역 key로 집계되고 CE ticker 일치 검증 없음
+has_oil_surge,유가급등,MACRO,false,시장 공통 원자재 이벤트
+has_banking_crisis,은행위기,MACRO_OR_SECTOR,false,시장 공통 금융 시스템 이벤트
+has_inflation,인플레이션,MACRO,false,시장 공통 인플레이션 이벤트
+has_fed_statement,연준발언,MACRO,false,시장 공통 중앙은행 이벤트

@@ -1,0 +1,9 @@
+path,entry_point,event_flag_source,use_llm_events_consulted,explicit_live_event_config,rulebook_gate,event_state,notes
+central_stage3_intraday,engine/live/central_control.py::_evaluate_stage3_entity_signal,ctx.active_events exact-key conversion,false,false,use_event_block,LIVE_ON,"active_events가 있으면 무조건 flag 생성"
+general_runner_intraday,engine/strategies/learned_rulebook.py::evaluate,ctx.active_events exact-key conversion,false,false,use_event_block,LIVE_ON,"Runner._process_ticker와 add-buy 재평가가 사용"
+telegram_manual_evaluate,engine/live/telegram/bot.py -> LearnedRuleBook.evaluate,ctx.active_events exact-key conversion,false,false,use_event_block,LIVE_ON,"일반 LearnedRuleBook 경로와 동일"
+next_open_d1,engine/live/scheduled_open_buy_queue.py::_evaluate_entity_signal_point_in_time,market_history helper,true_false_explicit,false,use_event_block,LIVE_OFF,"_lookup_signal_context(... use_llm_events=False)"
+elite_shadow,engine/live/elite_shadow_trader.py::evaluate_candidate,ctx.active_events helper conversion,false,false,use_event_block,LIVE_ON,"central과 별도 duplicate helper"
+elite_pullback_replay,engine/live/elite_pullback_replay.py,ctx.active_events helper conversion,false,false,use_event_block,LIVE_ON,"현재 context Event를 replay 전체에 전달"
+elite_signal_history,engine/live/elite_signal_history.py,ctx.active_events helper conversion,false,false,use_event_block,LIVE_ON,"현재 context Event를 history 계산에 전달"
+backtest,engine/learning/backtest.py::run_backtest,lagged market_history has_* columns,true,true_function_argument,use_event_block,DEFAULT_TRUE_BUT_CALLER_OVERRIDE,"생산 Stage2/Stage3 caller는 False 명시"

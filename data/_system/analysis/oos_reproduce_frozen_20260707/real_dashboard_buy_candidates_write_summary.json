@@ -1,0 +1,47 @@
+{
+  "canonical_output_replaced": true,
+  "exported_candidate_ids": [
+    "stage3:BMI:07d4ee0f7841",
+    "stage3:BMA:0c978464f9dd",
+    "stage3:BTBT:363898884d44",
+    "stage3:ADMA:42437a3ee595",
+    "stage3:CE:998b0b638c66",
+    "stage3:BCS:5e7da5a74b01",
+    "stage2:ALGT:402f72d48c3c",
+    "stage3:ALGT:aec5dd5b1dc1"
+  ],
+  "exported_count": 8,
+  "limit": 20,
+  "live_candidate_ids": [
+    "stage3:BMI:07d4ee0f7841",
+    "stage3:BMA:0c978464f9dd",
+    "stage3:BTBT:363898884d44",
+    "stage3:ADMA:42437a3ee595",
+    "stage3:CE:998b0b638c66",
+    "stage3:BCS:5e7da5a74b01",
+    "stage2:ALGT:402f72d48c3c",
+    "stage3:ALGT:aec5dd5b1dc1"
+  ],
+  "live_slot_count": 8,
+  "ok": true,
+  "output_path": "data/_system/real_dashboard_buy_candidates.json",
+  "post_write_validation_errors": [],
+  "post_write_validation_ok": true,
+  "post_write_validation_stats": {
+    "candidate_errors": {}
+  },
+  "replacement_requested": true,
+  "report_candidate_count": 93,
+  "skipped": [],
+  "skipped_count": 0,
+  "skipped_summary": {},
+  "source_section": "slots",
+  "state_path": "data/_system/live_slots_state.json",
+  "state_updated_at": "2026-07-09T16:57:35.008938+00:00",
+  "temp_path": "/home/g3000kkw/kingmaker/data/_system/.real_dashboard_buy_candidates.json.tmp.229615.20260709T165834Z",
+  "validation_errors": [],
+  "validation_ok": true,
+  "validation_stats": {
+    "candidate_errors": {}
+  }
+}

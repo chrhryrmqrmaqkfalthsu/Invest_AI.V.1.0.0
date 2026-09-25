@@ -1,0 +1,12 @@
+check_item,expected,actual,result,notes
+denylist_total_entries,11 active entries,11 active entries,PASS,existing 4 retained plus 7 THREE_SYMPTOM_MATCH entries added
+new_entries_reason_label,7 new entries have THREE_SYMPTOM_MATCH,CENX CRMD CAR AMBA APH ARKG HCC all THREE_SYMPTOM_MATCH,PASS,allows later review/reversal by label
+match_policy,no raw rule_hash-only blocking,candidate_id exact OR ticker/stage constrained rule_hash match,PASS,apply_candidate_denylist unchanged from previous implementation
+code_change,no code change needed,no engine/live/elite_shadow_report.py change in this step,PASS,JSON registration was sufficient
+build_report_blocked_count,blocked_count=11,blocked_count=11 and candidate_count=82,PASS,93 original minus 11 denied
+build_report_denied_absent,all 11 denied absent from report,denied_present=[],PASS,CE CDE BKSY BOIL CENX CRMD CAR AMBA APH ARKG HCC excluded at generation stage
+live_pool_denied_absent,all 11 denied absent from live candidate_pool,denied_present=[] and pool_count=18,PASS,refresh --force-evaluate --max-candidates 93
+canonical_export_denied_absent,all 11 denied absent from real_dashboard_buy_candidates.json,denied_present=[] and exported_count=18,PASS,export source candidate_pool limit 26 write
+export_rulebooks_present,remaining candidates have full rulebook and selected_rulebook,missing_rulebook=[],PASS,full rulebook validation/export path OK
+original_rule_pool_preserved,final_rulebooks/survivors/exit_trades unchanged,all sha_same=True and mtime_same=True,PASS,checked 22 original artifact files for 11 denied candidates
+orders_safety,no direct order / broker mutation / .env change,no order path invoked and no direct_orders_enabled change,PASS,candidate refresh/export only

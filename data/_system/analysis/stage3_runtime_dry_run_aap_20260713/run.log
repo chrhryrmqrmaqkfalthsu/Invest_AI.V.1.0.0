@@ -1,0 +1,25 @@
+Stage 3 runtime dry-run
+Ticker: AAP
+Fold: train_1 (2022-07-01 ~ 2023-06-30)
+Population: 10
+Generations: 3
+Seed: 20260713
+
+Gen 1: best=-17.490, avg=-101.975
+Gen 2: best=14.200, avg=-58.125
+Gen 3: best=16.166, avg=-27.784
+
+Final verdict: PASS
+Evaluations: 34
+Final population: 10
+Invalid candidates: 0
+Best fitness: 38.20838426424461
+Best joint support: 24
+Daily signal tape count: 1005
+Holding signal points: 40
+Cooldown signal points: 12
+Entry interval-break exits: 12
+High-quality interval failures that remained no-buy: 256
+Original-path exits: stop_loss=2, time_out=2, trailing=4
+
+The first launch attempt stopped before GA because the local AAP snapshot path was relative to the workspace. The path was corrected to the repository root and the successful dry-run above was then executed. No fetch was used.

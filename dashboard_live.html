@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="refresh" content="0; url=http://localhost:8001/dashboard">
+<title>KINGMAKER — redirect</title>
+<style>
+  body{background:#0a0e17;color:#c9d4e5;font-family:"Segoe UI","Malgun Gothic",sans-serif;padding:32px;}
+  a{color:#3b82f6;}
+</style>
+<script>
+(function(){
+  const host = window.location.hostname || 'localhost';
+  window.location.replace(`http://${host}:8001/dashboard`);
+})();
+</script>
+</head>
+<body>
+  <h1>KINGMAKER 대시보드 이동 중</h1>
+  <p>이 구버전 대시보드는 통합 대시보드로 대체되었습니다.</p>
+  <p><a href="http://localhost:8001/dashboard">http://localhost:8001/dashboard</a></p>
+</body>
+</html>

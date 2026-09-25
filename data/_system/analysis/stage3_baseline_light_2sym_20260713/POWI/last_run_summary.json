@@ -1,0 +1,151 @@
+{
+  "stage": "all",
+  "summaries": [
+    {
+      "all3_pass_count": 0,
+      "all3_pass_hash_samples": [],
+      "config": {
+        "min_member_score": 10.0,
+        "min_trades": 5,
+        "qualify_min_expectancy_pct": 2.0,
+        "qualify_years": 3
+      },
+      "data_end": "2026-07-06",
+      "data_start": "2020-06-08",
+      "early_stop_reason": {
+        "evaluated_split_count": 2,
+        "reason": "required_split_has_zero_passing_candidates",
+        "split": "train_2"
+      },
+      "early_stopped": true,
+      "elapsed_seconds": 62.4786331653595,
+      "entry_execution_semantics": "entry_provisional_interval_break_d5_v2",
+      "fail_reason_metric_counts": {
+        "early_stop_zero_pass_split": 1
+      },
+      "fitness_cache": {
+        "enabled": false,
+        "hit_rate": 0.0,
+        "hits": 0,
+        "misses": 0,
+        "unique_keys": 0
+      },
+      "ga_summaries": [
+        {
+          "best_fitness": 55.40625550290392,
+          "best_hash": "b4752e572c4a640eb127f1606b02d339a2a91271faf471cbaf9497c0897fdc36",
+          "entry_domain_sample_count": 251,
+          "fitness_cache": {
+            "enabled": false,
+            "hit_rate": 0.0,
+            "hits": 0,
+            "misses": 0,
+            "unique_keys": 0
+          },
+          "gene_scope": "entry",
+          "generations_run": 3,
+          "seed": 2026071303,
+          "split": {
+            "end": "2023-06-30",
+            "label": "train_1",
+            "start": "2022-07-01"
+          },
+          "technical_feature_lag_mode": "strict_entry_d5_v1",
+          "technical_feature_lag_trading_days": 5,
+          "top_count": 3
+        },
+        {
+          "best_fitness": 43.66029321690086,
+          "best_hash": "819ac7f003be7073a96088d28f31ff03c98235f867818b1753cbb961ec81b07a",
+          "entry_domain_sample_count": 250,
+          "fitness_cache": {
+            "enabled": false,
+            "hit_rate": 0.0,
+            "hits": 0,
+            "misses": 0,
+            "unique_keys": 0
+          },
+          "gene_scope": "entry",
+          "generations_run": 3,
+          "seed": 2026071304,
+          "split": {
+            "end": "2024-06-30",
+            "label": "train_2",
+            "start": "2023-07-01"
+          },
+          "technical_feature_lag_mode": "strict_entry_d5_v1",
+          "technical_feature_lag_trading_days": 5,
+          "top_count": 3
+        },
+        {
+          "best_fitness": 12.8541264483433,
+          "best_hash": "4e3741617bd05b55acf8830429550272fe631a85a9d1d8e4318d1edb35c1d666",
+          "entry_domain_sample_count": 250,
+          "fitness_cache": {
+            "enabled": false,
+            "hit_rate": 0.0,
+            "hits": 0,
+            "misses": 0,
+            "unique_keys": 0
+          },
+          "gene_scope": "entry",
+          "generations_run": 3,
+          "seed": 2026071305,
+          "split": {
+            "end": "2025-06-30",
+            "label": "train_3",
+            "start": "2024-07-01"
+          },
+          "technical_feature_lag_mode": "strict_entry_d5_v1",
+          "technical_feature_lag_trading_days": 5,
+          "top_count": 3
+        }
+      ],
+      "market_context_lag_days": 1,
+      "member_score_stats": {
+        "train_1": {
+          "count": 9,
+          "max": 90.0,
+          "mean": 50.0,
+          "min": 4.375
+        },
+        "train_2": {
+          "count": 9,
+          "max": 92.5,
+          "mean": 50.0,
+          "min": 5.0
+        }
+      },
+      "note": "D-5 entry-scope qualify with shifted fold empirical domains and provisional entry exits",
+      "periods": [
+        {
+          "end": "2023-06-30",
+          "label": "train_1",
+          "start": "2022-07-01"
+        },
+        {
+          "end": "2024-06-30",
+          "label": "train_2",
+          "start": "2023-07-01"
+        },
+        {
+          "end": "2025-06-30",
+          "label": "train_3",
+          "start": "2024-07-01"
+        }
+      ],
+      "qualified": false,
+      "seed_base": 2026071302,
+      "stage": "qualify",
+      "technical_feature_lag_mode": "strict_entry_d5_v1",
+      "technical_feature_lag_trading_days": 5,
+      "ticker": "POWI",
+      "unique_candidate_count": 9,
+      "year_pass_counts": {
+        "train_1": 2,
+        "train_2": 0
+      }
+    }
+  ],
+  "ticker": "POWI"
+}

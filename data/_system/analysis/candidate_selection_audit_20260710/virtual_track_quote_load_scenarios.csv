@@ -1,0 +1,8 @@
+scenario,ticker_n,cycle_sec,price_cache_ttl_sec,ohlcv_cache_ttl_sec,logical_price_fetches_per_min,logical_ohlcv_fetches_per_min_avg,logical_total_fetches_per_min_avg,cold_or_ohlcv_refresh_cycle_fetches,shared_with_live,assessment,notes
+CURRENT_LIVE_EVALUATED,61,60,30,600,61.0,6.1,67.1,122,true,OBSERVED_STABLE,"63 candidates/61 tickers; recent 100-cycle elapsed median 7.145s p95 13.382s max 14.462s"
+FULL_POOL_60S_CURRENT_ARCH,531,60,30,600,531.0,53.1,584.1,1062,true,UNSAFE,"17,071 candidates/531 tickers; 8.70x ticker scale; linear p95 116.49s"
+FULL_POOL_5MIN_SHARED_DAILY_CACHE,531,300,300,86400,106.2,0.369,106.569,1062,true,RISKY_WITHOUT_PROVIDER_BUDGET,"price 5m; persistent one-day historical cache assumed; still adds more than current live price load"
+FULL_POOL_10MIN_SHARED_DAILY_CACHE,531,600,600,86400,53.1,0.369,53.469,1062,true,CONDITIONAL,"one sweep every 10m; must stagger requests and reserve live priority"
+FULL_POOL_15MIN_SHARED_DAILY_CACHE,531,900,900,86400,35.4,0.369,35.769,1062,true,RECOMMENDED_MAX_RATE,"one sweep every 15m; no burst allowed"
+VIRTUAL_ONLY_EXTRA_10MIN_SHARED_CACHE,448,600,600,86400,44.8,0.311,45.111,896,true,CONDITIONAL,"83 LIVE tickers reuse same snapshot; only 448 additional tickers fetched"
+VIRTUAL_ONLY_EXTRA_15MIN_SHARED_CACHE,448,900,900,86400,29.867,0.311,30.178,896,true,RECOMMENDED,"shared LIVE cache plus 30-ticker/min virtual cap gives about one full sweep per 15m"

@@ -1,0 +1,10 @@
+import json
+from replay_common import BASE,SPECS,d,f,many,one,period_map
+from replay_engine import execute
+from replay_match import build
+
+def run(t,pl):
+ pfx=SPECS[t];sd=BASE/t/'stage3';m=json.loads((sd/'manifest.json').read_text());v=one(sd/'validation_results.jsonl',pfx);fin=one(sd/'final_rulebooks.jsonl',pfx);p=period_map(v)[pl];rd=str(m['updated_at'])[:10]
+ df,sell,r=execute(t,rd,fin['rulebook'],p);o=[x for x in many(sd/'rl_replay_trades.jsonl',pfx) if x.get('period_label')==pl];c=[x for x in many(sd/'exit_trades.jsonl',pfx) if x.get('period_label')==pl];rr=[dict(x) for x in (r.trades or [])];detail,ma=build(t,pfx,v['rulebook_hash'],p,o,rr);sm=((v.get('period_results') or {}).get(pl) or {}).get('metrics') or {};oe=f(sm.get('expectancy_pct'));re=f(r.expectancy_pct)
+ s={'ticker':t,'rule_id':f'stage3:{t}:{pfx}','rulebook_hash':v['rulebook_hash'],'period_label':pl,'period_role':p['role'],'period_start':p.get('start') or 'DATA_START','period_end':p.get('end'),'manifest_run_date':rd,'loaded_data_start':d(df.index.min()),'loaded_data_end':d(df.index.max()),'loaded_rows':len(df),'sell_omen_available':sell.get('available'),'sell_omen_matched_rows':sell.get('matched_rows'),'original_snapshot_trades':len(o),'original_compact_trades':len(c),'rerun_trades':len(rr),'entry_date_match_count':ma['entry_date_matches'],'exact_match_count':ma['exact_matches'],'missing_in_rerun_count':len(o)-ma['entry_date_matches'],'rerun_only_count':len(rr)-ma['rerun_used'],'original_component_available_count':sum(bool(x.get('entry_signal_components')) for x in o),'rerun_component_available_count':sum(bool(x.get('entry_signal_components')) for x in rr),'original_expectancy_pct':oe,'rerun_expectancy_pct':re,'expectancy_delta_pct':re-oe if oe is not None and re is not None else None,'original_win_rate_pct':f(sm.get('win_rate')),'rerun_win_rate_pct':f(r.win_rate),'original_max_drawdown_pct':f(sm.get('max_drawdown_pct')),'rerun_max_drawdown_pct':f(r.max_drawdown_pct),'exact_period_reproduction':bool(len(o)==len(rr) and ma['exact_matches']==len(o))}
+ return {'detail_csv':detail,'summary':s}

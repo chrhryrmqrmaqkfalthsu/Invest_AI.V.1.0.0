@@ -1,0 +1,178 @@
+{
+  "created_at": "2026-07-10T17:23:35.290609+00:00",
+  "policy_version": "integrated-gate-v2-p99-reachability-block",
+  "policy": {
+    "enforcement": "BLOCK",
+    "active_weight": "weight > 0",
+    "eligible_condition_forms": [
+      "ONE_SIDED_GE",
+      "ONE_SIDED_LE"
+    ],
+    "ge_fail": "threshold > training p99; threshold > max is UNREACHABLE",
+    "le_fail": "threshold < training p01; equivalent transformed activation-tail threshold > p99; threshold < min is UNREACHABLE",
+    "excluded": {
+      "MA": "event/no stored scalar threshold",
+      "MACD": "cross event/no stored scalar threshold",
+      "RSI": "two-sided inclusive band; explicit one-sided-only policy scope"
+    }
+  },
+  "origin_count": 17071,
+  "p99_block": {
+    "pass_count": 13104,
+    "fail_count": 3967,
+    "stage_counts": [
+      {
+        "scope": "ALL",
+        "status": "PASS",
+        "candidate_count": 13104,
+        "scope_total": 17071,
+        "rate_pct": 76.76175970944877
+      },
+      {
+        "scope": "ALL",
+        "status": "FAIL",
+        "candidate_count": 3967,
+        "scope_total": 17071,
+        "rate_pct": 23.238240290551225
+      },
+      {
+        "scope": "stage2",
+        "status": "PASS",
+        "candidate_count": 894,
+        "scope_total": 1162,
+        "rate_pct": 76.93631669535283
+      },
+      {
+        "scope": "stage2",
+        "status": "FAIL",
+        "candidate_count": 268,
+        "scope_total": 1162,
+        "rate_pct": 23.06368330464716
+      },
+      {
+        "scope": "stage3",
+        "status": "PASS",
+        "candidate_count": 12210,
+        "scope_total": 15909,
+        "rate_pct": 76.74900999434283
+      },
+      {
+        "scope": "stage3",
+        "status": "FAIL",
+        "candidate_count": 3699,
+        "scope_total": 15909,
+        "rate_pct": 23.250990005657172
+      }
+    ],
+    "fail_evidence_rows": 3967,
+    "fail_unique_entry_rule_count": 1501,
+    "volume_fail_count": 3967,
+    "bb_fail_count": 0
+  },
+  "capture": {
+    "named_boil_captured": false,
+    "named_boil_volume_label": "INACTIVE_WEIGHT",
+    "named_boil_bb_label": "REACHABLE",
+    "ce_7_captured_count": 1,
+    "ce_7_total": 7,
+    "ce_7_missed_ids": [
+      "stage3:ANET:fe220620802b",
+      "stage3:BB:f1bdfe7f8ad9",
+      "stage3:BOIL:9044dc2c67a3",
+      "stage3:CDE:ceb9fe0512dc",
+      "stage3:CE:998b0b638c66",
+      "stage3:CWK:2970595abcd4"
+    ]
+  },
+  "combined_gate": {
+    "status_counts": {
+      "FAIL": 14613,
+      "PASS": 2226,
+      "HOLD": 232
+    },
+    "selected_count": 88,
+    "selected_stage_counts": {
+      "stage3": 78,
+      "stage2": 10
+    },
+    "old_selected_count": 93,
+    "old_selected_blocked_count": 15,
+    "fallback_recovered_count": 10,
+    "old_selected_dropped_count": 15
+  },
+  "high_vol_relationship": [
+    {
+      "comparison": "HIGH_VOL_STAGE1_VOLUME_BLIND",
+      "reference_count": 3036,
+      "new_block_count": 3967,
+      "overlap_count": 476,
+      "reference_only_count": 2560,
+      "new_block_only_count": 3491,
+      "reference_capture_rate_pct": 15.678524374176547,
+      "relation": "PARALLEL_NOT_SUPERSET"
+    },
+    {
+      "comparison": "HIGH_VOL_STAGE2_STRICT_NEVER",
+      "reference_count": 84,
+      "new_block_count": 3967,
+      "overlap_count": 69,
+      "reference_only_count": 15,
+      "new_block_only_count": 3898,
+      "reference_capture_rate_pct": 82.14285714285714,
+      "relation": "PARALLEL_NOT_SUPERSET"
+    },
+    {
+      "comparison": "HIGH_VOL_STAGE2_RELAXED_NEVER_OR_RARE",
+      "reference_count": 801,
+      "new_block_count": 3967,
+      "overlap_count": 476,
+      "reference_only_count": 325,
+      "new_block_only_count": 3491,
+      "reference_capture_rate_pct": 59.425717852684144,
+      "relation": "PARALLEL_NOT_SUPERSET"
+    },
+    {
+      "comparison": "CE_FAIL_7",
+      "reference_count": 7,
+      "new_block_count": 3967,
+      "overlap_count": 1,
+      "reference_only_count": 6,
+      "new_block_only_count": 3966,
+      "reference_capture_rate_pct": 14.285714285714285,
+      "relation": "PARALLEL_NOT_SUPERSET"
+    },
+    {
+      "comparison": "NAMED_BOIL_9044",
+      "reference_count": 1,
+      "new_block_count": 3967,
+      "overlap_count": 0,
+      "reference_only_count": 1,
+      "new_block_only_count": 3967,
+      "reference_capture_rate_pct": 0.0,
+      "relation": "PARALLEL_NOT_SUPERSET"
+    }
+  ],
+  "excluded_form_activity_diagnostic": {
+    "ma": {
+      "active_candidate_count": 15393,
+      "zero_fired_count": 0,
+      "excluded_label": "EXCLUDED_EVENT_NO_SCALAR_THRESHOLD"
+    },
+    "macd": {
+      "active_candidate_count": 15578,
+      "zero_fired_count": 0,
+      "excluded_label": "EXCLUDED_EVENT_NO_SCALAR_THRESHOLD"
+    },
+    "rsi": {
+      "active_candidate_count": 16243,
+      "zero_fired_count": 0,
+      "excluded_label": "EXCLUDED_BAND_NOT_ONE_SIDED"
+    }
+  },
+  "operational_implementation": false,
+  "source_rule_mutation": false,
+  "live_change": false,
+  "retraining": false,
+  "order": false,
+  "delete": false
+}

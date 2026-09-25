@@ -1,0 +1,3476 @@
+{
+  "ticker": "AAP",
+  "execution_scale": "OFFICIAL_FULL_STAGE3_NEW_FITNESS",
+  "official_config": {
+    "qualify_population": 100,
+    "qualify_generations": 40,
+    "entry_population": 100,
+    "entry_generations": 50,
+    "exit_population": 60,
+    "exit_generations": 25,
+    "top_n_qualify": 100,
+    "top_n_entry_pool": 100,
+    "max_entry_candidates": 20,
+    "top_n_exit_per_entry": 3,
+    "entry_min_expectancy_pct": 2.0,
+    "entry_overlap_threshold": 0.7
+  },
+  "workers": 28,
+  "parallel_axis": "population_fitness_evaluation",
+  "parallel_reproducibility_probe": {
+    "passed": true,
+    "sequential_best_hash": "4c9db562068ce3e6ce66683ed933d9b49b76299e45bfb1089906c3bee6213677",
+    "parallel_best_hash": "4c9db562068ce3e6ce66683ed933d9b49b76299e45bfb1089906c3bee6213677",
+    "fitness_history_equal": true,
+    "final_population_equal": true,
+    "parallel_axis": "population_fitness_evaluation",
+    "workers": 12,
+    "merge_order": "input_index_order",
+    "random_generation_location": "parent_process_only",
+    "process_start_method": "spawn"
+  },
+  "new_fitness_activation_probe": {
+    "passed": true,
+    "checks": {
+      "gene_scope_marker": true,
+      "primary_formula": true,
+      "mae_threshold": true,
+      "realized_loss_threshold": true,
+      "realized_loss_penalty_present": true,
+      "profit_concentration_penalty_absent": true,
+      "win_threshold": true,
+      "minimum_trade_count": true,
+      "win_rate_gate": true,
+      "entry_gate_rule": true,
+      "trade_count_factor_active": true,
+      "factor_anchors": true,
+      "mutation_hint_only": true,
+      "stage2_legacy_defaults": true
+    },
+    "factor_checks": {
+      "7": true,
+      "8": true,
+      "10": true,
+      "12": true,
+      "15": true,
+      "20": true,
+      "81": true
+    },
+    "gene_scope_defaults": {
+      "random_rulebook": "legacy",
+      "mutate": "legacy",
+      "crossover": "legacy",
+      "run_ga": "legacy"
+    },
+    "sample_trade_count": 32,
+    "sample_final_fitness": -1000000000.0
+  },
+  "manifest_gate_passed": true,
+  "qualified": true,
+  "all3_pass_count": 1,
+  "pass_count_distribution": {
+    "all3": 1,
+    "all2": 26,
+    "all1": 229,
+    "all0": 44
+  },
+  "entry_survivor_count": 0,
+  "exit_candidate_count": 0,
+  "validate_survivor_count": 0,
+  "entry_result": {
+    "ticker": "AAP",
+    "stage": "entry",
+    "skipped_by_feature_nulltest_v8": true,
+    "skip_reason": "qualify_only_nulltest_pop100_gen40_x3fold",
+    "selected_count": 0,
+    "pool_count": 0,
+    "seed_base": 2026071401,
+    "call_index": 4,
+    "elapsed_seconds": 0.0
+  },
+  "exit_result": null,
+  "validate_result": null,
+  "ce_boil_audit": {
+    "candidate_count": 0,
+    "one_sided_count": 0,
+    "missing_domain_count": 0,
+    "validator_error_count": 0,
+    "validator_errors": {},
+    "quality_score_override_count": 0,
+    "ce_boil_zero": true
+  },
+  "stop_reason": "no_entry_survivor",
+  "protected_sha_start": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+  },
+  "protected_sha_end": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+  },
+  "protected_unchanged": true,
+  "daemon_start": {
+    "cmdline": "/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60",
+    "pid": 494330,
+    "snapshot_source": "VM_snapshot_for_notebook_staging_run",
+    "starttime_ticks": "36014393",
+    "state": "Sl"
+  },
+  "daemon_end": {
+    "cmdline": "/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60",
+    "pid": 494330,
+    "snapshot_source": "VM_snapshot_for_notebook_staging_run",
+    "starttime_ticks": "36014393",
+    "state": "Sl"
+  },
+  "daemon_unchanged": true,
+  "elapsed_seconds": 326.074729681015,
+  "independent_host_role": "notebook",
+  "host_name": "DESKTOP-TO74AR2",
+  "requested_local_workers": 28,
+  "market_available_cutoff_date": "2026-07-10",
+  "inter_machine_candidate_communication": false,
+  "notebook_exit_validate_workers": 1,
+  "source_git_commit": "ca1154d",
+  "launch_command": {
+    "python_executable": "C:\\dask310\\Scripts\\python.exe",
+    "cwd": "C:\\kingmaker_nulltest_v8\\scripts\\research\\stage23_rework_20260713",
+    "argv": [
+      "C:\\dask310\\Scripts\\python.exe",
+      "C:\\kingmaker_nulltest_v8\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_tradecount_factor_v3_host.py",
+      "--baseline-dir",
+      "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+      "--out-dir",
+      "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_feature_nulltest_v8_20260715\\atr14_pct\\SHUFFLED",
+      "--seed-base",
+      "2026071401",
+      "--workers",
+      "28",
+      "--host-role",
+      "notebook",
+      "--market-cutoff-date",
+      "2026-07-10",
+      "--protected-snapshot-json",
+      "{\".env\": \"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\", \"data/_system/market_history.csv\": \"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\", \"data/_system/market_history_v2.csv\": \"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}",
+      "--daemon-snapshot-json",
+      "{\"cmdline\": \"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\", \"pid\": 494330, \"snapshot_source\": \"VM_snapshot_for_notebook_staging_run\", \"starttime_ticks\": \"36014393\", \"state\": \"Sl\"}",
+      "--source-git-commit",
+      "ca1154d"
+    ],
+    "environment": {
+      "PYTHONPATH": "C:\\kingmaker_nulltest_v8\\scripts\\research\\stage23_rework_20260713;C:\\kingmaker;C:\\kingmaker\\vendor",
+      "PATH": "C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\;C:\\WINDOWS\\System32\\OpenSSH\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python310\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python312\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Launcher\\;C:\\Users\\1000k\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Users\\1000k\\AppData\\Local\\GitHubDesktop\\bin;C:\\Users\\1000k\\AppData\\Local\\Programs\\Ollama;C:\\Users\\1000k\\AppData\\Local\\Google\\Cloud SDK\\google-cloud-sdk\\bin",
+      "PYTHONUTF8": "1",
+      "PYTHONUNBUFFERED": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "powershell_command": "& 'C:\\dask310\\Scripts\\python.exe' 'C:\\kingmaker_nulltest_v8\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_tradecount_factor_v3_host.py' '--baseline-dir' 'C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX' '--out-dir' 'C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_feature_nulltest_v8_20260715\\atr14_pct\\SHUFFLED' '--seed-base' '2026071401' '--workers' '28' '--host-role' 'notebook' '--market-cutoff-date' '2026-07-10' '--protected-snapshot-json' '{\".env\": \"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\", \"data/_system/market_history.csv\": \"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\", \"data/_system/market_history_v2.csv\": \"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}' '--daemon-snapshot-json' '{\"cmdline\": \"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\", \"pid\": 494330, \"snapshot_source\": \"VM_snapshot_for_notebook_staging_run\", \"starttime_ticks\": \"36014393\", \"state\": \"Sl\"}' '--source-git-commit' 'ca1154d'",
+    "host_local_parent": true,
+    "local_process_workers": 28,
+    "inter_machine_candidate_communication": false,
+    "environment_recording_scope": "execution-relevant whitelist; secrets excluded",
+    "entry_concurrency_mode": "entry_scope_independent_overlapping_positions",
+    "legacy_concurrency_mode": "single_position_exit_plus_cooldown",
+    "eec_penalty_patch_token": "entry_scope_eec_penalty_v5_20260715",
+    "eec_target": 4.0,
+    "eec_floor": 0.7,
+    "eec_cluster_gap_trading_days": 8,
+    "remote_fetch_regenerate_disabled": true,
+    "logged_at_utc": "2026-07-15T10:35:17.362338+00:00"
+  },
+  "trade_count_factor_comparison": {
+    "baseline_dir": "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+    "current_dir": "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_feature_nulltest_v8_20260715\\atr14_pct\\SHUFFLED",
+    "seed_base": 2026071401,
+    "pass_count_distribution": {
+      "previous_v2": {
+        "all3": 0,
+        "all2": 2,
+        "all1": 192,
+        "all0": 106
+      },
+      "factor_restore": {
+        "all3": 1,
+        "all2": 26,
+        "all1": 229,
+        "all0": 44
+      }
+    },
+    "fold_pass_counts": {
+      "previous_v2": {
+        "train_1": 48,
+        "train_2": 67,
+        "train_3": 81
+      },
+      "factor_restore": {
+        "train_1": 79,
+        "train_2": 111,
+        "train_3": 94
+      }
+    },
+    "fold_best": {
+      "previous_v2": {
+        "train_1": {
+          "fitness": 0.6445069087263888,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 1.1214100249286763,
+          "mae_penalty": 0.14048010872368452,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666,
+          "effective_event_count": 0.0,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        },
+        "train_2": {
+          "fitness": 1.0460364481256468,
+          "trade_count": 11,
+          "trade_count_factor": 0.6124999999999999,
+          "primary_objective_pct_per_day": 1.8426002549290919,
+          "mae_penalty": 0.061449395135074525,
+          "realized_loss_penalty": 0.02110681288334735,
+          "win_rate_pct": 81.81818181818183,
+          "effective_event_count": 0.0,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        },
+        "train_3": {
+          "fitness": 2.091575610734492,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 3.1040362758923905,
+          "mae_penalty": 0.08124978239018137,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666,
+          "effective_event_count": 0.0,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        }
+      },
+      "factor_restore": {
+        "train_1": {
+          "fitness": 0.8059024017289121,
+          "trade_count": 27,
+          "trade_count_factor": 1.0,
+          "primary_objective_pct_per_day": 0.9785845546938672,
+          "mae_penalty": 0.07482369749556837,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 85.18518518518519,
+          "effective_event_count": 5.4,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        },
+        "train_2": {
+          "fitness": 1.364763873918462,
+          "trade_count": 18,
+          "trade_count_factor": 0.925,
+          "primary_objective_pct_per_day": 2.1923340562467235,
+          "mae_penalty": 0.1561678776027025,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 100.0,
+          "effective_event_count": 4.499999999999999,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        },
+        "train_3": {
+          "fitness": 1.7106577620593564,
+          "trade_count": 14,
+          "trade_count_factor": 0.7749999999999999,
+          "primary_objective_pct_per_day": 2.2109446905312633,
+          "mae_penalty": 0.0028243731023724905,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 100.0,
+          "effective_event_count": 6.533333333333334,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        }
+      }
+    },
+    "final_generation": {
+      "previous_v2": {
+        "train_1": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_1",
+          "call_index": 1,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "a323a7da1507335d3e600d333ce53c281f0ecb5085b8d02d332cbc1a9086c7a4",
+          "best_fitness": 0.6445069087263888,
+          "mean_fitness": -219999999.69874397,
+          "best_primary_objective_pct_per_day": 1.1214100249286763,
+          "best_trade_count_factor": 0.7,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 0.7849870174500734,
+          "best_mae_penalty": 0.14048010872368452,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.14048010872368452,
+          "best_fitness_before_entry_gate": 0.6445069087263888,
+          "best_final_fitness": 0.6445069087263888,
+          "best_trade_count": 12,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 91.66666666666666,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T19:59:25.171559+00:00"
+        },
+        "train_2": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_2",
+          "call_index": 2,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "3458571c823af0daba0c97ab8a3fb6bc7278b6463628b6e28e574b678149d5f8",
+          "best_fitness": 1.0460364481256468,
+          "mean_fitness": -339999999.5572147,
+          "best_primary_objective_pct_per_day": 1.8426002549290919,
+          "best_trade_count_factor": 0.6124999999999999,
+          "best_trade_count_factor_bin": "8_11",
+          "best_primary_after_trade_count_factor": 1.1285926561440687,
+          "best_mae_penalty": 0.061449395135074525,
+          "best_realized_loss_penalty": 0.02110681288334735,
+          "best_total_risk_penalty": 0.08255620801842187,
+          "best_fitness_before_entry_gate": 1.0460364481256468,
+          "best_final_fitness": 1.0460364481256468,
+          "best_trade_count": 11,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 81.81818181818183,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T20:03:47.668245+00:00"
+        },
+        "train_3": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_3",
+          "call_index": 3,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "a099fd3046c9be09aaa6130887f08d1f2ec43240273cf5d48ddf125af63ab017",
+          "best_fitness": 2.091575610734492,
+          "mean_fitness": -169999999.07338226,
+          "best_primary_objective_pct_per_day": 3.1040362758923905,
+          "best_trade_count_factor": 0.7,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 2.1728253931246733,
+          "best_mae_penalty": 0.08124978239018137,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.08124978239018137,
+          "best_fitness_before_entry_gate": 2.091575610734492,
+          "best_final_fitness": 2.091575610734492,
+          "best_trade_count": 12,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 91.66666666666666,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T20:07:08.807458+00:00"
+        }
+      },
+      "factor_restore": {
+        "train_1": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_1",
+          "call_index": 1,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "af7c892b2ba0e4eb8d03563b4bd5170212971bf8777390397379c4ed847ef47a",
+          "best_fitness": 0.764476553391175,
+          "mean_fitness": -99999999.48791634,
+          "best_primary_objective_pct_per_day": 1.0908852031431164,
+          "best_trade_count_factor": 0.8875,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 0.9681606177895158,
+          "best_mae_penalty": 0.0,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.0,
+          "best_fitness_before_entry_gate": 0.764476553391175,
+          "best_final_fitness": 0.764476553391175,
+          "best_trade_count": 17,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 82.35294117647058,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-15T10:31:48.261801+00:00"
+        },
+        "train_2": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_2",
+          "call_index": 2,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "627b478d7b741b16a4a3a790f341d9734cd9f9d383c871b25b1dd3537b5974d6",
+          "best_fitness": 1.364763873918462,
+          "mean_fitness": -109999999.54850292,
+          "best_primary_objective_pct_per_day": 2.1923340562467235,
+          "best_trade_count_factor": 0.925,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 2.0279090020282196,
+          "best_mae_penalty": 0.1561678776027025,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.1561678776027025,
+          "best_fitness_before_entry_gate": 1.364763873918462,
+          "best_final_fitness": 1.364763873918462,
+          "best_trade_count": 18,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 100.0,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-15T10:33:25.611815+00:00"
+        },
+        "train_3": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_3",
+          "call_index": 3,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "1d89cdfc027e8500e9dcd18dab57e7cbc5003430408338c28af0c08cb81d988e",
+          "best_fitness": 1.7106577620593564,
+          "mean_fitness": -29999998.8664048,
+          "best_primary_objective_pct_per_day": 2.2109446905312633,
+          "best_trade_count_factor": 0.7749999999999999,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 1.7134821351617289,
+          "best_mae_penalty": 0.0028243731023724905,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.0028243731023724905,
+          "best_fitness_before_entry_gate": 1.7106577620593564,
+          "best_final_fitness": 1.7106577620593564,
+          "best_trade_count": 14,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 100.0,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-15T10:34:39.207477+00:00"
+        }
+      }
+    },
+    "strict_and_joint_pass": {
+      "train_1": {
+        "strict_and_entry_eligible_day_count": 251,
+        "strict_and_joint_pass_day_count": 13,
+        "strict_and_joint_pass_dates": [
+          "2022-07-01",
+          "2022-07-11",
+          "2022-10-11",
+          "2022-10-12",
+          "2022-10-14",
+          "2022-12-29",
+          "2022-12-30",
+          "2023-01-03",
+          "2023-01-05",
+          "2023-01-26",
+          "2023-01-31",
+          "2023-04-06",
+          "2023-04-12"
+        ]
+      },
+      "train_2": {
+        "strict_and_entry_eligible_day_count": 250,
+        "strict_and_joint_pass_day_count": 13,
+        "strict_and_joint_pass_dates": [
+          "2023-11-29",
+          "2023-12-05",
+          "2023-12-07",
+          "2024-02-22",
+          "2024-02-27",
+          "2024-03-01",
+          "2024-04-15",
+          "2024-04-16",
+          "2024-04-17",
+          "2024-04-24",
+          "2024-05-08",
+          "2024-05-28",
+          "2024-06-10"
+        ]
+      },
+      "train_3": {
+        "strict_and_entry_eligible_day_count": 250,
+        "strict_and_joint_pass_day_count": 12,
+        "strict_and_joint_pass_dates": [
+          "2024-07-08",
+          "2024-07-26",
+          "2024-07-29",
+          "2024-08-12",
+          "2024-10-10",
+          "2024-10-11",
+          "2024-10-31",
+          "2024-11-04",
+          "2025-04-10",
+          "2025-05-13",
+          "2025-05-15",
+          "2025-05-29"
+        ]
+      }
+    },
+    "gate_bottleneck": {
+      "train_1": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 152,
+        "trade_count_below_minimum_rate": 0.5066666666666667,
+        "trade_count_met_but_win_rate_below_60_count": 59,
+        "trade_count_met_but_win_rate_below_60_rate": 0.19666666666666666,
+        "both_entry_gates_pass_count": 89,
+        "both_entry_gates_pass_rate": 0.2966666666666667,
+        "realized_loss_penalized_count": 154,
+        "realized_loss_penalized_rate": 0.5133333333333333,
+        "mean_realized_loss_penalty_among_penalized": 4.757406138991176,
+        "mean_realized_loss_penalty_all": 2.4421351513488037,
+        "mae_penalized_count": 161,
+        "mae_penalized_rate": 0.5366666666666666,
+        "mean_mae_penalty_among_penalized": 5.290310141114345,
+        "mean_mae_penalty_all": 2.839133109064698,
+        "trade_count_distribution": {
+          "min": 0,
+          "median": 7.0,
+          "max": 61,
+          "histogram": {
+            "0": 61,
+            "1": 11,
+            "2": 11,
+            "3": 1,
+            "4": 2,
+            "5": 53,
+            "6": 5,
+            "7": 8,
+            "8": 10,
+            "9": 2,
+            "10": 4,
+            "11": 8,
+            "12": 1,
+            "13": 2,
+            "14": 3,
+            "15": 2,
+            "16": 3,
+            "17": 23,
+            "18": 2,
+            "19": 9,
+            "20": 4,
+            "21": 3,
+            "22": 3,
+            "23": 19,
+            "24": 4,
+            "25": 6,
+            "26": 6,
+            "27": 5,
+            "28": 5,
+            "29": 3,
+            "30": 1,
+            "33": 1,
+            "35": 3,
+            "37": 3,
+            "38": 1,
+            "39": 3,
+            "44": 4,
+            "45": 2,
+            "53": 1,
+            "54": 1,
+            "61": 1
+          },
+          "factor_bins": {
+            "lt_8": 152,
+            "20_80": 79,
+            "12_19": 45,
+            "8_11": 24
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 10,
+          "median": 23,
+          "max": 37,
+          "histogram": {
+            "10": 2,
+            "13": 1,
+            "14": 2,
+            "15": 1,
+            "16": 1,
+            "17": 21,
+            "18": 1,
+            "19": 3,
+            "20": 2,
+            "21": 1,
+            "22": 1,
+            "23": 19,
+            "24": 3,
+            "25": 6,
+            "26": 5,
+            "27": 5,
+            "28": 2,
+            "29": 1,
+            "30": 1,
+            "37": 1
+          },
+          "factor_bins": {
+            "12_19": 30,
+            "20_80": 47,
+            "8_11": 2
+          }
+        },
+        "mean_primary_objective_pct_per_day": -1.211321036313199,
+        "mean_fitness_before_entry_gate": -5.272476455715574,
+        "qualify_pass_count": 79,
+        "fail_metric_counts": {
+          "entry_trade_count_below_8": 152,
+          "expectancy_pct": 209,
+          "entry_win_rate_below_60": 59,
+          "member_score": 1
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates.",
+        "eec_penalty_enabled": true,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "mean_effective_event_count": 2.5003375228991107,
+        "median_effective_event_count": 2.0,
+        "mean_eec_multiplier": 1.0,
+        "eec_multiplier_histogram": {
+          "1.0": 300
+        },
+        "max_cluster_share_mean": 0.0,
+        "eec_penalized_count": 0,
+        "eec_penalized_rate": 0.0
+      },
+      "train_2": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 89,
+        "trade_count_below_minimum_rate": 0.2966666666666667,
+        "trade_count_met_but_win_rate_below_60_count": 93,
+        "trade_count_met_but_win_rate_below_60_rate": 0.31,
+        "both_entry_gates_pass_count": 118,
+        "both_entry_gates_pass_rate": 0.3933333333333333,
+        "realized_loss_penalized_count": 171,
+        "realized_loss_penalized_rate": 0.57,
+        "mean_realized_loss_penalty_among_penalized": 0.7127354082736413,
+        "mean_realized_loss_penalty_all": 0.4062591827159756,
+        "mae_penalized_count": 215,
+        "mae_penalized_rate": 0.7166666666666667,
+        "mean_mae_penalty_among_penalized": 0.6593353310380248,
+        "mean_mae_penalty_all": 0.4725236539105844,
+        "trade_count_distribution": {
+          "min": 2,
+          "median": 14.0,
+          "max": 77,
+          "histogram": {
+            "2": 1,
+            "3": 66,
+            "4": 11,
+            "5": 5,
+            "6": 3,
+            "7": 3,
+            "9": 3,
+            "10": 2,
+            "11": 1,
+            "12": 5,
+            "13": 24,
+            "14": 34,
+            "15": 10,
+            "16": 4,
+            "17": 8,
+            "18": 41,
+            "19": 12,
+            "20": 7,
+            "21": 5,
+            "22": 3,
+            "23": 1,
+            "24": 2,
+            "25": 10,
+            "26": 3,
+            "27": 2,
+            "28": 1,
+            "29": 3,
+            "30": 1,
+            "31": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1,
+            "37": 3,
+            "38": 1,
+            "40": 2,
+            "41": 2,
+            "42": 1,
+            "43": 3,
+            "45": 1,
+            "47": 1,
+            "51": 2,
+            "53": 1,
+            "54": 1,
+            "58": 1,
+            "59": 1,
+            "61": 1,
+            "62": 1,
+            "63": 1,
+            "64": 1,
+            "77": 1
+          },
+          "factor_bins": {
+            "12_19": 138,
+            "lt_8": 89,
+            "20_80": 67,
+            "8_11": 6
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 9,
+          "median": 18,
+          "max": 58,
+          "histogram": {
+            "9": 1,
+            "12": 2,
+            "13": 23,
+            "14": 2,
+            "15": 2,
+            "17": 1,
+            "18": 36,
+            "19": 8,
+            "20": 5,
+            "21": 3,
+            "22": 2,
+            "25": 7,
+            "26": 1,
+            "27": 2,
+            "28": 1,
+            "29": 1,
+            "30": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1,
+            "37": 1,
+            "40": 2,
+            "41": 1,
+            "43": 3,
+            "45": 1,
+            "51": 1,
+            "58": 1
+          },
+          "factor_bins": {
+            "12_19": 74,
+            "20_80": 36,
+            "8_11": 1
+          }
+        },
+        "mean_primary_objective_pct_per_day": 1.1407002736179692,
+        "mean_fitness_before_entry_gate": -0.46669888202023074,
+        "qualify_pass_count": 111,
+        "fail_metric_counts": {
+          "entry_trade_count_below_8": 89,
+          "entry_win_rate_below_60": 93,
+          "member_score": 26,
+          "expectancy_pct": 92
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates.",
+        "eec_penalty_enabled": true,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "mean_effective_event_count": 3.073097443655391,
+        "median_effective_event_count": 2.5128205128205128,
+        "mean_eec_multiplier": 1.0,
+        "eec_multiplier_histogram": {
+          "1.0": 300
+        },
+        "max_cluster_share_mean": 0.0,
+        "eec_penalized_count": 0,
+        "eec_penalized_rate": 0.0
+      },
+      "train_3": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 6,
+        "trade_count_below_minimum_rate": 0.02,
+        "trade_count_met_but_win_rate_below_60_count": 193,
+        "trade_count_met_but_win_rate_below_60_rate": 0.6433333333333333,
+        "both_entry_gates_pass_count": 101,
+        "both_entry_gates_pass_rate": 0.33666666666666667,
+        "realized_loss_penalized_count": 242,
+        "realized_loss_penalized_rate": 0.8066666666666666,
+        "mean_realized_loss_penalty_among_penalized": 2.881869059479178,
+        "mean_realized_loss_penalty_all": 2.3247077079798704,
+        "mae_penalized_count": 300,
+        "mae_penalized_rate": 1.0,
+        "mean_mae_penalty_among_penalized": 1.1686954823020843,
+        "mean_mae_penalty_all": 1.1686954823020843,
+        "trade_count_distribution": {
+          "min": 4,
+          "median": 15.0,
+          "max": 66,
+          "histogram": {
+            "4": 1,
+            "5": 1,
+            "6": 1,
+            "7": 3,
+            "8": 48,
+            "9": 9,
+            "10": 4,
+            "11": 4,
+            "12": 6,
+            "13": 9,
+            "14": 56,
+            "15": 9,
+            "16": 7,
+            "17": 7,
+            "18": 5,
+            "19": 3,
+            "20": 5,
+            "21": 1,
+            "22": 2,
+            "23": 2,
+            "24": 4,
+            "25": 2,
+            "26": 1,
+            "27": 3,
+            "28": 3,
+            "29": 3,
+            "30": 3,
+            "31": 2,
+            "32": 2,
+            "34": 1,
+            "35": 2,
+            "36": 1,
+            "37": 1,
+            "38": 1,
+            "39": 1,
+            "40": 2,
+            "41": 2,
+            "42": 14,
+            "43": 1,
+            "44": 11,
+            "45": 2,
+            "46": 3,
+            "48": 5,
+            "49": 1,
+            "50": 2,
+            "51": 3,
+            "52": 14,
+            "53": 5,
+            "54": 7,
+            "55": 2,
+            "56": 2,
+            "57": 1,
+            "58": 3,
+            "59": 1,
+            "60": 1,
+            "61": 1,
+            "62": 1,
+            "63": 1,
+            "64": 1,
+            "66": 1
+          },
+          "factor_bins": {
+            "8_11": 65,
+            "12_19": 102,
+            "20_80": 127,
+            "lt_8": 6
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 9,
+          "median": 14.0,
+          "max": 31,
+          "histogram": {
+            "9": 1,
+            "13": 7,
+            "14": 55,
+            "15": 7,
+            "16": 3,
+            "17": 6,
+            "18": 3,
+            "19": 2,
+            "20": 2,
+            "21": 1,
+            "22": 2,
+            "24": 1,
+            "27": 2,
+            "30": 1,
+            "31": 1
+          },
+          "factor_bins": {
+            "12_19": 83,
+            "20_80": 10,
+            "8_11": 1
+          }
+        },
+        "mean_primary_objective_pct_per_day": -0.0389364310817796,
+        "mean_fitness_before_entry_gate": -3.2846348913680097,
+        "qualify_pass_count": 94,
+        "fail_metric_counts": {
+          "entry_win_rate_below_60": 193,
+          "expectancy_pct": 206,
+          "entry_trade_count_below_8": 6,
+          "member_score": 13
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates.",
+        "eec_penalty_enabled": true,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "mean_effective_event_count": 4.202979891394885,
+        "median_effective_event_count": 3.510249694429893,
+        "mean_eec_multiplier": 1.0,
+        "eec_multiplier_histogram": {
+          "1.0": 300
+        },
+        "max_cluster_share_mean": 0.0,
+        "eec_penalized_count": 0,
+        "eec_penalized_rate": 0.0
+      }
+    },
+    "elapsed_seconds": {
+      "previous_v2": 877.9297504425049,
+      "factor_restore": 326.074729681015
+    },
+    "verdict_code": "FACTOR_RESTORE_SUCCESS",
+    "verdict_reason": "세 fold fold-best가 모두 12건을 벗어났고 최소 한 fold가 15건 이상으로 이동했다."
+  },
+  "verdict_code": "EEC_PENALTY_EFFECTIVE",
+  "verdict_reason": "fold-best EEC가 모든 fold에서 상승했고 최대 클러스터 비중도 모두 하락했다.",
+  "overlap_entry_comparison": {
+    "baseline_dir": "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+    "current_dir": "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_feature_nulltest_v8_20260715\\atr14_pct\\SHUFFLED",
+    "source_git_commit": "ca1154d",
+    "seed_base": 2026071401,
+    "baseline_label": "v3_single_position",
+    "current_label": "v4_overlap_entry",
+    "pass_count_distribution": {
+      "v3_single_position": {
+        "all3": 0,
+        "all2": 2,
+        "all1": 192,
+        "all0": 106
+      },
+      "v4_overlap_entry": {
+        "all3": 1,
+        "all2": 26,
+        "all1": 229,
+        "all0": 44
+      }
+    },
+    "fold_pass_counts": {
+      "v3_single_position": {
+        "train_1": 48,
+        "train_2": 67,
+        "train_3": 81
+      },
+      "v4_overlap_entry": {
+        "train_1": 79,
+        "train_2": 111,
+        "train_3": 94
+      }
+    },
+    "fold_best": {
+      "v3_single_position": {
+        "train_1": {
+          "fitness": 0.6445069087263888,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 1.1214100249286763,
+          "mae_penalty": 0.14048010872368452,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666,
+          "effective_event_count": 0.0,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        },
+        "train_2": {
+          "fitness": 1.0460364481256468,
+          "trade_count": 11,
+          "trade_count_factor": 0.6124999999999999,
+          "primary_objective_pct_per_day": 1.8426002549290919,
+          "mae_penalty": 0.061449395135074525,
+          "realized_loss_penalty": 0.02110681288334735,
+          "win_rate_pct": 81.81818181818183,
+          "effective_event_count": 0.0,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        },
+        "train_3": {
+          "fitness": 2.091575610734492,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 3.1040362758923905,
+          "mae_penalty": 0.08124978239018137,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666,
+          "effective_event_count": 0.0,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        }
+      },
+      "v4_overlap_entry": {
+        "train_1": {
+          "fitness": 0.8059024017289121,
+          "trade_count": 27,
+          "trade_count_factor": 1.0,
+          "primary_objective_pct_per_day": 0.9785845546938672,
+          "mae_penalty": 0.07482369749556837,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 85.18518518518519,
+          "effective_event_count": 5.4,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        },
+        "train_2": {
+          "fitness": 1.364763873918462,
+          "trade_count": 18,
+          "trade_count_factor": 0.925,
+          "primary_objective_pct_per_day": 2.1923340562467235,
+          "mae_penalty": 0.1561678776027025,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 100.0,
+          "effective_event_count": 4.499999999999999,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        },
+        "train_3": {
+          "fitness": 1.7106577620593564,
+          "trade_count": 14,
+          "trade_count_factor": 0.7749999999999999,
+          "primary_objective_pct_per_day": 2.2109446905312633,
+          "mae_penalty": 0.0028243731023724905,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 100.0,
+          "effective_event_count": 6.533333333333334,
+          "eec_multiplier": 1.0,
+          "eec_target": 4.0,
+          "eec_floor": 0.7,
+          "eec_nonduplicate_event_count": 0,
+          "eec_event_cluster_count": 0,
+          "eec_max_cluster_trade_share": 0.0,
+          "primary_after_trade_count_factor_before_eec": 0.0,
+          "primary_after_eec_penalty": 0.0,
+          "final_fitness_before_eec": 0.0
+        }
+      }
+    },
+    "fold_concurrency_and_support": {
+      "v3_single_position": {
+        "train_1": {
+          "joint_pass_day_count": 25,
+          "actual_trade_count": 12,
+          "max_concurrent_positions": 1,
+          "effective_event_count": 4.084967320261438
+        },
+        "train_2": {
+          "joint_pass_day_count": 29,
+          "actual_trade_count": 11,
+          "max_concurrent_positions": 1,
+          "effective_event_count": 4.06280193236715
+        },
+        "train_3": {
+          "joint_pass_day_count": 32,
+          "actual_trade_count": 12,
+          "max_concurrent_positions": 1,
+          "effective_event_count": 3.7925925925925927
+        }
+      },
+      "v4_overlap_entry": {
+        "train_1": {
+          "joint_pass_day_count": 13,
+          "actual_trade_count": 11,
+          "executed_joint_pass_day_count": 11,
+          "holding_cooldown_absorbed_count": 0,
+          "nonexecuted_joint_pass_day_count": 2,
+          "max_concurrent_positions": 2,
+          "entry_time_concurrency_distribution": {
+            "1": 8,
+            "2": 3
+          },
+          "active_day_concurrency_distribution": {
+            "1": 16,
+            "2": 4
+          },
+          "effective_event_count": 4.567567567567567,
+          "event_cluster_count": 5
+        },
+        "train_2": {
+          "joint_pass_day_count": 13,
+          "actual_trade_count": 13,
+          "executed_joint_pass_day_count": 13,
+          "holding_cooldown_absorbed_count": 0,
+          "nonexecuted_joint_pass_day_count": 0,
+          "max_concurrent_positions": 3,
+          "entry_time_concurrency_distribution": {
+            "1": 10,
+            "2": 2,
+            "3": 1
+          },
+          "active_day_concurrency_distribution": {
+            "1": 21,
+            "2": 2,
+            "3": 1
+          },
+          "effective_event_count": 4.567567567567567,
+          "event_cluster_count": 6
+        },
+        "train_3": {
+          "joint_pass_day_count": 12,
+          "actual_trade_count": 11,
+          "executed_joint_pass_day_count": 11,
+          "holding_cooldown_absorbed_count": 0,
+          "nonexecuted_joint_pass_day_count": 1,
+          "max_concurrent_positions": 2,
+          "entry_time_concurrency_distribution": {
+            "1": 8,
+            "2": 3
+          },
+          "active_day_concurrency_distribution": {
+            "1": 18,
+            "2": 3
+          },
+          "effective_event_count": 7.199999999999999,
+          "event_cluster_count": 8
+        }
+      }
+    },
+    "generation_best_trade_count_distribution": {
+      "train_1": {
+        "generation_count": 40,
+        "min": 17,
+        "median": 25.5,
+        "max": 41,
+        "histogram": {
+          "17": 9,
+          "18": 1,
+          "23": 10,
+          "28": 2,
+          "29": 1,
+          "30": 6,
+          "32": 4,
+          "33": 1,
+          "34": 1,
+          "35": 2,
+          "40": 1,
+          "41": 2
+        }
+      },
+      "train_2": {
+        "generation_count": 40,
+        "min": 13,
+        "median": 18.0,
+        "max": 45,
+        "histogram": {
+          "13": 1,
+          "14": 3,
+          "15": 2,
+          "16": 5,
+          "17": 7,
+          "18": 6,
+          "19": 7,
+          "20": 5,
+          "23": 3,
+          "45": 1
+        }
+      },
+      "train_3": {
+        "generation_count": 40,
+        "min": 13,
+        "median": 14.0,
+        "max": 43,
+        "histogram": {
+          "13": 7,
+          "14": 14,
+          "15": 3,
+          "16": 1,
+          "19": 1,
+          "20": 7,
+          "21": 2,
+          "22": 2,
+          "32": 1,
+          "43": 2
+        }
+      }
+    },
+    "gate_bottleneck": {
+      "train_1": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 152,
+        "trade_count_below_minimum_rate": 0.5066666666666667,
+        "trade_count_met_but_win_rate_below_60_count": 59,
+        "trade_count_met_but_win_rate_below_60_rate": 0.19666666666666666,
+        "both_entry_gates_pass_count": 89,
+        "both_entry_gates_pass_rate": 0.2966666666666667,
+        "realized_loss_penalized_count": 154,
+        "realized_loss_penalized_rate": 0.5133333333333333,
+        "mean_realized_loss_penalty_among_penalized": 4.757406138991176,
+        "mean_realized_loss_penalty_all": 2.4421351513488037,
+        "mae_penalized_count": 161,
+        "mae_penalized_rate": 0.5366666666666666,
+        "mean_mae_penalty_among_penalized": 5.290310141114345,
+        "mean_mae_penalty_all": 2.839133109064698,
+        "trade_count_distribution": {
+          "min": 0,
+          "median": 7.0,
+          "max": 61,
+          "histogram": {
+            "0": 61,
+            "1": 11,
+            "2": 11,
+            "3": 1,
+            "4": 2,
+            "5": 53,
+            "6": 5,
+            "7": 8,
+            "8": 10,
+            "9": 2,
+            "10": 4,
+            "11": 8,
+            "12": 1,
+            "13": 2,
+            "14": 3,
+            "15": 2,
+            "16": 3,
+            "17": 23,
+            "18": 2,
+            "19": 9,
+            "20": 4,
+            "21": 3,
+            "22": 3,
+            "23": 19,
+            "24": 4,
+            "25": 6,
+            "26": 6,
+            "27": 5,
+            "28": 5,
+            "29": 3,
+            "30": 1,
+            "33": 1,
+            "35": 3,
+            "37": 3,
+            "38": 1,
+            "39": 3,
+            "44": 4,
+            "45": 2,
+            "53": 1,
+            "54": 1,
+            "61": 1
+          },
+          "factor_bins": {
+            "lt_8": 152,
+            "20_80": 79,
+            "12_19": 45,
+            "8_11": 24
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 10,
+          "median": 23,
+          "max": 37,
+          "histogram": {
+            "10": 2,
+            "13": 1,
+            "14": 2,
+            "15": 1,
+            "16": 1,
+            "17": 21,
+            "18": 1,
+            "19": 3,
+            "20": 2,
+            "21": 1,
+            "22": 1,
+            "23": 19,
+            "24": 3,
+            "25": 6,
+            "26": 5,
+            "27": 5,
+            "28": 2,
+            "29": 1,
+            "30": 1,
+            "37": 1
+          },
+          "factor_bins": {
+            "12_19": 30,
+            "20_80": 47,
+            "8_11": 2
+          }
+        },
+        "mean_primary_objective_pct_per_day": -1.211321036313199,
+        "mean_fitness_before_entry_gate": -5.272476455715574,
+        "qualify_pass_count": 79,
+        "fail_metric_counts": {
+          "entry_trade_count_below_8": 152,
+          "expectancy_pct": 209,
+          "entry_win_rate_below_60": 59,
+          "member_score": 1
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates.",
+        "eec_penalty_enabled": true,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "mean_effective_event_count": 2.5003375228991107,
+        "median_effective_event_count": 2.0,
+        "mean_eec_multiplier": 1.0,
+        "eec_multiplier_histogram": {
+          "1.0": 300
+        },
+        "max_cluster_share_mean": 0.0,
+        "eec_penalized_count": 0,
+        "eec_penalized_rate": 0.0
+      },
+      "train_2": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 89,
+        "trade_count_below_minimum_rate": 0.2966666666666667,
+        "trade_count_met_but_win_rate_below_60_count": 93,
+        "trade_count_met_but_win_rate_below_60_rate": 0.31,
+        "both_entry_gates_pass_count": 118,
+        "both_entry_gates_pass_rate": 0.3933333333333333,
+        "realized_loss_penalized_count": 171,
+        "realized_loss_penalized_rate": 0.57,
+        "mean_realized_loss_penalty_among_penalized": 0.7127354082736413,
+        "mean_realized_loss_penalty_all": 0.4062591827159756,
+        "mae_penalized_count": 215,
+        "mae_penalized_rate": 0.7166666666666667,
+        "mean_mae_penalty_among_penalized": 0.6593353310380248,
+        "mean_mae_penalty_all": 0.4725236539105844,
+        "trade_count_distribution": {
+          "min": 2,
+          "median": 14.0,
+          "max": 77,
+          "histogram": {
+            "2": 1,
+            "3": 66,
+            "4": 11,
+            "5": 5,
+            "6": 3,
+            "7": 3,
+            "9": 3,
+            "10": 2,
+            "11": 1,
+            "12": 5,
+            "13": 24,
+            "14": 34,
+            "15": 10,
+            "16": 4,
+            "17": 8,
+            "18": 41,
+            "19": 12,
+            "20": 7,
+            "21": 5,
+            "22": 3,
+            "23": 1,
+            "24": 2,
+            "25": 10,
+            "26": 3,
+            "27": 2,
+            "28": 1,
+            "29": 3,
+            "30": 1,
+            "31": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1,
+            "37": 3,
+            "38": 1,
+            "40": 2,
+            "41": 2,
+            "42": 1,
+            "43": 3,
+            "45": 1,
+            "47": 1,
+            "51": 2,
+            "53": 1,
+            "54": 1,
+            "58": 1,
+            "59": 1,
+            "61": 1,
+            "62": 1,
+            "63": 1,
+            "64": 1,
+            "77": 1
+          },
+          "factor_bins": {
+            "12_19": 138,
+            "lt_8": 89,
+            "20_80": 67,
+            "8_11": 6
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 9,
+          "median": 18,
+          "max": 58,
+          "histogram": {
+            "9": 1,
+            "12": 2,
+            "13": 23,
+            "14": 2,
+            "15": 2,
+            "17": 1,
+            "18": 36,
+            "19": 8,
+            "20": 5,
+            "21": 3,
+            "22": 2,
+            "25": 7,
+            "26": 1,
+            "27": 2,
+            "28": 1,
+            "29": 1,
+            "30": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1,
+            "37": 1,
+            "40": 2,
+            "41": 1,
+            "43": 3,
+            "45": 1,
+            "51": 1,
+            "58": 1
+          },
+          "factor_bins": {
+            "12_19": 74,
+            "20_80": 36,
+            "8_11": 1
+          }
+        },
+        "mean_primary_objective_pct_per_day": 1.1407002736179692,
+        "mean_fitness_before_entry_gate": -0.46669888202023074,
+        "qualify_pass_count": 111,
+        "fail_metric_counts": {
+          "entry_trade_count_below_8": 89,
+          "entry_win_rate_below_60": 93,
+          "member_score": 26,
+          "expectancy_pct": 92
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates.",
+        "eec_penalty_enabled": true,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "mean_effective_event_count": 3.073097443655391,
+        "median_effective_event_count": 2.5128205128205128,
+        "mean_eec_multiplier": 1.0,
+        "eec_multiplier_histogram": {
+          "1.0": 300
+        },
+        "max_cluster_share_mean": 0.0,
+        "eec_penalized_count": 0,
+        "eec_penalized_rate": 0.0
+      },
+      "train_3": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 6,
+        "trade_count_below_minimum_rate": 0.02,
+        "trade_count_met_but_win_rate_below_60_count": 193,
+        "trade_count_met_but_win_rate_below_60_rate": 0.6433333333333333,
+        "both_entry_gates_pass_count": 101,
+        "both_entry_gates_pass_rate": 0.33666666666666667,
+        "realized_loss_penalized_count": 242,
+        "realized_loss_penalized_rate": 0.8066666666666666,
+        "mean_realized_loss_penalty_among_penalized": 2.881869059479178,
+        "mean_realized_loss_penalty_all": 2.3247077079798704,
+        "mae_penalized_count": 300,
+        "mae_penalized_rate": 1.0,
+        "mean_mae_penalty_among_penalized": 1.1686954823020843,
+        "mean_mae_penalty_all": 1.1686954823020843,
+        "trade_count_distribution": {
+          "min": 4,
+          "median": 15.0,
+          "max": 66,
+          "histogram": {
+            "4": 1,
+            "5": 1,
+            "6": 1,
+            "7": 3,
+            "8": 48,
+            "9": 9,
+            "10": 4,
+            "11": 4,
+            "12": 6,
+            "13": 9,
+            "14": 56,
+            "15": 9,
+            "16": 7,
+            "17": 7,
+            "18": 5,
+            "19": 3,
+            "20": 5,
+            "21": 1,
+            "22": 2,
+            "23": 2,
+            "24": 4,
+            "25": 2,
+            "26": 1,
+            "27": 3,
+            "28": 3,
+            "29": 3,
+            "30": 3,
+            "31": 2,
+            "32": 2,
+            "34": 1,
+            "35": 2,
+            "36": 1,
+            "37": 1,
+            "38": 1,
+            "39": 1,
+            "40": 2,
+            "41": 2,
+            "42": 14,
+            "43": 1,
+            "44": 11,
+            "45": 2,
+            "46": 3,
+            "48": 5,
+            "49": 1,
+            "50": 2,
+            "51": 3,
+            "52": 14,
+            "53": 5,
+            "54": 7,
+            "55": 2,
+            "56": 2,
+            "57": 1,
+            "58": 3,
+            "59": 1,
+            "60": 1,
+            "61": 1,
+            "62": 1,
+            "63": 1,
+            "64": 1,
+            "66": 1
+          },
+          "factor_bins": {
+            "8_11": 65,
+            "12_19": 102,
+            "20_80": 127,
+            "lt_8": 6
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 9,
+          "median": 14.0,
+          "max": 31,
+          "histogram": {
+            "9": 1,
+            "13": 7,
+            "14": 55,
+            "15": 7,
+            "16": 3,
+            "17": 6,
+            "18": 3,
+            "19": 2,
+            "20": 2,
+            "21": 1,
+            "22": 2,
+            "24": 1,
+            "27": 2,
+            "30": 1,
+            "31": 1
+          },
+          "factor_bins": {
+            "12_19": 83,
+            "20_80": 10,
+            "8_11": 1
+          }
+        },
+        "mean_primary_objective_pct_per_day": -0.0389364310817796,
+        "mean_fitness_before_entry_gate": -3.2846348913680097,
+        "qualify_pass_count": 94,
+        "fail_metric_counts": {
+          "entry_win_rate_below_60": 193,
+          "expectancy_pct": 206,
+          "entry_trade_count_below_8": 6,
+          "member_score": 13
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates.",
+        "eec_penalty_enabled": true,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "mean_effective_event_count": 4.202979891394885,
+        "median_effective_event_count": 3.510249694429893,
+        "mean_eec_multiplier": 1.0,
+        "eec_multiplier_histogram": {
+          "1.0": 300
+        },
+        "max_cluster_share_mean": 0.0,
+        "eec_penalized_count": 0,
+        "eec_penalized_rate": 0.0
+      }
+    },
+    "elapsed_seconds": {
+      "v3_single_position": 877.9297504425049,
+      "v4_overlap_entry": 326.074729681015
+    },
+    "verdict_code": "OVERLAP_ENTRY_EFFECT_CONFIRMED",
+    "verdict_reason": "세 fold 모두 fold-best 거래수가 v3보다 증가했고 보유·cooldown 흡수가 0으로 확인됐다."
+  },
+  "fold_best_concurrency_summary": {
+    "train_1": {
+      "joint_pass_day_count": 13,
+      "actual_trade_count": 11,
+      "executed_joint_pass_day_count": 11,
+      "holding_cooldown_absorbed_count": 0,
+      "nonexecuted_joint_pass_day_count": 2,
+      "max_concurrent_positions": 2,
+      "entry_time_concurrency_distribution": {
+        "1": 8,
+        "2": 3
+      },
+      "active_day_concurrency_distribution": {
+        "1": 16,
+        "2": 4
+      },
+      "effective_event_count": 4.567567567567567,
+      "event_cluster_count": 5
+    },
+    "train_2": {
+      "joint_pass_day_count": 13,
+      "actual_trade_count": 13,
+      "executed_joint_pass_day_count": 13,
+      "holding_cooldown_absorbed_count": 0,
+      "nonexecuted_joint_pass_day_count": 0,
+      "max_concurrent_positions": 3,
+      "entry_time_concurrency_distribution": {
+        "1": 10,
+        "2": 2,
+        "3": 1
+      },
+      "active_day_concurrency_distribution": {
+        "1": 21,
+        "2": 2,
+        "3": 1
+      },
+      "effective_event_count": 4.567567567567567,
+      "event_cluster_count": 6
+    },
+    "train_3": {
+      "joint_pass_day_count": 12,
+      "actual_trade_count": 11,
+      "executed_joint_pass_day_count": 11,
+      "holding_cooldown_absorbed_count": 0,
+      "nonexecuted_joint_pass_day_count": 1,
+      "max_concurrent_positions": 2,
+      "entry_time_concurrency_distribution": {
+        "1": 8,
+        "2": 3
+      },
+      "active_day_concurrency_distribution": {
+        "1": 18,
+        "2": 3
+      },
+      "effective_event_count": 7.199999999999999,
+      "event_cluster_count": 8
+    }
+  },
+  "eec_penalty_comparison": {
+    "baseline_dir": "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+    "current_dir": "C:\\kingmaker_nulltest_v8\\data\\_system\\analysis\\stage3_feature_nulltest_v8_20260715\\atr14_pct\\SHUFFLED",
+    "seed_base": 2026071401,
+    "v4_reference": {
+      "pass_count_distribution": {
+        "all3": 0,
+        "all2": 2,
+        "all1": 192,
+        "all0": 106
+      },
+      "fold_best_trade_count": {
+        "train_1": 20,
+        "train_2": 15,
+        "train_3": 13
+      },
+      "fold_best_eec": {
+        "train_1": 2.3,
+        "train_2": 2.53,
+        "train_3": 3.7
+      },
+      "fold_best_max_cluster_share": {
+        "train_1": 0.6,
+        "train_2": 0.6,
+        "train_3": 0.37
+      }
+    },
+    "pass_count_distribution": {
+      "v4": {
+        "all3": 0,
+        "all2": 2,
+        "all1": 192,
+        "all0": 106
+      },
+      "this_run": {
+        "all3": 1,
+        "all2": 26,
+        "all1": 229,
+        "all0": 44
+      }
+    },
+    "fold_best": {
+      "train_1": {
+        "fitness": 0.8059024017289121,
+        "trade_count": 27,
+        "trade_count_factor": 1.0,
+        "primary_objective_pct_per_day": 0.9785845546938672,
+        "mae_penalty": 0.07482369749556837,
+        "realized_loss_penalty": 0.0,
+        "win_rate_pct": 85.18518518518519,
+        "effective_event_count": 5.4,
+        "eec_multiplier": 1.0,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "eec_nonduplicate_event_count": 0,
+        "eec_event_cluster_count": 0,
+        "eec_max_cluster_trade_share": 0.0,
+        "primary_after_trade_count_factor_before_eec": 0.0,
+        "primary_after_eec_penalty": 0.0,
+        "final_fitness_before_eec": 0.0
+      },
+      "train_2": {
+        "fitness": 1.364763873918462,
+        "trade_count": 18,
+        "trade_count_factor": 0.925,
+        "primary_objective_pct_per_day": 2.1923340562467235,
+        "mae_penalty": 0.1561678776027025,
+        "realized_loss_penalty": 0.0,
+        "win_rate_pct": 100.0,
+        "effective_event_count": 4.499999999999999,
+        "eec_multiplier": 1.0,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "eec_nonduplicate_event_count": 0,
+        "eec_event_cluster_count": 0,
+        "eec_max_cluster_trade_share": 0.0,
+        "primary_after_trade_count_factor_before_eec": 0.0,
+        "primary_after_eec_penalty": 0.0,
+        "final_fitness_before_eec": 0.0
+      },
+      "train_3": {
+        "fitness": 1.7106577620593564,
+        "trade_count": 14,
+        "trade_count_factor": 0.7749999999999999,
+        "primary_objective_pct_per_day": 2.2109446905312633,
+        "mae_penalty": 0.0028243731023724905,
+        "realized_loss_penalty": 0.0,
+        "win_rate_pct": 100.0,
+        "effective_event_count": 6.533333333333334,
+        "eec_multiplier": 1.0,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "eec_nonduplicate_event_count": 0,
+        "eec_event_cluster_count": 0,
+        "eec_max_cluster_trade_share": 0.0,
+        "primary_after_trade_count_factor_before_eec": 0.0,
+        "primary_after_eec_penalty": 0.0,
+        "final_fitness_before_eec": 0.0
+      }
+    },
+    "fold_best_trade_metrics": {
+      "train_1": {
+        "trade_count": 11,
+        "effective_event_count": 4.840000000000001,
+        "eec_multiplier": 1.0,
+        "max_cluster_trade_share": 0.2727272727272727,
+        "event_clusters": [
+          {
+            "cluster_index": 1,
+            "start": "2022-07-01",
+            "end": "2022-07-11",
+            "event_count": 2,
+            "trade_share": 0.18181818181818182,
+            "share_squared": 0.03305785123966942,
+            "monthly_distribution": {
+              "2022-07": 2
+            }
+          },
+          {
+            "cluster_index": 2,
+            "start": "2022-10-11",
+            "end": "2022-10-14",
+            "event_count": 3,
+            "trade_share": 0.2727272727272727,
+            "share_squared": 0.07438016528925619,
+            "monthly_distribution": {
+              "2022-10": 3
+            }
+          },
+          {
+            "cluster_index": 3,
+            "start": "2022-12-29",
+            "end": "2022-12-30",
+            "event_count": 2,
+            "trade_share": 0.18181818181818182,
+            "share_squared": 0.03305785123966942,
+            "monthly_distribution": {
+              "2022-12": 2
+            }
+          },
+          {
+            "cluster_index": 4,
+            "start": "2023-01-26",
+            "end": "2023-01-31",
+            "event_count": 2,
+            "trade_share": 0.18181818181818182,
+            "share_squared": 0.03305785123966942,
+            "monthly_distribution": {
+              "2023-01": 2
+            }
+          },
+          {
+            "cluster_index": 5,
+            "start": "2023-04-06",
+            "end": "2023-04-12",
+            "event_count": 2,
+            "trade_share": 0.18181818181818182,
+            "share_squared": 0.03305785123966942,
+            "monthly_distribution": {
+              "2023-04": 2
+            }
+          }
+        ],
+        "entry_time_concurrency_distribution": {
+          "1": 8,
+          "2": 3
+        },
+        "active_day_concurrency_distribution": {
+          "1": 16,
+          "2": 4
+        }
+      },
+      "train_2": {
+        "trade_count": 13,
+        "effective_event_count": 4.567567567567567,
+        "eec_multiplier": 1.0,
+        "max_cluster_trade_share": 0.3076923076923077,
+        "event_clusters": [
+          {
+            "cluster_index": 1,
+            "start": "2023-11-29",
+            "end": "2023-12-07",
+            "event_count": 3,
+            "trade_share": 0.23076923076923078,
+            "share_squared": 0.053254437869822494,
+            "monthly_distribution": {
+              "2023-11": 1,
+              "2023-12": 2
+            }
+          },
+          {
+            "cluster_index": 2,
+            "start": "2024-02-22",
+            "end": "2024-03-01",
+            "event_count": 3,
+            "trade_share": 0.23076923076923078,
+            "share_squared": 0.053254437869822494,
+            "monthly_distribution": {
+              "2024-02": 2,
+              "2024-03": 1
+            }
+          },
+          {
+            "cluster_index": 3,
+            "start": "2024-04-15",
+            "end": "2024-04-24",
+            "event_count": 4,
+            "trade_share": 0.3076923076923077,
+            "share_squared": 0.09467455621301776,
+            "monthly_distribution": {
+              "2024-04": 4
+            }
+          },
+          {
+            "cluster_index": 4,
+            "start": "2024-05-08",
+            "end": "2024-05-08",
+            "event_count": 1,
+            "trade_share": 0.07692307692307693,
+            "share_squared": 0.00591715976331361,
+            "monthly_distribution": {
+              "2024-05": 1
+            }
+          },
+          {
+            "cluster_index": 5,
+            "start": "2024-05-28",
+            "end": "2024-05-28",
+            "event_count": 1,
+            "trade_share": 0.07692307692307693,
+            "share_squared": 0.00591715976331361,
+            "monthly_distribution": {
+              "2024-05": 1
+            }
+          },
+          {
+            "cluster_index": 6,
+            "start": "2024-06-10",
+            "end": "2024-06-10",
+            "event_count": 1,
+            "trade_share": 0.07692307692307693,
+            "share_squared": 0.00591715976331361,
+            "monthly_distribution": {
+              "2024-06": 1
+            }
+          }
+        ],
+        "entry_time_concurrency_distribution": {
+          "1": 10,
+          "2": 2,
+          "3": 1
+        },
+        "active_day_concurrency_distribution": {
+          "1": 21,
+          "2": 2,
+          "3": 1
+        }
+      },
+      "train_3": {
+        "trade_count": 11,
+        "effective_event_count": 7.117647058823529,
+        "eec_multiplier": 1.0,
+        "max_cluster_trade_share": 0.18181818181818182,
+        "event_clusters": [
+          {
+            "cluster_index": 1,
+            "start": "2024-07-08",
+            "end": "2024-07-08",
+            "event_count": 1,
+            "trade_share": 0.09090909090909091,
+            "share_squared": 0.008264462809917356,
+            "monthly_distribution": {
+              "2024-07": 1
+            }
+          },
+          {
+            "cluster_index": 2,
+            "start": "2024-07-26",
+            "end": "2024-07-29",
+            "event_count": 2,
+            "trade_share": 0.18181818181818182,
+            "share_squared": 0.03305785123966942,
+            "monthly_distribution": {
+              "2024-07": 2
+            }
+          },
+          {
+            "cluster_index": 3,
+            "start": "2024-08-12",
+            "end": "2024-08-12",
+            "event_count": 1,
+            "trade_share": 0.09090909090909091,
+            "share_squared": 0.008264462809917356,
+            "monthly_distribution": {
+              "2024-08": 1
+            }
+          },
+          {
+            "cluster_index": 4,
+            "start": "2024-10-10",
+            "end": "2024-10-11",
+            "event_count": 2,
+            "trade_share": 0.18181818181818182,
+            "share_squared": 0.03305785123966942,
+            "monthly_distribution": {
+              "2024-10": 2
+            }
+          },
+          {
+            "cluster_index": 5,
+            "start": "2024-10-31",
+            "end": "2024-11-04",
+            "event_count": 2,
+            "trade_share": 0.18181818181818182,
+            "share_squared": 0.03305785123966942,
+            "monthly_distribution": {
+              "2024-10": 1,
+              "2024-11": 1
+            }
+          },
+          {
+            "cluster_index": 6,
+            "start": "2025-04-10",
+            "end": "2025-04-10",
+            "event_count": 1,
+            "trade_share": 0.09090909090909091,
+            "share_squared": 0.008264462809917356,
+            "monthly_distribution": {
+              "2025-04": 1
+            }
+          },
+          {
+            "cluster_index": 7,
+            "start": "2025-05-13",
+            "end": "2025-05-13",
+            "event_count": 1,
+            "trade_share": 0.09090909090909091,
+            "share_squared": 0.008264462809917356,
+            "monthly_distribution": {
+              "2025-05": 1
+            }
+          },
+          {
+            "cluster_index": 8,
+            "start": "2025-05-29",
+            "end": "2025-05-29",
+            "event_count": 1,
+            "trade_share": 0.09090909090909091,
+            "share_squared": 0.008264462809917356,
+            "monthly_distribution": {
+              "2025-05": 1
+            }
+          }
+        ],
+        "entry_time_concurrency_distribution": {
+          "1": 8,
+          "2": 3
+        },
+        "active_day_concurrency_distribution": {
+          "1": 18,
+          "2": 3
+        }
+      }
+    },
+    "rank_shift": {
+      "train_1": {
+        "largest_rank_shifts": [
+          {
+            "hash": null,
+            "before": 0.8059024017289121,
+            "after": 0.8059024017289121,
+            "eec": 5.4,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 0.7821304159298486,
+            "after": 0.7821304159298486,
+            "eec": 4.878048780487805,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 0.764476553391175,
+            "after": 0.764476553391175,
+            "eec": 4.737704918032787,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 0.764476553391175,
+            "after": 0.764476553391175,
+            "eec": 4.737704918032787,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 0.764476553391175,
+            "after": 0.764476553391175,
+            "eec": 4.737704918032787,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 0.764476553391175,
+            "after": 0.764476553391175,
+            "eec": 4.737704918032787,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 0.764476553391175,
+            "after": 0.764476553391175,
+            "eec": 4.737704918032787,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 0.764476553391175,
+            "after": 0.764476553391175,
+            "eec": 4.737704918032787,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 0.764476553391175,
+            "after": 0.764476553391175,
+            "eec": 4.737704918032787,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 0.764476553391175,
+            "after": 0.764476553391175,
+            "eec": 4.737704918032787,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          }
+        ]
+      },
+      "train_2": {
+        "largest_rank_shifts": [
+          {
+            "hash": null,
+            "before": 1.364763873918462,
+            "after": 1.364763873918462,
+            "eec": 4.499999999999999,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.364763873918462,
+            "after": 1.364763873918462,
+            "eec": 4.499999999999999,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.364763873918462,
+            "after": 1.364763873918462,
+            "eec": 4.499999999999999,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.364763873918462,
+            "after": 1.364763873918462,
+            "eec": 4.499999999999999,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.364763873918462,
+            "after": 1.364763873918462,
+            "eec": 4.499999999999999,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.364763873918462,
+            "after": 1.364763873918462,
+            "eec": 4.499999999999999,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.364763873918462,
+            "after": 1.364763873918462,
+            "eec": 4.499999999999999,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.364763873918462,
+            "after": 1.364763873918462,
+            "eec": 4.499999999999999,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.364763873918462,
+            "after": 1.364763873918462,
+            "eec": 4.499999999999999,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.364763873918462,
+            "after": 1.364763873918462,
+            "eec": 4.499999999999999,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          }
+        ]
+      },
+      "train_3": {
+        "largest_rank_shifts": [
+          {
+            "hash": null,
+            "before": 1.7106577620593564,
+            "after": 1.7106577620593564,
+            "eec": 6.533333333333334,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.7106577620593564,
+            "after": 1.7106577620593564,
+            "eec": 6.533333333333334,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.7106577620593564,
+            "after": 1.7106577620593564,
+            "eec": 6.533333333333334,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.7106577620593564,
+            "after": 1.7106577620593564,
+            "eec": 6.533333333333334,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.7106577620593564,
+            "after": 1.7106577620593564,
+            "eec": 6.533333333333334,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.7106577620593564,
+            "after": 1.7106577620593564,
+            "eec": 6.533333333333334,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.7106577620593564,
+            "after": 1.7106577620593564,
+            "eec": 6.533333333333334,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.7106577620593564,
+            "after": 1.7106577620593564,
+            "eec": 6.533333333333334,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.7106577620593564,
+            "after": 1.7106577620593564,
+            "eec": 6.533333333333334,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          },
+          {
+            "hash": null,
+            "before": 1.7106577620593564,
+            "after": 1.7106577620593564,
+            "eec": 6.533333333333334,
+            "multiplier": 1.0,
+            "rank_before_eec": 100,
+            "rank_after_eec": 100,
+            "rank_delta_after_minus_before": 0
+          }
+        ]
+      }
+    },
+    "gate_bottleneck": {
+      "train_1": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 152,
+        "trade_count_below_minimum_rate": 0.5066666666666667,
+        "trade_count_met_but_win_rate_below_60_count": 59,
+        "trade_count_met_but_win_rate_below_60_rate": 0.19666666666666666,
+        "both_entry_gates_pass_count": 89,
+        "both_entry_gates_pass_rate": 0.2966666666666667,
+        "realized_loss_penalized_count": 154,
+        "realized_loss_penalized_rate": 0.5133333333333333,
+        "mean_realized_loss_penalty_among_penalized": 4.757406138991176,
+        "mean_realized_loss_penalty_all": 2.4421351513488037,
+        "mae_penalized_count": 161,
+        "mae_penalized_rate": 0.5366666666666666,
+        "mean_mae_penalty_among_penalized": 5.290310141114345,
+        "mean_mae_penalty_all": 2.839133109064698,
+        "trade_count_distribution": {
+          "min": 0,
+          "median": 7.0,
+          "max": 61,
+          "histogram": {
+            "0": 61,
+            "1": 11,
+            "2": 11,
+            "3": 1,
+            "4": 2,
+            "5": 53,
+            "6": 5,
+            "7": 8,
+            "8": 10,
+            "9": 2,
+            "10": 4,
+            "11": 8,
+            "12": 1,
+            "13": 2,
+            "14": 3,
+            "15": 2,
+            "16": 3,
+            "17": 23,
+            "18": 2,
+            "19": 9,
+            "20": 4,
+            "21": 3,
+            "22": 3,
+            "23": 19,
+            "24": 4,
+            "25": 6,
+            "26": 6,
+            "27": 5,
+            "28": 5,
+            "29": 3,
+            "30": 1,
+            "33": 1,
+            "35": 3,
+            "37": 3,
+            "38": 1,
+            "39": 3,
+            "44": 4,
+            "45": 2,
+            "53": 1,
+            "54": 1,
+            "61": 1
+          },
+          "factor_bins": {
+            "lt_8": 152,
+            "20_80": 79,
+            "12_19": 45,
+            "8_11": 24
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 10,
+          "median": 23,
+          "max": 37,
+          "histogram": {
+            "10": 2,
+            "13": 1,
+            "14": 2,
+            "15": 1,
+            "16": 1,
+            "17": 21,
+            "18": 1,
+            "19": 3,
+            "20": 2,
+            "21": 1,
+            "22": 1,
+            "23": 19,
+            "24": 3,
+            "25": 6,
+            "26": 5,
+            "27": 5,
+            "28": 2,
+            "29": 1,
+            "30": 1,
+            "37": 1
+          },
+          "factor_bins": {
+            "12_19": 30,
+            "20_80": 47,
+            "8_11": 2
+          }
+        },
+        "mean_primary_objective_pct_per_day": -1.211321036313199,
+        "mean_fitness_before_entry_gate": -5.272476455715574,
+        "qualify_pass_count": 79,
+        "fail_metric_counts": {
+          "entry_trade_count_below_8": 152,
+          "expectancy_pct": 209,
+          "entry_win_rate_below_60": 59,
+          "member_score": 1
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates.",
+        "eec_penalty_enabled": true,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "mean_effective_event_count": 2.5003375228991107,
+        "median_effective_event_count": 2.0,
+        "mean_eec_multiplier": 1.0,
+        "eec_multiplier_histogram": {
+          "1.0": 300
+        },
+        "max_cluster_share_mean": 0.0,
+        "eec_penalized_count": 0,
+        "eec_penalized_rate": 0.0
+      },
+      "train_2": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 89,
+        "trade_count_below_minimum_rate": 0.2966666666666667,
+        "trade_count_met_but_win_rate_below_60_count": 93,
+        "trade_count_met_but_win_rate_below_60_rate": 0.31,
+        "both_entry_gates_pass_count": 118,
+        "both_entry_gates_pass_rate": 0.3933333333333333,
+        "realized_loss_penalized_count": 171,
+        "realized_loss_penalized_rate": 0.57,
+        "mean_realized_loss_penalty_among_penalized": 0.7127354082736413,
+        "mean_realized_loss_penalty_all": 0.4062591827159756,
+        "mae_penalized_count": 215,
+        "mae_penalized_rate": 0.7166666666666667,
+        "mean_mae_penalty_among_penalized": 0.6593353310380248,
+        "mean_mae_penalty_all": 0.4725236539105844,
+        "trade_count_distribution": {
+          "min": 2,
+          "median": 14.0,
+          "max": 77,
+          "histogram": {
+            "2": 1,
+            "3": 66,
+            "4": 11,
+            "5": 5,
+            "6": 3,
+            "7": 3,
+            "9": 3,
+            "10": 2,
+            "11": 1,
+            "12": 5,
+            "13": 24,
+            "14": 34,
+            "15": 10,
+            "16": 4,
+            "17": 8,
+            "18": 41,
+            "19": 12,
+            "20": 7,
+            "21": 5,
+            "22": 3,
+            "23": 1,
+            "24": 2,
+            "25": 10,
+            "26": 3,
+            "27": 2,
+            "28": 1,
+            "29": 3,
+            "30": 1,
+            "31": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1,
+            "37": 3,
+            "38": 1,
+            "40": 2,
+            "41": 2,
+            "42": 1,
+            "43": 3,
+            "45": 1,
+            "47": 1,
+            "51": 2,
+            "53": 1,
+            "54": 1,
+            "58": 1,
+            "59": 1,
+            "61": 1,
+            "62": 1,
+            "63": 1,
+            "64": 1,
+            "77": 1
+          },
+          "factor_bins": {
+            "12_19": 138,
+            "lt_8": 89,
+            "20_80": 67,
+            "8_11": 6
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 9,
+          "median": 18,
+          "max": 58,
+          "histogram": {
+            "9": 1,
+            "12": 2,
+            "13": 23,
+            "14": 2,
+            "15": 2,
+            "17": 1,
+            "18": 36,
+            "19": 8,
+            "20": 5,
+            "21": 3,
+            "22": 2,
+            "25": 7,
+            "26": 1,
+            "27": 2,
+            "28": 1,
+            "29": 1,
+            "30": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1,
+            "37": 1,
+            "40": 2,
+            "41": 1,
+            "43": 3,
+            "45": 1,
+            "51": 1,
+            "58": 1
+          },
+          "factor_bins": {
+            "12_19": 74,
+            "20_80": 36,
+            "8_11": 1
+          }
+        },
+        "mean_primary_objective_pct_per_day": 1.1407002736179692,
+        "mean_fitness_before_entry_gate": -0.46669888202023074,
+        "qualify_pass_count": 111,
+        "fail_metric_counts": {
+          "entry_trade_count_below_8": 89,
+          "entry_win_rate_below_60": 93,
+          "member_score": 26,
+          "expectancy_pct": 92
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates.",
+        "eec_penalty_enabled": true,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "mean_effective_event_count": 3.073097443655391,
+        "median_effective_event_count": 2.5128205128205128,
+        "mean_eec_multiplier": 1.0,
+        "eec_multiplier_histogram": {
+          "1.0": 300
+        },
+        "max_cluster_share_mean": 0.0,
+        "eec_penalized_count": 0,
+        "eec_penalized_rate": 0.0
+      },
+      "train_3": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 6,
+        "trade_count_below_minimum_rate": 0.02,
+        "trade_count_met_but_win_rate_below_60_count": 193,
+        "trade_count_met_but_win_rate_below_60_rate": 0.6433333333333333,
+        "both_entry_gates_pass_count": 101,
+        "both_entry_gates_pass_rate": 0.33666666666666667,
+        "realized_loss_penalized_count": 242,
+        "realized_loss_penalized_rate": 0.8066666666666666,
+        "mean_realized_loss_penalty_among_penalized": 2.881869059479178,
+        "mean_realized_loss_penalty_all": 2.3247077079798704,
+        "mae_penalized_count": 300,
+        "mae_penalized_rate": 1.0,
+        "mean_mae_penalty_among_penalized": 1.1686954823020843,
+        "mean_mae_penalty_all": 1.1686954823020843,
+        "trade_count_distribution": {
+          "min": 4,
+          "median": 15.0,
+          "max": 66,
+          "histogram": {
+            "4": 1,
+            "5": 1,
+            "6": 1,
+            "7": 3,
+            "8": 48,
+            "9": 9,
+            "10": 4,
+            "11": 4,
+            "12": 6,
+            "13": 9,
+            "14": 56,
+            "15": 9,
+            "16": 7,
+            "17": 7,
+            "18": 5,
+            "19": 3,
+            "20": 5,
+            "21": 1,
+            "22": 2,
+            "23": 2,
+            "24": 4,
+            "25": 2,
+            "26": 1,
+            "27": 3,
+            "28": 3,
+            "29": 3,
+            "30": 3,
+            "31": 2,
+            "32": 2,
+            "34": 1,
+            "35": 2,
+            "36": 1,
+            "37": 1,
+            "38": 1,
+            "39": 1,
+            "40": 2,
+            "41": 2,
+            "42": 14,
+            "43": 1,
+            "44": 11,
+            "45": 2,
+            "46": 3,
+            "48": 5,
+            "49": 1,
+            "50": 2,
+            "51": 3,
+            "52": 14,
+            "53": 5,
+            "54": 7,
+            "55": 2,
+            "56": 2,
+            "57": 1,
+            "58": 3,
+            "59": 1,
+            "60": 1,
+            "61": 1,
+            "62": 1,
+            "63": 1,
+            "64": 1,
+            "66": 1
+          },
+          "factor_bins": {
+            "8_11": 65,
+            "12_19": 102,
+            "20_80": 127,
+            "lt_8": 6
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 9,
+          "median": 14.0,
+          "max": 31,
+          "histogram": {
+            "9": 1,
+            "13": 7,
+            "14": 55,
+            "15": 7,
+            "16": 3,
+            "17": 6,
+            "18": 3,
+            "19": 2,
+            "20": 2,
+            "21": 1,
+            "22": 2,
+            "24": 1,
+            "27": 2,
+            "30": 1,
+            "31": 1
+          },
+          "factor_bins": {
+            "12_19": 83,
+            "20_80": 10,
+            "8_11": 1
+          }
+        },
+        "mean_primary_objective_pct_per_day": -0.0389364310817796,
+        "mean_fitness_before_entry_gate": -3.2846348913680097,
+        "qualify_pass_count": 94,
+        "fail_metric_counts": {
+          "entry_win_rate_below_60": 193,
+          "expectancy_pct": 206,
+          "entry_trade_count_below_8": 6,
+          "member_score": 13
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates.",
+        "eec_penalty_enabled": true,
+        "eec_target": 4.0,
+        "eec_floor": 0.7,
+        "mean_effective_event_count": 4.202979891394885,
+        "median_effective_event_count": 3.510249694429893,
+        "mean_eec_multiplier": 1.0,
+        "eec_multiplier_histogram": {
+          "1.0": 300
+        },
+        "max_cluster_share_mean": 0.0,
+        "eec_penalized_count": 0,
+        "eec_penalized_rate": 0.0
+      }
+    },
+    "verdict_code": "EEC_PENALTY_EFFECTIVE",
+    "verdict_reason": "fold-best EEC가 모든 fold에서 상승했고 최대 클러스터 비중도 모두 하락했다."
+  },
+  "fold_best_eec_summary": {
+    "train_1": {
+      "trade_count": 11,
+      "effective_event_count": 4.840000000000001,
+      "eec_multiplier": 1.0,
+      "max_cluster_trade_share": 0.2727272727272727,
+      "event_clusters": [
+        {
+          "cluster_index": 1,
+          "start": "2022-07-01",
+          "end": "2022-07-11",
+          "event_count": 2,
+          "trade_share": 0.18181818181818182,
+          "share_squared": 0.03305785123966942,
+          "monthly_distribution": {
+            "2022-07": 2
+          }
+        },
+        {
+          "cluster_index": 2,
+          "start": "2022-10-11",
+          "end": "2022-10-14",
+          "event_count": 3,
+          "trade_share": 0.2727272727272727,
+          "share_squared": 0.07438016528925619,
+          "monthly_distribution": {
+            "2022-10": 3
+          }
+        },
+        {
+          "cluster_index": 3,
+          "start": "2022-12-29",
+          "end": "2022-12-30",
+          "event_count": 2,
+          "trade_share": 0.18181818181818182,
+          "share_squared": 0.03305785123966942,
+          "monthly_distribution": {
+            "2022-12": 2
+          }
+        },
+        {
+          "cluster_index": 4,
+          "start": "2023-01-26",
+          "end": "2023-01-31",
+          "event_count": 2,
+          "trade_share": 0.18181818181818182,
+          "share_squared": 0.03305785123966942,
+          "monthly_distribution": {
+            "2023-01": 2
+          }
+        },
+        {
+          "cluster_index": 5,
+          "start": "2023-04-06",
+          "end": "2023-04-12",
+          "event_count": 2,
+          "trade_share": 0.18181818181818182,
+          "share_squared": 0.03305785123966942,
+          "monthly_distribution": {
+            "2023-04": 2
+          }
+        }
+      ],
+      "entry_time_concurrency_distribution": {
+        "1": 8,
+        "2": 3
+      },
+      "active_day_concurrency_distribution": {
+        "1": 16,
+        "2": 4
+      }
+    },
+    "train_2": {
+      "trade_count": 13,
+      "effective_event_count": 4.567567567567567,
+      "eec_multiplier": 1.0,
+      "max_cluster_trade_share": 0.3076923076923077,
+      "event_clusters": [
+        {
+          "cluster_index": 1,
+          "start": "2023-11-29",
+          "end": "2023-12-07",
+          "event_count": 3,
+          "trade_share": 0.23076923076923078,
+          "share_squared": 0.053254437869822494,
+          "monthly_distribution": {
+            "2023-11": 1,
+            "2023-12": 2
+          }
+        },
+        {
+          "cluster_index": 2,
+          "start": "2024-02-22",
+          "end": "2024-03-01",
+          "event_count": 3,
+          "trade_share": 0.23076923076923078,
+          "share_squared": 0.053254437869822494,
+          "monthly_distribution": {
+            "2024-02": 2,
+            "2024-03": 1
+          }
+        },
+        {
+          "cluster_index": 3,
+          "start": "2024-04-15",
+          "end": "2024-04-24",
+          "event_count": 4,
+          "trade_share": 0.3076923076923077,
+          "share_squared": 0.09467455621301776,
+          "monthly_distribution": {
+            "2024-04": 4
+          }
+        },
+        {
+          "cluster_index": 4,
+          "start": "2024-05-08",
+          "end": "2024-05-08",
+          "event_count": 1,
+          "trade_share": 0.07692307692307693,
+          "share_squared": 0.00591715976331361,
+          "monthly_distribution": {
+            "2024-05": 1
+          }
+        },
+        {
+          "cluster_index": 5,
+          "start": "2024-05-28",
+          "end": "2024-05-28",
+          "event_count": 1,
+          "trade_share": 0.07692307692307693,
+          "share_squared": 0.00591715976331361,
+          "monthly_distribution": {
+            "2024-05": 1
+          }
+        },
+        {
+          "cluster_index": 6,
+          "start": "2024-06-10",
+          "end": "2024-06-10",
+          "event_count": 1,
+          "trade_share": 0.07692307692307693,
+          "share_squared": 0.00591715976331361,
+          "monthly_distribution": {
+            "2024-06": 1
+          }
+        }
+      ],
+      "entry_time_concurrency_distribution": {
+        "1": 10,
+        "2": 2,
+        "3": 1
+      },
+      "active_day_concurrency_distribution": {
+        "1": 21,
+        "2": 2,
+        "3": 1
+      }
+    },
+    "train_3": {
+      "trade_count": 11,
+      "effective_event_count": 7.117647058823529,
+      "eec_multiplier": 1.0,
+      "max_cluster_trade_share": 0.18181818181818182,
+      "event_clusters": [
+        {
+          "cluster_index": 1,
+          "start": "2024-07-08",
+          "end": "2024-07-08",
+          "event_count": 1,
+          "trade_share": 0.09090909090909091,
+          "share_squared": 0.008264462809917356,
+          "monthly_distribution": {
+            "2024-07": 1
+          }
+        },
+        {
+          "cluster_index": 2,
+          "start": "2024-07-26",
+          "end": "2024-07-29",
+          "event_count": 2,
+          "trade_share": 0.18181818181818182,
+          "share_squared": 0.03305785123966942,
+          "monthly_distribution": {
+            "2024-07": 2
+          }
+        },
+        {
+          "cluster_index": 3,
+          "start": "2024-08-12",
+          "end": "2024-08-12",
+          "event_count": 1,
+          "trade_share": 0.09090909090909091,
+          "share_squared": 0.008264462809917356,
+          "monthly_distribution": {
+            "2024-08": 1
+          }
+        },
+        {
+          "cluster_index": 4,
+          "start": "2024-10-10",
+          "end": "2024-10-11",
+          "event_count": 2,
+          "trade_share": 0.18181818181818182,
+          "share_squared": 0.03305785123966942,
+          "monthly_distribution": {
+            "2024-10": 2
+          }
+        },
+        {
+          "cluster_index": 5,
+          "start": "2024-10-31",
+          "end": "2024-11-04",
+          "event_count": 2,
+          "trade_share": 0.18181818181818182,
+          "share_squared": 0.03305785123966942,
+          "monthly_distribution": {
+            "2024-10": 1,
+            "2024-11": 1
+          }
+        },
+        {
+          "cluster_index": 6,
+          "start": "2025-04-10",
+          "end": "2025-04-10",
+          "event_count": 1,
+          "trade_share": 0.09090909090909091,
+          "share_squared": 0.008264462809917356,
+          "monthly_distribution": {
+            "2025-04": 1
+          }
+        },
+        {
+          "cluster_index": 7,
+          "start": "2025-05-13",
+          "end": "2025-05-13",
+          "event_count": 1,
+          "trade_share": 0.09090909090909091,
+          "share_squared": 0.008264462809917356,
+          "monthly_distribution": {
+            "2025-05": 1
+          }
+        },
+        {
+          "cluster_index": 8,
+          "start": "2025-05-29",
+          "end": "2025-05-29",
+          "event_count": 1,
+          "trade_share": 0.09090909090909091,
+          "share_squared": 0.008264462809917356,
+          "monthly_distribution": {
+            "2025-05": 1
+          }
+        }
+      ],
+      "entry_time_concurrency_distribution": {
+        "1": 8,
+        "2": 3
+      },
+      "active_day_concurrency_distribution": {
+        "1": 18,
+        "2": 3
+      }
+    }
+  },
+  "eec_rank_shift": {
+    "train_1": {
+      "largest_rank_shifts": [
+        {
+          "hash": null,
+          "before": 0.8059024017289121,
+          "after": 0.8059024017289121,
+          "eec": 5.4,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 0.7821304159298486,
+          "after": 0.7821304159298486,
+          "eec": 4.878048780487805,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 0.764476553391175,
+          "after": 0.764476553391175,
+          "eec": 4.737704918032787,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 0.764476553391175,
+          "after": 0.764476553391175,
+          "eec": 4.737704918032787,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 0.764476553391175,
+          "after": 0.764476553391175,
+          "eec": 4.737704918032787,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 0.764476553391175,
+          "after": 0.764476553391175,
+          "eec": 4.737704918032787,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 0.764476553391175,
+          "after": 0.764476553391175,
+          "eec": 4.737704918032787,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 0.764476553391175,
+          "after": 0.764476553391175,
+          "eec": 4.737704918032787,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 0.764476553391175,
+          "after": 0.764476553391175,
+          "eec": 4.737704918032787,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 0.764476553391175,
+          "after": 0.764476553391175,
+          "eec": 4.737704918032787,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        }
+      ]
+    },
+    "train_2": {
+      "largest_rank_shifts": [
+        {
+          "hash": null,
+          "before": 1.364763873918462,
+          "after": 1.364763873918462,
+          "eec": 4.499999999999999,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.364763873918462,
+          "after": 1.364763873918462,
+          "eec": 4.499999999999999,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.364763873918462,
+          "after": 1.364763873918462,
+          "eec": 4.499999999999999,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.364763873918462,
+          "after": 1.364763873918462,
+          "eec": 4.499999999999999,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.364763873918462,
+          "after": 1.364763873918462,
+          "eec": 4.499999999999999,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.364763873918462,
+          "after": 1.364763873918462,
+          "eec": 4.499999999999999,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.364763873918462,
+          "after": 1.364763873918462,
+          "eec": 4.499999999999999,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.364763873918462,
+          "after": 1.364763873918462,
+          "eec": 4.499999999999999,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.364763873918462,
+          "after": 1.364763873918462,
+          "eec": 4.499999999999999,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.364763873918462,
+          "after": 1.364763873918462,
+          "eec": 4.499999999999999,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        }
+      ]
+    },
+    "train_3": {
+      "largest_rank_shifts": [
+        {
+          "hash": null,
+          "before": 1.7106577620593564,
+          "after": 1.7106577620593564,
+          "eec": 6.533333333333334,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.7106577620593564,
+          "after": 1.7106577620593564,
+          "eec": 6.533333333333334,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.7106577620593564,
+          "after": 1.7106577620593564,
+          "eec": 6.533333333333334,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.7106577620593564,
+          "after": 1.7106577620593564,
+          "eec": 6.533333333333334,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.7106577620593564,
+          "after": 1.7106577620593564,
+          "eec": 6.533333333333334,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.7106577620593564,
+          "after": 1.7106577620593564,
+          "eec": 6.533333333333334,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.7106577620593564,
+          "after": 1.7106577620593564,
+          "eec": 6.533333333333334,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.7106577620593564,
+          "after": 1.7106577620593564,
+          "eec": 6.533333333333334,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.7106577620593564,
+          "after": 1.7106577620593564,
+          "eec": 6.533333333333334,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        },
+        {
+          "hash": null,
+          "before": 1.7106577620593564,
+          "after": 1.7106577620593564,
+          "eec": 6.533333333333334,
+          "multiplier": 1.0,
+          "rank_before_eec": 100,
+          "rank_after_eec": 100,
+          "rank_delta_after_minus_before": 0
+        }
+      ]
+    }
+  },
+  "feature_nulltest_v8": {
+    "patch_token": "entry_strict_extra_feature_v8_20260715",
+    "feature": "atr14_pct",
+    "variant": "SHUFFLED",
+    "shuffle_seed": 2026071501,
+    "strict_and_feature_count": 6,
+    "added_low_field": "entry_extra_feature_low",
+    "added_high_field": "entry_extra_feature_high",
+    "candidate_series_d5": {
+      "feature": "atr14_pct",
+      "variant": "SHUFFLED",
+      "shuffle_seed": 2026071501,
+      "sha256": "95f49dd1535a4387bdb7686099009b54afd3c1febec838fecb522c4e15de907d",
+      "valid_count": 1521,
+      "first_valid_date": "2020-05-26",
+      "last_valid_date": "2026-06-12"
+    },
+    "peer_cache": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache",
+    "peer_inputs": {
+      "AAP": {
+        "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\AAP.pkl",
+        "sha256": "f3982ccac813b9932b58059afe30dc554b66964dd01e312fca771f7d96f719da"
+      },
+      "GPC": {
+        "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\GPC.pkl",
+        "sha256": "172528a07786e0e204ddeafb7570a185c465f13570ae19e50d6aecaa696bfeda"
+      },
+      "ORLY": {
+        "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\ORLY.pkl",
+        "sha256": "e37d9b5da83d517e6e77ba0f2d55ef4f07869815b24e73cc4f7259df01f8d75a"
+      },
+      "AZO": {
+        "path": "C:\\kingmaker_nulltest_v8\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\AZO.pkl",
+        "sha256": "42006c75744935719992fe0c423580541ba560e4ba67d3cd894d130690bd36d1"
+      }
+    },
+    "entry_exit_impact_note": "The added feature is part of strict-AND, so entry_interval_break can occur when this feature exits its learned interval. This is recorded, not blocked."
+  },
+  "actual_launcher_note": "run_stage3_aap_feature_nulltest_v8_host.py delegates to v5 runner after installing one strict-AND feature patch"
+}

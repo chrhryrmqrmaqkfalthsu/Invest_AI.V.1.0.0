@@ -1,0 +1,78 @@
+{
+  "train_1": {
+    "joint_pass_day_count": 20,
+    "actual_trade_count": 20,
+    "executed_joint_pass_day_count": 20,
+    "holding_cooldown_absorbed_count": 0,
+    "nonexecuted_joint_pass_day_count": 0,
+    "max_concurrent_positions": 8,
+    "entry_time_concurrency_distribution": {
+      "1": 4,
+      "2": 4,
+      "3": 3,
+      "4": 1,
+      "5": 1,
+      "6": 1,
+      "7": 5,
+      "8": 1
+    },
+    "active_day_concurrency_distribution": {
+      "1": 9,
+      "2": 4,
+      "3": 3,
+      "4": 1,
+      "5": 1,
+      "6": 1,
+      "7": 5,
+      "8": 1
+    },
+    "effective_event_count": 2.2988505747126435,
+    "event_cluster_count": 4
+  },
+  "train_2": {
+    "joint_pass_day_count": 15,
+    "actual_trade_count": 15,
+    "executed_joint_pass_day_count": 15,
+    "holding_cooldown_absorbed_count": 0,
+    "nonexecuted_joint_pass_day_count": 0,
+    "max_concurrent_positions": 7,
+    "entry_time_concurrency_distribution": {
+      "1": 6,
+      "2": 3,
+      "3": 1,
+      "4": 1,
+      "5": 1,
+      "6": 2,
+      "7": 1
+    },
+    "active_day_concurrency_distribution": {
+      "1": 13,
+      "2": 3,
+      "3": 1,
+      "4": 1,
+      "5": 1,
+      "6": 2,
+      "7": 1
+    },
+    "effective_event_count": 2.5280898876404496,
+    "event_cluster_count": 6
+  },
+  "train_3": {
+    "joint_pass_day_count": 30,
+    "actual_trade_count": 13,
+    "executed_joint_pass_day_count": 13,
+    "holding_cooldown_absorbed_count": 0,
+    "nonexecuted_joint_pass_day_count": 17,
+    "max_concurrent_positions": 2,
+    "entry_time_concurrency_distribution": {
+      "1": 8,
+      "2": 5
+    },
+    "active_day_concurrency_distribution": {
+      "1": 21,
+      "2": 5
+    },
+    "effective_event_count": 4.368932038834951,
+    "event_cluster_count": 8
+  }
+}

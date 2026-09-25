@@ -1,0 +1,488 @@
+[
+  {
+    "rulebook_hash": "653bb97a7a1f3af64e2b47ec2873c27a1f785796b4c027df8894124c2c35f028",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "bdd422eb7cf7b5f788062f0b9d4f6455a3ce71ac1fae6f68d4aa806d74090bc3",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "104cc9792f251cc4da9559e3eaa4854e18cc4a45383b2be30b540e77c229fcc7",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "1189f8acf08ff0e15b9f4e8ba1ca9741c287b9308b203b5b8480ff44dbd14a24",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "2070f6881e4eab578c6a5715fe82e9861c5813927b9accf3be69df3f041a9e47",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "274e2d477a99d999258476e4a2573fd68a4d759a945c9c9c222d02a0589ffb45",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "323d715bcca1ff60b1f05e2afe497651b0cd0f1dfd8035a91dc398c21e3f6526",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "33328660d40fa07804ee09947884c172d01619b8112c1d594f64520d23874832",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "3c36afb9bbacd7f2be74a69694e80ca465a75fef92247bd409a8e2f2afee75fc",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "47b08735827b149926303473759b0d5e1fb0419b9f05f6f0c3d8dd24f94be381",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "5cddbed0cd1374c10973552ccede69deb48350ab7cdee6c63b7b9a44aa51e8b3",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "5eba11757dde9cadce537972ddbf4bb568b57f1166c6a0f8b73c05aa346e3bf7",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "63ba2f46f38db4e97b7ff47bd43cb00703ead622d177ee443d5938844da2ecde",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "694513f9e52a4d62e9472704f9b59c3d680d29cdb7d2462b6d6dc9d4ccd69759",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "731def82690600ed378e8ace986308f30660147ace77cc21e74e3b39597d5d8c",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "74654e0ec04454e774d6f5579529bd311f242ef48bf4328f3381075b8b5180a5",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "7b4860c5f284dc5883e7a7c337302708df4549dc324cf40805d484ab96eec6b8",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "7ceb4beed6c8e8f83aaadac1b1715bc1c165c8e75c5b776983372e4686dc0e53",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "7fe07428f8fbc9d6789f2dc9c9ef035ef8a4f9f9e625de6add57e27677f742d2",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "82b9ae2a8ae2b0e7e7ed97ca624442f0cfc9c5e02bb3015be197618e37362aca",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "84590be79fc311b39e7e2843f662441f63080e8021adaf1391cd3d430c2b36ac",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "8985b47db0bf052338ba981701bb5b8500e27a2c325fad87205f052df9777123",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "8b26436ae6a5198b0e645d135ec2db54240988b8c99d643a1869afa42b389f09",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "964d355a476fd315c30c6645c03c711e437e2f2ba0c573f96cacc1d798f30b6c",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "99f9b313ed505c66bdabe8b24f609324a42d1ee2c7d8172c734aef69c9913e81",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "af5e1521fb64c83a7a1ebb8aabc4c16388695ca31b9567c58e889a24f4adfee9",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "b315b8ee8c4a43675a79d4177061cb1d37a0c57fe8958aa763672a42e41429cf",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "b3aba3270888b0898a71f7c92f5452587fa9f7c8a12eed1d5bb1c7cdd796a28e",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "b7e508d0a60b777fa8db1f1303a92ad2b5e5f75cd21de27ba2c671f4aa133bed",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "c6ac15aa940ac9788dab51c5686e417dabe901c425380380c1ee72224fb01c4f",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "cb315f5757ce7c3b65096fee4c9e6e42c1a67252e34d1549005c3604f92feebe",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "cd01fcb89024ac64f571146a675acc6ac56945327cb0a52420eea853eef7b63b",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "cde2929564be953d2d263c0ac23d73f5fab2887b365ce5523e090873f224b972",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "d401be5b0fe952f43c4d82ff44ec2c29df171b369387102be6297da8d6555540",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "e8fc562cf808186caca925591f13f8229ad5587a34a3360f4257b85ef75a41ae",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "ebd4c5a0cb05afb77b5ee7b5b931bcfb1816f6ef65699c3a71f06ad7f1a67de9",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "f243fbca282db6cf7da71e794c125074029e51a7ff8b997f3b35420e416433b6",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "f2a8e5ce50292bb63f439b06fd6f9b30f16da66d276f46c4683da1bed989ac73",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "f2f991ab0a42dcc81053a34f006dccc9dfce3ea74598b282ffb8f6a5b667b624",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "f8a2c69e6ef4f88b149d6c0f2edc96bf8cef1ef43f942fc8b53d407ace4bb687",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "fbf9d94cf50307032babebd84a0b548a94811f32ca92fd5f8bc7e00ba70248da",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "8dc3618bbee2ba5e1d978dfa37779706de9c70e0365dc31ab68614bfed081870",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "9a25d132e03d1440bb046a6cce8fb52ac639adfa7f34a2489757aded81824c92",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "e299d0ecea2b48def6ec4047e71fa52c938a9e080e18624e662a411661087aba",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "20cc5c74aab28344e8909b608146682de477a026ecead09ce2d807047c07f3ad",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "43c3a94b78aa458810d991352afb3bd8023dd82bd4109fcdd2c17018e65a5b32",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "58c8aad679bf4ae375553379ceda5c5e8de3030a62d5dc52bb6e0b3cdfb3e46a",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "936d461e836bd97abbe400ebfe10338744a19563c57a95e1bafd77c354ae2ee4",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "aab9e48a29bb58ba8afbab919b52ed3f157ae83a685b1e4a6b8eb299646d87f5",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "1a4022f320c6e1948208315bdc919e38d20739946ab1dea7f6c9fefe77eb3596",
+    "reason": "entry_date_overlap",
+    "overlap": 0.9285714285714286,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "5ea46d0ca2ca4ce762f33a6af9b3c449719a7f34395742f3b782f44f93c43655",
+    "reason": "entry_date_overlap",
+    "overlap": 0.9285714285714286,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "aac13c4ff11fbb1354539f676c87667f4fab44b7ce65959654b571f611641c7c",
+    "reason": "entry_date_overlap",
+    "overlap": 0.9230769230769231,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "560cdfaa6a815843a28b2c92ee61a4eec31c6c68fc11b258c2d269eb014c5c79",
+    "reason": "entry_date_overlap",
+    "overlap": 0.9285714285714286,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "9523c53547ab811f2026db1bafc3f296f3bafb884ae70c4d5c10760e94fe7ecb",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8571428571428571,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "bff73c4cf04e90d063a4e639d9f35bcbc2ee5defa8c3b3857dd488ed49b03d50",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "9505e0565e6ecc9b91ba7a7ee6b9f144d1bd9a55b455387433d6194c91b5bcbd"
+  },
+  {
+    "rulebook_hash": "e4e09585b94783740d95eb602f6c9e53e99c32a9af1d6b9c6757b2767017027a",
+    "reason": "entry_date_overlap",
+    "overlap": 0.9285714285714286,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "4d2446e3a1ca22ac50d0b549cf4a1562f41adf78972f87b32ee84c69a5571f6d",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8461538461538461,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "3ca01173ed43a9baa9e59b9ca7bfe2aeb9783c474cfdf7686ee64872f0589df5",
+    "reason": "entry_date_overlap",
+    "overlap": 0.9285714285714286,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "de07e2ea316a3830a99d67dbe22ad8b494078bee4d6d9817b52c746787839844",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8666666666666667,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "a0f3aa720459f081eaedf517bde5ad148c23da5bf72928d3b4ab89b78303a1b4",
+    "reason": "entry_date_overlap",
+    "overlap": 0.7058823529411765,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "7b6c536c826bc364402a13780eaf4849b9090b82d9380e34f5f5a43f983d2f21",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8666666666666667,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "9b3a726f6621f14e482d9231552857cc47572809c7f9cc432be1a1227707eaa6",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8666666666666667,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "dc14e04f88093d5bc1a39f4394429ced9db497a3218c3e58d22a171dcb221063",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8666666666666667,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "e8bbf23675064214599dbd6ec0f7169d9f5fd93353eb05dd2be879c0244a7538",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8125,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "35ac2cb15fd840c2f6b35686cd666d915b0d9572ab38921f6e958012cbe985cd",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8461538461538461,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "6158da638d13f04819f7c55d63a0d9431455489f3a457d07c3b907877ff9521a",
+    "reason": "entry_date_overlap",
+    "overlap": 0.7647058823529411,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "ce958b6693b90df482393756ed578150cf33a049a86220308ba462ab7b675e8d",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8125,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "aef1d1f77f95449b7d561395ae37c6041409c22bf1e5d084dd7b0603221672cb",
+    "reason": "entry_date_overlap",
+    "overlap": 0.7222222222222222,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "e41efe56102fb35d61dda077f2c8f0da872bccd1c68539b7feed48a5a5491ae0",
+    "reason": "entry_date_overlap",
+    "overlap": 0.9285714285714286,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "c0530bc8887c5bf8c03896ecf8716b46358efe13b0430d0177faa601eb61516d",
+    "reason": "entry_date_overlap",
+    "overlap": 0.7647058823529411,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "18aa62a12390b2c95cd1ab488f5d1d39cec5f7f86b8855c629e597a6df6bd2d4",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8125,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "a2be4affdb7b7a1a49d4d8a84f4767a70fc4d910a023e5f3443b5f18e51635f8",
+    "reason": "entry_date_overlap",
+    "overlap": 1.0,
+    "duplicate_of": "45949948bccaab0d4f027865a70e582bdd16ba015bed221db3453f99532734ae"
+  },
+  {
+    "rulebook_hash": "9541f55cc2f776b9d8544870c76419e3b0febc995d48111eff3e2bd16b38430a",
+    "reason": "entry_date_overlap",
+    "overlap": 0.7692307692307693,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "059d344ad69168bc12052ab7581a5721fb78d79c65c95a1faf6a04e286c38f91",
+    "reason": "entry_date_overlap",
+    "overlap": 0.7058823529411765,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "d5a480eb4bf2eed02fff6fb52f037187592ad9e5b4a0da149502d767f1aac94c",
+    "reason": "entry_date_overlap",
+    "overlap": 0.7857142857142857,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "d3aa394b6a9639957b2588fb16d9bd1f7486ba1d2f63187d160f8db95050f742",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8125,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "7734a21962deddc78f9bf36cdba044255972340cbb5a9580321ad582fb20c00d",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8125,
+    "duplicate_of": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864"
+  },
+  {
+    "rulebook_hash": "ef9038877add27d05996c8a8f0b10896193d84b0f6290dce16a59952f04dacb5",
+    "reason": "entry_date_overlap",
+    "overlap": 0.8,
+    "duplicate_of": "5f06e6cbe584b69a0204001a96c5703ff14269e0f3b4842168132bf9fcdc57d0"
+  },
+  {
+    "rulebook_hash": "8f99bc0d55e9caec7240efdc195e870e7f2f8aa33b77341f4b8bb316af42bd11",
+    "reason": "entry_date_overlap",
+    "overlap": 0.9117647058823529,
+    "duplicate_of": "3f9b5080e40097ed4a8bff65e091afc7cdb5ad4c30e008f8f10473862fcd0155"
+  },
+  {
+    "rulebook_hash": "b3fa6ec269a4dcea1b7e4929264219d99eeacc1d294147ad2f3b361ebf474d1e",
+    "reason": "entry_date_overlap",
+    "overlap": 0.7916666666666666,
+    "duplicate_of": "dfafd2819c00b53155d9f08fef4c308057d76b34438ddc4b69e573f020d74c38"
+  },
+  {
+    "rulebook_hash": "67a8353f7914881d17beee933d9c7f68aa4cdafa5396eb725ab09a54d7d9b952",
+    "reason": "entry_date_overlap",
+    "overlap": 0.7954545454545454,
+    "duplicate_of": "486c8b93136fd57f37fae1213e107002e115863091026616a9d1dff72311f795"
+  }
+]

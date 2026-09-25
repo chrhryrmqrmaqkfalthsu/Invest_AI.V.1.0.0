@@ -1,0 +1,8 @@
+candidate_id,stage,ticker,is_ce_fail_7,is_named_boil,final_p99_block_status,p99_block_fail_components,p99_block_reason_codes,bb_reachability_label,volume_reachability_label,captured_by_p99_block
+stage3:ANET:fe220620802b,stage3,ANET,True,False,PASS,,,REACHABLE,REACHABLE,False
+stage3:BB:f1bdfe7f8ad9,stage3,BB,True,False,PASS,,,REACHABLE,REACHABLE,False
+stage3:BOIL:9044dc2c67a3,stage3,BOIL,True,True,PASS,,,REACHABLE,INACTIVE_WEIGHT,False
+stage3:BTE:4ba9af200f79,stage3,BTE,True,False,FAIL,volume,ACTIVE_VOLUME_THRESHOLD_GT_TRAIN_MAX,REACHABLE,UNREACHABLE,True
+stage3:CDE:ceb9fe0512dc,stage3,CDE,True,False,PASS,,,REACHABLE,REACHABLE,False
+stage3:CE:998b0b638c66,stage3,CE,True,False,PASS,,,REACHABLE,REACHABLE,False
+stage3:CWK:2970595abcd4,stage3,CWK,True,False,PASS,,,REACHABLE,INACTIVE_WEIGHT,False

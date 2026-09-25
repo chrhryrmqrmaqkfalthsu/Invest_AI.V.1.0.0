@@ -1,0 +1,3 @@
+source,eq_group,n,win_rate_pct,avg_net_pct,sum_net_pct,net_per_day_pct,avg_MAE_pct,worst_MAE_pct
+elite_shadow_trades,ALLOW,150,32,-0.379731693891,-56.9597540836,-0.379731693891,-1.4020322751,-7.30379871718
+elite_strategy_sim_trades,ALLOW,2,50,-3.22877197193,-6.45754394386,-3.22877197193,-6.66455650375,-7.53647909378

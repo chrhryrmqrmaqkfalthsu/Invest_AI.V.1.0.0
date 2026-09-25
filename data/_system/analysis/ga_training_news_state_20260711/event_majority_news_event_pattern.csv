@@ -1,0 +1,10 @@
+ticker,use_news_global,weight_news_sentiment,nonzero_topic_weight_count,topic_weight_abs_sum,topic_weight_max_abs,news_block_cap,effective_news_days_train3,event_effective_days_train3,use_event_block,event_response_abs_sum,event_response_max_abs,event_strength_multiplier,pattern
+BMA,false,0.6909360464038705,15,23.764056934872656,3.0,3.5575287874495487,55,0,true,11.85082562408684,2.0,3.0,"NewsTopics live; Event genes unidentifiable"
+BNTX,true,1.2933035675776785,15,27.772421072095764,3.0,4.223570127203705,108,0,true,14.855117619803064,2.0,3.0,"Global+Topics live; Event genes unidentifiable"
+BTBT,false,0.5493052186199101,15,25.374043887328813,3.0,4.66590645299545,85,0,true,10.881612839959358,2.0,3.0,"NewsTopics live; Event genes unidentifiable"
+CMC,true,1.11016456594609,15,24.14215732952544,3.0,4.75659123828112,73,0,true,13.074795332614332,2.0,1.5670930009029838,"Global+Topics live; Event genes unidentifiable"
+BWXT,false,1.5,15,24.578529229999937,3.0,5.838049872613507,74,0,true,14.128388546037181,2.0,0.5,"NewsTopics live; Event genes unidentifiable"
+BMI,true,0.48223957234381065,15,17.592105845480138,2.8343156769602595,2.0,46,0,true,10.995607178224517,2.0,3.0,"Global+Topics live; Event genes unidentifiable"
+BGC,true,0.3781710057141421,15,22.86507883408317,3.0,2.802580421825565,52,0,true,9.306354806215825,2.0,3.0,"Global+Topics live; Event genes unidentifiable"
+CE,false,1.009438261684377,15,24.075441919049968,3.0,4.171489297362729,87,0,true,8.744966834197404,1.931246851347001,2.3387436247691396,"NewsTopics live; Event genes unidentifiable"
+ACMR,false,1.308442015784803,15,22.835377330080846,3.0,5.772943710241601,12,0,true,9.785616114250047,2.0,2.122155764630403,"NewsTopics very sparse but nonzero; Event genes unidentifiable"

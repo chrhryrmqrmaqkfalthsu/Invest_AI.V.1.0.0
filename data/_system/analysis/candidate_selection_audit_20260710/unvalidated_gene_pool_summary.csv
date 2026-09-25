@@ -1,0 +1,3 @@
+pool_scope,total_rules,unvalidated_rules,unvalidated_rate_pct,weakly_validated_rules,weakly_validated_rate_pct,zero_unvalidated_gene_rules,one_unvalidated_gene_rules,two_plus_unvalidated_gene_rules
+STAGE2_UPSTREAM,597300,43163,7.2263519169596515,189843,31.783525866398794,554137,43117,46
+STAGE3_ENTRY,5663,364,6.427688504326329,1782,31.46742009535582,5299,364,0

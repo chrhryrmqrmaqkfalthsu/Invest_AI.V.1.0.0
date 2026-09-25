@@ -1,0 +1,9 @@
+slot_no,ticker,candidate_id,backtest_entry_signal_basis,final_score,threshold,score_gte_threshold,ratio,eq_allow,eq_label,eq_score,eq_primary_reason,gate_status,vol_group,case
+1,BMI,stage3:BMI:07d4ee0f7841,PASS_should_buy_true_in_live_pool,15.944364,2.429303,True,6.563350,True,HEALTHY_FOLLOW_THROUGH,64.0,event_heavy_size_cap,KEEP,LOW_VOL,BACKTEST_PASS_EQ_ALLOW
+2,BMA,stage3:BMA:0c978464f9dd,PASS_should_buy_true_in_live_pool,13.470340,2.848392,True,4.729104,False,WEAK_FOLLOW_THROUGH,46.0,event_heavy_without_follow_through,KEEP,MID_VOL,BACKTEST_PASS_EQ_BLOCK
+3,BTBT,stage3:BTBT:363898884d44,PASS_should_buy_true_in_live_pool,11.424443,1.911258,True,5.977448,False,FAILED_FOLLOW_THROUGH,0.0,failed_follow_through_q_lt_45,KEEP,HIGH_VOL,BACKTEST_PASS_EQ_BLOCK
+4,ADMA,stage3:ADMA:42437a3ee595,PASS_should_buy_true_in_live_pool,8.133905,2.179291,True,3.732364,True,STRONG_FOLLOW_THROUGH,100.0,passed,KEEP,HIGH_VOL,BACKTEST_PASS_EQ_ALLOW
+5,CE,stage3:CE:998b0b638c66,PASS_should_buy_true_in_live_pool,7.195458,2.654187,True,2.710984,True,STRONG_FOLLOW_THROUGH,76.0,passed,KEEP,LOW_VOL,BACKTEST_PASS_EQ_ALLOW
+6,ALGT,stage2:ALGT:402f72d48c3c,PASS_should_buy_true_in_live_pool,6.706770,2.333673,True,2.873912,False,FAILED_FOLLOW_THROUGH,0.0,failed_follow_through_q_lt_45,KEEP,MID_VOL,BACKTEST_PASS_EQ_BLOCK
+7,CAMT,stage3:CAMT:bd5f11c548d5,PASS_should_buy_true_in_live_pool,6.488897,2.247025,True,2.887773,False,FAILED_FOLLOW_THROUGH,0.0,failed_follow_through_q_lt_45,KEEP,MID_VOL,BACKTEST_PASS_EQ_BLOCK
+8,ALGT,stage3:ALGT:aec5dd5b1dc1,PASS_should_buy_true_in_live_pool,5.597293,2.293728,True,2.440260,False,FAILED_FOLLOW_THROUGH,0.0,failed_follow_through_q_lt_45,KEEP,MID_VOL,BACKTEST_PASS_EQ_BLOCK

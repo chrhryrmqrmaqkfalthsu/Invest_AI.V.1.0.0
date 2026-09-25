@@ -1,0 +1,10 @@
+ticker,period_label,period_reproduction_status,trade_match_status,confidence_tier,component_matches_original,entry_date,exit_date,pnl_pct,score,threshold,ratio,market_adjustment,positive_component_count,active_combo,ma_align,macd,rsi,bb,volume,news,news_topics,events
+ANET,train_2,mismatch_period,exact,B_trade_exact,True,2023-08-29,2023-09-13,3.26467164,3.02509707,2.63909028,1.14626509,1.0,2,MA+RSI,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.0,0.0
+ANET,train_2,mismatch_period,exact,B_trade_exact,True,2023-09-21,2023-10-11,4.91018149,3.06870904,2.63909028,1.16279048,1.0,3,RSI+BB+NewsTopics,0.0,0.0,1.71024754,1.34511228,0.0,0.0,0.01334922,0.0
+ANET,train_2,mismatch_period,exact,B_trade_exact,True,2023-10-18,2023-10-26,-8.88298564,3.87966214,2.63909028,1.47007557,1.0,3,MA+RSI+NewsTopics,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.85456508,0.0
+ANET,train_2,mismatch_period,exact,B_trade_exact,True,2023-10-31,2023-11-10,5.28384003,5.05535982,2.63909028,1.91556911,1.0,2,RSI+BB,0.0,0.0,1.71024754,1.34511228,0.0,0.0,0.0,0.0
+ANET,train_2,mismatch_period,exact,B_trade_exact,True,2023-11-16,2023-12-04,1.27598705,3.14757493,2.63909028,1.19267422,1.0,3,MA+RSI+NewsTopics,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.12247787,0.0
+ANET,train_2,mismatch_period,exact,B_trade_exact,True,2024-02-01,2024-02-06,1.27598705,3.02509707,2.63909028,1.14626509,1.0,2,MA+RSI,1.31484952,0.0,1.71024754,0.0,0.0,0.0,0.0,0.0
+ANET,train_2,mismatch_period,exact,B_trade_exact,True,2024-02-12,2024-02-13,-11.97175523,3.93330572,2.63909028,1.49040211,1.0,3,MA+MACD+NewsTopics,1.31484952,2.0,0.0,0.0,0.0,0.0,0.6184562,0.0
+ANET,train_2,mismatch_period,exact,B_trade_exact,True,2024-03-04,2024-03-27,1.27598705,3.31484952,2.63909028,1.25605765,1.0,2,MA+MACD,1.31484952,2.0,0.0,0.0,0.0,0.0,0.0,0.0
+ANET,train_2,mismatch_period,exact,B_trade_exact,True,2024-04-02,2024-04-09,-1.42311514,5.65556651,2.63909028,2.1429985,1.0,3,MA+RSI+NewsTopics,1.31484952,0.0,1.71024754,0.0,0.0,0.0,2.63046945,0.0

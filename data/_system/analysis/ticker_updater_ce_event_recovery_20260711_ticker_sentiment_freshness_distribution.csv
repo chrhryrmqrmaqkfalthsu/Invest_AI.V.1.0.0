@@ -1,0 +1,20 @@
+dimension,bucket,count,reference_date,notes
+age_days,missing_last_news_date,153,2026-07-10,CSV는 있으나 유효한 마지막 뉴스 날짜 없음
+age_days,0_to_7,0,2026-07-10,7일 max-age 이내
+age_days,8_to_30,0,2026-07-10,모두 30일 초과
+age_days,31_to_45,3803,2026-07-10,stale
+age_days,46_to_60,1403,2026-07-10,stale
+age_days,61_to_90,454,2026-07-10,stale
+age_days,91_to_180,251,2026-07-10,stale
+age_days,181_to_365,52,2026-07-10,stale
+age_days,366_plus,58,2026-07-10,stale
+file_mtime_date,2026-05-31,153,2026-07-10,전수 실행에서 집계 실패한 종목의 기존 CSV 보존 패턴과 일치
+file_mtime_date,2026-06-02,6021,2026-07-10,마지막 전수 updater 실행일
+last_news_date,2026-06-02,1157,2026-07-10,전체 파일 중 가장 최신 뉴스 날짜
+last_news_date,2026-06-01,959,2026-07-10,stale
+last_news_date,2026-05-31,185,2026-07-10,stale
+last_news_date,2026-05-30,307,2026-07-10,stale
+last_news_date,2026-05-29,377,2026-07-10,stale
+last_news_date,2026-05-28,368,2026-07-10,stale
+last_news_date,2026-05-27,262,2026-07-10,stale
+last_news_date,2026-05-26,188,2026-07-10,stale

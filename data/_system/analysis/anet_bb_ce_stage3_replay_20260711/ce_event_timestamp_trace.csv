@@ -1,0 +1,7 @@
+item,requested_value,trace_result,source,confidence,notes
+CE_first_live_signal,2026-07-07T22:22:21.577113+00:00,confirmed,data/_system/live_slots_state.json,high,"first_signal_at and first_signal_price 48.68 preserved"
+CE_order_snapshot,2026-07-08T14:27:15.330072+00:00,confirmed,data/_system/real_dashboard_manual_buy_intent.json,high,"Event contribution +4.62260455 preserved"
+active_event_categories_at_first_signal,,not_confirmed,no historical market_state snapshot or event payload preserved,unavailable,"candidate snapshot stored only aggregate Event contribution/reason"
+active_event_article_timestamps_at_first_signal,,not_confirmed,no historical event feed payload preserved,unavailable,"current market_state contains later July 10 refresh data and cannot prove July 7 active set"
+elapsed_days_event_to_entry,,not_calculable,depends on missing event timestamps,unavailable,"must not infer from current articles"
+current_market_state_examples,2026-07-04 to 2026-07-09 article URLs/titles observed,confirmed only for 2026-07-10 market_state,data/_system/market_state.json,limited,"shows old articles can coexist in active event payload but does not identify CE July 7 flags"

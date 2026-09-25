@@ -1,0 +1,52 @@
+{
+  "run_id": "stage2_adpt_eec_fullcpu_20260715",
+  "status": "COMPLETE",
+  "actual_compute_host": "DESKTOP-TO74AR2",
+  "notebook_only": true,
+  "vm_role": "staging, launch/status, output retrieval, git commit only",
+  "staging_root": "C:\\kingmaker_stage2_adpt_eec_fullcpu",
+  "command": [
+    "C:\\dask310\\Scripts\\python.exe",
+    "C:\\kingmaker_stage2_adpt_eec_fullcpu\\data\\_system\\analysis\\stage2_adpt_eec_fullcpu_20260715\\run_fullcpu.py",
+    "--repo-root",
+    "C:\\kingmaker_stage2_adpt_eec_fullcpu",
+    "--out-dir",
+    "data/_system/analysis/stage2_adpt_eec_fullcpu_20260715/notebook_run",
+    "--ticker",
+    "ADPT",
+    "--seed-base",
+    "2026071401",
+    "--workers",
+    "28"
+  ],
+  "env_subset": {
+    "PYTHONPATH": "C:\\kingmaker_stage2_adpt_eec_fullcpu\\scripts\\research\\stage23_rework_20260713",
+    "PYTHONUTF8": "1",
+    "PYTHONIOENCODING": "utf-8",
+    "PYTHONUNBUFFERED": "1",
+    "KINGMAKER_MARKET_CUTOFF_DATE": "2026-07-10",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1"
+  },
+  "notebook_logical_processors": 28,
+  "NOTEBOOK_MAX": 28,
+  "actual_worker_processes": 28,
+  "parallel_unit": "GA population fitness evaluation",
+  "dependency_shims_in_staging_only": [
+    "loguru",
+    "dotenv",
+    "requests disabled",
+    "yfinance disabled"
+  ],
+  "seed_base": 2026071401,
+  "ticker": "ADPT",
+  "result": {
+    "survivor_count": 0,
+    "first_failed_period": "stress_pre_2022h1",
+    "generated_rulebook_rows": 300,
+    "unique_rulebook_hashes": 300,
+    "elapsed_sec": 1206.002259016037
+  }
+}

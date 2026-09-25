@@ -1,0 +1,1981 @@
+{
+  "ticker": "AAP",
+  "execution_scale": "OFFICIAL_FULL_STAGE3_NEW_FITNESS",
+  "official_config": {
+    "qualify_population": 100,
+    "qualify_generations": 40,
+    "entry_population": 100,
+    "entry_generations": 50,
+    "exit_population": 60,
+    "exit_generations": 25,
+    "top_n_qualify": 100,
+    "top_n_entry_pool": 100,
+    "max_entry_candidates": 20,
+    "top_n_exit_per_entry": 3,
+    "entry_min_expectancy_pct": 2.0,
+    "entry_overlap_threshold": 0.7
+  },
+  "workers": 28,
+  "parallel_axis": "population_fitness_evaluation",
+  "parallel_reproducibility_probe": {
+    "passed": true,
+    "sequential_best_hash": "4c9db562068ce3e6ce66683ed933d9b49b76299e45bfb1089906c3bee6213677",
+    "parallel_best_hash": "4c9db562068ce3e6ce66683ed933d9b49b76299e45bfb1089906c3bee6213677",
+    "fitness_history_equal": true,
+    "final_population_equal": true,
+    "parallel_axis": "population_fitness_evaluation",
+    "workers": 12,
+    "merge_order": "input_index_order",
+    "random_generation_location": "parent_process_only",
+    "process_start_method": "spawn"
+  },
+  "new_fitness_activation_probe": {
+    "passed": true,
+    "checks": {
+      "gene_scope_marker": true,
+      "primary_formula": true,
+      "mae_threshold": true,
+      "realized_loss_threshold": true,
+      "realized_loss_penalty_present": true,
+      "profit_concentration_penalty_absent": true,
+      "win_threshold": true,
+      "minimum_trade_count": true,
+      "win_rate_gate": true,
+      "entry_gate_rule": true,
+      "trade_count_factor_active": true,
+      "factor_anchors": true,
+      "mutation_hint_only": true,
+      "stage2_legacy_defaults": true
+    },
+    "factor_checks": {
+      "7": true,
+      "8": true,
+      "10": true,
+      "12": true,
+      "15": true,
+      "20": true,
+      "81": true
+    },
+    "gene_scope_defaults": {
+      "random_rulebook": "legacy",
+      "mutate": "legacy",
+      "crossover": "legacy",
+      "run_ga": "legacy"
+    },
+    "sample_trade_count": 32,
+    "sample_final_fitness": -1000000000.0
+  },
+  "manifest_gate_passed": true,
+  "qualified": true,
+  "all3_pass_count": 61,
+  "pass_count_distribution": {
+    "all3": 61,
+    "all2": 27,
+    "all1": 173,
+    "all0": 39
+  },
+  "entry_survivor_count": 12,
+  "exit_candidate_count": 36,
+  "validate_survivor_count": 4,
+  "entry_result": {
+    "ticker": "AAP",
+    "stage": "entry",
+    "seed": 2026071501,
+    "population": 100,
+    "generation_limit": 50,
+    "generations_run": 50,
+    "evaluation_workers": 28,
+    "parallel_axis": "population_fitness_evaluation",
+    "pool_count": 100,
+    "win_gate_pass_pool_count": 99,
+    "expectancy_absolute_pass_count": 93,
+    "selected_count": 12,
+    "overlap_rejected_count": 81,
+    "best_fitness": 1.729611543573542,
+    "best_hash": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864",
+    "elapsed_seconds": 296.15256905555725
+  },
+  "exit_result": {
+    "ticker": "AAP",
+    "stage": "exit",
+    "mode": "entry_candidate_parallel",
+    "max_workers": 6,
+    "entry_count": 12,
+    "final_rulebook_count": 36,
+    "best_composite_fitness": 38.49019088610639,
+    "best_hash": "e4ea82deb1c8b90f65471f12112191e9211f2cb35f7b88f7bda2ee6469354d0f",
+    "worker_results": [
+      {
+        "entry_index": 1,
+        "entry_rulebook_hash": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864",
+        "elapsed_seconds": 1150.4679992198944,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_001.log"
+      },
+      {
+        "entry_index": 2,
+        "entry_rulebook_hash": "9505e0565e6ecc9b91ba7a7ee6b9f144d1bd9a55b455387433d6194c91b5bcbd",
+        "elapsed_seconds": 1179.7315332889557,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_002.log"
+      },
+      {
+        "entry_index": 3,
+        "entry_rulebook_hash": "6ce361d51444df167ae09737d7c05dfcbb89c1f473df989d0b89b45f10e6dc6c",
+        "elapsed_seconds": 1200.4497017860413,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_003.log"
+      },
+      {
+        "entry_index": 4,
+        "entry_rulebook_hash": "45949948bccaab0d4f027865a70e582bdd16ba015bed221db3453f99532734ae",
+        "elapsed_seconds": 1152.8102295398712,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_004.log"
+      },
+      {
+        "entry_index": 5,
+        "entry_rulebook_hash": "262a5aa3a4a95e2465ef8ee6b2be19db610953f6ef94fcddef902c4350b7426b",
+        "elapsed_seconds": 1146.1702058315277,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_005.log"
+      },
+      {
+        "entry_index": 6,
+        "entry_rulebook_hash": "5f06e6cbe584b69a0204001a96c5703ff14269e0f3b4842168132bf9fcdc57d0",
+        "elapsed_seconds": 1170.3998131752014,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_006.log"
+      },
+      {
+        "entry_index": 7,
+        "entry_rulebook_hash": "3f9b5080e40097ed4a8bff65e091afc7cdb5ad4c30e008f8f10473862fcd0155",
+        "elapsed_seconds": 1179.3824594020844,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_007.log"
+      },
+      {
+        "entry_index": 8,
+        "entry_rulebook_hash": "28597ae1becccd7841c0c4c03226f828819c1aaebed33c378b2fae9b59d2dc00",
+        "elapsed_seconds": 1204.6873519420624,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_008.log"
+      },
+      {
+        "entry_index": 9,
+        "entry_rulebook_hash": "675500b570b292e06889f1e70418883405452e953f0d43426a7dfca03af09c72",
+        "elapsed_seconds": 1169.880066394806,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_009.log"
+      },
+      {
+        "entry_index": 10,
+        "entry_rulebook_hash": "fd2e04b76de12120226f6c8e3541928847a7e50b959ba8e1d53247face41e1ba",
+        "elapsed_seconds": 1155.8080613613129,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_010.log"
+      },
+      {
+        "entry_index": 11,
+        "entry_rulebook_hash": "dfafd2819c00b53155d9f08fef4c308057d76b34438ddc4b69e573f020d74c38",
+        "elapsed_seconds": 1238.5605177879333,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_011.log"
+      },
+      {
+        "entry_index": 12,
+        "entry_rulebook_hash": "486c8b93136fd57f37fae1213e107002e115863091026616a9d1dff72311f795",
+        "elapsed_seconds": 1195.4656777381897,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_exit_workers\\entry_012.log"
+      }
+    ],
+    "elapsed_seconds": 2419.853721857071
+  },
+  "validate_result": {
+    "ticker": "AAP",
+    "stage": "validate",
+    "mode": "final_candidate_parallel_then_parent_merge",
+    "max_workers": 6,
+    "candidate_count": 36,
+    "eligible_count": 4,
+    "ineligible_count": 32,
+    "worker_results": [
+      {
+        "candidate_index": 1,
+        "rulebook_hash": "e4ea82deb1c8b90f65471f12112191e9211f2cb35f7b88f7bda2ee6469354d0f",
+        "elapsed_seconds": 1.7398276329040527,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_001\\worker.log"
+      },
+      {
+        "candidate_index": 2,
+        "rulebook_hash": "1be9fcdf14148609c45dd62460a4c038bced5f5c46fc585c5ccfae5ab1dccc4b",
+        "elapsed_seconds": 1.739447832107544,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_002\\worker.log"
+      },
+      {
+        "candidate_index": 3,
+        "rulebook_hash": "e00aee9677aa859c00107d6b4f60a2da6d08b53bc47b6b9a97573fec968483ba",
+        "elapsed_seconds": 1.7438254356384277,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_003\\worker.log"
+      },
+      {
+        "candidate_index": 4,
+        "rulebook_hash": "bf08d8d13e26c1028bfe103a488e9587f7535fed3aff3f3009ce23b5c2c5e85b",
+        "elapsed_seconds": 1.7418324947357178,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_004\\worker.log"
+      },
+      {
+        "candidate_index": 5,
+        "rulebook_hash": "fcf6517fea504a298e2653a0466c7fb51de631c56371518cbef2a973059fd0fe",
+        "elapsed_seconds": 1.7118303775787354,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_005\\worker.log"
+      },
+      {
+        "candidate_index": 6,
+        "rulebook_hash": "881acb5b4df517175a315850956cbab433751699746871052544a8a33d233530",
+        "elapsed_seconds": 1.700850486755371,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_006\\worker.log"
+      },
+      {
+        "candidate_index": 7,
+        "rulebook_hash": "5a925a81a6d88e3ff619260faf58785c14ced1a6053515ae097531c0598e99a1",
+        "elapsed_seconds": 1.7210698127746582,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_007\\worker.log"
+      },
+      {
+        "candidate_index": 8,
+        "rulebook_hash": "df91cdf7332582a2f93d8acbc170a5c0889c9e03cfa5f4d54b74187caeabf584",
+        "elapsed_seconds": 1.7105584144592285,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_008\\worker.log"
+      },
+      {
+        "candidate_index": 9,
+        "rulebook_hash": "a3dc46a2a2323d0d20e34179075654d769660ad621f4f8da401ccc2eae84ff0e",
+        "elapsed_seconds": 1.743558406829834,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_009\\worker.log"
+      },
+      {
+        "candidate_index": 10,
+        "rulebook_hash": "4798972ef2f761d29e9f7fa0169bc69d9fc4839e0657b6c9b407bf73164601c3",
+        "elapsed_seconds": 1.7616689205169678,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_010\\worker.log"
+      },
+      {
+        "candidate_index": 11,
+        "rulebook_hash": "f318a8b4e9bfffcab294ff94a9bf17c782181c72ef57f97497fe2e8fb8c9efeb",
+        "elapsed_seconds": 1.765160322189331,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_011\\worker.log"
+      },
+      {
+        "candidate_index": 12,
+        "rulebook_hash": "c21fe94ce711bbd27418786849cfa2d9828459ba0fa32558da011176fb88baeb",
+        "elapsed_seconds": 1.775670051574707,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_012\\worker.log"
+      },
+      {
+        "candidate_index": 13,
+        "rulebook_hash": "50f0ad732dad61ae61917faa735bed0883421f728a6197fed10ec78454bb932d",
+        "elapsed_seconds": 1.7109403610229492,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_013\\worker.log"
+      },
+      {
+        "candidate_index": 14,
+        "rulebook_hash": "d71471b0f4462166709decbea4b2c45721d22385da57cb6a49a77df853a47440",
+        "elapsed_seconds": 1.7514288425445557,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_014\\worker.log"
+      },
+      {
+        "candidate_index": 15,
+        "rulebook_hash": "d3005888580b6c8b5e905d590709e3c32809aab751a6a201d3d4eb2c685d1b2d",
+        "elapsed_seconds": 1.8033459186553955,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_015\\worker.log"
+      },
+      {
+        "candidate_index": 16,
+        "rulebook_hash": "f8b9ac54124a4539b19f67773dbc5b7db240774966124fc0e2bb541b4fc2144e",
+        "elapsed_seconds": 1.6858270168304443,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_016\\worker.log"
+      },
+      {
+        "candidate_index": 17,
+        "rulebook_hash": "0f04760aaebe2673932354cad74dbd3854cab68b31b3dde5eba9f15b4f84a035",
+        "elapsed_seconds": 1.694828748703003,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_017\\worker.log"
+      },
+      {
+        "candidate_index": 18,
+        "rulebook_hash": "a0bfdd25c1fb4ad3ed6e490b179e45d51583fd9d13e6a0ed889f2c5672906a46",
+        "elapsed_seconds": 1.6978304386138916,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_018\\worker.log"
+      },
+      {
+        "candidate_index": 19,
+        "rulebook_hash": "ac49a9ff1f928e2dc7a09f6ff11aeae805a8b7ceb62bab007c6274529b5cefa1",
+        "elapsed_seconds": 1.6868524551391602,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_019\\worker.log"
+      },
+      {
+        "candidate_index": 20,
+        "rulebook_hash": "b5547459a7a59d67dec948097888bc895b6590e1b137974a065dc7f818c5d67a",
+        "elapsed_seconds": 1.7378456592559814,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_020\\worker.log"
+      },
+      {
+        "candidate_index": 21,
+        "rulebook_hash": "0771971649226326bcebd683bd1b55bd57501d93244b59a8ac279ad4b65ea7d0",
+        "elapsed_seconds": 1.7213680744171143,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_021\\worker.log"
+      },
+      {
+        "candidate_index": 22,
+        "rulebook_hash": "beeeba32ced76e292cacb8d37119a88823eaa8cc4ae014015ec2db54a48bd87e",
+        "elapsed_seconds": 1.692866563796997,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_022\\worker.log"
+      },
+      {
+        "candidate_index": 23,
+        "rulebook_hash": "9d32b994516810459a44515d219858aab99e936034e7454ea731753f5a9a0953",
+        "elapsed_seconds": 1.709886074066162,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_023\\worker.log"
+      },
+      {
+        "candidate_index": 24,
+        "rulebook_hash": "5d7626ffb2b1ec912fb3adc61805177290becca240682879557ed4412b4898ce",
+        "elapsed_seconds": 1.7048864364624023,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_024\\worker.log"
+      },
+      {
+        "candidate_index": 25,
+        "rulebook_hash": "c35ee4e2dd36514df93e41348c6630c2cfbbcf29c937655d38568dfcb19d7dcf",
+        "elapsed_seconds": 1.8415501117706299,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_025\\worker.log"
+      },
+      {
+        "candidate_index": 26,
+        "rulebook_hash": "8821bfcd83d264698c5d66af65c8810ab424bae317bcaa55c3d20228616b3c87",
+        "elapsed_seconds": 1.8265478610992432,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_026\\worker.log"
+      },
+      {
+        "candidate_index": 27,
+        "rulebook_hash": "d776bf8709042bd2bb257ad8b1aac35c0e9faf3a16d83f328a9011e9b47b819c",
+        "elapsed_seconds": 1.8115711212158203,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_027\\worker.log"
+      },
+      {
+        "candidate_index": 28,
+        "rulebook_hash": "c8d54232bf4a434a0a70ff74cab5c3ccf90be48d214b31d8a206efa9675948fb",
+        "elapsed_seconds": 1.7530412673950195,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_028\\worker.log"
+      },
+      {
+        "candidate_index": 29,
+        "rulebook_hash": "a534e8567714e61bde4bf97ad0128e40d0dfe2fc1e0b3b69382b3e8493522e10",
+        "elapsed_seconds": 1.729024887084961,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_029\\worker.log"
+      },
+      {
+        "candidate_index": 30,
+        "rulebook_hash": "4f4fbf73ce88719cfbfda2ab9f2a0a7bbe436927540f3fb2f323cd7cea2c1e60",
+        "elapsed_seconds": 1.7865641117095947,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_030\\worker.log"
+      },
+      {
+        "candidate_index": 31,
+        "rulebook_hash": "9745d5e0f428210875920471f5bc5b9a3c220b51a3e3876fdbaa99a1ccd0839c",
+        "elapsed_seconds": 1.8335845470428467,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_031\\worker.log"
+      },
+      {
+        "candidate_index": 32,
+        "rulebook_hash": "aa4047fffecc9978b4d334f3691e7205d42fcf00b64093537337de8aafd05a17",
+        "elapsed_seconds": 1.7985844612121582,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_032\\worker.log"
+      },
+      {
+        "candidate_index": 33,
+        "rulebook_hash": "63ba818e1aeb27793c2ca35aa9e317334d28c2193c2e19b52ce51725a270c2ce",
+        "elapsed_seconds": 1.7845830917358398,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_033\\worker.log"
+      },
+      {
+        "candidate_index": 34,
+        "rulebook_hash": "81887f1366de272e2a06a12e0ceb0327e887891cac3cb08909a17b2c442839d2",
+        "elapsed_seconds": 1.6640594005584717,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_034\\worker.log"
+      },
+      {
+        "candidate_index": 35,
+        "rulebook_hash": "7eb2eae297123668f6819debca67096cc0cccc67e519dad7018dc4baf1fda7e2",
+        "elapsed_seconds": 1.6495161056518555,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_035\\worker.log"
+      },
+      {
+        "candidate_index": 36,
+        "rulebook_hash": "29e52378bc271dc42e7f2592581497ae27635bee8c6b5052bde3339048f37c29",
+        "elapsed_seconds": 1.6783907413482666,
+        "worker_log": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP\\_parallel_validate_workers\\candidate_036\\worker.log"
+      }
+    ],
+    "outputs": {
+      "exit_trades.jsonl": "exit_trades.jsonl",
+      "rl_replay_trades.jsonl": "rl_replay_trades.jsonl",
+      "validation_results.jsonl": "validation_results.jsonl",
+      "stage3_profile_catalog.jsonl": "stage3_profile_catalog.jsonl",
+      "stage3_ineligible.jsonl": "stage3_ineligible.jsonl"
+    },
+    "elapsed_seconds": 14.221206188201904
+  },
+  "ce_boil_audit": {
+    "candidate_count": 48,
+    "one_sided_count": 0,
+    "missing_domain_count": 0,
+    "validator_error_count": 0,
+    "validator_errors": {},
+    "quality_score_override_count": 0,
+    "ce_boil_zero": true
+  },
+  "stop_reason": null,
+  "protected_sha_start": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+  },
+  "protected_sha_end": {
+    ".env": "da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce",
+    "data/_system/market_history.csv": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38",
+    "data/_system/market_history_v2.csv": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+  },
+  "protected_unchanged": true,
+  "daemon_start": {
+    "cmdline": "/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60",
+    "pid": 494330,
+    "snapshot_source": "VM_proxy_for_notebook_independent_run",
+    "starttime_ticks": "36014393",
+    "state": "R"
+  },
+  "daemon_end": {
+    "cmdline": "/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60",
+    "pid": 494330,
+    "snapshot_source": "VM_proxy_for_notebook_independent_run",
+    "starttime_ticks": "36014393",
+    "state": "R"
+  },
+  "daemon_unchanged": true,
+  "elapsed_seconds": 2730.2630400657654,
+  "checkpoint_resume": true,
+  "checkpoint_resume_stage": "post-entry",
+  "post_entry_local_workers": 6,
+  "post_entry_seed_policy": "seed_base + 1000 + entry_index",
+  "post_entry_merge_order": "candidate_input_index_order",
+  "initial_source_git_commit": "faed59a43761076b9a1544d5f48c0bcf2d867ec8",
+  "resume_source_git_commit": "004bf73",
+  "independent_host_role": "notebook",
+  "host_name": "DESKTOP-TO74AR2",
+  "requested_local_workers": 28,
+  "market_available_cutoff_date": "2026-07-10",
+  "inter_machine_candidate_communication": false,
+  "notebook_exit_validate_workers": 6,
+  "source_git_commit": "faed59a43761076b9a1544d5f48c0bcf2d867ec8",
+  "launch_command": {
+    "python_executable": "C:\\dask310\\Scripts\\python.exe",
+    "cwd": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\scripts\\research\\stage23_rework_20260713",
+    "argv": [
+      "C:\\dask310\\Scripts\\python.exe",
+      "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_overlap_entry_v4_cutoff_host.py",
+      "--baseline-dir",
+      "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+      "--out-dir",
+      "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP",
+      "--seed-base",
+      "2026071401",
+      "--workers",
+      "28",
+      "--host-role",
+      "notebook",
+      "--market-cutoff-date",
+      "2026-07-10",
+      "--protected-snapshot-json",
+      "{\".env\": \"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\", \"data/_system/market_history.csv\": \"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\", \"data/_system/market_history_v2.csv\": \"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}",
+      "--daemon-snapshot-json",
+      "{\"cmdline\": \"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\", \"pid\": 494330, \"snapshot_source\": \"VM_proxy_for_notebook_independent_run\", \"starttime_ticks\": \"36014393\", \"state\": \"R\"}",
+      "--source-git-commit",
+      "faed59a43761076b9a1544d5f48c0bcf2d867ec8"
+    ],
+    "environment": {
+      "PYTHONPATH": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\scripts\\research\\stage23_rework_20260713;C:\\kingmaker\\vendor;C:\\kingmaker_aap_v2_swing_restore_20260715_r2\\vendor",
+      "PATH": "C:\\kingmaker\\vendor;C:\\kingmaker_aap_v2_swing_restore_20260715_r2\\vendor;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\;C:\\WINDOWS\\System32\\OpenSSH\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python310\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python312\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Launcher\\;C:\\Users\\1000k\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Users\\1000k\\AppData\\Local\\GitHubDesktop\\bin;C:\\Users\\1000k\\AppData\\Local\\Programs\\Ollama;C:\\Users\\1000k\\AppData\\Local\\Google\\Cloud SDK\\google-cloud-sdk\\bin",
+      "PYTHONUTF8": "1",
+      "PYTHONUNBUFFERED": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "KINGMAKER_MARKET_CUTOFF_DATE": "2026-07-10"
+    },
+    "powershell_command": "$env:PYTHONPATH='C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\scripts\\research\\stage23_rework_20260713;C:\\kingmaker\\vendor;C:\\kingmaker_aap_v2_swing_restore_20260715_r2\\vendor'; $env:PATH='C:\\kingmaker\\vendor;C:\\kingmaker_aap_v2_swing_restore_20260715_r2\\vendor;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\;C:\\WINDOWS\\System32\\OpenSSH\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python310\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python312\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Launcher\\;C:\\Users\\1000k\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Users\\1000k\\AppData\\Local\\GitHubDesktop\\bin;C:\\Users\\1000k\\AppData\\Local\\Programs\\Ollama;C:\\Users\\1000k\\AppData\\Local\\Google\\Cloud SDK\\google-cloud-sdk\\bin'; $env:PYTHONUTF8='1'; $env:PYTHONUNBUFFERED='1'; $env:OMP_NUM_THREADS='1'; $env:OPENBLAS_NUM_THREADS='1'; $env:MKL_NUM_THREADS='1'; $env:NUMEXPR_NUM_THREADS='1'; $env:KINGMAKER_MARKET_CUTOFF_DATE='2026-07-10'; & 'C:\\dask310\\Scripts\\python.exe' 'C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_overlap_entry_v4_cutoff_host.py' '--baseline-dir' 'C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX' '--out-dir' 'C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP' '--seed-base' '2026071401' '--workers' '28' '--host-role' 'notebook' '--market-cutoff-date' '2026-07-10' '--protected-snapshot-json' '{\".env\": \"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\", \"data/_system/market_history.csv\": \"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\", \"data/_system/market_history_v2.csv\": \"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}' '--daemon-snapshot-json' '{\"cmdline\": \"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\", \"pid\": 494330, \"snapshot_source\": \"VM_proxy_for_notebook_independent_run\", \"starttime_ticks\": \"36014393\", \"state\": \"R\"}' '--source-git-commit' 'faed59a43761076b9a1544d5f48c0bcf2d867ec8'",
+    "host_local_parent": true,
+    "local_process_workers": 28,
+    "inter_machine_candidate_communication": false,
+    "environment_recording_scope": "execution-relevant whitelist; secrets excluded",
+    "entry_concurrency_mode": "entry_scope_independent_overlapping_positions",
+    "legacy_concurrency_mode": "single_position_exit_plus_cooldown",
+    "post_entry_resume": {
+      "enabled": true,
+      "python_executable": "C:\\dask310\\Scripts\\python.exe",
+      "argv": [
+        "C:\\dask310\\Scripts\\python.exe",
+        "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_overlap_entry_v4_resume_finalize.py",
+        "--out-dir",
+        "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP",
+        "--baseline-dir",
+        "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+        "--seed-base",
+        "2026071401",
+        "--market-cutoff-date",
+        "2026-07-10",
+        "--protected-snapshot-json",
+        "{\".env\": \"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\", \"data/_system/market_history.csv\": \"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\", \"data/_system/market_history_v2.csv\": \"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}",
+        "--daemon-snapshot-json",
+        "{\"cmdline\": \"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\", \"pid\": 494330, \"snapshot_source\": \"VM_proxy_for_notebook_independent_run\", \"starttime_ticks\": \"36014393\", \"state\": \"R\"}",
+        "--initial-source-git-commit",
+        "faed59a43761076b9a1544d5f48c0bcf2d867ec8",
+        "--resume-source-git-commit",
+        "004bf73",
+        "--initial-launch-argv-json",
+        "[\"C:\\\\kingmaker_aap_overlap_entry_v4_20260715_r3\\\\scripts\\\\research\\\\stage23_rework_20260713\\\\scripts\\\\research\\\\run_stage3_aap_overlap_entry_v4_cutoff_host.py\", \"--baseline-dir\", \"C:\\\\kingmaker_aap_tradecount_factor_v3_20260715\\\\data\\\\_system\\\\analysis\\\\stage3_aap_tradecount_factor_v3_20260715\\\\AAP\\\\NOTEBOOK_MAX\", \"--out-dir\", \"C:\\\\kingmaker_aap_overlap_entry_v4_20260715_r3\\\\data\\\\_system\\\\analysis\\\\stage3_aap_overlap_entry_v4_20260715\\\\AAP\", \"--seed-base\", \"2026071401\", \"--workers\", \"28\", \"--host-role\", \"notebook\", \"--market-cutoff-date\", \"2026-07-10\", \"--protected-snapshot-json\", \"{\\\".env\\\": \\\"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\\\", \\\"data/_system/market_history.csv\\\": \\\"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\\\", \\\"data/_system/market_history_v2.csv\\\": \\\"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\\\"}\", \"--daemon-snapshot-json\", \"{\\\"cmdline\\\": \\\"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\\\", \\\"pid\\\": 494330, \\\"snapshot_source\\\": \\\"VM_proxy_for_notebook_independent_run\\\", \\\"starttime_ticks\\\": \\\"36014393\\\", \\\"state\\\": \\\"R\\\"}\", \"--source-git-commit\", \"faed59a43761076b9a1544d5f48c0bcf2d867ec8\"]"
+      ],
+      "powershell_command": "$env:PYTHONPATH='C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\scripts\\research\\stage23_rework_20260713;C:\\kingmaker\\vendor;C:\\kingmaker_aap_v2_swing_restore_20260715_r2\\vendor'; $env:PATH='C:\\kingmaker\\vendor;C:\\kingmaker_aap_v2_swing_restore_20260715_r2\\vendor;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\;C:\\WINDOWS\\System32\\OpenSSH\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python310\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Python312\\;C:\\Users\\1000k\\AppData\\Local\\Programs\\Python\\Launcher\\;C:\\Users\\1000k\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Users\\1000k\\AppData\\Local\\GitHubDesktop\\bin;C:\\Users\\1000k\\AppData\\Local\\Programs\\Ollama;C:\\Users\\1000k\\AppData\\Local\\Google\\Cloud SDK\\google-cloud-sdk\\bin'; $env:PYTHONUTF8='1'; $env:PYTHONUNBUFFERED='1'; $env:OMP_NUM_THREADS='1'; $env:OPENBLAS_NUM_THREADS='1'; $env:MKL_NUM_THREADS='1'; $env:NUMEXPR_NUM_THREADS='1'; $env:KINGMAKER_MARKET_CUTOFF_DATE='2026-07-10'; & 'C:\\dask310\\Scripts\\python.exe' 'C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\scripts\\research\\stage23_rework_20260713\\scripts\\research\\run_stage3_aap_overlap_entry_v4_resume_finalize.py' '--out-dir' 'C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP' '--baseline-dir' 'C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX' '--seed-base' '2026071401' '--market-cutoff-date' '2026-07-10' '--protected-snapshot-json' '{\".env\": \"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\", \"data/_system/market_history.csv\": \"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\", \"data/_system/market_history_v2.csv\": \"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\"}' '--daemon-snapshot-json' '{\"cmdline\": \"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\", \"pid\": 494330, \"snapshot_source\": \"VM_proxy_for_notebook_independent_run\", \"starttime_ticks\": \"36014393\", \"state\": \"R\"}' '--initial-source-git-commit' 'faed59a43761076b9a1544d5f48c0bcf2d867ec8' '--resume-source-git-commit' '004bf73' '--initial-launch-argv-json' '[\"C:\\\\kingmaker_aap_overlap_entry_v4_20260715_r3\\\\scripts\\\\research\\\\stage23_rework_20260713\\\\scripts\\\\research\\\\run_stage3_aap_overlap_entry_v4_cutoff_host.py\", \"--baseline-dir\", \"C:\\\\kingmaker_aap_tradecount_factor_v3_20260715\\\\data\\\\_system\\\\analysis\\\\stage3_aap_tradecount_factor_v3_20260715\\\\AAP\\\\NOTEBOOK_MAX\", \"--out-dir\", \"C:\\\\kingmaker_aap_overlap_entry_v4_20260715_r3\\\\data\\\\_system\\\\analysis\\\\stage3_aap_overlap_entry_v4_20260715\\\\AAP\", \"--seed-base\", \"2026071401\", \"--workers\", \"28\", \"--host-role\", \"notebook\", \"--market-cutoff-date\", \"2026-07-10\", \"--protected-snapshot-json\", \"{\\\".env\\\": \\\"da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce\\\", \\\"data/_system/market_history.csv\\\": \\\"35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38\\\", \\\"data/_system/market_history_v2.csv\\\": \\\"b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611\\\"}\", \"--daemon-snapshot-json\", \"{\\\"cmdline\\\": \\\"/home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\\\", \\\"pid\\\": 494330, \\\"snapshot_source\\\": \\\"VM_proxy_for_notebook_independent_run\\\", \\\"starttime_ticks\\\": \\\"36014393\\\", \\\"state\\\": \\\"R\\\"}\", \"--source-git-commit\", \"faed59a43761076b9a1544d5f48c0bcf2d867ec8\"]'",
+      "workers": 6,
+      "seed_policy": "seed_base + 1000 + entry_index",
+      "merge_order": "candidate_input_index_order",
+      "elapsed_seconds": 2434.110471010208,
+      "initial_source_git_commit": "faed59a43761076b9a1544d5f48c0bcf2d867ec8",
+      "resume_source_git_commit": "004bf73"
+    }
+  },
+  "trade_count_factor_comparison": {
+    "baseline_dir": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+    "current_dir": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP",
+    "seed_base": 2026071401,
+    "pass_count_distribution": {
+      "previous_v2": {
+        "all3": 0,
+        "all2": 2,
+        "all1": 192,
+        "all0": 106
+      },
+      "factor_restore": {
+        "all3": 61,
+        "all2": 27,
+        "all1": 173,
+        "all0": 39
+      }
+    },
+    "fold_pass_counts": {
+      "previous_v2": {
+        "train_1": 48,
+        "train_2": 67,
+        "train_3": 81
+      },
+      "factor_restore": {
+        "train_1": 101,
+        "train_2": 154,
+        "train_3": 155
+      }
+    },
+    "fold_best": {
+      "previous_v2": {
+        "train_1": {
+          "fitness": 0.6445069087263888,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 1.1214100249286763,
+          "mae_penalty": 0.14048010872368452,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666
+        },
+        "train_2": {
+          "fitness": 1.0460364481256468,
+          "trade_count": 11,
+          "trade_count_factor": 0.6124999999999999,
+          "primary_objective_pct_per_day": 1.8426002549290919,
+          "mae_penalty": 0.061449395135074525,
+          "realized_loss_penalty": 0.02110681288334735,
+          "win_rate_pct": 81.81818181818183
+        },
+        "train_3": {
+          "fitness": 2.091575610734492,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 3.1040362758923905,
+          "mae_penalty": 0.08124978239018137,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666
+        }
+      },
+      "factor_restore": {
+        "train_1": {
+          "fitness": 1.1724113242558079,
+          "trade_count": 20,
+          "trade_count_factor": 1.0,
+          "primary_objective_pct_per_day": 1.1724113242558079,
+          "mae_penalty": 0.0,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 95.0
+        },
+        "train_2": {
+          "fitness": 1.6321081616005721,
+          "trade_count": 15,
+          "trade_count_factor": 0.8125,
+          "primary_objective_pct_per_day": 2.0087485065853197,
+          "mae_penalty": 0.0,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 86.66666666666667
+        },
+        "train_3": {
+          "fitness": 1.5883405825352652,
+          "trade_count": 13,
+          "trade_count_factor": 0.7374999999999999,
+          "primary_objective_pct_per_day": 2.157806393365493,
+          "mae_penalty": 0.003041632571785759,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 100.0
+        }
+      }
+    },
+    "final_generation": {
+      "previous_v2": {
+        "train_1": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_1",
+          "call_index": 1,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "a323a7da1507335d3e600d333ce53c281f0ecb5085b8d02d332cbc1a9086c7a4",
+          "best_fitness": 0.6445069087263888,
+          "mean_fitness": -219999999.69874397,
+          "best_primary_objective_pct_per_day": 1.1214100249286763,
+          "best_trade_count_factor": 0.7,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 0.7849870174500734,
+          "best_mae_penalty": 0.14048010872368452,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.14048010872368452,
+          "best_fitness_before_entry_gate": 0.6445069087263888,
+          "best_final_fitness": 0.6445069087263888,
+          "best_trade_count": 12,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 91.66666666666666,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T19:59:25.171559+00:00"
+        },
+        "train_2": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_2",
+          "call_index": 2,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "3458571c823af0daba0c97ab8a3fb6bc7278b6463628b6e28e574b678149d5f8",
+          "best_fitness": 1.0460364481256468,
+          "mean_fitness": -339999999.5572147,
+          "best_primary_objective_pct_per_day": 1.8426002549290919,
+          "best_trade_count_factor": 0.6124999999999999,
+          "best_trade_count_factor_bin": "8_11",
+          "best_primary_after_trade_count_factor": 1.1285926561440687,
+          "best_mae_penalty": 0.061449395135074525,
+          "best_realized_loss_penalty": 0.02110681288334735,
+          "best_total_risk_penalty": 0.08255620801842187,
+          "best_fitness_before_entry_gate": 1.0460364481256468,
+          "best_final_fitness": 1.0460364481256468,
+          "best_trade_count": 11,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 81.81818181818183,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T20:03:47.668245+00:00"
+        },
+        "train_3": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_3",
+          "call_index": 3,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "a099fd3046c9be09aaa6130887f08d1f2ec43240273cf5d48ddf125af63ab017",
+          "best_fitness": 2.091575610734492,
+          "mean_fitness": -169999999.07338226,
+          "best_primary_objective_pct_per_day": 3.1040362758923905,
+          "best_trade_count_factor": 0.7,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 2.1728253931246733,
+          "best_mae_penalty": 0.08124978239018137,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.08124978239018137,
+          "best_fitness_before_entry_gate": 2.091575610734492,
+          "best_final_fitness": 2.091575610734492,
+          "best_trade_count": 12,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 91.66666666666666,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T20:07:08.807458+00:00"
+        }
+      },
+      "factor_restore": {
+        "train_1": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_1",
+          "call_index": 1,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "17032e9b0fa41be3fb4f8074abc5343db38c47fa7642399f0ae5bdc2599ab3f8",
+          "best_fitness": 1.1724113242558079,
+          "mean_fitness": -59999999.15216095,
+          "best_primary_objective_pct_per_day": 1.1724113242558079,
+          "best_trade_count_factor": 1.0,
+          "best_trade_count_factor_bin": "20_80",
+          "best_primary_after_trade_count_factor": 1.1724113242558079,
+          "best_mae_penalty": 0.0,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.0,
+          "best_fitness_before_entry_gate": 1.1724113242558079,
+          "best_final_fitness": 1.1724113242558079,
+          "best_trade_count": 20,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 95.0,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T21:43:15.793665+00:00"
+        },
+        "train_2": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_2",
+          "call_index": 2,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "ef5165219f45e8ae79daade130d8c32e860fd4e6ac6a4bea87553cf48d0f204f",
+          "best_fitness": 1.6321081616005721,
+          "mean_fitness": -119999998.97110142,
+          "best_primary_objective_pct_per_day": 2.0087485065853197,
+          "best_trade_count_factor": 0.8125,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 1.6321081616005721,
+          "best_mae_penalty": 0.0,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.0,
+          "best_fitness_before_entry_gate": 1.6321081616005721,
+          "best_final_fitness": 1.6321081616005721,
+          "best_trade_count": 15,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 86.66666666666667,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T21:47:57.538373+00:00"
+        },
+        "train_3": {
+          "event": "stage3_aap_tradecount_factor_v3_ga_generation",
+          "stage": "qualify",
+          "fold": "train_3",
+          "call_index": 3,
+          "gene_scope": "entry",
+          "evaluation_workers": 28,
+          "parallel_axis": "population_fitness_evaluation",
+          "merge_order": "input_index_order",
+          "generation": 40,
+          "best_hash": "35b536dd5ee0e4bbfa657ddef382a115d91276850ee36a4bc257e8cd8d451866",
+          "best_fitness": 1.5883405825352652,
+          "mean_fitness": -109999999.08098625,
+          "best_primary_objective_pct_per_day": 2.157806393365493,
+          "best_trade_count_factor": 0.7374999999999999,
+          "best_trade_count_factor_bin": "12_19",
+          "best_primary_after_trade_count_factor": 1.591382215107051,
+          "best_mae_penalty": 0.003041632571785759,
+          "best_realized_loss_penalty": 0.0,
+          "best_total_risk_penalty": 0.003041632571785759,
+          "best_fitness_before_entry_gate": 1.5883405825352652,
+          "best_final_fitness": 1.5883405825352652,
+          "best_trade_count": 13,
+          "best_trade_count_gate_pass": true,
+          "best_win_rate_pct": 100.0,
+          "best_win_rate_threshold_pass": true,
+          "best_entry_gate_pass": true,
+          "logged_at_utc": "2026-07-14T21:51:30.550618+00:00"
+        }
+      }
+    },
+    "strict_and_joint_pass": {
+      "train_1": {
+        "strict_and_entry_eligible_day_count": 251,
+        "strict_and_joint_pass_day_count": 20,
+        "strict_and_joint_pass_dates": [
+          "2022-07-01",
+          "2022-10-07",
+          "2022-10-10",
+          "2022-12-16",
+          "2022-12-19",
+          "2022-12-20",
+          "2022-12-21",
+          "2022-12-22",
+          "2022-12-23",
+          "2022-12-27",
+          "2022-12-28",
+          "2022-12-29",
+          "2022-12-30",
+          "2023-01-03",
+          "2023-01-04",
+          "2023-04-05",
+          "2023-04-06",
+          "2023-04-10",
+          "2023-04-12",
+          "2023-04-13"
+        ]
+      },
+      "train_2": {
+        "strict_and_entry_eligible_day_count": 250,
+        "strict_and_joint_pass_day_count": 15,
+        "strict_and_joint_pass_dates": [
+          "2023-07-25",
+          "2023-08-09",
+          "2023-08-22",
+          "2023-09-12",
+          "2023-09-13",
+          "2023-10-23",
+          "2023-10-25",
+          "2023-10-26",
+          "2023-10-27",
+          "2023-10-30",
+          "2023-10-31",
+          "2023-11-01",
+          "2023-11-02",
+          "2023-11-06",
+          "2024-06-26"
+        ]
+      },
+      "train_3": {
+        "strict_and_entry_eligible_day_count": 250,
+        "strict_and_joint_pass_day_count": 30,
+        "strict_and_joint_pass_dates": [
+          "2024-07-08",
+          "2024-07-10",
+          "2024-07-15",
+          "2024-07-16",
+          "2024-07-26",
+          "2024-07-29",
+          "2024-07-30",
+          "2024-07-31",
+          "2024-08-12",
+          "2024-08-13",
+          "2024-08-19",
+          "2024-09-25",
+          "2024-10-10",
+          "2024-10-11",
+          "2024-10-16",
+          "2024-10-30",
+          "2024-10-31",
+          "2024-11-04",
+          "2024-11-06",
+          "2024-11-07",
+          "2024-11-08",
+          "2025-03-26",
+          "2025-04-10",
+          "2025-04-28",
+          "2025-05-12",
+          "2025-05-13",
+          "2025-05-14",
+          "2025-05-15",
+          "2025-05-16",
+          "2025-05-29"
+        ]
+      }
+    },
+    "gate_bottleneck": {
+      "train_1": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 5,
+        "trade_count_below_minimum_rate": 0.016666666666666666,
+        "trade_count_met_but_win_rate_below_60_count": 180,
+        "trade_count_met_but_win_rate_below_60_rate": 0.6,
+        "both_entry_gates_pass_count": 115,
+        "both_entry_gates_pass_rate": 0.38333333333333336,
+        "realized_loss_penalized_count": 214,
+        "realized_loss_penalized_rate": 0.7133333333333334,
+        "mean_realized_loss_penalty_among_penalized": 0.7976258023079935,
+        "mean_realized_loss_penalty_all": 0.5689730723130354,
+        "mae_penalized_count": 229,
+        "mae_penalized_rate": 0.7633333333333333,
+        "mean_mae_penalty_among_penalized": 0.6894407385218811,
+        "mean_mae_penalty_all": 0.5262730970717026,
+        "trade_count_distribution": {
+          "min": 0,
+          "median": 19.0,
+          "max": 58,
+          "histogram": {
+            "0": 2,
+            "1": 1,
+            "3": 1,
+            "5": 1,
+            "10": 2,
+            "11": 3,
+            "12": 4,
+            "13": 2,
+            "14": 5,
+            "15": 18,
+            "16": 38,
+            "17": 4,
+            "18": 57,
+            "19": 18,
+            "20": 59,
+            "21": 20,
+            "22": 12,
+            "23": 14,
+            "24": 6,
+            "25": 7,
+            "26": 5,
+            "27": 3,
+            "28": 1,
+            "29": 4,
+            "31": 1,
+            "32": 1,
+            "35": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1,
+            "52": 1,
+            "53": 1,
+            "55": 1,
+            "57": 1,
+            "58": 2
+          },
+          "factor_bins": {
+            "12_19": 146,
+            "20_80": 144,
+            "lt_8": 5,
+            "8_11": 5
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 14,
+          "median": 20,
+          "max": 29,
+          "histogram": {
+            "14": 1,
+            "15": 1,
+            "16": 4,
+            "17": 1,
+            "18": 4,
+            "19": 9,
+            "20": 52,
+            "21": 11,
+            "22": 4,
+            "23": 3,
+            "24": 4,
+            "25": 3,
+            "26": 2,
+            "28": 1,
+            "29": 1
+          },
+          "factor_bins": {
+            "20_80": 81,
+            "12_19": 20
+          }
+        },
+        "mean_primary_objective_pct_per_day": 0.2192074034982171,
+        "mean_fitness_before_entry_gate": -0.8719168531684048,
+        "qualify_pass_count": 101,
+        "fail_metric_counts": {
+          "entry_win_rate_below_60": 180,
+          "expectancy_pct": 199,
+          "member_score": 27,
+          "entry_trade_count_below_8": 5
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates."
+      },
+      "train_2": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 14,
+        "trade_count_below_minimum_rate": 0.04666666666666667,
+        "trade_count_met_but_win_rate_below_60_count": 124,
+        "trade_count_met_but_win_rate_below_60_rate": 0.41333333333333333,
+        "both_entry_gates_pass_count": 162,
+        "both_entry_gates_pass_rate": 0.54,
+        "realized_loss_penalized_count": 215,
+        "realized_loss_penalized_rate": 0.7166666666666667,
+        "mean_realized_loss_penalty_among_penalized": 1.0569402633029374,
+        "mean_realized_loss_penalty_all": 0.7574738553671051,
+        "mae_penalized_count": 232,
+        "mae_penalized_rate": 0.7733333333333333,
+        "mean_mae_penalty_among_penalized": 1.3363209851525528,
+        "mean_mae_penalty_all": 1.0334215618513076,
+        "trade_count_distribution": {
+          "min": 1,
+          "median": 16.0,
+          "max": 62,
+          "histogram": {
+            "1": 1,
+            "2": 1,
+            "4": 3,
+            "5": 4,
+            "6": 1,
+            "7": 4,
+            "8": 5,
+            "9": 42,
+            "10": 2,
+            "11": 6,
+            "12": 4,
+            "13": 8,
+            "14": 6,
+            "15": 55,
+            "16": 19,
+            "17": 13,
+            "18": 10,
+            "19": 48,
+            "20": 11,
+            "21": 19,
+            "22": 4,
+            "23": 1,
+            "24": 4,
+            "25": 2,
+            "26": 2,
+            "27": 3,
+            "29": 3,
+            "31": 2,
+            "32": 1,
+            "33": 1,
+            "35": 1,
+            "36": 2,
+            "38": 1,
+            "39": 1,
+            "40": 2,
+            "44": 1,
+            "48": 1,
+            "51": 1,
+            "52": 1,
+            "54": 1,
+            "55": 1,
+            "56": 1,
+            "62": 1
+          },
+          "factor_bins": {
+            "12_19": 163,
+            "20_80": 68,
+            "8_11": 55,
+            "lt_8": 14
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 10,
+          "median": 17.0,
+          "max": 27,
+          "histogram": {
+            "10": 1,
+            "12": 1,
+            "13": 3,
+            "14": 5,
+            "15": 52,
+            "16": 13,
+            "17": 6,
+            "18": 5,
+            "19": 44,
+            "20": 8,
+            "21": 13,
+            "22": 1,
+            "24": 1,
+            "27": 1
+          },
+          "factor_bins": {
+            "12_19": 129,
+            "20_80": 24,
+            "8_11": 1
+          }
+        },
+        "mean_primary_objective_pct_per_day": 0.8037371967480459,
+        "mean_fitness_before_entry_gate": -1.1596063444929068,
+        "qualify_pass_count": 154,
+        "fail_metric_counts": {
+          "entry_win_rate_below_60": 124,
+          "member_score": 25,
+          "expectancy_pct": 137,
+          "entry_trade_count_below_8": 14
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates."
+      },
+      "train_3": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 4,
+        "trade_count_below_minimum_rate": 0.013333333333333334,
+        "trade_count_met_but_win_rate_below_60_count": 122,
+        "trade_count_met_but_win_rate_below_60_rate": 0.4066666666666667,
+        "both_entry_gates_pass_count": 174,
+        "both_entry_gates_pass_rate": 0.58,
+        "realized_loss_penalized_count": 246,
+        "realized_loss_penalized_rate": 0.82,
+        "mean_realized_loss_penalty_among_penalized": 1.132349867925133,
+        "mean_realized_loss_penalty_all": 0.928526891698609,
+        "mae_penalized_count": 298,
+        "mae_penalized_rate": 0.9933333333333333,
+        "mean_mae_penalty_among_penalized": 1.1395884391258584,
+        "mean_mae_penalty_all": 1.1319911828650193,
+        "trade_count_distribution": {
+          "min": 5,
+          "median": 45.0,
+          "max": 83,
+          "histogram": {
+            "5": 1,
+            "6": 2,
+            "7": 1,
+            "8": 2,
+            "9": 4,
+            "10": 4,
+            "11": 5,
+            "12": 5,
+            "13": 41,
+            "14": 4,
+            "15": 5,
+            "16": 3,
+            "17": 5,
+            "18": 2,
+            "19": 2,
+            "20": 5,
+            "23": 1,
+            "24": 2,
+            "25": 1,
+            "26": 1,
+            "27": 2,
+            "30": 4,
+            "31": 4,
+            "32": 1,
+            "33": 1,
+            "34": 6,
+            "36": 3,
+            "38": 3,
+            "39": 3,
+            "40": 2,
+            "41": 5,
+            "42": 8,
+            "43": 4,
+            "44": 2,
+            "45": 9,
+            "46": 3,
+            "47": 3,
+            "48": 4,
+            "49": 43,
+            "50": 12,
+            "51": 28,
+            "52": 16,
+            "53": 6,
+            "54": 6,
+            "55": 5,
+            "56": 3,
+            "57": 2,
+            "58": 3,
+            "59": 3,
+            "60": 2,
+            "62": 1,
+            "68": 2,
+            "70": 1,
+            "71": 1,
+            "77": 1,
+            "79": 1,
+            "83": 1
+          },
+          "factor_bins": {
+            "20_80": 213,
+            "12_19": 67,
+            "8_11": 15,
+            "lt_8": 4,
+            "gt_80": 1
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 8,
+          "median": 20,
+          "max": 62,
+          "histogram": {
+            "8": 2,
+            "9": 3,
+            "10": 4,
+            "11": 4,
+            "12": 5,
+            "13": 40,
+            "14": 4,
+            "15": 5,
+            "16": 2,
+            "17": 4,
+            "18": 2,
+            "19": 2,
+            "20": 3,
+            "27": 1,
+            "31": 2,
+            "33": 1,
+            "34": 2,
+            "36": 3,
+            "38": 1,
+            "40": 1,
+            "41": 2,
+            "42": 8,
+            "43": 2,
+            "45": 8,
+            "46": 1,
+            "47": 1,
+            "48": 2,
+            "49": 34,
+            "50": 2,
+            "54": 1,
+            "55": 1,
+            "60": 1,
+            "62": 1
+          },
+          "factor_bins": {
+            "12_19": 64,
+            "8_11": 13,
+            "20_80": 78
+          }
+        },
+        "mean_primary_objective_pct_per_day": 0.6645284475828739,
+        "mean_fitness_before_entry_gate": -1.5548638133452517,
+        "qualify_pass_count": 155,
+        "fail_metric_counts": {
+          "entry_win_rate_below_60": 122,
+          "expectancy_pct": 138,
+          "entry_trade_count_below_8": 4,
+          "member_score": 29
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates."
+      }
+    },
+    "elapsed_seconds": {
+      "previous_v2": 877.9297504425049,
+      "factor_restore": 2730.2630400657654
+    },
+    "verdict_code": "FACTOR_RESTORE_SUCCESS",
+    "verdict_reason": "세 fold fold-best가 모두 12건을 벗어났고 최소 한 fold가 15건 이상으로 이동했다."
+  },
+  "verdict_code": "OVERLAP_ENTRY_EFFECT_CONFIRMED",
+  "verdict_reason": "세 fold 모두 fold-best 거래수가 v3보다 증가했고 보유·cooldown 흡수가 0으로 확인됐다.",
+  "overlap_entry_comparison": {
+    "baseline_dir": "C:\\kingmaker_aap_tradecount_factor_v3_20260715\\data\\_system\\analysis\\stage3_aap_tradecount_factor_v3_20260715\\AAP\\NOTEBOOK_MAX",
+    "current_dir": "C:\\kingmaker_aap_overlap_entry_v4_20260715_r3\\data\\_system\\analysis\\stage3_aap_overlap_entry_v4_20260715\\AAP",
+    "source_git_commit": "faed59a43761076b9a1544d5f48c0bcf2d867ec8",
+    "seed_base": 2026071401,
+    "baseline_label": "v3_single_position",
+    "current_label": "v4_overlap_entry",
+    "pass_count_distribution": {
+      "v3_single_position": {
+        "all3": 0,
+        "all2": 2,
+        "all1": 192,
+        "all0": 106
+      },
+      "v4_overlap_entry": {
+        "all3": 61,
+        "all2": 27,
+        "all1": 173,
+        "all0": 39
+      }
+    },
+    "fold_pass_counts": {
+      "v3_single_position": {
+        "train_1": 48,
+        "train_2": 67,
+        "train_3": 81
+      },
+      "v4_overlap_entry": {
+        "train_1": 101,
+        "train_2": 154,
+        "train_3": 155
+      }
+    },
+    "fold_best": {
+      "v3_single_position": {
+        "train_1": {
+          "fitness": 0.6445069087263888,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 1.1214100249286763,
+          "mae_penalty": 0.14048010872368452,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666
+        },
+        "train_2": {
+          "fitness": 1.0460364481256468,
+          "trade_count": 11,
+          "trade_count_factor": 0.6124999999999999,
+          "primary_objective_pct_per_day": 1.8426002549290919,
+          "mae_penalty": 0.061449395135074525,
+          "realized_loss_penalty": 0.02110681288334735,
+          "win_rate_pct": 81.81818181818183
+        },
+        "train_3": {
+          "fitness": 2.091575610734492,
+          "trade_count": 12,
+          "trade_count_factor": 0.7,
+          "primary_objective_pct_per_day": 3.1040362758923905,
+          "mae_penalty": 0.08124978239018137,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 91.66666666666666
+        }
+      },
+      "v4_overlap_entry": {
+        "train_1": {
+          "fitness": 1.1724113242558079,
+          "trade_count": 20,
+          "trade_count_factor": 1.0,
+          "primary_objective_pct_per_day": 1.1724113242558079,
+          "mae_penalty": 0.0,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 95.0
+        },
+        "train_2": {
+          "fitness": 1.6321081616005721,
+          "trade_count": 15,
+          "trade_count_factor": 0.8125,
+          "primary_objective_pct_per_day": 2.0087485065853197,
+          "mae_penalty": 0.0,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 86.66666666666667
+        },
+        "train_3": {
+          "fitness": 1.5883405825352652,
+          "trade_count": 13,
+          "trade_count_factor": 0.7374999999999999,
+          "primary_objective_pct_per_day": 2.157806393365493,
+          "mae_penalty": 0.003041632571785759,
+          "realized_loss_penalty": 0.0,
+          "win_rate_pct": 100.0
+        }
+      }
+    },
+    "fold_concurrency_and_support": {
+      "v3_single_position": {
+        "train_1": {
+          "joint_pass_day_count": 25,
+          "actual_trade_count": 12,
+          "max_concurrent_positions": 1,
+          "effective_event_count": 4.084967320261438
+        },
+        "train_2": {
+          "joint_pass_day_count": 29,
+          "actual_trade_count": 11,
+          "max_concurrent_positions": 1,
+          "effective_event_count": 4.06280193236715
+        },
+        "train_3": {
+          "joint_pass_day_count": 32,
+          "actual_trade_count": 12,
+          "max_concurrent_positions": 1,
+          "effective_event_count": 3.7925925925925927
+        }
+      },
+      "v4_overlap_entry": {
+        "train_1": {
+          "joint_pass_day_count": 20,
+          "actual_trade_count": 20,
+          "executed_joint_pass_day_count": 20,
+          "holding_cooldown_absorbed_count": 0,
+          "nonexecuted_joint_pass_day_count": 0,
+          "max_concurrent_positions": 8,
+          "entry_time_concurrency_distribution": {
+            "1": 4,
+            "2": 4,
+            "3": 3,
+            "4": 1,
+            "5": 1,
+            "6": 1,
+            "7": 5,
+            "8": 1
+          },
+          "active_day_concurrency_distribution": {
+            "1": 9,
+            "2": 4,
+            "3": 3,
+            "4": 1,
+            "5": 1,
+            "6": 1,
+            "7": 5,
+            "8": 1
+          },
+          "effective_event_count": 2.2988505747126435,
+          "event_cluster_count": 4
+        },
+        "train_2": {
+          "joint_pass_day_count": 15,
+          "actual_trade_count": 15,
+          "executed_joint_pass_day_count": 15,
+          "holding_cooldown_absorbed_count": 0,
+          "nonexecuted_joint_pass_day_count": 0,
+          "max_concurrent_positions": 7,
+          "entry_time_concurrency_distribution": {
+            "1": 6,
+            "2": 3,
+            "3": 1,
+            "4": 1,
+            "5": 1,
+            "6": 2,
+            "7": 1
+          },
+          "active_day_concurrency_distribution": {
+            "1": 13,
+            "2": 3,
+            "3": 1,
+            "4": 1,
+            "5": 1,
+            "6": 2,
+            "7": 1
+          },
+          "effective_event_count": 2.5280898876404496,
+          "event_cluster_count": 6
+        },
+        "train_3": {
+          "joint_pass_day_count": 30,
+          "actual_trade_count": 13,
+          "executed_joint_pass_day_count": 13,
+          "holding_cooldown_absorbed_count": 0,
+          "nonexecuted_joint_pass_day_count": 17,
+          "max_concurrent_positions": 2,
+          "entry_time_concurrency_distribution": {
+            "1": 8,
+            "2": 5
+          },
+          "active_day_concurrency_distribution": {
+            "1": 21,
+            "2": 5
+          },
+          "effective_event_count": 4.368932038834951,
+          "event_cluster_count": 8
+        }
+      }
+    },
+    "generation_best_trade_count_distribution": {
+      "train_1": {
+        "generation_count": 40,
+        "min": 15,
+        "median": 20.0,
+        "max": 26,
+        "histogram": {
+          "15": 2,
+          "16": 1,
+          "18": 2,
+          "20": 32,
+          "21": 1,
+          "22": 1,
+          "26": 1
+        }
+      },
+      "train_2": {
+        "generation_count": 40,
+        "min": 10,
+        "median": 15.0,
+        "max": 38,
+        "histogram": {
+          "10": 1,
+          "12": 4,
+          "14": 2,
+          "15": 18,
+          "16": 3,
+          "18": 2,
+          "19": 2,
+          "20": 6,
+          "22": 1,
+          "38": 1
+        }
+      },
+      "train_3": {
+        "generation_count": 40,
+        "min": 11,
+        "median": 13.0,
+        "max": 28,
+        "histogram": {
+          "11": 4,
+          "12": 6,
+          "13": 23,
+          "14": 1,
+          "17": 2,
+          "21": 3,
+          "28": 1
+        }
+      }
+    },
+    "gate_bottleneck": {
+      "train_1": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 5,
+        "trade_count_below_minimum_rate": 0.016666666666666666,
+        "trade_count_met_but_win_rate_below_60_count": 180,
+        "trade_count_met_but_win_rate_below_60_rate": 0.6,
+        "both_entry_gates_pass_count": 115,
+        "both_entry_gates_pass_rate": 0.38333333333333336,
+        "realized_loss_penalized_count": 214,
+        "realized_loss_penalized_rate": 0.7133333333333334,
+        "mean_realized_loss_penalty_among_penalized": 0.7976258023079935,
+        "mean_realized_loss_penalty_all": 0.5689730723130354,
+        "mae_penalized_count": 229,
+        "mae_penalized_rate": 0.7633333333333333,
+        "mean_mae_penalty_among_penalized": 0.6894407385218811,
+        "mean_mae_penalty_all": 0.5262730970717026,
+        "trade_count_distribution": {
+          "min": 0,
+          "median": 19.0,
+          "max": 58,
+          "histogram": {
+            "0": 2,
+            "1": 1,
+            "3": 1,
+            "5": 1,
+            "10": 2,
+            "11": 3,
+            "12": 4,
+            "13": 2,
+            "14": 5,
+            "15": 18,
+            "16": 38,
+            "17": 4,
+            "18": 57,
+            "19": 18,
+            "20": 59,
+            "21": 20,
+            "22": 12,
+            "23": 14,
+            "24": 6,
+            "25": 7,
+            "26": 5,
+            "27": 3,
+            "28": 1,
+            "29": 4,
+            "31": 1,
+            "32": 1,
+            "35": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1,
+            "52": 1,
+            "53": 1,
+            "55": 1,
+            "57": 1,
+            "58": 2
+          },
+          "factor_bins": {
+            "12_19": 146,
+            "20_80": 144,
+            "lt_8": 5,
+            "8_11": 5
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 14,
+          "median": 20,
+          "max": 29,
+          "histogram": {
+            "14": 1,
+            "15": 1,
+            "16": 4,
+            "17": 1,
+            "18": 4,
+            "19": 9,
+            "20": 52,
+            "21": 11,
+            "22": 4,
+            "23": 3,
+            "24": 4,
+            "25": 3,
+            "26": 2,
+            "28": 1,
+            "29": 1
+          },
+          "factor_bins": {
+            "20_80": 81,
+            "12_19": 20
+          }
+        },
+        "mean_primary_objective_pct_per_day": 0.2192074034982171,
+        "mean_fitness_before_entry_gate": -0.8719168531684048,
+        "qualify_pass_count": 101,
+        "fail_metric_counts": {
+          "entry_win_rate_below_60": 180,
+          "expectancy_pct": 199,
+          "member_score": 27,
+          "entry_trade_count_below_8": 5
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates."
+      },
+      "train_2": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 14,
+        "trade_count_below_minimum_rate": 0.04666666666666667,
+        "trade_count_met_but_win_rate_below_60_count": 124,
+        "trade_count_met_but_win_rate_below_60_rate": 0.41333333333333333,
+        "both_entry_gates_pass_count": 162,
+        "both_entry_gates_pass_rate": 0.54,
+        "realized_loss_penalized_count": 215,
+        "realized_loss_penalized_rate": 0.7166666666666667,
+        "mean_realized_loss_penalty_among_penalized": 1.0569402633029374,
+        "mean_realized_loss_penalty_all": 0.7574738553671051,
+        "mae_penalized_count": 232,
+        "mae_penalized_rate": 0.7733333333333333,
+        "mean_mae_penalty_among_penalized": 1.3363209851525528,
+        "mean_mae_penalty_all": 1.0334215618513076,
+        "trade_count_distribution": {
+          "min": 1,
+          "median": 16.0,
+          "max": 62,
+          "histogram": {
+            "1": 1,
+            "2": 1,
+            "4": 3,
+            "5": 4,
+            "6": 1,
+            "7": 4,
+            "8": 5,
+            "9": 42,
+            "10": 2,
+            "11": 6,
+            "12": 4,
+            "13": 8,
+            "14": 6,
+            "15": 55,
+            "16": 19,
+            "17": 13,
+            "18": 10,
+            "19": 48,
+            "20": 11,
+            "21": 19,
+            "22": 4,
+            "23": 1,
+            "24": 4,
+            "25": 2,
+            "26": 2,
+            "27": 3,
+            "29": 3,
+            "31": 2,
+            "32": 1,
+            "33": 1,
+            "35": 1,
+            "36": 2,
+            "38": 1,
+            "39": 1,
+            "40": 2,
+            "44": 1,
+            "48": 1,
+            "51": 1,
+            "52": 1,
+            "54": 1,
+            "55": 1,
+            "56": 1,
+            "62": 1
+          },
+          "factor_bins": {
+            "12_19": 163,
+            "20_80": 68,
+            "8_11": 55,
+            "lt_8": 14
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 10,
+          "median": 17.0,
+          "max": 27,
+          "histogram": {
+            "10": 1,
+            "12": 1,
+            "13": 3,
+            "14": 5,
+            "15": 52,
+            "16": 13,
+            "17": 6,
+            "18": 5,
+            "19": 44,
+            "20": 8,
+            "21": 13,
+            "22": 1,
+            "24": 1,
+            "27": 1
+          },
+          "factor_bins": {
+            "12_19": 129,
+            "20_80": 24,
+            "8_11": 1
+          }
+        },
+        "mean_primary_objective_pct_per_day": 0.8037371967480459,
+        "mean_fitness_before_entry_gate": -1.1596063444929068,
+        "qualify_pass_count": 154,
+        "fail_metric_counts": {
+          "entry_win_rate_below_60": 124,
+          "member_score": 25,
+          "expectancy_pct": 137,
+          "entry_trade_count_below_8": 14
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates."
+      },
+      "train_3": {
+        "candidate_count": 300,
+        "minimum_trade_count": 8,
+        "trade_count_below_minimum_count": 4,
+        "trade_count_below_minimum_rate": 0.013333333333333334,
+        "trade_count_met_but_win_rate_below_60_count": 122,
+        "trade_count_met_but_win_rate_below_60_rate": 0.4066666666666667,
+        "both_entry_gates_pass_count": 174,
+        "both_entry_gates_pass_rate": 0.58,
+        "realized_loss_penalized_count": 246,
+        "realized_loss_penalized_rate": 0.82,
+        "mean_realized_loss_penalty_among_penalized": 1.132349867925133,
+        "mean_realized_loss_penalty_all": 0.928526891698609,
+        "mae_penalized_count": 298,
+        "mae_penalized_rate": 0.9933333333333333,
+        "mean_mae_penalty_among_penalized": 1.1395884391258584,
+        "mean_mae_penalty_all": 1.1319911828650193,
+        "trade_count_distribution": {
+          "min": 5,
+          "median": 45.0,
+          "max": 83,
+          "histogram": {
+            "5": 1,
+            "6": 2,
+            "7": 1,
+            "8": 2,
+            "9": 4,
+            "10": 4,
+            "11": 5,
+            "12": 5,
+            "13": 41,
+            "14": 4,
+            "15": 5,
+            "16": 3,
+            "17": 5,
+            "18": 2,
+            "19": 2,
+            "20": 5,
+            "23": 1,
+            "24": 2,
+            "25": 1,
+            "26": 1,
+            "27": 2,
+            "30": 4,
+            "31": 4,
+            "32": 1,
+            "33": 1,
+            "34": 6,
+            "36": 3,
+            "38": 3,
+            "39": 3,
+            "40": 2,
+            "41": 5,
+            "42": 8,
+            "43": 4,
+            "44": 2,
+            "45": 9,
+            "46": 3,
+            "47": 3,
+            "48": 4,
+            "49": 43,
+            "50": 12,
+            "51": 28,
+            "52": 16,
+            "53": 6,
+            "54": 6,
+            "55": 5,
+            "56": 3,
+            "57": 2,
+            "58": 3,
+            "59": 3,
+            "60": 2,
+            "62": 1,
+            "68": 2,
+            "70": 1,
+            "71": 1,
+            "77": 1,
+            "79": 1,
+            "83": 1
+          },
+          "factor_bins": {
+            "20_80": 213,
+            "12_19": 67,
+            "8_11": 15,
+            "lt_8": 4,
+            "gt_80": 1
+          }
+        },
+        "pass_trade_count_distribution": {
+          "min": 8,
+          "median": 20,
+          "max": 62,
+          "histogram": {
+            "8": 2,
+            "9": 3,
+            "10": 4,
+            "11": 4,
+            "12": 5,
+            "13": 40,
+            "14": 4,
+            "15": 5,
+            "16": 2,
+            "17": 4,
+            "18": 2,
+            "19": 2,
+            "20": 3,
+            "27": 1,
+            "31": 2,
+            "33": 1,
+            "34": 2,
+            "36": 3,
+            "38": 1,
+            "40": 1,
+            "41": 2,
+            "42": 8,
+            "43": 2,
+            "45": 8,
+            "46": 1,
+            "47": 1,
+            "48": 2,
+            "49": 34,
+            "50": 2,
+            "54": 1,
+            "55": 1,
+            "60": 1,
+            "62": 1
+          },
+          "factor_bins": {
+            "12_19": 64,
+            "8_11": 13,
+            "20_80": 78
+          }
+        },
+        "mean_primary_objective_pct_per_day": 0.6645284475828739,
+        "mean_fitness_before_entry_gate": -1.5548638133452517,
+        "qualify_pass_count": 155,
+        "fail_metric_counts": {
+          "entry_win_rate_below_60": 122,
+          "expectancy_pct": 138,
+          "entry_trade_count_below_8": 4,
+          "member_score": 29
+        },
+        "hard_gate_partition_exclusive": true,
+        "note": "MAE and realized-loss remain score penalties; support and win-rate remain hard gates."
+      }
+    },
+    "elapsed_seconds": {
+      "v3_single_position": 877.9297504425049,
+      "v4_overlap_entry": 2730.2630400657654
+    },
+    "verdict_code": "OVERLAP_ENTRY_EFFECT_CONFIRMED",
+    "verdict_reason": "세 fold 모두 fold-best 거래수가 v3보다 증가했고 보유·cooldown 흡수가 0으로 확인됐다.",
+    "generation_distribution_scope": "qualify_stage_only"
+  },
+  "fold_best_concurrency_summary": {
+    "train_1": {
+      "joint_pass_day_count": 20,
+      "actual_trade_count": 20,
+      "executed_joint_pass_day_count": 20,
+      "holding_cooldown_absorbed_count": 0,
+      "nonexecuted_joint_pass_day_count": 0,
+      "max_concurrent_positions": 8,
+      "entry_time_concurrency_distribution": {
+        "1": 4,
+        "2": 4,
+        "3": 3,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 5,
+        "8": 1
+      },
+      "active_day_concurrency_distribution": {
+        "1": 9,
+        "2": 4,
+        "3": 3,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 5,
+        "8": 1
+      },
+      "effective_event_count": 2.2988505747126435,
+      "event_cluster_count": 4
+    },
+    "train_2": {
+      "joint_pass_day_count": 15,
+      "actual_trade_count": 15,
+      "executed_joint_pass_day_count": 15,
+      "holding_cooldown_absorbed_count": 0,
+      "nonexecuted_joint_pass_day_count": 0,
+      "max_concurrent_positions": 7,
+      "entry_time_concurrency_distribution": {
+        "1": 6,
+        "2": 3,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 2,
+        "7": 1
+      },
+      "active_day_concurrency_distribution": {
+        "1": 13,
+        "2": 3,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 2,
+        "7": 1
+      },
+      "effective_event_count": 2.5280898876404496,
+      "event_cluster_count": 6
+    },
+    "train_3": {
+      "joint_pass_day_count": 30,
+      "actual_trade_count": 13,
+      "executed_joint_pass_day_count": 13,
+      "holding_cooldown_absorbed_count": 0,
+      "nonexecuted_joint_pass_day_count": 17,
+      "max_concurrent_positions": 2,
+      "entry_time_concurrency_distribution": {
+        "1": 8,
+        "2": 5
+      },
+      "active_day_concurrency_distribution": {
+        "1": 21,
+        "2": 5
+      },
+      "effective_event_count": 4.368932038834951,
+      "event_cluster_count": 8
+    }
+  },
+  "checkpoint_resume_metadata": {
+    "enabled": true,
+    "stage": "post-entry",
+    "removed_partial_outputs": [
+      "_parallel_exit_workers/"
+    ],
+    "workers": 6,
+    "seed_policy": "seed_base + 1000 + entry_index",
+    "merge_order": "candidate_input_index_order",
+    "elapsed_seconds": 2434.110471010208,
+    "initial_source_git_commit": "faed59a43761076b9a1544d5f48c0bcf2d867ec8",
+    "resume_source_git_commit": "004bf73"
+  },
+  "report_repair": {
+    "generation_distribution_scope": "qualify_stage_only",
+    "launch_readout_synced": true,
+    "calculation_outputs_changed": false
+  }
+}

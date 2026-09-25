@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KINGMAKER Elite Shadow</title>
+<style>
+:root{--bg:#0a0e17;--panel:#111722;--panel2:#0d121c;--line:#1c2535;--txt:#c9d4e5;--dim:#6f7d92;--up:#26d07c;--down:#ff4d6a;--accent:#3b82f6;--gold:#f5c451;--purple:#8b5cf6}
+*{box-sizing:border-box;margin:0;padding:0}body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Malgun Gothic",sans-serif;font-size:13px}a{color:var(--accent);text-decoration:none}.topbar{display:flex;justify-content:space-between;align-items:center;padding:13px 22px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#0d121c,#111722);position:sticky;top:0;z-index:10}.logo{font-size:18px;font-weight:900;letter-spacing:1.5px}.logo span{color:var(--gold)}.nav{display:flex;gap:8px;align-items:center}.btn{border:1px solid var(--line);background:var(--panel2);color:var(--txt);border-radius:8px;padding:8px 12px;font-weight:800;cursor:pointer}.btn:hover{border-color:var(--accent)}.page{padding:18px 22px}.note{background:#1b1820;border:1px solid #3b3144;color:#d5c4ef;border-radius:12px;padding:12px 14px;line-height:1.55;margin-bottom:16px}.legend{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:12px 0 18px}.legend .item{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;line-height:1.45}.legend b{display:block;color:#fff;margin-bottom:3px}.legend span{color:var(--dim);font-size:12px}.block{border:1px solid var(--line);background:rgba(17,23,34,.55);border-radius:16px;padding:14px;margin:18px 0 26px}.block-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}.block-head h2{font-size:17px;letter-spacing:.5px}.block-head .meta{color:var(--dim);font-size:12px;text-align:right}.block-desc{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.22);border-radius:10px;color:#bfd7ff;padding:10px 12px;line-height:1.5;margin:10px 0 12px}.block-desc.warn{background:rgba(245,196,81,.08);border-color:rgba(245,196,81,.28);color:#f8e0a0}.table-title{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:16px 0 8px}.table-title h3{font-size:13px;color:#fff}.table-title p{color:var(--dim);font-size:12px;text-align:right}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:12px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}.card .lab{font-size:11px;color:var(--dim);letter-spacing:.7px;text-transform:uppercase}.card .val{font-size:24px;font-weight:900;margin-top:7px;font-variant-numeric:tabular-nums}.card .sub{font-size:11px;color:var(--dim);margin-top:4px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 12px}.chip{border:1px solid var(--line);background:var(--panel2);color:var(--dim);padding:7px 11px;border-radius:999px;cursor:pointer;font-weight:800}.chip.active{background:rgba(59,130,246,.18);border-color:var(--accent);color:#dbeafe}.table{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:auto;margin-bottom:12px}.row,.rank-row,.policy-row,.entrylab-row,.live-row,.trade-row{gap:8px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;min-width:980px}.row{display:grid;grid-template-columns:48px 82px 74px 92px 82px 82px 82px 82px 92px 82px 1fr}.rank-row{display:grid;grid-template-columns:42px 82px 86px 112px 96px 96px 96px 98px 104px 120px 1fr;min-width:1180px}.policy-row{display:grid;grid-template-columns:170px 112px 72px 72px 88px 82px 98px 98px 112px 112px 1fr}.entrylab-row{display:grid;grid-template-columns:92px 74px 92px 90px 90px 90px 90px 1fr}.live-row{display:grid;grid-template-columns:82px 72px 88px 86px 82px 82px 82px 78px 78px 78px 78px 1fr}.trade-row{display:grid;grid-template-columns:82px 72px 88px 86px 82px 82px 82px 82px 78px 1fr}.head{color:var(--dim);font-size:11px;text-transform:uppercase;font-weight:900;background:#0d121c;position:sticky;top:0;z-index:2}.rank-row.pick1{background:linear-gradient(90deg,rgba(245,196,81,.15),rgba(17,23,34,.35))}.rank-row.pick2{background:linear-gradient(90deg,rgba(59,130,246,.12),rgba(17,23,34,.25))}.scorepill{display:inline-flex;justify-content:center;align-items:center;min-width:60px;padding:5px 8px;border-radius:999px;font-size:13px;font-weight:900;background:rgba(59,130,246,.16);color:#dbeafe;border:1px solid rgba(59,130,246,.35)}.scorepill.good{background:rgba(38,208,124,.15);color:var(--up);border-color:rgba(38,208,124,.35)}.scorepill.warn{background:rgba(245,196,81,.14);color:var(--gold);border-color:rgba(245,196,81,.35)}.scorepill.bad{background:rgba(255,77,106,.12);color:var(--down);border-color:rgba(255,77,106,.35)}.action{font-weight:900}.action.top{color:var(--gold)}.action.ok{color:var(--up)}.action.watch2{color:#93c5fd}.action.no{color:var(--down)}.tk{font-size:15px;font-weight:900;color:#fff}.badge{display:inline-flex;align-items:center;justify-content:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:900}.A_core{background:rgba(38,208,124,.16);color:var(--up)}.B_stable{background:rgba(245,196,81,.16);color:var(--gold)}.C_momentum{background:rgba(139,92,246,.16);color:var(--purple)}.watch{background:rgba(95,110,133,.16);color:var(--dim)}.pos{color:var(--up);font-weight:800}.neg{color:var(--down);font-weight:800}.dim{color:var(--dim)}.lock{color:var(--gold);font-weight:900}.why{font-size:11px;color:var(--dim);line-height:1.4}.loading{padding:30px;text-align:center;color:var(--dim)}@media(max-width:1200px){.legend,.grid{grid-template-columns:repeat(2,1fr)}.block-head{display:block}.block-head .meta{text-align:left;margin-top:5px}.table-title{display:block}.table-title p{text-align:left;margin-top:4px}}@media(max-width:700px){.legend,.grid{grid-template-columns:1fr}.topbar{display:block}.nav{margin-top:10px;flex-wrap:wrap}.page{padding:12px}.block{padding:11px}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="logo">KINGMAKER <span>ELITE SHADOW</span></div><div class="nav"><a class="btn" href="/dashboard">기존 대시보드</a><a class="btn" href="/elite-strategy-sim" target="_blank">전략 시뮬</a><button class="btn" onclick="manualTick()">가상 Tick</button><button class="btn" onclick="load(true)">새로고침</button></div></div>
+<div class="page">
+  <div class="note">이 페이지는 <b>실제 주문이 아닌 가상 Shadow/Lab 분석 화면</b>입니다. 실제 Alpaca 주문·positions.json·live runner 보유 상태와 분리됩니다.</div>
+  <div class="legend">
+    <div class="item"><b>1. Shadow Ledger</b><span>현재 Elite Shadow 가상 장부의 총손익·보유·청산.</span></div>
+    <div class="item"><b>2. Exit Policy Lab</b><span>같은 진입을 9개 청산 정책으로 복제한 독립 비교.</span></div>
+    <div class="item"><b>3. 진입 몰빵 후보</b><span>진입 당시 Q/기대값/베이스 기준. 현재 손익은 점수 제외.</span></div>
+    <div class="item"><b>4. Shadow 보유/청산</b><span>실제로 Shadow 장부에 열려 있거나 닫힌 가상 거래.</span></div>
+    <div class="item"><b>5. 과거 룰북 성적</b><span>정예 후보 룰북의 과거 백테스트/성적표.</span></div>
+  </div>
+
+  <section class="block" id="shadow-ledger-block">
+    <div class="block-head"><h2>1️⃣ Shadow Ledger — 실제 Shadow 가상 장부</h2><div class="meta" id="live-meta">로딩...</div></div>
+    <div class="block-desc">이 구역은 <b>현재 Elite Shadow가 실제로 가상 보유/청산 중인 장부</b>입니다. Lab 정책 비교가 아니라 Shadow 본체의 현재 결과입니다.</div>
+    <div class="grid" id="live-summary"><div class="loading">로딩...</div></div>
+  </section>
+
+  <section class="block" id="exit-policy-lab-block">
+    <div class="block-head"><h2>2️⃣ Exit Policy Lab — 청산 정책 독립 비교</h2><div class="meta" id="lab-meta">동일 진입 복제 대기...</div></div>
+    <div class="block-desc warn">이 구역은 <b>같은 Shadow 진입을 여러 청산 정책에 똑같이 복제</b>한 검증 장부입니다. Shadow 본체와 별도이며, 어떤 정책이 먼저 청산해도 다른 정책은 계속 독립 추적합니다. `backfill_existing=true`인 포지션은 기존 Shadow 보유를 수동 복제한 표본입니다.</div>
+    <div class="grid" id="lab-summary"><div class="loading">Exit Policy Lab 로딩...</div></div>
+    <div class="table-title"><h3>2-A. 정책별 성과표</h3><p>청산 정책 자체를 비교하는 표. 최소 30개 청산 전까지 랭킹은 LOCK.</p></div>
+    <div class="table" id="lab-policy-table"><div class="loading">정책별 성과 대기...</div></div>
+    <div class="table-title"><h3>2-B. 동일 진입 그룹표</h3><p>한 종목 진입 1개가 9개 정책으로 어떻게 나뉘어 추적되는지 보는 표.</p></div>
+    <div class="table" id="lab-entry-table"><div class="loading">동일 진입 그룹 대기...</div></div>
+  </section>
+
+  <section class="block" id="concentration-rank-block">
+    <div class="block-head"><h2>3️⃣ 진입 몰빵 후보 랭킹 — 진입 시점 고정 기준</h2><div class="meta" id="rank-meta">현재 손익/오멘은 순위 점수에서 제외</div></div>
+    <div class="block-desc">이 표는 <b>진입 당시 몰빵 후보가 될 자격</b>을 보는 표입니다. 점수는 기대값·Q·stage/bucket·일봉 베이스·진입 리스크만 사용합니다. <b>진입 후 현재 수익률, 오멘, MFE 반납은 점수에 넣지 않고</b> 오른쪽 `현재 관리` 컬럼에만 표시합니다.</div>
+    <div class="table-title"><h3>3-A. 진입 몰빵 후보 기준표</h3><p>Q hard gate를 먼저 통과해야 TOP/2순위가 될 수 있음.</p></div>
+    <div class="table" id="rank-table"><div class="loading">랭킹 계산 중...</div></div>
+  </section>
+
+  <section class="block" id="shadow-position-block">
+    <div class="block-head"><h2>4️⃣ Shadow 포지션 상세 — 보유/청산 내역</h2><div class="meta">Shadow 본체 거래 내역</div></div>
+    <div class="block-desc">아래 두 표는 Lab이 아니라 <b>Shadow 본체의 포지션 내역</b>입니다. 첫 표는 현재 열린 가상 보유, 두 번째 표는 이미 닫힌 Shadow 가상 거래입니다.</div>
+    <div class="table-title"><h3>4-A. 현재 Shadow 가상 보유표</h3><p>지금 Shadow가 들고 있다고 가정하는 포지션.</p></div>
+    <div class="table" id="open-table"><div class="loading">가상 보유 조회 중...</div></div>
+    <div class="table-title"><h3>4-B. Shadow 가상 청산 거래표</h3><p>Shadow 본체에서 이미 청산된 가상 거래 기록.</p></div>
+    <div class="table" id="closed-table"><div class="loading">가상 청산 거래 조회 중...</div></div>
+  </section>
+
+  <section class="block" id="rulebook-history-block">
+    <div class="block-head"><h2>5️⃣ 과거 룰북 거래 성적표 — 후보별 백테스트</h2><div class="meta">batch artifact 기반</div></div>
+    <div class="block-desc">이 구역은 현재 보유나 Lab 비교가 아니라, <b>정예 후보 룰북들의 과거 성적/기대값</b>을 보는 참고용 표입니다.</div>
+    <div class="grid" id="summary"><div class="loading">로딩...</div></div>
+    <div class="toolbar" id="chips"></div>
+    <div class="table-title"><h3>5-A. 정예 후보 룰북 성적표</h3><p>필터를 바꿔 stage/bucket별 과거 성적을 확인.</p></div>
+    <div class="table" id="table"><div class="loading">정예 후보 계산 중...</div></div>
+  </section>
+</div>
+<script>
+let DATA=null, LEDGER=null, LAB=null, FILTER='all';
+const fmt=(n,d=2)=>n==null||!isFinite(Number(n))?'—':Number(n).toFixed(d);
+const pct=n=>n==null||!isFinite(Number(n))?'—':(Number(n)>=0?'+':'')+Number(n).toFixed(2)+'%';
+const usd=n=>n==null||!isFinite(Number(n))?'—':(Number(n)>=0?'+':'-')+'$'+Math.abs(Number(n)).toLocaleString(undefined,{maximumFractionDigits:2});
+const cls=n=>Number(n)>=0?'pos':'neg';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,Number(n)||0));
+function bucketLabel(b){return {A_core:'A 핵심',B_stable:'B 안정',C_momentum:'C 모멘텀',watch:'관찰'}[b]||b||'—'}
+function stageLabel(s){return String(s||'').toUpperCase()||'—'}
+function safeNum(n){const v=Number(n); return isFinite(v)?v:0}
+function calcLedgerTotals(){
+  const opens=(LEDGER&&LEDGER.open_positions)||[], trades=(LEDGER&&LEDGER.recent_trades)||[];
+  const openInvest=opens.reduce((a,p)=>a+safeNum(p.notional),0), openPnl=opens.reduce((a,p)=>a+safeNum(p.unrealized_pnl_usd),0);
+  const closedInvest=trades.reduce((a,t)=>a+safeNum(t.notional),0), closedPnl=trades.reduce((a,t)=>a+safeNum(t.pnl_usd),0);
+  const totalInvest=openInvest+closedInvest, totalPnl=openPnl+closedPnl;
+  return {openInvest,openPnl,closedInvest,closedPnl,totalInvest,totalPnl,totalRoi:totalInvest?totalPnl/totalInvest*100:0,openRoi:openInvest?openPnl/openInvest*100:0,closedRoi:closedInvest?closedPnl/closedInvest*100:0};
+}
+async function manualTick(){document.getElementById('live-meta').textContent='가상 tick 실행 중...';const r=await fetch('/api/live/elite_shadow_tick?max_candidates=93',{method:'POST'});await r.json().catch(()=>null);await Promise.all([loadLedger(),loadLab()]);}
+async function load(refresh){document.getElementById('table').innerHTML='<div class="loading">정예 후보 계산 중...</div>';await Promise.all([loadReport(refresh),loadLedger(),loadLab()]);}
+async function loadReport(refresh){const r=await fetch('/api/live/elite_shadow'+(refresh?'?refresh=true':''));DATA=await r.json();renderReport();renderConcentrationRank();}
+async function loadLedger(){const r=await fetch('/api/live/elite_shadow_trader');LEDGER=await r.json();renderLedger();renderConcentrationRank();}
+async function loadLab(){const r=await fetch('/api/live/elite_exit_policy_lab');LAB=await r.json();renderLab();}
+function renderLedger(){
+  const s=(LEDGER&&LEDGER.summary)||{}, lt=(LEDGER&&LEDGER.last_tick)||{}, totals=calcLedgerTotals();
+  document.getElementById('live-meta').textContent=lt.time?`마지막 tick ${lt.time} · 평가 ${lt.evaluated||0} · 신규 ${lt.opened||0} · 청산 ${lt.closed||0}`:'아직 tick 없음';
+  document.getElementById('live-summary').innerHTML=`
+    <div class="card"><div class="lab">총 가상 투입</div><div class="val">${usd(totals.totalInvest)}</div><div class="sub">보유 ${usd(totals.openInvest)} · 청산 ${usd(totals.closedInvest)}</div></div>
+    <div class="card"><div class="lab">총 가상손익</div><div class="val ${cls(totals.totalPnl)}">${usd(totals.totalPnl)}</div><div class="sub">실현 ${usd(totals.closedPnl)} · 미실현 ${usd(totals.openPnl)}</div></div>
+    <div class="card"><div class="lab">총 수익률</div><div class="val ${cls(totals.totalRoi)}">${pct(totals.totalRoi)}</div><div class="sub">투입금 대비 실현+미실현</div></div>
+    <div class="card"><div class="lab">가상 보유 / 보유 ROI</div><div class="val">${s.open_count||0}</div><div class="sub ${cls(totals.openRoi)}">${pct(totals.openRoi)}</div></div>
+    <div class="card"><div class="lab">가상 청산 / 청산 ROI</div><div class="val">${s.closed_count||0}</div><div class="sub ${cls(totals.closedRoi)}">${pct(totals.closedRoi)}</div></div>`;
+  const opens=(LEDGER&&LEDGER.open_positions)||[];
+  document.getElementById('open-table').innerHTML=`<div class="live-row head"><span>종목</span><span>Stage</span><span>Bucket</span><span>투자금</span><span>진입가</span><span>현재가</span><span>손익률</span><span>손익$</span><span>목표</span><span>손절</span><span>보유</span><span>진입 신호</span></div>`+(opens.length?opens.slice().sort((a,b)=>safeNum(b.unrealized_pnl_pct)-safeNum(a.unrealized_pnl_pct)).map(p=>`<div class="live-row"><span class="tk">${esc(p.ticker)}</span><span>${stageLabel(p.stage)}</span><span><b class="badge ${esc(p.bucket)}">${bucketLabel(p.bucket)}</b></span><span>${usd(p.notional)}</span><span>${fmt(p.entry_price)}</span><span>${fmt(p.last_price)}</span><span class="${cls(p.unrealized_pnl_pct)}">${pct(p.unrealized_pnl_pct)}</span><span class="${cls(p.unrealized_pnl_usd)}">${usd(p.unrealized_pnl_usd)}</span><span>${fmt(p.target_price)}</span><span>${fmt(p.stop_price)}</span><span>${p.holding_days||0}일</span><span>${fmt(p.entry_score,2)}/${fmt(p.entry_threshold,2)}</span></div>`).join(''):'<div class="loading">가상 보유 없음 · 신호 뜨면 여기에 뜸</div>');
+  const trades=(LEDGER&&LEDGER.recent_trades)||[];
+  document.getElementById('closed-table').innerHTML=`<div class="trade-row head"><span>종목</span><span>Stage</span><span>Bucket</span><span>투자금</span><span>진입</span><span>청산</span><span>손익률</span><span>손익$</span><span>보유</span><span>사유</span></div>`+(trades.length?trades.map(t=>`<div class="trade-row"><span class="tk">${esc(t.ticker)}</span><span>${stageLabel(t.stage)}</span><span><b class="badge ${esc(t.bucket)}">${bucketLabel(t.bucket)}</b></span><span>${usd(t.notional)}</span><span>${fmt(t.entry_price)}</span><span>${fmt(t.exit_price)}</span><span class="${cls(t.pnl_pct)}">${pct(t.pnl_pct)}</span><span class="${cls(t.pnl_usd)}">${usd(t.pnl_usd)}</span><span>${t.holding_days||0}일</span><span>${esc(t.exit_reason)}</span></div>`).join(''):'<div class="loading">가상 청산 거래 없음</div>');
+}
+function renderLab(){
+  const el=document.getElementById('lab-summary'); if(!LAB){el.innerHTML='<div class="loading">Exit Policy Lab 로딩...</div>';return;}
+  const s=LAB.summary||{}, lt=LAB.last_tick||{}, by=s.by_policy||{};
+  document.getElementById('lab-meta').textContent=lt.time?`마지막 Lab tick ${lt.time} · 정책포지션 ${s.open_policy_positions||0}개 · 청산 ${s.closed_policy_positions||0}개`:'Lab 초기화 대기';
+  const backfill=(LAB.open_positions||[]).filter(p=>p.backfill_existing).length;
+  el.innerHTML=`
+    <div class="card"><div class="lab">동일 진입 그룹</div><div class="val">${s.source_entry_count||0}</div><div class="sub">기존 제외 ${s.ignored_existing_count||0} · 백필 ${backfill}</div></div>
+    <div class="card"><div class="lab">열린 정책 포지션</div><div class="val">${s.open_policy_positions||0}</div><div class="sub">정책 ${s.policy_count||0}개 병렬</div></div>
+    <div class="card"><div class="lab">닫힌 정책 포지션</div><div class="val">${s.closed_policy_positions||0}</div><div class="sub">정책별 최소 ${s.min_closed_for_ranking||30}개 전 랭킹 잠금</div></div>
+    <div class="card"><div class="lab">랭킹 상태</div><div class="val ${s.ranking_locked?'lock':'pos'}">${s.ranking_locked?'LOCK':'OPEN'}</div><div class="sub">표본 부족 시 우열 미판정</div></div>
+    <div class="card"><div class="lab">공정성</div><div class="val">SAME</div><div class="sub">진입가·수량·시각 동일 복제</div></div>`;
+  const policies=Object.values(by);
+  document.getElementById('lab-policy-table').innerHTML=`<div class="policy-row head"><span>정책</span><span>계열</span><span>Open</span><span>Closed</span><span>잠금</span><span>승률</span><span>평균손익</span><span>MFE회수</span><span>반납폭</span><span>조기청산</span><span>설명</span></div>`+(policies.length?policies.map(p=>`<div class="policy-row"><span><b>${esc(p.name)}</b><br><span class="dim">${esc(p.policy_id)}</span></span><span>${esc(p.family)}</span><span>${p.open_count||0}</span><span>${p.closed_count||0}</span><span class="${p.ranking_locked?'lock':'pos'}">${p.ranking_locked?'LOCK':'OK'}</span><span>${fmt(p.win_rate,1)}%</span><span class="${cls(p.avg_pnl_pct)}">${pct(p.avg_pnl_pct)}</span><span>${p.avg_capture_pct_mfe_ge_2==null?'—':fmt(p.avg_capture_pct_mfe_ge_2,1)+'%'}</span><span>${p.avg_giveback_pct_mfe_ge_2==null?'—':fmt(p.avg_giveback_pct_mfe_ge_2,2)+'%p'}</span><span>${p.premature_30m_2p_rate==null?'추적중':fmt(p.premature_30m_2p_rate,1)+'%'}</span><span class="why">${esc(p.description||'')}</span></div>`).join(''):'<div class="loading">아직 진입이 없어 정책별 비교 대기 중</div>');
+  const groups=(s.entry_groups||[]).slice(0,40);
+  document.getElementById('lab-entry-table').innerHTML=`<div class="entrylab-row head"><span>종목</span><span>Stage</span><span>진입가</span><span>열린정책</span><span>닫힌정책</span><span>최고손익</span><span>평균손익</span><span>정책 상태</span></div>`+(groups.length?groups.map(g=>{const states=g.policy_states||[];const maxp=Math.max(...states.map(x=>safeNum(x.max_profit_pct)),0);const avg=states.length?states.reduce((a,x)=>a+safeNum(x.pnl_pct),0)/states.length:0;const sample=states.slice(0,9).map(x=>`${x.policy_id}:${x.status}${x.pnl_pct!=null?' '+pct(x.pnl_pct):''}`).join(' · ');return `<div class="entrylab-row"><span class="tk">${esc(g.ticker)}</span><span>${stageLabel(g.stage)}</span><span>${fmt(g.entry_price)}</span><span>${g.open_policy_count||0}</span><span>${g.closed_policy_count||0}</span><span>${pct(maxp)}</span><span class="${cls(avg)}">${pct(avg)}</span><span class="why">${esc(sample)}</span></div>`;}).join(''):'<div class="loading">아직 Lab 진입 그룹 없음</div>');
+}
+function candidateMap(){const map={};for(const c of ((DATA&&DATA.candidates)||[])){if(c.candidate_id)map[c.candidate_id]=c;map[`${c.stage}:${c.ticker}:${c.rulebook_hash_short||''}`]=c;}return map;}
+function currentManageLabel(p){
+  const pnl=safeNum(p.unrealized_pnl_pct), maxProfit=safeNum(p.max_profit_pct), omen=safeNum(p.shadow_exit_omen_score), omenReason=String(p.shadow_exit_omen_reason||'hold');
+  if(omen>=60||omenReason!=='hold'||pnl<=-1.5)return '위험관리';
+  if(maxProfit>=2&&pnl<maxProfit*0.55)return '반납관리';
+  if(pnl>=2)return '수익관리';
+  if(pnl>0)return '플러스 보유';
+  return '보유 관찰';
+}
+function rankPosition(p,map){
+  const c=map[p.candidate_id]||map[`${p.stage}:${p.ticker}:${p.rulebook_hash_short||''}`]||{};
+  const stored=p.entry_concentration||null;
+  const manage=currentManageLabel(p);
+  if(stored&&stored.score!=null){
+    const comp=stored.components||{}, inputs=stored.inputs||{};
+    const block=stored.blocks||[], cap=stored.caps||[];
+    let ac='no';
+    if(block.length)ac='no';else if(stored.action==='TOP 진입 몰빵')ac='top';else if(stored.action==='2순위 집중')ac='ok';else if(stored.action==='관찰 후보')ac='watch2';
+    const rankAt=p.entry_concentration_rank_at_entry??stored.rank_at_entry;
+    const rankTotal=p.entry_concentration_rank_total??stored.rank_total;
+    const why=[];
+    why.push(`저장시각 ${String(stored.ranked_at||stored.calculated_at||'').replace('T',' ').slice(0,19)}`);
+    why.push(`Q${fmt(inputs.q,0)} ${String(inputs.label||'').replace('_FOLLOW_THROUGH','')}`);
+    if(block.length)why.push('차단: '+block.join(','));else if(cap.length)why.push('제한: '+cap.join(','));else why.push('진입조건 통과');
+    return {p,c,stored:true,score:safeNum(stored.score),expected:safeNum(comp.expected),quality:safeNum(comp.quality),base:safeNum(comp.base),risk:safeNum(comp.risk),action:stored.action||'분산/제외',ac,block,cap,manage,why:why.slice(0,4),rankAt,rankTotal,inputs};
+  }
+  return {p,c,stored:false,score:-1,expected:0,quality:0,base:0,risk:0,action:'패치 전 미저장',ac:'no',block:['entry_rank_not_recorded'],cap:[],manage,why:['이 포지션은 entry_concentration 저장 패치 이전 진입','정확한 진입 당시 몰빵 순위 복원 불가'],rankAt:null,rankTotal:null,inputs:{}};
+}
+function renderConcentrationRank(){
+  const el=document.getElementById('rank-table');if(!el)return;if(!LEDGER){el.innerHTML='<div class="loading">가상 보유 조회 중...</div>';return}const opens=(LEDGER&&LEDGER.open_positions)||[];if(!opens.length){el.innerHTML='<div class="loading">현재 가상 보유 없음</div>';return}const map=candidateMap();const rows=opens.map(p=>rankPosition(p,map)).sort((a,b)=>{const ap=!a.stored?9:((a.block&&a.block.length)?6:(a.action==='TOP 진입 몰빵'?0:(a.action==='2순위 집중'?1:(a.action==='관찰 후보'?2:3))));const bp=!b.stored?9:((b.block&&b.block.length)?6:(b.action==='TOP 진입 몰빵'?0:(b.action==='2순위 집중'?1:(b.action==='관찰 후보'?2:3))));if(ap!==bp)return ap-bp;const ar=a.rankAt==null?999:Number(a.rankAt);const br=b.rankAt==null?999:Number(b.rankAt);if(ar!==br)return ar-br;if(a.stored!==b.stored)return a.stored?-1:1;return b.score-a.score});const valid=rows.filter(r=>r.stored&&!r.block.length);const validIndex=new Map(valid.map((r,i)=>[r,i]));const missing=rows.filter(r=>!r.stored).length;const top2=valid.slice(0,2).map(r=>`${r.p.ticker}(${r.rankAt||'?'}위)`).join(', ');document.getElementById('rank-meta').textContent=`현재 보유 ${opens.length}개 · 저장된 진입순위 기준 상위 ${top2||'없음'} · 패치 전 미저장 ${missing}개`;
+  const head=`<div class="rank-row head"><span>진입순위</span><span>종목</span><span>진입점수</span><span>몰빵 판정</span><span>기대값</span><span>Q/품질</span><span>베이스</span><span>리스크</span><span>현재손익</span><span>현재관리</span><span>진입 당시 저장 근거</span></div>`;
+  el.innerHTML=head+rows.map((r,i)=>{const p=r.p,c=r.c||{},m=c.metrics||{},ts=c.trade_summary||{},inp=r.inputs||{};const pill=(r.stored&&!r.block.length&&r.score>=85)?'good':(r.stored&&r.score>=70)?'warn':'bad';const pickIdx=validIndex.get(r);const pick=(pickIdx===0)?'pick1':(pickIdx===1)?'pick2':'';const rankTxt=r.stored?`${r.rankAt||'?'} / ${r.rankTotal||'?'}`:'미저장';const scoreTxt=r.stored?fmt(r.score,1):'—';const qTxt=r.stored?fmt(inp.q,0):fmt(p.entry_quality_score,0);const labelTxt=r.stored?(inp.label||''):(p.entry_quality_label||'');return `<div class="rank-row ${pick}"><span>${rankTxt}</span><span><span class="tk">${esc(p.ticker)}</span><br><span class="dim">${stageLabel(p.stage)} · ${bucketLabel(p.bucket)}</span></span><span><b class="scorepill ${pill}">${scoreTxt}</b><br><span class="dim">E${fmt(r.expected,0)} Q${fmt(r.quality,0)} B${fmt(r.base,0)} R${fmt(r.risk,0)}</span></span><span class="action ${r.ac}">${r.action}</span><span>${pct((r.inputs||{}).oos_expectancy_pct ?? m.oos_expectancy_pct)}<br><span class="dim">승 ${fmt((r.inputs||{}).oos_win_rate ?? m.oos_win_rate,0)}% · MFE ${pct((r.inputs||{}).avg_mfe_pct ?? ts.avg_mfe_pct)}</span></span><span>Q${qTxt}<br><span class="dim">${esc(labelTxt)}</span></span><span>${fmt(r.base,1)}/20<br><span class="dim">5D ${pct((r.inputs||{}).ret_5d_pct ?? (p.entry_quality&&p.entry_quality.metrics||{}).ret_5d_pct)}</span></span><span>${fmt(r.risk,1)}/10<br><span class="dim">DD ${pct(-Math.abs(safeNum((r.inputs||{}).worst_drawdown_pct_abs ?? m.worst_drawdown_pct)))}</span></span><span class="${cls(p.unrealized_pnl_pct)}">${pct(p.unrealized_pnl_pct)}<br><span class="dim">최고 ${pct(p.max_profit_pct)}</span></span><span>${esc(r.manage)}<br><span class="dim">오멘 ${fmt(p.shadow_exit_omen_score,0)} ${esc(p.shadow_exit_omen_reason||'hold')}</span></span><span class="why">${esc(r.why.join(' · '))}</span></div>`}).join('');
+}
+function renderReport(){renderSummary();renderChips();renderTable();}
+function renderSummary(){const s=DATA.summary||{},bc=s.bucket_counts||{},sc=s.stage_counts||{},cands=DATA.candidates||[];const withTrades=cands.filter(c=>(c.trade_summary||{}).trade_count>0);const avgComp=withTrades.length?withTrades.reduce((a,c)=>a+Number((c.trade_summary||{}).compounded_pct||0),0)/withTrades.length:0;document.getElementById('summary').innerHTML=`<div class="card"><div class="lab">후보 수</div><div class="val">${s.candidate_count||0}</div></div><div class="card"><div class="lab">Stage2 / Stage3</div><div class="val">${sc.stage2||0} / ${sc.stage3||0}</div></div><div class="card"><div class="lab">A 핵심</div><div class="val" style="color:var(--up)">${bc.A_core||0}</div></div><div class="card"><div class="lab">B 안정 / C 모멘텀</div><div class="val">${bc.B_stable||0} / ${bc.C_momentum||0}</div></div><div class="card"><div class="lab">평균 복리 백테스트</div><div class="val ${cls(avgComp)}">${pct(avgComp)}</div></div>`;}
+function renderChips(){const chips=[['all','전체'],['A_core','A 핵심'],['B_stable','B 안정'],['C_momentum','C 모멘텀'],['stage2','Stage2'],['stage3','Stage3']];document.getElementById('chips').innerHTML=chips.map(([id,t])=>`<button class="chip ${FILTER===id?'active':''}" onclick="FILTER='${id}';renderReport()">${t}</button>`).join('');}
+function filtered(){let rows=DATA.candidates||[];if(FILTER==='stage2'||FILTER==='stage3')rows=rows.filter(c=>c.stage===FILTER);else if(FILTER!=='all')rows=rows.filter(c=>c.bucket===FILTER);return rows;}
+function renderTable(){const rows=filtered();const head=`<div class="row head"><span>#</span><span>종목</span><span>Stage</span><span>Bucket</span><span>점수</span><span>기대값</span><span>승률</span><span>거래수</span><span>복리</span><span>MDD</span><span>전략</span></div>`;const body=rows.map((c,i)=>{const m=c.metrics||{},rb=c.rulebook||{},ts=c.trade_summary||{};return `<div class="row"><span>${i+1}</span><span class="tk">${esc(c.ticker)}</span><span>${stageLabel(c.stage)}</span><span><b class="badge ${esc(c.bucket)}">${bucketLabel(c.bucket)}</b></span><span>${fmt(c.elite_score,1)}</span><span class="pos">${pct(m.oos_expectancy_pct)}</span><span>${fmt(m.oos_win_rate,1)}%</span><span>${ts.trade_count||0}</span><span class="${cls(ts.compounded_pct)}">${pct(ts.compounded_pct)}</span><span class="neg">${pct(m.worst_drawdown_pct)}</span><span>${esc(rb.exit_strategy)} · ${rb.max_holding_days}일 · ${rb.sell_omen_enabled?'SO ON':'SO OFF'}</span></div>`}).join('');document.getElementById('table').innerHTML=head+(body||'<div class="loading">필터 결과 없음</div>');}
+load(false).catch(e=>{document.getElementById('table').innerHTML='<div class="loading">로드 실패: '+esc(e)+'</div>'});
+setInterval(()=>{loadLedger();loadLab();},30000);
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+step,component,value,operation,running_total,source_or_note
+1,MA,0.0,add,0.0,"inactive in CE logged reasons"
+2,MACD,1.167787881408684,add,1.167787881408684,"CE rulebook weight_macd_golden"
+3,RSI,1.725077524288451,add,2.892865405697135,"CE rulebook weight_rsi_zone"
+4,Bollinger,0.8477763470822091,add,3.740641752779344,"CE rulebook weight_bb_near_lower"
+5,Volume,0.0,add,3.740641752779344,"inactive in CE logged reasons"
+6,News,0.0,add,3.740641752779344,"stored CE snapshot News=0"
+7,NewsTopics,0.0,add,3.740641752779344,"stored CE snapshot NewsTopics=0"
+8,Event,4.622604542854353,add,8.363246295633697,"stored full score minus technical subtotal; displayed as +4.62"
+9,Crash bonus,0.0,add,8.363246295633697,"not present in CE reasons"
+10,Market adjustment,1.0,multiply,8.363246295633697,"CE rulebook use_market_entry_adjustment=False"
+11,Final score,8.363246295633697,compare_to_threshold,8.363246295633697,"threshold=2.6541866643896674; should_buy=True"

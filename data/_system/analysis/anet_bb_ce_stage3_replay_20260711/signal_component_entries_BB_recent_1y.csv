@@ -1,0 +1,11 @@
+ticker,period_label,period_reproduction_status,trade_match_status,confidence_tier,component_matches_original,entry_date,exit_date,pnl_pct,score,threshold,ratio,market_adjustment,positive_component_count,active_combo,ma_align,macd,rsi,bb,volume,news,news_topics,events
+BB,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-07-07,2025-07-31,-14.91240381,3.65188241,2.79195117,1.30800368,1.0,3,MA+RSI+BB,1.54052185,0.0,1.75038162,0.36097895,0.0,0.0,0.0,0.0
+BB,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-08-05,2025-08-29,-0.0999875,3.20672633,2.79195117,1.14856104,1.0,3,RSI+BB+NewsTopics,0.0,0.0,1.75038162,0.36097895,0.0,0.0,1.09536577,0.0
+BB,recent_1y,mismatch_period,exact,B_trade_exact,True,2025-12-05,2025-12-19,-10.56495191,3.34108323,2.79195117,1.19668398,1.0,3,MACD+RSI+BB,0.0,1.59867026,1.75038162,0.36097895,0.0,0.0,-0.3689476,0.0
+BB,recent_1y,mismatch_period,exact,B_trade_exact,True,2026-01-02,2026-01-29,-5.33166489,4.9891575,2.79195117,1.78697878,1.0,3,RSI+BB+NewsTopics,0.0,0.0,1.75038162,0.36097895,0.0,0.0,2.87779693,0.0
+BB,recent_1y,mismatch_period,exact,B_trade_exact,True,2026-02-17,2026-03-13,-3.00478848,3.50992239,2.79195117,1.25715751,1.0,3,RSI+BB+NewsTopics,0.0,0.0,1.75038162,0.36097895,0.0,0.0,1.39856182,0.0
+BB,recent_1y,mismatch_period,exact,B_trade_exact,True,2026-06-11,2026-06-26,30.0794443,3.29090347,2.79195117,1.17871097,1.0,2,MA+RSI,1.54052185,0.0,1.75038162,0.0,0.0,0.0,0.0,0.0
+BB,recent_1y,mismatch_period,entry_date_match_but_values_differ,C_signal_exact_exit_diff,True,2025-09-22,2025-10-16,5.84793018,3.44326602,2.79195117,1.23328304,1.0,2,RSI+NewsTopics,0.0,0.0,1.75038162,0.0,0.0,0.0,1.6928844,0.0
+BB,recent_1y,mismatch_period,entry_date_match_but_values_differ,C_signal_exact_exit_diff,True,2026-03-18,2026-04-14,21.63597532,7.15814253,2.79195117,2.56384947,1.0,3,RSI+BB+NewsTopics,0.0,0.0,1.75038162,0.36097895,0.0,0.0,5.04678196,0.0
+BB,recent_1y,mismatch_period,entry_date_match_but_values_differ,C_signal_exact_exit_diff,True,2026-04-27,2026-05-21,32.88115176,3.19542055,2.79195117,1.14451161,1.0,2,MA+RSI,1.54052185,0.0,1.75038162,0.0,0.0,0.0,-0.09548292,0.0
+BB,recent_1y,mismatch_period,not_in_original,D_low_partial_or_rerun_only,False,2025-10-23,2025-11-18,-5.17344307,3.48384013,2.79195117,1.24781557,1.0,4,RSI+BB+Volume+NewsTopics,0.0,0.0,1.75038162,0.36097895,1.16162065,0.0,0.21085892,0.0

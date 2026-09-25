@@ -1,0 +1,42 @@
+# stage3_all3_cluster_dissect_20260715 SHA / audit
+
+# output files
+cad22c0639b947378f70abe459faac579b92e270e144a98c1264ce5709f94067  readout.md
+4fcf24e00d7c8ef2d458a9536597a1a8e79bf95a3552e8e623544ef9b994ef77  trade_level_compact.md
+
+# all3 source files
+90202b7f098b8b74d47625303874dee2bab05dc5100702133ebc4c3ed21272dc  data/_system/analysis/stage3_multiticker_v5_probe_20260715/LASR/qualify_candidate_rulebooks.jsonl
+15e4ef6fa90a637e6714478a5b1d847998349d8d8eb06419217f646d5f2e7701  data/_system/analysis/stage3_multiticker_v5_probe_20260715/LASR/qualify_cross_fold_matrix.jsonl
+b6e3ba9b55dcb0d2a1ca5fd5298a80db5ed30fbca66805198be31f77aeaf97f5  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/qualify_candidate_rulebooks.jsonl
+8b0135c4d1757179054ac5497e48270f1469e34cd10f46f93a3e28951a759a6d  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/qualify_cross_fold_matrix.jsonl
+
+# all3 candidate object hashes
+# LASR_all3_1 deb35e5a3a60ad2731a33fe9e1378b162f798b89a8d710eb4505d1da37253e06
+#   rulebook_object_sha: 2b6034e1f89444eccf3d64551e193bda190253d909939c8369655171dfa4c6a6
+#   crossfold_object_sha: 0ee187b06e77eb83d0698ae7582bf819b5bfd3b0119a67463ec215fe9eb3a07e
+# LASR_all3_2 ec2841e0fb1a9418dca1c961b2df1b6c337f18a8230a58abfdb04f4aaf47e852
+#   rulebook_object_sha: a196c449f9fcfc441fd7ab98d39096c19acb13b484dbb76af48c6df72ec6889b
+#   crossfold_object_sha: fcfa7346cec3bfcfbe4eb425c7b115f6e43fcbcf9d7c29b824ce38857e753d81
+# ADPT_all3_1 3c950cfa5f239b1530cb312ad4b224b74ad1e7d8922d5dbe1c6e0146774231d6
+#   rulebook_object_sha: d4cb840ec7a13769219227a79c4f420d7f34372c59b64354c55483bb9839d5c5
+#   crossfold_object_sha: cf8615fe097218846c331db95a931ce95914ae27b3e9a7a600f99aaed3688d53
+
+# primary OHLCV inputs
+d9c89fb09b543d09ee7a08ca319e27a7950a580f47e9c9a1d22b9055362112a5  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/LASR.pkl
+13fb9f982e8efa29e4ee6dd3ffb585d7fb5d578c3c5099e8c76409ca0ada9503  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/ADPT.pkl
+
+# D-5 feature matrix SHA from same OHLCV + existing 5 features
+# LASR: d5182e604d6102c3b9fc1da16c4a8e5bafe19fe6b921507fd6ab41c1b6b5c98a
+# ADPT: 7ae6f2107da975d4c43c628705be74719f7203ee3469a3a205c23eaa2588ea60
+
+# protected files: start == end confirmed
+da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce  .env
+35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38  data/_system/market_history.csv
+b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611  data/_system/market_history_v2.csv
+
+# daemon end-state
+# PID PPID STAT STARTED CMD
+# 494330 1 Sl Sat Jul 11 20:16:00 2026 /home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60
+
+# git
+# pre-output backup commit: b80cc97

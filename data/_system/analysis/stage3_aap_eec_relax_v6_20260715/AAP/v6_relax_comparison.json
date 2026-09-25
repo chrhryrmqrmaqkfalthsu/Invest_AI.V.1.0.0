@@ -1,0 +1,54 @@
+{
+  "run_id": "stage3_aap_eec_relax_v6_20260715",
+  "ticker": "AAP",
+  "seed_base": 2026071401,
+  "qualify": {
+    "population": 100,
+    "generations": 40,
+    "folds": ["train_1", "train_2", "train_3"],
+    "local_process_workers": 28,
+    "host_role": "notebook"
+  },
+  "code_change": {
+    "file": "scripts/research/stage23_rework_20260713/engine/learning/execution_mode_backtest_eec_v5.py",
+    "only_parameter_change": true,
+    "eec_target_before": 6.0,
+    "eec_target_after": 4.0,
+    "eec_floor_before": 0.5,
+    "eec_floor_after": 0.7,
+    "before_backup_commit": "9deb663",
+    "after_code_commit": "3e2b6c7",
+    "file_sha256_before": "161ee1a88fa617116a1ec017233655502a65bc0fd8e2df2843edf6667ea415dc",
+    "file_sha256_after": "d0882a88918b842b2b987cfff1abcaa2742a7d077a2a56e4b1b2aa483db560ac"
+  },
+  "static_verification": {
+    "py_compile": "PASS",
+    "eec_4_multiplier": 1.0,
+    "eec_2_multiplier": 0.7,
+    "legacy_bitwise_unchanged": true,
+    "execution_module_not_auto_patched": true,
+    "mutation_helper_ast_sha": "aab7163f9194cf5f989ad01973e8d2967dad48be53f7d52ee09747eea502077d"
+  },
+  "v5_target6_floor05": {
+    "all3_all2_all1_all0": "0/4/245/51",
+    "fold_pass_counts": "90/80/83",
+    "fold_best_trade_count": "21/21/13",
+    "fold_best_eec": "4.955056/6.211268/8.047619",
+    "fold_best_max_cluster_share": "23.81%/19.05%/23.08%",
+    "fold_best_fitness": "0.8734105702136226/1.5040265454276753/1.4454281972759289"
+  },
+  "this_run_target4_floor07": {
+    "all3_all2_all1_all0": "0/61/200/39",
+    "fold_pass_counts": "80/94/148",
+    "fold_best_trade_count": "19/19/13",
+    "fold_best_eec": "4.149425/4.569620/5.827586",
+    "fold_best_max_cluster_share": "31.58%/31.58%/23.08%",
+    "fold_best_fitness": "1.1705521409904807/1.8556541319114905/1.729611543573542"
+  },
+  "all3_eec_cluster_log": {
+    "all3_count": 0,
+    "candidates": [],
+    "note": "No all3 candidate exists in qualify_cross_fold_matrix.jsonl. Concentration relapse cannot be assessed for all3."
+  },
+  "verdict": "RELAX_STILL_NO_ALL3"
+}

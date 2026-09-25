@@ -1,0 +1,8 @@
+ticker,scope,similarity_group,definition,n,avg_pnl_pct,median_pnl_pct,win_rate_pct,min_pnl_pct,max_pnl_pct
+ANET,all_79,exact,"active set exactly MA+MACD+RSI",0,,,,,
+ANET,all_79,contains_live_plus_extra,"MA+MACD+RSI all active plus another indicator",1,1.27598705,1.27598705,100.000000,1.27598705,1.27598705
+ANET,all_79,overlap_2_of_3,"exactly two of MA MACD RSI active",44,1.98737797,1.27598705,70.454545,-12.98790292,26.80603139
+ANET,all_79,overlap_1_of_3,"exactly one of MA MACD RSI active",34,3.01826264,1.27598705,73.529412,-13.00013917,34.48145034
+BB,all_41,exact,"active set exactly MA+RSI",6,5.00419715,-0.71037659,50.000000,-18.47447219,32.88115176
+BB,all_41,contains_live_plus_extra,"MA+RSI both active plus another indicator",6,-7.71612474,-13.82651247,16.666667,-21.72436695,28.07792162
+BB,all_41,overlap_1_of_2,"exactly one of MA RSI active",29,1.85385065,-3.00478848,41.379310,-15.49745946,71.00050569

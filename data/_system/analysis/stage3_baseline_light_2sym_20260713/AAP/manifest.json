@@ -1,0 +1,248 @@
+{
+  "ce_boil_audit": {
+    "candidate_count": 0,
+    "ce_boil_zero": true,
+    "missing_domain_count": 0,
+    "one_sided_count": 0,
+    "quality_score_override_count": 0,
+    "validator_error_count": 0,
+    "validator_errors": {}
+  },
+  "description": "Stage 3 aggressive pipeline output; validate creates a profile catalog for eligible candidates instead of hard-killing by holding/MDD labels.",
+  "entry_phase_exit_priority_gate": {
+    "max_holding_days": 7,
+    "passed": true,
+    "priority": [
+      "entry_provisional_atr_stop",
+      "entry_interval_break",
+      "entry_provisional_max_holding"
+    ]
+  },
+  "entry_selection_config": {
+    "entry_min_expectancy_pct": 2.0,
+    "entry_overlap_threshold": 0.7,
+    "max_entry_candidates": 3
+  },
+  "execution_scale": "LIGHT_ONLY_NOT_FULL_STAGE3",
+  "external_fetch_enabled": false,
+  "last_requested_stage": "all",
+  "light_config": {
+    "entry_generations": 3,
+    "entry_population": 10,
+    "exit_generations": 3,
+    "exit_population": 10,
+    "max_entry_candidates": 3,
+    "qualify_generations": 3,
+    "qualify_population": 10,
+    "top_n_entry_pool": 3,
+    "top_n_exit_per_entry": 1,
+    "top_n_qualify": 3
+  },
+  "light_final_counts": {
+    "entry_survivor_count": 0,
+    "exit_candidate_count": 0,
+    "qualified": false,
+    "validate_survivor_count": 0
+  },
+  "light_run_completed": true,
+  "light_run_stop_reason": "qualify_failed",
+  "market_snapshot_preflight": {
+    "auto_fetch_enabled": false,
+    "auto_regenerate_enabled": false,
+    "fail_closed": true,
+    "primary": {
+      "first_date": "2019-07-11",
+      "last_date": "2026-07-10",
+      "path": "/home/g3000kkw/kingmaker/data/_system/market_history.csv",
+      "required_columns": [
+        "date",
+        "score",
+        "vix",
+        "sector_tech",
+        "sector_finance",
+        "sector_energy",
+        "sector_healthcare",
+        "sector_consumer",
+        "sector_industrials"
+      ],
+      "row_count": 1759,
+      "sha256": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38"
+    },
+    "primary_freshness": {
+      "as_of_new_york_date": "2026-07-13",
+      "basis": "latest_us_market_session_strictly_before_as_of_new_york_date",
+      "calendar_path": "/home/g3000kkw/kingmaker/data/_system/calendars/us_xnys_2020_2027.json",
+      "calendar_source": "cache",
+      "expected_latest_session": "2026-07-10",
+      "fresh": true,
+      "missing_session_count": 0,
+      "missing_sessions": [],
+      "snapshot_last_date": "2026-07-10"
+    },
+    "source_mode": "repository_root_sha_pinned_single_source",
+    "v2": {
+      "first_date": "2020-06-01",
+      "freshness_applicable": false,
+      "freshness_policy": "sha_pinned_event_snapshot_no_stage3_auto_refresh",
+      "last_date": "2026-06-05",
+      "path": "/home/g3000kkw/kingmaker/data/_system/market_history_v2.csv",
+      "required_columns": [
+        "date",
+        "event_adjustment",
+        "active_events_count",
+        "av_sentiment_avg"
+      ],
+      "row_count": 2196,
+      "sha256": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+    }
+  },
+  "ohlcv_snapshot": {
+    "external_fetch": false,
+    "first_date": "2020-06-08",
+    "last_date": "2026-07-06",
+    "path": "/home/g3000kkw/kingmaker/data/_system/analysis/ohlc_snapshot_20260707/AAP_ohlcv.csv",
+    "rows": 1526,
+    "sell_omen_info": {
+      "added_columns": [
+        "sell_omen_model_train_end",
+        "sell_omen_score",
+        "sell_omen_score_year"
+      ],
+      "available": true,
+      "coverage": 0.3931847968545216,
+      "matched_rows": 600,
+      "score_max": 0.81137879359898,
+      "score_min": 0.1577570346203378,
+      "score_table_path": "/home/g3000kkw/kingmaker/data/_system/ml_sell_omen/sell_omen_scores.csv"
+    },
+    "sell_omen_score_table": "/home/g3000kkw/kingmaker/data/_system/ml_sell_omen/sell_omen_scores.csv",
+    "sha256": "6a07b754f5ea60983e16ecc91115496495bd41c090fa837f381a62340c3f3717"
+  },
+  "periods": {
+    "bull_period": {
+      "end": "2025-06-30",
+      "label": "train_3",
+      "start": "2024-07-01"
+    },
+    "exit_check_period": {
+      "end": "2022-06-30",
+      "label": "stress_pre_2022h1",
+      "role": "exit_check",
+      "start": null
+    },
+    "pure_oos_validation_periods": [
+      {
+        "end": "2023-06-30",
+        "label": "train_1",
+        "start": "2022-07-01"
+      },
+      {
+        "end": "2024-06-30",
+        "label": "train_2",
+        "start": "2023-07-01"
+      },
+      {
+        "end": null,
+        "label": "recent_1y",
+        "start": "2025-07-01"
+      }
+    ],
+    "stress_period": {
+      "end": "2022-06-30",
+      "label": "stress_pre_2022h1",
+      "start": null
+    },
+    "train_splits": [
+      {
+        "end": "2023-06-30",
+        "label": "train_1",
+        "start": "2022-07-01"
+      },
+      {
+        "end": "2024-06-30",
+        "label": "train_2",
+        "start": "2023-07-01"
+      },
+      {
+        "end": "2025-06-30",
+        "label": "train_3",
+        "start": "2024-07-01"
+      }
+    ]
+  },
+  "qualify_individual_policy": "audit_summary_then_discard",
+  "research_market_snapshot": {
+    "auto_fetch_enabled": false,
+    "auto_regenerate_enabled": false,
+    "fail_closed": true,
+    "primary": {
+      "first_date": "2019-07-11",
+      "last_date": "2026-07-10",
+      "path": "/home/g3000kkw/kingmaker/data/_system/market_history.csv",
+      "required_columns": [
+        "date",
+        "score",
+        "vix",
+        "sector_tech",
+        "sector_finance",
+        "sector_energy",
+        "sector_healthcare",
+        "sector_consumer",
+        "sector_industrials"
+      ],
+      "row_count": 1759,
+      "sha256": "35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38"
+    },
+    "primary_freshness": {
+      "as_of_new_york_date": "2026-07-13",
+      "basis": "latest_us_market_session_strictly_before_as_of_new_york_date",
+      "calendar_path": "/home/g3000kkw/kingmaker/data/_system/calendars/us_xnys_2020_2027.json",
+      "calendar_source": "cache",
+      "expected_latest_session": "2026-07-10",
+      "fresh": true,
+      "missing_session_count": 0,
+      "missing_sessions": [],
+      "snapshot_last_date": "2026-07-10"
+    },
+    "source_mode": "repository_root_sha_pinned_single_source",
+    "v2": {
+      "first_date": "2020-06-01",
+      "freshness_applicable": false,
+      "freshness_policy": "sha_pinned_event_snapshot_no_stage3_auto_refresh",
+      "last_date": "2026-06-05",
+      "path": "/home/g3000kkw/kingmaker/data/_system/market_history_v2.csv",
+      "required_columns": [
+        "date",
+        "event_adjustment",
+        "active_events_count",
+        "av_sentiment_avg"
+      ],
+      "row_count": 2196,
+      "sha256": "b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611"
+    }
+  },
+  "runner": "scripts/research/run_stage3_baseline_light.py",
+  "seed_base": 2026071301,
+  "stage3_final_oos_periods": [
+    "train_1",
+    "train_2",
+    "recent_1y"
+  ],
+  "stage3_profile_config": {
+    "eligibility_min_expectancy_pct": 1.0,
+    "high_exp_floor_pct": 4.0,
+    "holding_mid_max_days": 14.0,
+    "holding_ultra_short_max_days": 7.0,
+    "low_mdd_floor_pct": -10.0,
+    "mid_exp_floor_pct": 2.0,
+    "mid_mdd_floor_pct": -20.0
+  },
+  "stage3_qualify_config": {
+    "min_member_score": 10.0,
+    "min_trades": 5,
+    "qualify_min_expectancy_pct": 2.0,
+    "qualify_years": 3
+  },
+  "ticker": "AAP",
+  "updated_at": "2026-07-13T10:45:49"
+}

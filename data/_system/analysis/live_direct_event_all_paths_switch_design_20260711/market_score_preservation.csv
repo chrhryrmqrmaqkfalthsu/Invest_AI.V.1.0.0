@@ -1,0 +1,13 @@
+path,market_score_assignment,event_flag_assignment,off_behavior,market_score_event_aggregate_preserved,notes
+central_stage3,"market_score = float(ctx.score)","live_event_flags(ctx) -> None when OFF",direct Event component 0,true,"ctx.score retrieval occurs before and independently of event_flags"
+general_learned_rulebook,"market_score = float(ctx.score)","live_event_flags(ctx) -> None when OFF",direct Event component 0,true,"market adjustment and crash gate continue using same ctx.score"
+live_candidate_slots,"evaluate_candidate receives shared ctx; market_score=float(ctx.score)","elite helper delegates to live_event_flags",candidate score recomputed without direct Event,true,"slot ordering still sees Event-adjusted market_score when rulebook market adjustment is enabled"
+real_dashboard_export,"evaluate_candidate receives shared ctx; market_score=float(ctx.score)","elite helper delegates to live_event_flags",export revalidation excludes direct Event,true,"same MarketContext remains attached"
+s2_auto_validation,"evaluate_candidate(full, ctx=get_market_context())","elite helper delegates to live_event_flags",execution check excludes direct Event,true,"upstream slot and final revalidation both controlled by same switch"
+elite_shadow,"evaluate_candidate uses ctx.score","elite helper delegates to live_event_flags",virtual entry excludes direct Event,true,"virtual ledger and exits otherwise unchanged"
+elite_strategy_sim,"evaluate_candidate uses ctx.score","elite helper delegates to live_event_flags",virtual strategy entry excludes direct Event,true,"strategy gate history also needs shared helper"
+elite_signal_history,"market_score from _context_values(ctx, rb)","imported helper returns None",historical slices exclude direct Event,true,"current ctx.score remains fixed across slices as before"
+elite_pullback_replay,"market_score from _context_values(ctx, rb)","imported helper returns None",replay excludes direct Event,true,"current ctx.score remains fixed across replay as before"
+next_open_d1,"market_score from lagged market_history.score","explicit use_llm_events=False",no change,not_applicable,"already direct Event OFF and does not use live ctx.score Event aggregate"
+central_backtester,"market_score from lagged market_history.score","use_llm_events default false",no change,not_applicable,"research/backtest path outside live switch"
+market_context_builder,"ctx.score=clip(price_score+event_adj)","no direct flag decision here",unchanged,true,"must not be modified for direct-only OFF goal"

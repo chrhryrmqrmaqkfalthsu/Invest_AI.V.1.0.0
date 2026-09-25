@@ -1,0 +1,18 @@
+{
+  "ticker": "AAP",
+  "stage": "entry",
+  "seed": 2026071501,
+  "population": 100,
+  "generation_limit": 50,
+  "generations_run": 50,
+  "evaluation_workers": 28,
+  "parallel_axis": "population_fitness_evaluation",
+  "pool_count": 100,
+  "win_gate_pass_pool_count": 99,
+  "expectancy_absolute_pass_count": 93,
+  "selected_count": 12,
+  "overlap_rejected_count": 81,
+  "best_fitness": 1.729611543573542,
+  "best_hash": "128e8927734b5c46d4a3b072c04e0f6b0bc50fd7a40e4af4f785f50ec28ef864",
+  "elapsed_seconds": 296.15256905555725
+}

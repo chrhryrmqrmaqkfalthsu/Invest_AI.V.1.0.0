@@ -1,0 +1,55 @@
+# stage3_multiticker_v5_probe_20260715 SHA / audit
+
+# aggregate output files
+444c42765b01efc2bdf252648910a4c1a34f422ebdc0cc3d5665b49bf10e6b98  readout.md
+69fa3c7fa782c37b01f101b11cf5e0268fdcafd2729d263c1a6e9e31fa9cba9f  launch_command.json
+fcac0b98247d1d3779d1331326ffec59c630d70586dbb1c24271a80b3b143a6c  driver_status.json
+
+# per-ticker launch records
+24b59c9bbb804f7bca322aaca985504b418f096ee389a0faa4b54ac67a733efe  LASR_launch_driver.json
+a0ef3a197d2fbfcc6e7e0f4e29ae78205809b829c2f224bcdefff2f7014ca413  BTBT_launch_driver.json
+83a84805fee3bad6e5219fc93f5d958e1960e5f99619a4724892db9b165ab6c6  ADPT_launch_driver.json
+0319d05c17c4ccbb9eced3563beec2721865bec846e007e507434e9f3a3ae407  FIX_launch_driver.json
+
+# qualify result files
+3ab5c0b8bad670dbd843284a7b76d6cf22a11f73802d7c43eb73e185bda98b0f  LASR/qualify_result.json
+3bf2f60b6ecbf5d77ad456430aa4b2bbbe713aaff8d933e679fb6c3961b828af  BTBT/qualify_result.json
+7643a37e80fb78a307e87825e87d03d226daea686ebe6993c2b4a01a09155c18  ADPT/qualify_result.json
+a37d3903f28c9223e64d05dcd6f6f85f4c62a8f3ad92d2ba6859d42b794c311b  FIX/qualify_result.json
+
+# fold-best summaries
+256e459f10957e1de14d27f1f957300536e02598734b25009c4c1c34e572e211  LASR/fold_best_summary.json
+190fdd46e1b60b00b1b9dd6e59514969dbe6399070821d62aad661a6a044b0f2  BTBT/fold_best_summary.json
+55b8944fa53135b3ec751c4cb182cb6c15f5990f23c1a9fa5f155b6f1fc43d29  ADPT/fold_best_summary.json
+cdc4343cac75a61caaca158a6061d34d75667ad8d3f04fa7f48a3dee68770145  FIX/fold_best_summary.json
+
+# fold-best EEC summaries
+9f02ff5a2e7da57cab313be91787b6ce0671305ecc91530f029894f33498135d  LASR/fold_best_eec_summary.json
+43d24ff9d235be14e4414371b0434828101108bbdc1bfd92f7d07b3c812d6fc2  BTBT/fold_best_eec_summary.json
+4ebd3b692f630cf42ca36a2126fc6ff41847b5c31f1916535c9a26eb946e55d9  ADPT/fold_best_eec_summary.json
+7210451315c213ab9682e155a17ef5da6c09c661976fea13372cd134cc197418  FIX/fold_best_eec_summary.json
+
+# primary OHLCV inputs
+f3982ccac813b9932b58059afe30dc554b66964dd01e312fca771f7d96f719da  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/AAP.pkl
+d9c89fb09b543d09ee7a08ca319e27a7950a580f47e9c9a1d22b9055362112a5  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/LASR.pkl
+c555db59f58a41c50f4c3f6771f030585883a28bf454c22866a579b30ee5af9e  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/BTBT.pkl
+13fb9f982e8efa29e4ee6dd3ffb585d7fb5d578c3c5099e8c76409ca0ada9503  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/ADPT.pkl
+9a6e3aa4fe099242f649ed9a2c36b6c1e7b2a49dc804442007e0e92d888579b5  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/FIX.pkl
+
+# protected files: start == end confirmed
+da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce  .env
+35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38  data/_system/market_history.csv
+b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611  data/_system/market_history_v2.csv
+
+# static verification
+# py_compile: PASS
+# mutation-helper AST SHA: aab7163f9194cf5f989ad01973e8d2967dad48be53f7d52ee09747eea502077d
+# source diff bytes after static check: 0
+# EEC target/floor in final cross-fold outputs: 6.0 / 0.5
+
+# daemon end-state
+# PID PPID STAT STARTED CMD
+# 494330 1 Sl Sat Jul 11 20:16:00 2026 /home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60
+
+# git
+# pre-run backup commit: 1b58d1f

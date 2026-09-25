@@ -1,0 +1,136 @@
+{
+  "patch_token": "adpt_feature_nulltest_v9_20260715",
+  "ticker": "ADPT",
+  "feature": "rs_xbi_ret20",
+  "variant": "SHUFFLED",
+  "shuffle_seed": 2026071501,
+  "strict_and_feature_count": 6,
+  "added_low_field": "entry_extra_feature_low",
+  "added_high_field": "entry_extra_feature_high",
+  "candidate_series_d5": {
+    "feature": "rs_xbi_ret20",
+    "variant": "SHUFFLED",
+    "shuffle_seed": 2026071501,
+    "d_minus_shift_trading_days": 5,
+    "sha256": "06e2165cc0f7f4c43d9f349815b570587aa411bcd66b374b59412e5217e96e9d",
+    "valid_count": 1502,
+    "train_valid_count": 751,
+    "first_valid_date": "2020-06-23",
+    "last_valid_date": "2026-06-15"
+  },
+  "input_validation": {
+    "ticker": "ADPT",
+    "peers": {
+      "NTRA": {
+        "path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\NTRA.pkl",
+        "exists": true,
+        "sha256": "e159704672f8d034714a079ef6eb3780dbc737471f0690a6f0cfd4d4b6899675",
+        "rows": 1527,
+        "first_date": "2020-05-18",
+        "last_date": "2026-06-15",
+        "train_rows": 751,
+        "required_columns_present": true,
+        "train_ohlcv_null_count": 0,
+        "covers_train": true
+      },
+      "GH": {
+        "path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\GH.pkl",
+        "exists": true,
+        "sha256": "03dbb90e9d61333810e7b13062eddd94bbed2d7752ecafd977a4f54bed0d7ab9",
+        "rows": 1527,
+        "first_date": "2020-05-18",
+        "last_date": "2026-06-15",
+        "train_rows": 751,
+        "required_columns_present": true,
+        "train_ohlcv_null_count": 0,
+        "covers_train": true
+      },
+      "PSNL": {
+        "path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\PSNL.pkl",
+        "exists": true,
+        "sha256": "c0c4f0acec782a053d44c1e73d2718f0c38876ea81726902e6796bec8a0f420f",
+        "rows": 1527,
+        "first_date": "2020-05-18",
+        "last_date": "2026-06-15",
+        "train_rows": 751,
+        "required_columns_present": true,
+        "train_ohlcv_null_count": 0,
+        "covers_train": true
+      },
+      "VCYT": {
+        "path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\VCYT.pkl",
+        "exists": true,
+        "sha256": "fb0a12e93615ee7da169e53d0a766c80a372cbcd1e255f847fc3f2056fb4267a",
+        "rows": 1527,
+        "first_date": "2020-05-18",
+        "last_date": "2026-06-15",
+        "train_rows": 751,
+        "required_columns_present": true,
+        "train_ohlcv_null_count": 0,
+        "covers_train": true
+      },
+      "NEO": {
+        "path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\NEO.pkl",
+        "exists": true,
+        "sha256": "6efc7a768ee6cf78e9c4a59a566fa5c3bdadb3276dd6b7397540ca11419556c3",
+        "rows": 1526,
+        "first_date": "2020-05-18",
+        "last_date": "2026-06-12",
+        "train_rows": 751,
+        "required_columns_present": true,
+        "train_ohlcv_null_count": 0,
+        "covers_train": true
+      },
+      "CDNA": {
+        "path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\CDNA.pkl",
+        "exists": true,
+        "sha256": "a756c13add1b4bb6046ca8d006940205baea2c144455c77664a6c1ec1ee30911",
+        "rows": 1527,
+        "first_date": "2020-05-18",
+        "last_date": "2026-06-15",
+        "train_rows": 751,
+        "required_columns_present": true,
+        "train_ohlcv_null_count": 0,
+        "covers_train": true
+      }
+    },
+    "xbi": {
+      "path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\XBI.pkl",
+      "exists": true,
+      "sha256": "6f0412b2722f9e6b6a5e2c3deae49ea2c0d51f9070ccfce57778a9bb100884e0",
+      "rows": 1526,
+      "first_date": "2020-05-18",
+      "last_date": "2026-06-12",
+      "train_rows": 751,
+      "required_columns_present": true,
+      "train_ohlcv_null_count": 0,
+      "covers_train": true
+    },
+    "adpt": {
+      "path": "C:\\kingmaker_adpt_feature_nulltest_v9\\data\\_system\\research\\honest_full_6174_20260616_stage01_full\\stage0\\ohlcv_cache\\ADPT.pkl",
+      "exists": true,
+      "sha256": "13fb9f982e8efa29e4ee6dd3ffb585d7fb5d578c3c5099e8c76409ca0ada9503",
+      "rows": 1527,
+      "first_date": "2020-05-18",
+      "last_date": "2026-06-15",
+      "train_rows": 751,
+      "required_columns_present": true,
+      "train_ohlcv_null_count": 0,
+      "covers_train": true
+    },
+    "accepted_peers": [
+      "NTRA",
+      "GH",
+      "PSNL",
+      "VCYT",
+      "NEO",
+      "CDNA"
+    ],
+    "peer_feature_available": true,
+    "xbi_feature_available": true
+  },
+  "peer_basket_definition": "rs_peer_ret20 = ADPT 100-rebased 20d return minus equal-weight basket 100-rebased 20d return, accepted peers only; then D-5 shift in evaluator/domain",
+  "xbi_definition": "rs_xbi_ret20 = ADPT 100-rebased 20d return minus XBI 100-rebased 20d return; then D-5 shift in evaluator/domain",
+  "entry_exit_impact_note": "The added feature participates in strict-AND, so entry_interval_break can occur when this feature exits its learned interval. This is recorded, not blocked.",
+  "recent_1y_excluded": true
+}

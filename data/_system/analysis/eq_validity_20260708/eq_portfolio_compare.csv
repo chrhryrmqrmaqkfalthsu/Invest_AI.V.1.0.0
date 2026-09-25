@@ -1,0 +1,3 @@
+scenario,K,total_signals,realized_trades,skipped_signals,skip_rate_pct,final_multiplier,CAGR_pct,MDD_pct,Sharpe_daily_ann,avg_active_positions,max_active_positions
+EQ_ignored_all_signals,20,12915,726,12189,94.3786295006,2.26946704699,72.2677693488,-21.9626504419,1.84164667123,19.9893617021,20
+EQ_allow_only,20,5690,695,4995,87.7855887522,2.01207036039,59.0408341591,-25.6420540165,1.77830581933,19.7739361702,20

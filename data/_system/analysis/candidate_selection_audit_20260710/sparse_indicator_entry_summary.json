@@ -1,0 +1,76 @@
+{
+  "created_at": "2026-07-10T16:45:10.990353+00:00",
+  "origin_count": 17071,
+  "stage_counts": {
+    "stage3": 15909,
+    "stage2": 1162
+  },
+  "formula": {
+    "core_raw_score": "sum(active core weights)",
+    "neutral_final_score": "core_raw_score * 1.0",
+    "market_cap_final_score": "core_raw_score * (1 + clamp(market_adjustment_strength,0,1)) when enabled, else *1",
+    "entry_comparison": "final_score >= signal_threshold",
+    "noncore_additives": "news/topic/events/crash_bonus fixed at zero to isolate core-only structure"
+  },
+  "neutral": {
+    "n1": 3496,
+    "n2_or_less": 14536,
+    "impossible_core_only": 303,
+    "min_count_distribution": {
+      "2.0": 11040,
+      "1.0": 3496,
+      "3.0": 1916,
+      "nan": 303,
+      "4.0": 278,
+      "5.0": 38
+    }
+  },
+  "market_cap": {
+    "n1": 6794,
+    "n2_or_less": 15394,
+    "impossible_core_only": 232,
+    "min_count_distribution": {
+      "2.0": 8600,
+      "1.0": 6794,
+      "3.0": 1203,
+      "nan": 232,
+      "4.0": 220,
+      "5.0": 22
+    }
+  },
+  "boil_parity": {
+    "existing_boil_count": 444,
+    "captured_n1_market_cap": 254,
+    "captured_n2_market_cap": 440,
+    "missed_n2_market_cap": 4
+  },
+  "ce_parity": {
+    "existing_ce_fail_count": 7,
+    "captured_n1_market_cap": 1,
+    "captured_n2_market_cap": 7,
+    "missed_n2_market_cap": 0
+  },
+  "unjudged_count": 0,
+  "enumeration_greedy_parity_failures": 0,
+  "limitations": [
+    "Market-cap multiplier is a code-level upper bound, not proof that a contemporaneous market context attains it.",
+    "Positive news/topic/event/crash additions are fixed at zero by the core-only definition; they can lower actual required core count further.",
+    "Indicator activation combinations are treated combinatorially; temporal co-occurrence probability is not modeled."
+  ],
+  "no_source_mutation": true,
+  "no_live_candidate_change": true,
+  "no_training": true,
+  "no_order": true,
+  "percentages": {
+    "neutral_n1_pct": 20.479175209419484,
+    "neutral_n2_or_less_pct": 85.15025481811259,
+    "market_cap_n1_pct": 39.79848866498741,
+    "market_cap_n2_or_less_pct": 90.17632241813602,
+    "complete_market_cap_n1_pct": 34.94013862633901,
+    "complete_market_cap_n2_or_less_pct": 88.40579710144928
+  },
+  "noncore_additive_possible_count": 17071,
+  "core_only_scope": "A flagged rule is structurally sparse-entry capable with core indicators alone. A non-flagged rule is not proven safe because positive non-core additions were fixed at zero.",
+  "parity_summary_csv": "data/_system/analysis/candidate_selection_audit_20260710/sparse_indicator_entry_parity_summary.csv",
+  "boil_missed_csv": "data/_system/analysis/candidate_selection_audit_20260710/sparse_indicator_entry_boil_n2_missed.csv"
+}

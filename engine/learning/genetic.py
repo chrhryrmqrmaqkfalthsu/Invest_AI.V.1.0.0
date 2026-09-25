@@ -13,6 +13,7 @@ import numpy as np
 
 from engine.core.config import config
 from engine.core.logger import get_logger
+from engine.core.metadata import compute_rulebook_hash
 from engine.strategies.rulebook import (
     CATEGORICAL_PARAMS,
     PARAM_RANGES,
@@ -43,6 +44,54 @@ class GAResult:
     generations_run: int
 
 
+def collect_top_rulebooks(ga_result: GAResult, n: int) -> list[Rulebook]:
+    """GA 결과에서 fitness 기준 상위 N개 비중복 룰북을 반환한다.
+
+    ``GAResult.best``는 마지막 세대 population이 아니라 과거 세대의
+    best_overall일 수 있으므로 ``final_population``과 반드시 합집합으로
+    다룬다. 중복 제거는 ``compute_rulebook_hash`` 기준이다.
+
+    Note:
+        ``compute_rulebook_hash``는 mask_schema_version 1+에서 mask 조합을
+        hash에 반영한다. 따라서 마스크 조합이 다른 룰북은 서로 다른
+        후보로 취급되며, 이는 Top-N 후보 다양성을 위한 의도된 동작이다.
+    """
+    try:
+        limit = int(n)
+    except Exception:
+        limit = 0
+    if ga_result is None or limit <= 0:
+        return []
+
+    candidates: list[Rulebook] = []
+    best = getattr(ga_result, "best", None)
+    if best is not None:
+        candidates.append(best)
+    candidates.extend(list(getattr(ga_result, "final_population", []) or []))
+
+    by_hash: dict[str, Rulebook] = {}
+    for rb in candidates:
+        if rb is None:
+            continue
+        rulebook_hash = compute_rulebook_hash(rb)
+        current = by_hash.get(rulebook_hash)
+        rb_fitness = getattr(rb, "fitness", None)
+        current_fitness = getattr(current, "fitness", None) if current is not None else None
+        rb_score = float(rb_fitness) if rb_fitness is not None else float("-inf")
+        current_score = float(current_fitness) if current_fitness is not None else float("-inf")
+        if current is None or rb_score > current_score:
+            by_hash[rulebook_hash] = rb
+
+    ranked = sorted(
+        by_hash.items(),
+        key=lambda item: (
+            -(float(getattr(item[1], "fitness", None)) if getattr(item[1], "fitness", None) is not None else float("-inf")),
+            item[0],
+        ),
+    )
+    return [rb for _, rb in ranked[:limit]]
+
+
 # ---------- 룰북 생성/변이 ----------
 def _rand_in(low, high, integer: bool = False):
     if integer:
@@ -50,7 +99,60 @@ def _rand_in(low, high, integer: bool = False):
     return random.uniform(low, high)
 
 
-_INT_PARAMS = {"max_holding_days", "add_buy_max_count", "earnings_blackout_days"}
+_INT_PARAMS = {"max_holding_days"}
+_MASK_CATEGORICAL_PARAMS = {
+    "use_news_global",
+    "use_event_block",
+    "use_market_entry_adjustment",
+}
+
+
+def _mark_mask_schema_if_needed(rb: Rulebook) -> None:
+    """GA가 mask categorical을 다루는 산출물은 schema 1로 승격한다."""
+    if any(k in CATEGORICAL_PARAMS and hasattr(rb, k) for k in _MASK_CATEGORICAL_PARAMS):
+        rb.mask_schema_version = max(int(getattr(rb, "mask_schema_version", 0) or 0), 1)
+
+
+def _clamp_float(value: object, low: float, high: float) -> float:
+    try:
+        v = float(value)
+    except Exception:
+        v = low
+    return float(max(low, min(high, v)))
+
+
+def _disable_add_buy_genes(rb: Rulebook) -> None:
+    """추가매수 유전자는 엔진/GA에서 비활성화하고 중앙 통제기 전용으로 보존한다."""
+    rb.add_buy_enabled = False
+    rb.add_buy_trigger_profit_pct = 2.0
+    rb.add_buy_max_count = 1
+    rb.add_buy_size_ratio = 0.5
+    rb.add_buy_min_signal_score = 1.5
+
+
+def _normalize_dependent_params(rb: Rulebook) -> None:
+    """Normalize dependent genes so disabled categorical paths do not create hash noise."""
+    if not bool(getattr(rb, "breakeven_enabled", False)):
+        rb.breakeven_trigger_profit_pct = 0.0
+        rb.breakeven_floor_profit_pct = 0.0
+    else:
+        trig_lo, trig_hi = PARAM_RANGES["breakeven_trigger_profit_pct"]
+        floor_lo, floor_hi = PARAM_RANGES["breakeven_floor_profit_pct"]
+        rb.breakeven_trigger_profit_pct = _clamp_float(getattr(rb, "breakeven_trigger_profit_pct", trig_lo), trig_lo, trig_hi)
+        rb.breakeven_floor_profit_pct = _clamp_float(getattr(rb, "breakeven_floor_profit_pct", floor_lo), floor_lo, floor_hi)
+
+    if not bool(getattr(rb, "sell_omen_enabled", False)):
+        rb.sell_omen_threshold = 1.0
+    else:
+        th_lo, th_hi = PARAM_RANGES["sell_omen_threshold"]
+        rb.sell_omen_threshold = _clamp_float(getattr(rb, "sell_omen_threshold", th_hi), th_lo, th_hi)
+
+
+def _finalize_rulebook_genes(rb: Rulebook) -> Rulebook:
+    _mark_mask_schema_if_needed(rb)
+    _normalize_dependent_params(rb)
+    _disable_add_buy_genes(rb)
+    return rb
 
 
 def random_rulebook(base: Rulebook) -> Rulebook:
@@ -63,7 +165,7 @@ def random_rulebook(base: Rulebook) -> Rulebook:
     for k, choices in CATEGORICAL_PARAMS.items():
         if hasattr(rb, k):
             setattr(rb, k, random.choice(choices))
-    return rb
+    return _finalize_rulebook_genes(rb)
 
 
 def mutate(rb: Rulebook, mutation_rate: float, strength: float) -> Rulebook:
@@ -83,7 +185,7 @@ def mutate(rb: Rulebook, mutation_rate: float, strength: float) -> Rulebook:
     for k, choices in CATEGORICAL_PARAMS.items():
         if random.random() < mutation_rate / 2 and hasattr(new_rb, k):
             setattr(new_rb, k, random.choice(choices))
-    return new_rb
+    return _finalize_rulebook_genes(new_rb)
 
 
 def crossover(p1: Rulebook, p2: Rulebook) -> Rulebook:
@@ -95,7 +197,7 @@ def crossover(p1: Rulebook, p2: Rulebook) -> Rulebook:
     for k in CATEGORICAL_PARAMS.keys():
         if hasattr(child, k) and random.random() < 0.5:
             setattr(child, k, getattr(p2, k))
-    return child
+    return _finalize_rulebook_genes(child)
 
 
 def tournament_select(population: list, k: int) -> Rulebook:
@@ -145,8 +247,6 @@ def run_ga(
             # 약간의 변이를 주어 다양성 확보
             rb = mutate(rb, mutation_rate=0.1, strength=0.1)
             population.append(rb)
-
-
 
     while len(population) < cfg.population:
         population.append(random_rulebook(base_rulebook))

@@ -1,0 +1,33 @@
+# stage3_oos_stress_method_probe_20260715 SHA / audit
+
+# output files
+2a5e3b8784ac8c4af56dd6b3ae2b634a7485d5535c10d03ca9a0815f768b9518  readout.md
+
+# original Stage 3 files
+8f275ca52745b6b9f92d56e0e24d8043ccef8644b5c5d996217b9c6226e701c0  scripts/research/run_stage3_aggressive.py
+bc3e191a449d6b67980dd0884a2a510acf9ecda719a8b12e76b0e8178de33004  scripts/research/run_stage3_aggressive.py.bak.before_qualify_eval_early_stop_20260706_001
+6447efa706edfe9c31c92e652ca504da1c8f16215d79f0eee3352f37520fc36a  engine/pipeline/stage3_gate.py
+
+# rework Stage 3 files
+3fb837c3a575d98260e3bc71eb45678440797a8f61188cdff366c93a0f8ebe7d  scripts/research/stage23_rework_20260713/scripts/research/run_stage3_aggressive.py
+bc3e191a449d6b67980dd0884a2a510acf9ecda719a8b12e76b0e8178de33004  scripts/research/stage23_rework_20260713/scripts/research/run_stage3_aggressive.py.bak.before_qualify_eval_early_stop_20260706_001
+5e7d83665b3cfa936e74dc9e275449661b4a6ad8408cd4952e6a2657d7a9361f  scripts/research/stage23_rework_20260713/scripts/research/run_stage3_aap_eec_penalty_v5_host.py
+872c6428b17a5507e28065be141b2a0c5aafe96221e9448f5b9735ad07270644  scripts/research/stage23_rework_20260713/scripts/research/run_stage3_aap_tradecount_factor_v3_host.py
+c19a41e52f330e11c2a8eac7dc03ad54f6209fc66031a34d1c1c65d4caef046b  scripts/research/stage23_rework_20260713/scripts/research/run_stage3_baseline_light.py
+6447efa706edfe9c31c92e652ca504da1c8f16215d79f0eee3352f37520fc36a  scripts/research/stage23_rework_20260713/engine/pipeline/stage3_gate.py
+
+# data coverage inputs
+13fb9f982e8efa29e4ee6dd3ffb585d7fb5d578c3c5099e8c76409ca0ada9503  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/ADPT.pkl
+6f0412b2722f9e6b6a5e2c3deae49ea2c0d51f9070ccfce57778a9bb100884e0  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/XBI.pkl
+
+# protected files: start == end confirmed
+da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce  .env
+35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38  data/_system/market_history.csv
+b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611  data/_system/market_history_v2.csv
+
+# daemon end-state
+# PID PPID STAT STARTED CMD
+# 494330 1 Sl Sat Jul 11 20:16:00 2026 /home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60
+
+# git
+# pre-output backup commit: 709cf72

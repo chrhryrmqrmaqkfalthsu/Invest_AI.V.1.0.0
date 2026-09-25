@@ -1,0 +1,38 @@
+# stage3_performance_summary_20260715 SHA / audit
+
+# output files
+e8090ce86574a5fc5806e2c16643d315322ea161b4653878b3053937dd9524a6  readout.md
+ba4b6eec6cb87fc57e4efe47c14e0af3737a949125966e5e637ae6e68c6a5660  trade_ledger.md
+
+# canonical fold-best trade-level source files
+e894915aef2f9b26dc0917c3b458a48411383884ca4f0fb218cf8b35ef0cc0d6  data/_system/analysis/stage3_aap_eec_penalty_v5_20260715/AAP/fold_best_trade_level.jsonl
+ba7e82ab4b7fc52f5e3c7a5a13e883455deae887d8d4921dcb35fa91f4ca4a8a  data/_system/analysis/stage3_multiticker_v5_probe_20260715/LASR/fold_best_trade_level.jsonl
+9a08d8e36bc9130dc9c52fa349debf9028bb02a96ac214b03c03474411096f14  data/_system/analysis/stage3_multiticker_v5_probe_20260715/ADPT/fold_best_trade_level.jsonl
+02758970f8087b0f5cfbcf242eaa858e48fac5a86930716f6ad97014d1552794  data/_system/analysis/stage3_multiticker_v5_probe_20260715/BTBT/fold_best_trade_level.jsonl
+7ad814750e3ed9edca5f2ead07bf363d2ce31b081c0433b13c4d6000346f9f5c  data/_system/analysis/stage3_multiticker_v5_probe_20260715/FIX/fold_best_trade_level.jsonl
+
+# OHLCV inputs
+f3982ccac813b9932b58059afe30dc554b66964dd01e312fca771f7d96f719da  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/AAP.pkl
+d9c89fb09b543d09ee7a08ca319e27a7950a580f47e9c9a1d22b9055362112a5  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/LASR.pkl
+13fb9f982e8efa29e4ee6dd3ffb585d7fb5d578c3c5099e8c76409ca0ada9503  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/ADPT.pkl
+c555db59f58a41c50f4c3f6771f030585883a28bf454c22866a579b30ee5af9e  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/BTBT.pkl
+9a6e3aa4fe099242f649ed9a2c36b6c1e7b2a49dc804442007e0e92d888579b5  data/_system/research/honest_full_6174_20260616_stage01_full/stage0/ohlcv_cache/FIX.pkl
+
+# D-5 feature matrix SHA from same OHLCV + existing 5 features
+# AAP:  a3737d57af53e73e0ed5a58d62bb10a1951ef008659c5dcef7ed45e7e9957579
+# LASR: d5182e604d6102c3b9fc1da16c4a8e5bafe19fe6b921507fd6ab41c1b6b5c98a
+# ADPT: 7ae6f2107da975d4c43c628705be74719f7203ee3469a3a205c23eaa2588ea60
+# BTBT: 310d068d95df3b4248b214a5a5ceb9a99b8468a643cbfa8be0a38052e3779167
+# FIX:  d24c766a7c9eb1c7bed964094d587725905ea516b6b3b43f8b16b3875033d589
+
+# protected files: start == end confirmed
+da8173082d40ef3f3f800568b29d1cc7139a1c06fe7979d32ead6cdb5579f1ce  .env
+35ad47a86528e5d9e5fae3c9fcf4958b70ee57c6daab61fcc7693915239e8c38  data/_system/market_history.csv
+b7db98bd5b17b7a95cc852cde6f6b44643ff450ebf6dbb86c6347548e9f4c611  data/_system/market_history_v2.csv
+
+# daemon end-state
+# PID PPID STAT STARTED CMD
+# 494330 1 Sl Sat Jul 11 20:16:00 2026 /home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60
+
+# git
+# pre-output backup commit: d261aab

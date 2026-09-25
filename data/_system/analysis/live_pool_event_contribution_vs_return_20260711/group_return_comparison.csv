@@ -1,0 +1,4 @@
+group,candidate_count,return_available_count,unrealized_returns_pct,reference_average_pct,minimum_pct,maximum_pct,observation_only
+EVENT_DEPENDENT,7,7,"BTBT +3.3537 | BMA +3.4370 | BMI -1.8425 | BNTX -2.6862 | CMC +1.7457 | BWXT -0.1584 | ACMR -3.7926",0.008083792777684704,-3.7926250091046665,3.4369918731672833,"mixed positive and negative snapshots; no superiority inference"
+EVENT_AMPLIFIED,3,3,"CRS -3.6714 | BCS -0.6959 | ADMA -1.5727",-1.9799882007740262,-3.6714040036609275,-0.6958904171550317,"all three snapshots negative at this timestamp; sample too small for inference"
+EVENT_NONE_OR_NEG,8,8,"ALGT +1.0273 | BN +0.5632 | BB -0.6793 | ANET +13.6596 | ARKW +1.4940 | CBRL +2.8433 | CRK -0.6391 | AEIS +6.1251",3.04924523821649,-0.6793464439502572,13.659575210153886,"wide dispersion dominated by individual names; no superiority inference"

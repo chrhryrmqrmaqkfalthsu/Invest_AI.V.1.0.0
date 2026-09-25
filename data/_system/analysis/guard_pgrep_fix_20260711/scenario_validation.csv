@@ -1,0 +1,6 @@
+scenario,precondition,old_or_new_guard,expected,actual,result
+ROOT_CAUSE_REPRO,"real daemon stopped; decoy process argv contains data/_system/ops/live_candidate_slots.py daemon --interval 60",OLD,"old broad pgrep should falsely report running and not start daemon","exact daemon remained absent; OLD_GUARD_FALSE_POSITIVE_REPRODUCED",PASS
+A_DAEMON_ALIVE,"exact daemon PID 477527 alive",NEW,"guard recognizes same daemon and starts no duplicate","before=477527 after=477527 exact_count=1",PASS
+B_DAEMON_DEAD,"exact daemon PID 477527 stopped; no exact daemon remains",NEW,"guard detects death and starts one new daemon","new=478988 exact_count=1 pidfile=478988",PASS
+C_GUARD_RUNNING_WITH_DECOY,"exact daemon stopped; decoy PID 479021 and parent shell contain old pattern text",NEW,"guard ignores decoy/self/parent command lines and starts exact daemon","exact_before=none broad_matches=479014|479021|479028 new=479037 exact_count=1 pidfile=479037",PASS
+FINAL_SAFETY,"scenario tests completed",NEW,"one exact daemon; latest code; open orders 0; cron flock retained","pid=479037 count=1 upstream=BLOCK integrated_symbol_absent open_orders=0",PASS

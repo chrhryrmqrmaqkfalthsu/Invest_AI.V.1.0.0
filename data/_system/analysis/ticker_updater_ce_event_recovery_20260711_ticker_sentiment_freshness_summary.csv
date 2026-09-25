@@ -1,0 +1,5 @@
+scope,as_of,total_csv,stale_gt_7d,fresh_le_7d,missing_last_data_date,oldest_file_mtime_date,newest_file_mtime_date,newest_last_news_date,classification,notes
+all_ticker_sentiment_csv,2026-07-10,6174,6174,0,153,2026-05-31,2026-06-02,2026-06-02,UPDATER_STOPPED_WIDESPREAD,"모든 CSV가 7일 max-age 초과; 6021개 mtime=2026-06-02, 153개 mtime=2026-05-31"
+live_slots_state_candidate_pool,2026-07-10,18,18,0,0,,,2026-06-02,UPDATER_STOPPED_WIDESPREAD,"현재 candidate_pool 고유 ticker 18개 전부 stale"
+central_buy_candidates,2026-07-10,2,2,0,0,,,2026-06-01,UPDATER_STOPPED_WIDESPREAD,"CAKE/WPM 모두 stale"
+CE,2026-07-07,1,1,0,0,2026-06-02,2026-06-02,2026-05-20,NOT_EXCEPTION,"CE는 전 종목 공통 정지의 한 사례"

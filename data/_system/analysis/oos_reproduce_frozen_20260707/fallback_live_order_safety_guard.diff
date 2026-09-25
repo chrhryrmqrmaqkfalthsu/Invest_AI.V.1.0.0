@@ -1,0 +1,41 @@
+diff --git a/engine/live/real_dashboard_api.py b/engine/live/real_dashboard_api.py
+index 7f863ea..e4ab11e 100644
+--- a/engine/live/real_dashboard_api.py
++++ b/engine/live/real_dashboard_api.py
+@@ -732,6 +732,36 @@ def _create_real_buy_intent(req: RealBuyIntentRequest) -> dict[str, Any]:
+         }
+     )
+     if _direct_orders_enabled():
++        is_fallback_candidate = bool(candidate.get("real_candidate_fallback")) or str(candidate.get("candidate_source") or "") == "live_slots_state_fallback"
++        if is_fallback_candidate:
++            reason = "REJECTED: fallback candidate has no verified full rulebook — order blocked for safety"
++            row.update(
++                {
++                    "status": "rejected",
++                    "rejected_at": utc_now_iso(),
++                    "rejection_reason": reason,
++                    "execution_mode": "blocked_fallback_candidate_no_verified_full_rulebook",
++                    "order_blocked": True,
++                    "broker_order": None,
++                }
++            )
++            _append_live_slot_event(
++                {
++                    "event": "DASHBOARD_REAL_BUY_REJECTED",
++                    "time": row.get("rejected_at"),
++                    "candidate_id": candidate_id,
++                    "ticker": ticker,
++                    "source": row.get("source"),
++                    "execution_mode": row.get("execution_mode"),
++                    "status": row.get("status"),
++                    "reason": reason,
++                    "candidate_source": candidate.get("candidate_source"),
++                    "real_candidate_fallback": bool(candidate.get("real_candidate_fallback")),
++                }
++            )
++            intents[intent_id] = row
++            _write_intent_state(REAL_BUY_INTENT_PATH, data)
++            return row
+         broker = _get_real_broker()
+         if broker is None:
+             raise ValueError(f"real broker unavailable: {_real_broker_error}")

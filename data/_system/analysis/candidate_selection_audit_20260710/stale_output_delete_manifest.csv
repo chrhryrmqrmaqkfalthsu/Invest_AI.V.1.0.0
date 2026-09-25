@@ -1,0 +1,7 @@
+file_path,source_artifact,size_bytes,modified_ns,git_tracked,deletion_status
+data/_system/central/stage3_live_pool/stage3_live_pool.jsonl,Stage3 live pool,2206962,1782450866209675317,False,DELETED
+data/_system/central/stage3_live_pool/stage3_live_pool_filtered.jsonl,Stage3 live pool filtered,1775994,1782478149254866375,False,DELETED
+data/_system/central/stage3_live_pool/rejected_sample.jsonl,Stage3 live-pool rejected samples,50027,1782450866217675303,False,DELETED
+data/_system/central/stage3_live_pool/rejected_sample_filtered.jsonl,Stage3 live-pool rejected samples,61749,1782478149257866370,False,DELETED
+data/_system/central/stage3_live_pool/summary.json,Stage3 live-pool summaries,1800,1782450866218675301,False,DELETED
+data/_system/central/stage3_live_pool/summary_filtered.json,Stage3 live-pool summaries,1933,1782478149258866368,False,DELETED

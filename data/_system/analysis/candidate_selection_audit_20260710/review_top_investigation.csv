@@ -1,0 +1,6 @@
+path,size_bytes,size_mib,file_count,live_reachable,live_reference_count,nonlive_reference_count,last_modified_kst,safety_verdict,evidence
+"data/_system/pipeline",82632425,78.804,4155,X,0,12,"2026-06-05 21:01:46 KST",DELETE_OK,"engine/pipeline과 별도인 v1 실행 산출물. 참조 12건은 모두 현재 148개 살아있는 집합 밖의 구 pipeline/replay 스크립트. 현재 Stage2/3는 exp_batch_stage123_2009_20260616_full 사용. 보호 파일명 0건."
+"data/_system/condition_db_sell_omen_clean",129892573,123.875,183,X,0,2,"2026-06-09 07:35:39 KST",DELETE_OK,"현재 살아있는 Stage2/3/실행 경로에서 condition_db 참조 0건. 두 참조는 미도달 builder와 LR8D postrun 분석 스크립트. 생성 중간 CSV이며 runtime은 sell_omen_scores_lr8d85.csv를 사용."
+"data/_system/condition_db_sell_omen_lr8d85",63017369,60.098,85,X,0,0,"2026-06-10 00:01:55 KST",DELETE_OK,"현재 소스 직접 참조 0건. stale rebuild/poc 로그에서 85종목 학습 입력으로만 사용됨. 현재 live 경로는 생성된 ml_sell_omen/sell_omen_scores_lr8d85.csv를 참조하고 condition DB는 읽지 않음."
+"backup",75940030,72.422,4684,X,0,0,"2026-07-10 03:27:06 KST",PARTIAL,"runtime 직접 참조 0건이며 보호 파일명도 발견되지 않음. 그러나 23개 tar.gz와 pre_refactor/screening_halt 등 롤백 스냅샷을 포함해 복구 가치가 있음. 보존 기간·최신본 정책 확정 후 하위 단위 선별 삭제 필요."
+"data/_system/logs",61554242,58.703,8,X,0,0,"2026-06-24 11:17:54 KST",DELETE_OK,"열린 파일 핸들 0건, pid 3개 모두 stale, 현재 로그 writer는 logs/ 및 data/logs/ 사용. frozen 로그 아님. 58.36MiB run_live_stage1_alpaca.log 포함 구 실행 로그."

@@ -1,0 +1,16 @@
+{
+  "run_id": "stage3_aap_eec_relax_v6_20260715",
+  "ticker": "AAP",
+  "seed_base": 2026071401,
+  "eec_target": 4.0,
+  "eec_floor": 0.7,
+  "all3_count": 0,
+  "all3_candidates": [],
+  "conclusion": "No all3 candidate was produced, so there is no all3 EEC/cluster concentration log to inspect.",
+  "pass_count_distribution": {
+    "all3": 0,
+    "all2": 61,
+    "all1": 200,
+    "all0": 39
+  }
+}

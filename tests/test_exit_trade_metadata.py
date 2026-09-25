@@ -10,6 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from engine.core.exit_policy import (  # noqa: E402
+    MarketContext,
+    initialize_position_state,
+    update_position_for_add_buy,
+)
 from engine.core.metadata import compute_rulebook_hash  # noqa: E402
 from engine.pipeline.rolling_validation import backtest_result_to_oos_period  # noqa: E402
 from engine.strategies.exit_simulator import Trade, simulate_exit  # noqa: E402
@@ -72,7 +77,7 @@ def test_trade_to_dict_records_entry_context_fields() -> None:
     assert_true(len(data["rulebook_hash"]) == 64, "rulebook_hash must be preserved")
 
 
-def test_simulate_exit_records_entry_context_before_add_buy_updates() -> None:
+def test_simulate_exit_disables_add_buy_but_preserves_trade_schema_and_entry_context() -> None:
     idx = pd.date_range("2024-01-01", periods=8, freq="D")
     close = [100.0, 102.0, 104.0, 106.0, 108.0, 110.0, 111.0, 112.0]
     df = pd.DataFrame(
@@ -110,7 +115,9 @@ def test_simulate_exit_records_entry_context_before_add_buy_updates() -> None:
     )
     assert_true(trade is not None, "trade must be produced")
     data = trade.to_dict()
-    assert_true(len(data["add_buys"]) > 0, "test setup must trigger add-buy")
+    assert_true(data["add_buys"] == [], "add-buy must be runtime-disabled even when rb.add_buy_enabled=True")
+    assert_true(data["total_shares"] == 10, "total_shares must remain entry_shares when add-buy is disabled")
+    assert_true(data["avg_cost"] == 100.0, "avg_cost must remain entry_price when add-buy is disabled")
     assert_true(data["entry_market_score"] == 72.0, "entry market score must be recorded")
     assert_true(data["entry_vix_level"] == 21.0, "entry VIX must be recorded")
     assert_true(data["entry_sector_score"] == 63.0, "entry sector score must be recorded")
@@ -120,10 +127,42 @@ def test_simulate_exit_records_entry_context_before_add_buy_updates() -> None:
     assert_true(data["exit_strategy"] == "fixed", "exit strategy must be recorded")
     assert_true(data["rulebook_hash"] == compute_rulebook_hash(rb), "rulebook hash must match metadata hash")
     assert_true(data["member_hash"] == compute_rulebook_hash(rb), "member hash must match rulebook hash in current model")
-    updated_stop_from_avg_cost = round(float(trade.avg_cost) - data["entry_atr"] * rb.stop_loss_atr, 4)
+
+
+def test_update_position_for_add_buy_logic_is_preserved() -> None:
+    rb = default_rulebook("TEST", asset_type="us_stock", direction="long")
+    rb.exit_strategy = "fixed"
+    rb.stop_loss_atr = 2.0
+    rb.take_profit_atr = 3.0
+    rb.trailing_atr = 1.5
+    mctx = MarketContext(market_score=72.0, vix_level=21.0, sector_score=63.0)
+    position = initialize_position_state(
+        ticker="TEST",
+        entry_price=100.0,
+        shares=10,
+        rulebook=rb,
+        atr_value=2.0,
+        market_context=mctx,
+        entry_date="2024-01-01",
+    )
+
+    updated = update_position_for_add_buy(
+        position,
+        add_price=110.0,
+        add_shares=5,
+        rulebook=rb,
+        atr_value=2.0,
+        market_context=mctx,
+    )
+
+    expected_avg_cost = ((100.0 * 10) + (110.0 * 5)) / 15
+    assert_true(abs(updated.avg_cost - expected_avg_cost) < 1e-9, "avg_cost must update by weighted average")
+    assert_true(updated.shares == 15, "shares must include add-buy shares")
+    assert_true(updated.add_buy_count == 1, "add_buy_count must increment")
+    assert_true(abs(updated.stop_price - (expected_avg_cost - 4.0)) < 1e-9, "stop must update from avg_cost and ATR")
     assert_true(
-        data["stop_price_at_entry"] != updated_stop_from_avg_cost,
-        "entry stop must not be overwritten by add-buy-updated avg-cost stop",
+        abs(updated.target_price - (expected_avg_cost + (2.0 * rb.take_profit_atr_bull))) < 1e-9,
+        "target must update from avg_cost and dynamic ATR target",
     )
 
 
@@ -158,7 +197,8 @@ def test_rolling_period_records_best_rulebook() -> None:
 def run_all() -> None:
     tests = [
         test_trade_to_dict_records_entry_context_fields,
-        test_simulate_exit_records_entry_context_before_add_buy_updates,
+        test_simulate_exit_disables_add_buy_but_preserves_trade_schema_and_entry_context,
+        test_update_position_for_add_buy_logic_is_preserved,
         test_rolling_period_records_best_rulebook,
     ]
     for test in tests:

@@ -1,0 +1,60 @@
+{
+  "created_at": "2026-07-10T16:36:05.871028+00:00",
+  "source_origin_count": 17071,
+  "stage_counts": {
+    "stage3": 15909,
+    "stage2": 1162
+  },
+  "previous_all_block_ce_counts": {
+    "PASS": 27,
+    "FAIL": 7,
+    "UNJUDGED": 17037
+  },
+  "corrected_ce_counts": {
+    "UNJUDGED_DYNAMIC_INPUT_REQUIRED": 16978,
+    "NOT_APPLICABLE_NO_BUY": 59,
+    "PASS": 27,
+    "FAIL": 7
+  },
+  "unjudged_reduction": 59,
+  "exact_dynamic_value_coverage": 93,
+  "residual_unjudged": 16978,
+  "ce_fail_count_same_semantics": 7,
+  "live93_ratio_top2_only_fail_without_should_buy_gate": 59,
+  "parity": {
+    "rows": 93,
+    "threshold_max_abs_diff": 4.95544807854742e-07,
+    "ratio_max_abs_diff": 2.4807744214427885e-06,
+    "top2_finite_rows": 86,
+    "top2_max_abs_diff": 8.40221798625862e-06,
+    "top2_zero_core_both_undefined": 7,
+    "should_buy_match_count": 93,
+    "active_component_weight_max_abs_diff": 4.798473577372064e-07,
+    "static_weight_top2_exact_match_count": 0
+  },
+  "static_reconstruction_verdict": "IMPOSSIBLE_WITH_ORIGIN_ONLY",
+  "reason": "final_score and realized core components require as-of OHLCV indicator activation plus market/sector/VIX/news/topic/event context; none are stored in survivors/final_rulebooks",
+  "stage2_historical_trade_schema": {
+    "files": 1994,
+    "with_components": 1994,
+    "with_score": 1994
+  },
+  "stage3_exit_trade_schema": {
+    "files": 269,
+    "with_components": 0,
+    "with_score": 0
+  },
+  "no_simulation": true,
+  "no_source_mutation": true,
+  "no_live_candidate_change": true,
+  "full_table_exact_ratio_count": 93,
+  "full_table_exact_top2_count": 86,
+  "full_table_static_threshold_count": 17071,
+  "full_table_static_weight_top2_count": 17071,
+  "static_proxy_warning": "static_core_weight_sum_to_threshold and static_weight_top2_share_pct use all configured weights; they are not CE ratio/top2 because realized indicator activation and dynamic context are absent",
+  "static_vs_realized_top2_mean_abs_diff_pctp": 36.02304257015242,
+  "static_vs_realized_top2_min_abs_diff_pctp": 2.731473439723217,
+  "static_vs_realized_ratio_mean_abs_diff": 2.008677299896789,
+  "static_vs_realized_ratio_min_abs_diff": 0.09739110667098716,
+  "static_ratio_exact_match_count": 0
+}

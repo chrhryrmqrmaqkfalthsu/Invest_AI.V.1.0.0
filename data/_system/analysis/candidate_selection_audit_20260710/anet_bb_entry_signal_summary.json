@@ -1,0 +1,89 @@
+{
+  "created_at": "2026-07-11T06:41:27.512303+09:00",
+  "verdict": "POINT_SNAPSHOT_CE_LIKE_BUT_ENTRY_COMPONENT_UNVERIFIABLE",
+  "candidates": {
+    "ANET": {
+      "ticker": "ANET",
+      "candidate_id": "stage3:ANET:fe220620802b",
+      "shadow_entry_n": 6,
+      "shadow_low_ratio_n": 5,
+      "shadow_low_ratio_rate_pct": 83.33333333333334,
+      "shadow_ratio_min": 1.1462650939174404,
+      "shadow_ratio_max": 1.9041019957862004,
+      "shadow_component_entry_snapshot_n": 0,
+      "live_order_intent_n": 3,
+      "live_submitted_intent_n": 1,
+      "live_order_time_ratio_available": false,
+      "live_order_time_components_available": false,
+      "point_snapshot_ratio": 1.1462650939174404,
+      "point_snapshot_threshold_excess_pct": 14.626509391744037,
+      "point_snapshot_positive_component_n": 2,
+      "point_snapshot_top2_components": "rsi+ma_align",
+      "point_snapshot_top2_share_pct": 100.0,
+      "point_snapshot_technical_core_only": true,
+      "point_snapshot_ce_verdict": "CE_LIKE_LOW_RATIO_AND_TOP2_CONCENTRATED",
+      "historical_entry_ce_verdict": "PARTIAL_LOW_RATIO_CONFIRMED_COMPONENT_UNKNOWN"
+    },
+    "BB": {
+      "ticker": "BB",
+      "candidate_id": "stage3:BB:f1bdfe7f8ad9",
+      "shadow_entry_n": 4,
+      "shadow_low_ratio_n": 4,
+      "shadow_low_ratio_rate_pct": 100.0,
+      "shadow_ratio_min": 1.1787109667939601,
+      "shadow_ratio_max": 1.1787109667939601,
+      "shadow_component_entry_snapshot_n": 0,
+      "live_order_intent_n": 2,
+      "live_submitted_intent_n": 1,
+      "live_order_time_ratio_available": false,
+      "live_order_time_components_available": false,
+      "point_snapshot_ratio": 1.1787109667939601,
+      "point_snapshot_threshold_excess_pct": 17.871096679396015,
+      "point_snapshot_positive_component_n": 2,
+      "point_snapshot_top2_components": "rsi+ma_align",
+      "point_snapshot_top2_share_pct": 100.0,
+      "point_snapshot_technical_core_only": true,
+      "point_snapshot_ce_verdict": "CE_LIKE_LOW_RATIO_AND_TOP2_CONCENTRATED",
+      "historical_entry_ce_verdict": "PARTIAL_LOW_RATIO_CONFIRMED_COMPONENT_UNKNOWN"
+    }
+  },
+  "entry_time_findings": {
+    "shadow_entries_have_ratio": true,
+    "shadow_entries_have_components": false,
+    "live_order_intents_have_ratio": false,
+    "live_order_intents_have_components": false,
+    "actual_entry_component_concentration_verifiable": false
+  },
+  "point_snapshot_findings": {
+    "snapshot_time_utc": "2026-07-10T10:01:09.313612+00:00",
+    "ANET": {
+      "ratio": 1.1462650939174404,
+      "positive_components": 2,
+      "top2": "rsi+ma_align",
+      "top2_share_pct": 100.0,
+      "technical_core_only": true
+    },
+    "BB": {
+      "ratio": 1.1787109667939601,
+      "positive_components": 2,
+      "top2": "rsi+ma_align",
+      "top2_share_pct": 100.0,
+      "technical_core_only": true
+    },
+    "comparison": "두 후보 모두 RSI+MA 두 지표가 양수 기여 100%를 차지하고 ratio<1.25; point snapshot에서는 사실상 동일한 CE형"
+  },
+  "difference": {
+    "ratio_BB_minus_ANET": 0.03244587287651979,
+    "threshold_excess_pct_ANET": 14.626509391744037,
+    "threshold_excess_pct_BB": 17.871096679396015,
+    "ANET_is_closer_to_threshold": true,
+    "signal_composition_discriminates_direction": false
+  },
+  "interpretation": "ANET과 BB의 2026-07-10 full point snapshot은 모두 두 technical core 지표에 100% 집중되고 임계 대비 14.6~17.9%만 초과했다. 그러나 실제 shadow/live entry 시점 component가 저장되지 않아 그 순간에도 같은 집중도였다고 단정할 수 없다.",
+  "no_source_change": true,
+  "operational_code_change": false,
+  "config_change": false,
+  "retraining": false,
+  "order": false,
+  "delete": false
+}

@@ -1,0 +1,417 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+
+from engine.live.broker.base import Balance, Holding, Order, OrderSide, OrderStatus, OrderType
+from engine.live.manual_sell_intent import (
+    atomic_write_json,
+    create_manual_sell_intent,
+    load_manual_sell_state,
+    load_pending_manual_sell_intents,
+    load_submitted_manual_sell_intents,
+)
+from engine.live.pending_order_manager import PendingOrderManager
+from engine.live.position_manager import PositionEntry, PositionManager
+from engine.live.runner import Runner, RunnerStats
+from engine.live.safety.layer import SafetyDecision, SafetyLayer
+
+
+class FakeNotifier:
+    def send_order(self, *a, **k): pass
+    def send_error(self, *a, **k): pass
+    def send_safety_block(self, *a, **k): pass
+    def send_trade_exit(self, *a, **k): pass
+
+
+class FakeSafety:
+    def __init__(self):
+        self.checked = []
+        self.recorded = []
+    def check_order(self, side, ticker, shares, price, purpose="entry"):
+        self.checked.append((side, ticker, shares, price, purpose))
+        return SafetyDecision(True, "ok")
+    def record_order(self, order, side, purpose="entry"):
+        self.recorded.append((order.order_id, side, purpose))
+    def record_fill(self, order, side, purpose="entry"):
+        self.recorded.append((order.order_id, side, purpose, "fill"))
+    def record_realized_pnl(self, *a, **k): pass
+
+
+class FakeBroker:
+    mode = "alpaca_paper"
+    def __init__(self, ticker="AR", shares=10.0, price=100.0, pending=True, holdings_error=False):
+        self.ticker = ticker
+        self.shares = shares
+        self.price = price
+        self.pending = pending
+        self.holdings_error = holdings_error
+        self.orders = {}
+        self.sell_calls = 0
+    def get_balance(self):
+        return Balance(100000, 100000, self.shares * self.price, self.get_holdings())
+    def get_holdings(self):
+        if self.holdings_error:
+            raise RuntimeError("holdings unavailable")
+        if self.shares <= 1e-6:
+            return []
+        return [Holding(self.ticker, self.shares, self.price, self.price, self.shares * self.price, 0.0, 0.0)]
+    def get_current_price(self, ticker):
+        return self.price
+    def is_market_open(self, ticker=None):
+        return True
+    def place_buy(self, *a, **k):
+        raise AssertionError("BUY should not be called")
+    def place_sell(self, ticker, shares, order_type=OrderType.MARKET, price=0.0, client_order_id=""):
+        self.sell_calls += 1
+        status = OrderStatus.PENDING if self.pending else OrderStatus.FILLED
+        filled_shares = 0.0 if self.pending else shares
+        order = Order(
+            f"S{self.sell_calls}", ticker, OrderSide.SELL, order_type, shares, price,
+            status, filled_shares=filled_shares, filled_avg_price=(self.price if filled_shares else 0.0),
+            client_order_id=client_order_id, raw_status=status.value,
+        )
+        self.orders[order.order_id] = order
+        if status == OrderStatus.FILLED:
+            self.shares = max(0.0, self.shares - shares)
+        return order
+    def get_order(self, order_id):
+        order = self.orders.get(order_id)
+        if order is None:
+            return None
+        if order.status == OrderStatus.PENDING:
+            order.status = OrderStatus.FILLED
+            order.raw_status = "filled"
+            order.filled_shares = order.shares
+            order.filled_avg_price = self.price
+            self.shares = max(0.0, self.shares - order.shares)
+        return order
+    def cancel_order(self, order_id):
+        return True
+
+
+def make_position(ticker="AR", shares=10.0, entry=100.0):
+    return PositionEntry(
+        ticker=ticker,
+        entry_date="2026-06-25T00:00:00+09:00",
+        entry_price=entry,
+        shares=shares,
+        atr_at_entry=1.0,
+        stop_price=90.0,
+        target_price=120.0,
+        trailing_distance=5.0,
+        trailing_stop=95.0,
+        highest_price=entry,
+        lowest_price=entry,
+        exit_strategy="fixed",
+        max_holding_days=10,
+        rulebook_direction="long",
+        member_hash="abc123",
+    )
+
+
+def make_pm(tmp_path, ticker="AR", shares=10.0):
+    pm = PositionManager.__new__(PositionManager)
+    pm._positions = {ticker: make_position(ticker, shares)}
+    pm._load_error = ""
+    return pm
+
+
+def make_runner(tmp_path, monkeypatch, ticker="AR", shares=10.0, pending=True):
+    import engine.live.position_manager as pm_module
+    import engine.live.manual_sell_intent as sell_module
+    intent_path = tmp_path / "manual_sell_intent.json"
+    monkeypatch.setattr(pm_module, "POSITIONS_PATH", tmp_path / "positions.json")
+    monkeypatch.setattr(pm_module, "TRADE_LOG_PATH", tmp_path / "trade_log.csv")
+    monkeypatch.setattr(sell_module, "POSITIONS_PATH", tmp_path / "positions.json")
+    pm = make_pm(tmp_path, ticker, shares)
+    pm._save()
+    broker = FakeBroker(ticker, shares, pending=pending)
+    runner = Runner.__new__(Runner)
+    runner.broker = broker
+    runner.safety = FakeSafety()
+    runner.notifier = FakeNotifier()
+    runner.position_manager = pm
+    runner.pending_order_manager = PendingOrderManager(broker, path=tmp_path / "pending_orders.json")
+    runner.stats = RunnerStats()
+    runner.order_shares = 1.0
+    runner.order_notional = 30.0
+    runner.manual_sell_intent_path = intent_path
+    runner._tick_locked_tickers = set()
+    runner.approval_manager = SimpleNamespace(get_request=lambda _rid: None, _save=lambda: None)
+    return runner, broker, intent_path
+
+
+def write_positions(path, ticker="AR", shares=10.0):
+    atomic_write_json(path, {ticker: make_position(ticker, shares).to_dict()})
+
+
+def write_multi_positions(path, rows: dict[str, float]):
+    atomic_write_json(path, {ticker: make_position(ticker, shares).to_dict() for ticker, shares in rows.items()})
+
+
+def test_pytest_guard_blocks_live_manual_sell_intent_writes(monkeypatch):
+    import engine.live.manual_sell_intent as sell_module
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "test_guard")
+
+    with pytest.raises(RuntimeError, match="test attempted to write live manual_sell_intent.json"):
+        sell_module.atomic_write_json(sell_module.MANUAL_SELL_INTENT_PATH, {"schema_version": 1})
+
+
+def test_create_manual_sell_intent_for_held_position_is_idempotent(tmp_path):
+    positions = tmp_path / "positions.json"
+    intents = tmp_path / "manual_sell_intent.json"
+    write_positions(positions, "AR", 10.0)
+
+    first = create_manual_sell_intent(ticker="ar", positions_path=positions, intent_path=intents)
+    second = create_manual_sell_intent(ticker="AR", positions_path=positions, intent_path=intents)
+
+    assert first["intent_id"] == second["intent_id"]
+    assert first["status"] == "pending"
+    assert first["shares_requested"] == 10.0
+
+
+def test_create_manual_sell_intent_rejects_not_held_and_partial(tmp_path):
+    positions = tmp_path / "positions.json"
+    intents = tmp_path / "manual_sell_intent.json"
+    write_positions(positions, "AR", 10.0)
+
+    with pytest.raises(ValueError, match="not held"):
+        create_manual_sell_intent(ticker="NOPE", positions_path=positions, intent_path=intents)
+    with pytest.raises(ValueError, match="partial sell not supported"):
+        create_manual_sell_intent(ticker="AR", shares_requested=5.0, positions_path=positions, intent_path=intents)
+
+
+def test_trade_date_rollover_preserves_non_terminal_sell_intents_and_drops_terminal(tmp_path, monkeypatch):
+    import engine.live.manual_sell_intent as sell_module
+    positions = tmp_path / "positions.json"
+    intents = tmp_path / "manual_sell_intent.json"
+    write_multi_positions(positions, {"AR": 10.0, "DDS": 20.0, "FIX": 2.0})
+    atomic_write_json(
+        intents,
+        {
+            "schema_version": 1,
+            "trade_date": "2026-06-25",
+            "intents": {
+                "manual_sell:DDS:pending": {
+                    "intent_id": "manual_sell:DDS:pending",
+                    "ticker": "DDS",
+                    "status": "pending",
+                    "trade_date": "2026-06-25",
+                    "shares_requested": 20.0,
+                },
+                "manual_sell:FIX:submitted": {
+                    "intent_id": "manual_sell:FIX:submitted",
+                    "ticker": "FIX",
+                    "status": "submitted",
+                    "trade_date": "2026-06-25",
+                    "shares_requested": 2.0,
+                },
+                "manual_sell:OLD:consumed": {
+                    "intent_id": "manual_sell:OLD:consumed",
+                    "ticker": "OLD",
+                    "status": "consumed",
+                    "trade_date": "2026-06-25",
+                },
+                "manual_sell:BAD:rejected": {
+                    "intent_id": "manual_sell:BAD:rejected",
+                    "ticker": "BAD",
+                    "status": "rejected",
+                    "trade_date": "2026-06-25",
+                },
+            },
+        },
+    )
+    monkeypatch.setattr(sell_module, "trade_date_kst", lambda now=None: "2026-06-26")
+
+    row = create_manual_sell_intent(ticker="AR", positions_path=positions, intent_path=intents)
+
+    state = load_manual_sell_state(intents)
+    assert state["trade_date"] == "2026-06-26"
+    assert row["ticker"] == "AR"
+    assert row["status"] == "pending"
+    assert "manual_sell:DDS:pending" in state["intents"]
+    assert "manual_sell:FIX:submitted" in state["intents"]
+    assert "manual_sell:OLD:consumed" not in state["intents"]
+    assert "manual_sell:BAD:rejected" not in state["intents"]
+    assert state["intents"]["manual_sell:DDS:pending"]["trade_date"] == "2026-06-25"
+
+    pending = load_pending_manual_sell_intents(intent_path=intents)
+    submitted = load_submitted_manual_sell_intents(intent_path=intents)
+    assert {item["ticker"] for item in pending} == {"DDS", "AR"}
+    assert {item["ticker"] for item in submitted} == {"FIX"}
+
+
+def test_trade_date_rollover_idempotent_existing_pending_persists_new_root_date(tmp_path, monkeypatch):
+    import engine.live.manual_sell_intent as sell_module
+    positions = tmp_path / "positions.json"
+    intents = tmp_path / "manual_sell_intent.json"
+    write_positions(positions, "AR", 10.0)
+    monkeypatch.setattr(sell_module, "trade_date_kst", lambda now=None: "2026-06-25")
+    first = create_manual_sell_intent(ticker="AR", positions_path=positions, intent_path=intents)
+
+    monkeypatch.setattr(sell_module, "trade_date_kst", lambda now=None: "2026-06-26")
+    second = create_manual_sell_intent(ticker="AR", positions_path=positions, intent_path=intents)
+
+    state = load_manual_sell_state(intents)
+    assert first["intent_id"] == second["intent_id"]
+    assert second["trade_date"] == "2026-06-25"
+    assert state["trade_date"] == "2026-06-26"
+    assert list(state["intents"]) == [first["intent_id"]]
+    assert state["intents"][first["intent_id"]]["status"] == "pending"
+
+
+def test_pending_sell_intent_consumes_existing_exit_path_and_finalizes(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    create_manual_sell_intent(ticker="AR", positions_path=tmp_path / "positions.json", intent_path=intent_path)
+
+    runner._process_manual_sell_intents()
+    state = load_manual_sell_state(intent_path)
+    intent = next(iter(state["intents"].values()))
+    assert intent["status"] == "submitted"
+    assert broker.sell_calls == 1
+    assert runner.pending_order_manager.has_pending_exit("AR")
+
+    runner._poll_pending_orders(context="test")
+    runner._process_manual_sell_intents()
+
+    state = load_manual_sell_state(intent_path)
+    intent = next(iter(state["intents"].values()))
+    assert intent["status"] == "consumed"
+    assert runner.position_manager.get("AR") is None
+    assert broker.get_holdings() == []
+    assert runner.pending_order_manager.all() == []
+
+
+def test_pending_sell_intent_with_position_but_zero_broker_holding_stays_pending(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    broker.shares = 0.0
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "pending"}}})
+
+    runner._process_manual_sell_intents()
+
+    row = load_manual_sell_state(intent_path)["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "pending"
+    assert row.get("note", "") == ""
+    assert broker.sell_calls == 0
+
+
+def test_pending_sell_intent_with_broker_holding_but_missing_position_stays_pending(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    runner.position_manager.unregister("AR")
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "pending"}}})
+
+    runner._process_manual_sell_intents()
+
+    row = load_manual_sell_state(intent_path)["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "pending"
+    assert row.get("note", "") == ""
+    assert broker.sell_calls == 0
+
+
+def test_already_exited_manual_sell_intent_is_rejected_without_order(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    # Simulate stale pending intent after the bot already exited and local state was cleaned.
+    runner.position_manager.unregister("AR")
+    broker.shares = 0.0
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "pending"}}})
+
+    runner._process_manual_sell_intents()
+
+    state = load_manual_sell_state(intent_path)
+    row = state["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "rejected"
+    assert row["note"] == "already exited"
+    assert broker.sell_calls == 0
+
+
+def test_pending_sell_intent_broker_holding_exception_stays_pending(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    broker.holdings_error = True
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "pending"}}})
+
+    runner._process_manual_sell_intents()
+
+    row = load_manual_sell_state(intent_path)["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "pending"
+    assert row.get("note", "") == ""
+    assert broker.sell_calls == 0
+
+
+def test_submitted_sell_intent_consumes_only_when_position_and_broker_holding_missing(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    runner.position_manager.unregister("AR")
+    broker.shares = 0.0
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "submitted"}}})
+
+    runner._process_manual_sell_intents()
+
+    row = load_manual_sell_state(intent_path)["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "consumed"
+    assert row["note"] == "sell finalized"
+    assert broker.sell_calls == 0
+
+
+def test_submitted_sell_intent_broker_holding_exception_stays_submitted(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    broker.holdings_error = True
+    atomic_write_json(intent_path, {"schema_version": 1, "trade_date": "2026-06-25", "intents": {"manual_sell:AR:x": {"intent_id": "manual_sell:AR:x", "ticker": "AR", "status": "submitted"}}})
+
+    runner._process_manual_sell_intents()
+
+    row = load_manual_sell_state(intent_path)["intents"]["manual_sell:AR:x"]
+    assert row["status"] == "submitted"
+    assert row.get("note", "") == ""
+    assert broker.sell_calls == 0
+
+
+def test_sell_pending_lock_rejects_duplicate_manual_intent_and_skips_order(tmp_path, monkeypatch):
+    runner, broker, intent_path = make_runner(tmp_path, monkeypatch, "AR", 10.0, pending=True)
+    # Pre-existing SELL pending lock, e.g. auto-exit already submitted.
+    order = Order("SLOCK", "AR", OrderSide.SELL, OrderType.MARKET, 10.0, 0.0, OrderStatus.PENDING, client_order_id="x")
+    runner.pending_order_manager.track_order(order, purpose="exit", exit_reason="stop_loss")
+    create_manual_sell_intent(ticker="AR", positions_path=tmp_path / "positions.json", intent_path=intent_path)
+
+    runner._process_manual_sell_intents()
+
+    row = next(iter(load_manual_sell_state(intent_path)["intents"].values()))
+    assert row["status"] == "rejected"
+    assert row["note"] == "already exiting"
+    assert broker.sell_calls == 0
+
+
+def test_safety_layer_does_not_limit_notional_for_sell(tmp_path, monkeypatch):
+    import engine.live.safety.layer as safety_layer
+    symbols = tmp_path / "symbols"
+    (symbols / "FIX").mkdir(parents=True)
+    positions = tmp_path / "positions.json"
+    positions.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(safety_layer, "SYMBOLS_DIR", symbols)
+    monkeypatch.setattr(safety_layer, "POSITIONS_PATH", positions)
+    policy = tmp_path / "policy.yaml"
+    policy.write_text(
+        "small_amount_safety:\n"
+        "  enabled: true\n"
+        "  max_shares_per_order: 0\n"
+        "  max_notional_ratio: 0.25\n"
+        "  max_orders_per_day: 1000000\n"
+        "  require_first_order_approval: false\n"
+        "entry:\n"
+        "  cooldown_after_buy_hours: 0\n",
+        encoding="utf-8",
+    )
+    sell_broker = FakeBroker("FIX", shares=12.0, price=2000.0, pending=False)
+    sell_broker.get_balance = lambda: Balance(100000, 50000, 24000, sell_broker.get_holdings())
+    sell_safety = SafetyLayer(broker=sell_broker, policy_path=policy)
+
+    buy_broker = FakeBroker("FIX", shares=0.0, price=2000.0, pending=False)
+    buy_broker.get_balance = lambda: Balance(100000, 50000, 0.0, [])
+    buy_safety = SafetyLayer(broker=buy_broker, policy_path=policy)
+
+    sell = sell_safety.check_order("SELL", "FIX", 12.0, 2000.0, purpose="exit")
+    buy = buy_safety.check_order("BUY", "FIX", 12.0, 2000.0, purpose="entry")
+
+    assert sell.allowed, sell
+    assert not buy.allowed
+    assert buy.code == "LIMIT_NOTIONAL"

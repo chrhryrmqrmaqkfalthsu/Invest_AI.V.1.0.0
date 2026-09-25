@@ -1,0 +1,185 @@
+{
+  "created_at_kst": "2026-07-11",
+  "verdict": "PARTIAL",
+  "definition": "Stage3 entry-time signal persistence audit",
+  "calculation": {
+    "function": "engine.strategies.evaluator.evaluate_signal",
+    "return_fields": [
+      "should_buy",
+      "score",
+      "raw_score",
+      "threshold",
+      "reasons",
+      "market_adjustment",
+      "components"
+    ],
+    "live_wrapper": "engine.live.elite_shadow_trader.evaluate_candidate",
+    "live_wrapper_additional_fields": [
+      "ratio",
+      "price",
+      "atr",
+      "market_score",
+      "sector_score",
+      "vix_level",
+      "news_sentiment",
+      "entry_quality"
+    ]
+  },
+  "live_persistence": {
+    "current_candidate_state": {
+      "path": "data/_system/live_slots_state.json",
+      "stored": [
+        "final_score",
+        "raw_score",
+        "threshold",
+        "ratio",
+        "reasons",
+        "market_score",
+        "sector_score",
+        "vix_level",
+        "price",
+        "atr"
+      ],
+      "discarded_at_projection": [
+        "components",
+        "market_adjustment",
+        "news_sentiment",
+        "topic_features",
+        "event_flags"
+      ],
+      "durability": "current point state overwritten on refresh; not append-only entry history"
+    },
+    "execution_recheck": {
+      "in_memory_full_evaluation": true,
+      "persisted_evaluation_summary": [
+        "score",
+        "threshold",
+        "ratio",
+        "price",
+        "atr",
+        "should_buy"
+      ],
+      "discarded": [
+        "components",
+        "raw_score",
+        "market_adjustment",
+        "reasons",
+        "news_sentiment"
+      ]
+    },
+    "order_intent": {
+      "stored_signal_fields": [],
+      "stored_metadata": [
+        "candidate_id",
+        "ticker",
+        "shares",
+        "price",
+        "notional",
+        "selected_rulebook",
+        "preflight_atr"
+      ]
+    },
+    "shadow": {
+      "stored": [
+        "entry_score",
+        "entry_threshold",
+        "entry_ratio",
+        "entry_reasons"
+      ],
+      "discarded": [
+        "components",
+        "raw_score",
+        "market_adjustment"
+      ],
+      "outcome_joinable": true,
+      "top2_reconstructable": false
+    }
+  },
+  "canonical_schema": {
+    "stage3_exit_trade_files": 269,
+    "stage3_exit_trade_rows": 975118,
+    "stage3_exit_unique_fields": 22,
+    "stage3_exit_fields": [
+      "breakeven_enabled",
+      "breakeven_trigger_profit_pct",
+      "entry_date",
+      "entry_price",
+      "entry_rulebook_hash",
+      "exit_date",
+      "exit_price",
+      "exit_rank",
+      "exit_reason",
+      "final_rulebook_hash",
+      "holding_days",
+      "max_holding_days",
+      "max_loss_during_hold",
+      "max_profit_during_hold",
+      "period_label",
+      "pnl_pct",
+      "sell_omen_enabled",
+      "stop_loss_atr",
+      "stop_loss_atr_bear",
+      "stop_price_at_entry",
+      "target_price_at_entry",
+      "trailing_stop_at_entry"
+    ],
+    "stage3_entry_signal_fields": [],
+    "stage2_trade_files": 325,
+    "stage2_trade_rows": 2439619,
+    "stage2_entry_signal_fields": [
+      "entry_event_flags",
+      "entry_market_adjustment",
+      "entry_news_sentiment",
+      "entry_signal_components",
+      "entry_signal_date",
+      "entry_signal_raw_score",
+      "entry_signal_score",
+      "entry_signal_threshold",
+      "entry_topic_features"
+    ]
+  },
+  "stage2_stage3_difference": {
+    "upstream_signal_calculation_same": true,
+    "backtest_trade_enrichment_same": true,
+    "difference_location": "Stage3 compact persistence projection",
+    "stage3_projection": "EXIT_TRADE_OUTPUT_FIELDS in original Stage3 runner loaded by wrapper",
+    "result": "full entry snapshot exists in memory but is omitted from exit_trades.jsonl"
+  },
+  "logging_need": {
+    "required": true,
+    "reason": "No durable repeated Stage3 entry component snapshot exists; current state is point-in-time only and shadow omits components",
+    "primary_live_location": "data/_system/ops/live_candidate_slots.py refresh_slots immediately after evaluate_candidate returns ok and before public_candidate_row projection",
+    "execution_location": "engine/live/s2_auto_trader.py _validate_candidate_signal immediately after evaluate_candidate; append only when should_buy passes and attach decision/order join key",
+    "shadow_location": "engine/live/elite_shadow_trader.py _open_position before components are dropped",
+    "historical_stage3_location": "Stage3 _compact_exit_trade/EXIT_TRADE_OUTPUT_FIELDS if canonical backtest history must retain entry_* fields",
+    "minimum_fields": [
+      "timestamp",
+      "candidate_id",
+      "stage",
+      "ticker",
+      "rulebook_hash",
+      "should_buy",
+      "score",
+      "raw_score",
+      "threshold",
+      "ratio",
+      "market_adjustment",
+      "components",
+      "market_score",
+      "sector_score",
+      "vix_level",
+      "news_sentiment",
+      "event_flags",
+      "decision_id_or_position_id",
+      "later_outcome_join_key"
+    ]
+  },
+  "final_interpretation": "PARTIAL: score/raw_score/threshold/ratio are temporarily or currently persisted in some live state paths, but Stage3 entry components and market adjustment are discarded before durable entry/outcome history. Existing data cannot support historical Stage3 Top2 CE validation.",
+  "implementation_performed": false,
+  "operational_code_change": false,
+  "config_change": false,
+  "design_change": false,
+  "retraining": false,
+  "order": false,
+  "delete": false
+}

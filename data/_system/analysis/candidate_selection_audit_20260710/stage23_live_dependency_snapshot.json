@@ -1,0 +1,236 @@
+{
+  "created_at": "2026-07-10T15:00:57.860352+00:00",
+  "lineage_counts": {
+    "ORIGIN": 9,
+    "DERIVED": 20
+  },
+  "decision_counts": {
+    "KEEP_ORIGIN": 17,
+    "SAFE_TO_REGEN_DELETE": 7,
+    "REVIEW": 5
+  },
+  "elite_shadow_report": {
+    "candidate_count": 82,
+    "stage_counts": {
+      "stage3": 70,
+      "stage2": 12
+    },
+    "bucket_counts": {
+      "A_core": 8,
+      "watch": 38,
+      "B_stable": 14,
+      "C_momentum": 22
+    },
+    "stage2_skip_top": [
+      [
+        "not_eligible",
+        137509
+      ],
+      [
+        "not_stage2",
+        12566
+      ],
+      [
+        "oos_expectancy_lt_2.7",
+        2490
+      ],
+      [
+        "oos_trades_lt_15",
+        411
+      ],
+      [
+        "oos_fitness_lt_70",
+        318
+      ],
+      [
+        "oos_win_lt_70",
+        90
+      ],
+      [
+        "worst_drawdown_lte_-18",
+        51
+      ],
+      [
+        "market_adjustment_too_weak",
+        30
+      ],
+      [
+        "min_trades_lt_8",
+        15
+      ],
+      [
+        "holding_days_gt_24",
+        3
+      ]
+    ],
+    "stage3_skip_top": [
+      [
+        "win_lt_70",
+        3690
+      ],
+      [
+        "holding_days_gt_24",
+        2049
+      ],
+      [
+        "fixed_exit_long_holding",
+        1993
+      ],
+      [
+        "market_adjustment_too_weak",
+        1080
+      ],
+      [
+        "expectancy_lt_2.7",
+        888
+      ],
+      [
+        "drawdown_lte_-18",
+        743
+      ],
+      [
+        "fitness_lt_45",
+        481
+      ],
+      [
+        "trades_lt_8",
+        345
+      ]
+    ],
+    "denylist_blocked_count": 11,
+    "denylist_blocked": [
+      {
+        "candidate_id": "stage2:HCC:2154d17783f3",
+        "ticker": "HCC",
+        "stage": "stage2",
+        "rulebook_hash_short": "2154d17783f3",
+        "reason_label": "THREE_SYMPTOM_MATCH"
+      },
+      {
+        "candidate_id": "stage3:CENX:53d7b0caa6a3",
+        "ticker": "CENX",
+        "stage": "stage3",
+        "rulebook_hash_short": "53d7b0caa6a3",
+        "reason_label": "THREE_SYMPTOM_MATCH"
+      },
+      {
+        "candidate_id": "stage3:CRMD:1a48a9a1b768",
+        "ticker": "CRMD",
+        "stage": "stage3",
+        "rulebook_hash_short": "1a48a9a1b768",
+        "reason_label": "THREE_SYMPTOM_MATCH"
+      },
+      {
+        "candidate_id": "stage3:CAR:ce44ff6acbb5",
+        "ticker": "CAR",
+        "stage": "stage3",
+        "rulebook_hash_short": "ce44ff6acbb5",
+        "reason_label": "THREE_SYMPTOM_MATCH"
+      },
+      {
+        "candidate_id": "stage3:BKSY:f1bcc8efea02",
+        "ticker": "BKSY",
+        "stage": "stage3",
+        "rulebook_hash_short": "f1bcc8efea02",
+        "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|WEAK_EXIT_HISTORY"
+      },
+      {
+        "candidate_id": "stage3:CDE:ceb9fe0512dc",
+        "ticker": "CDE",
+        "stage": "stage3",
+        "rulebook_hash_short": "ceb9fe0512dc",
+        "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|WEAK_EXIT_HISTORY"
+      },
+      {
+        "candidate_id": "stage3:AMBA:5e057e3cfc2d",
+        "ticker": "AMBA",
+        "stage": "stage3",
+        "rulebook_hash_short": "5e057e3cfc2d",
+        "reason_label": "THREE_SYMPTOM_MATCH"
+      },
+      {
+        "candidate_id": "stage3:APH:c7885deba35c",
+        "ticker": "APH",
+        "stage": "stage3",
+        "rulebook_hash_short": "c7885deba35c",
+        "reason_label": "THREE_SYMPTOM_MATCH"
+      },
+      {
+        "candidate_id": "stage3:BOIL:9044dc2c67a3",
+        "ticker": "BOIL",
+        "stage": "stage3",
+        "rulebook_hash_short": "9044dc2c67a3",
+        "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|HIGH_VOL_VOLUME_WEIGHT_ZERO_TAIL_RISK"
+      },
+      {
+        "candidate_id": "stage3:CE:998b0b638c66",
+        "ticker": "CE",
+        "stage": "stage3",
+        "rulebook_hash_short": "998b0b638c66",
+        "reason_label": "LOW_RATIO_LT_1_25|TOP2_CONCENTRATION_GE_90|WEAK_EXIT_HISTORY"
+      },
+      {
+        "candidate_id": "stage3:ARKG:50b05b8de94f",
+        "ticker": "ARKG",
+        "stage": "stage3",
+        "rulebook_hash_short": "50b05b8de94f",
+        "reason_label": "THREE_SYMPTOM_MATCH"
+      }
+    ]
+  },
+  "live_slots": {
+    "path": "data/_system/live_slots_state.json",
+    "exists": true,
+    "size_bytes": 160588,
+    "modified_utc": "2026-07-10T15:00:40.395034+00:00",
+    "candidate_pool": 17,
+    "slots": 8,
+    "waitlist": 9,
+    "updated_at": "2026-07-10T15:00:40.389901+00:00"
+  },
+  "dashboard_candidates": {
+    "path": "data/_system/real_dashboard_buy_candidates.json",
+    "exists": true,
+    "size_bytes": 205328,
+    "modified_utc": "2026-07-10T10:01:16.885191+00:00",
+    "candidates": 18,
+    "updated_at": "2026-07-10T10:01:09.313612+00:00"
+  },
+  "elite_shadow_state": {
+    "path": "data/_system/elite_shadow_state.json",
+    "exists": true,
+    "size_bytes": 304958,
+    "modified_utc": "2026-07-07T14:44:08.967117+00:00",
+    "open_positions": 16,
+    "summary": {
+      "avg_pnl_pct": -0.3797316938908629,
+      "closed_count": 150,
+      "open_count": 16,
+      "open_unrealized_pct_avg": -0.12404705148895828,
+      "open_unrealized_usd": -94.29961710912794,
+      "total_pnl_usd": -2506.887107460754,
+      "win_rate": 32.0
+    },
+    "updated_at": "2026-07-07T14:44:08.929897+00:00"
+  },
+  "broker_positions": {
+    "path": "data/_system/positions.json",
+    "exists": true,
+    "size_bytes": 14079,
+    "modified_utc": "2026-07-08T15:53:12.946802+00:00",
+    "positions": 3,
+    "tickers": [
+      "CAKE",
+      "MPLX",
+      "WPM"
+    ]
+  },
+  "critical_findings": [
+    "rulebooks_all=Stage2 GA origin",
+    "survivors=derived but live direct",
+    "entry_rulebooks=entry GA origin",
+    "final_rulebooks=exit GA origin",
+    "qualify individuals discarded; qualify re-gate requires GA rerun",
+    "validation/profile/ineligible derived from final_rulebooks"
+  ]
+}

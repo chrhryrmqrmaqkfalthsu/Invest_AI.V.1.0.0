@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from engine.live.broker.base import Holding, Order, OrderSide, OrderStatus, OrderType
+from engine.live.broker.base import Balance, Holding, Order, OrderSide, OrderStatus, OrderType
 from engine.live.pending_order_manager import PendingOrderManager
 from engine.live.safety import layer as safety_layer_mod
 from engine.live.safety import state as safety_state_mod
@@ -11,10 +11,19 @@ from engine.live.safety.layer import SafetyLayer
 
 
 class Broker:
-    def __init__(self, *, holdings=None, fail_holdings=False, market_open=True):
+    def __init__(self, *, holdings=None, fail_holdings=False, market_open=True, total_value=100000.0):
         self.holdings = holdings or []
         self.fail_holdings = fail_holdings
         self.market_open = market_open
+        self.total_value = float(total_value)
+
+    def get_balance(self):
+        return Balance(
+            cash_krw=self.total_value,
+            total_value_krw=self.total_value,
+            invested_krw=sum(h.shares * h.avg_cost for h in self.holdings),
+            holdings=self.get_holdings(),
+        )
 
     def get_holdings(self):
         if self.fail_holdings:
@@ -32,7 +41,7 @@ def make_policy(tmp_path: Path, *, daily=1000, exposure=1000) -> Path:
 small_amount_safety:
   enabled: true
   max_shares_per_order: 100000
-  max_notional_per_order: 100000000
+  max_notional_ratio: 10.0
   max_bought_notional_per_day: {daily}
   max_total_exposure_notional: {exposure}
   max_orders_per_day: 100
@@ -112,7 +121,7 @@ def test_holdings_query_failure_blocks_buy(monkeypatch, tmp_path):
     decision = safety.check_order("BUY", "AAA", 1, 100)
 
     assert decision.allowed is False
-    assert decision.code in {"HOLDINGS_CHECK_FAILED", "EXPOSURE_CHECK_FAILED"}
+    assert decision.code in {"HOLDINGS_CHECK_FAILED", "EXPOSURE_CHECK_FAILED", "LIMIT_NOTIONAL"}
 
 
 def test_daily_bought_limit_uses_today_counter_and_resets_on_rollover(monkeypatch, tmp_path):

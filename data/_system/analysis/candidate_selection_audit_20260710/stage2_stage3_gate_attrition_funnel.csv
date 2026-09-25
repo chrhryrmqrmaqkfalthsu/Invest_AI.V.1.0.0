@@ -1,0 +1,12 @@
+sequence,step,enforcement,stage2_before,stage2_condition_hits,stage2_hit_rate_pct,stage2_removed,stage2_removed_rate_pct,stage2_remaining,stage2_unique_tickers,stage3_before,stage3_condition_hits,stage3_hit_rate_pct,stage3_removed,stage3_removed_rate_pct,stage3_remaining,stage3_unique_tickers,note
+0,origin,BASE,1162,0,0.000000,0,0.000000,1162,325,15909,0,0.000000,0,0.000000,15909,269,canonical origins
+1,artifact_completeness,BLOCK,1162,0,0.000000,0,0.000000,1162,325,15909,13897,87.353071,13897,87.353071,2012,152,Stage3 profile and done validation
+2,history_sample_min,HOLD_EXCLUDE,1162,103,8.864028,103,8.864028,1059,299,2012,188,9.343936,188,9.343936,1824,143,Stage2 base_n>=35; Stage3 base_n>=24
+3,history_avg_pnl,BLOCK,1059,0,0.000000,0,0.000000,1059,299,1824,0,0.000000,0,0.000000,1824,143,average PnL >= 0
+4,history_win_rate,MONITOR,1059,106,10.009443,0,0.000000,1059,299,1824,164,8.991228,0,0.000000,1824,143,Stage2 <58.5274%; Stage3 <50%; monitor only
+5,v3_p99_weightless,BLOCK,1059,263,24.834750,263,24.834750,796,242,1824,494,27.083333,494,27.083333,1330,128,stored one-sided threshold beyond activation-tail p99
+6,boil_exact_zero_high_vol,MONITOR_PARALLEL,796,2,0.251256,0,0.000000,796,242,1330,9,0.676692,0,0.000000,1330,128,HIGH_VOL volume-blind exact-zero condition; no enforcement change
+7,elite_filter,BLOCK,796,774,97.236181,774,97.236181,22,10,1330,949,71.353383,949,71.353383,381,75,existing elite static filter
+8,denylist,BLOCK,22,1,4.545455,1,4.545455,21,10,381,1,0.262467,1,0.262467,380,75,denylist before ticker dedup
+9,ticker_dedup,SELECTION,21,11,52.380952,11,52.380952,10,10,380,305,80.263158,305,80.263158,75,75,best surviving candidate per ticker with fallback
+10,stage_cap,SELECTION,10,0,0.000000,0,0.000000,10,10,75,0,0.000000,0,0.000000,75,75,Stage2 cap=60 and Stage3 cap=80; both non-binding

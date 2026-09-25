@@ -1,0 +1,27 @@
+{
+  "created_at": "2026-07-10T16:22:48.292624+00:00",
+  "policy": "all-causal-conditions-block-dryrun-v1",
+  "or_semantics": "any FAIL=>FAIL; no FAIL+CE unavailable=>UNJUDGED; all judged pass=>PASS",
+  "conditions": {
+    "completeness": "origin_complete true; Stage3 profile eligible",
+    "avg_pnl": "base average PnL <0% FAIL",
+    "win_rate": {
+      "stage2_lt_pct": 58.52738150023009,
+      "stage3_lt_pct": 50.0
+    },
+    "boil": "HIGH_VOL and abs(weight_volume_surge)<=0.05 FAIL",
+    "ce": "ratio<1.25 and Top2>=90% FAIL; absent snapshot UNJUDGED"
+  },
+  "sample_reference_not_blocker": {
+    "stage2_p10": 35,
+    "stage3_p10": 24
+  },
+  "selection_order": [
+    "BLOCK checks",
+    "elite filter/score",
+    "denylist",
+    "ticker dedup fallback",
+    "stage caps 60/80"
+  ],
+  "ce_source": "historical live93 snapshot; no live evaluation"
+}

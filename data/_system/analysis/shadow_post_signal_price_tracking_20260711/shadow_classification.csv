@@ -1,0 +1,2 @@
+shadow_timestamp_utc,candidate_id,ticker,group,score_on,score_off,event_component,pass_on,pass_off,threshold,market_score,shadow_source_file,shadow_source_line
+2026-07-11T12:33:09.799605+00:00,stage3:BTBT:363898884d44,BTBT,DROP_ON_OFF,18.273542025757642,1.8154976300972685,14.919817861651637,true,false,1.911257702358741,73.8,data/_system/analysis/shadow_direct_event/shadow_direct_event_20260711.jsonl,13

@@ -1,0 +1,8 @@
+candidate_id,stage,ticker,is_named_boil,final_p99_weightless_block_status,p99_weightless_fail_components,p99_weightless_reason_codes,bb_reachability_label,bb_weight,bb_inactive_weight,volume_reachability_label,volume_weight,volume_inactive_weight,newly_captured_vs_v2,captured_by_v3_weightless_block
+stage3:ANET:fe220620802b,stage3,ANET,False,PASS,,,REACHABLE,1.3451122782253937,False,REACHABLE,0.2530485421711657,False,False,False
+stage3:BB:f1bdfe7f8ad9,stage3,BB,False,PASS,,,REACHABLE,0.3609789460123143,False,REACHABLE,1.16162064645687,False,False,False
+stage3:BOIL:9044dc2c67a3,stage3,BOIL,True,FAIL,volume,INACTIVE_VOLUME_THRESHOLD_GT_TRAIN_MAX,REACHABLE,2.0,False,UNREACHABLE,0.0,True,True,True
+stage3:BTE:4ba9af200f79,stage3,BTE,False,FAIL,volume,ACTIVE_VOLUME_THRESHOLD_GT_TRAIN_MAX,REACHABLE,2.0,False,UNREACHABLE,0.331361425716663,False,False,True
+stage3:CDE:ceb9fe0512dc,stage3,CDE,False,PASS,,,REACHABLE,1.708622714209994,False,REACHABLE,0.4898398020557082,False,False,False
+stage3:CE:998b0b638c66,stage3,CE,False,PASS,,,REACHABLE,0.8477763470822091,False,REACHABLE,0.0887692459381948,False,False,False
+stage3:CWK:2970595abcd4,stage3,CWK,False,FAIL,volume,INACTIVE_VOLUME_THRESHOLD_GT_TRAIN_P99,REACHABLE,1.5214033124548558,False,NEAR_UNREACHABLE,0.0,True,True,True

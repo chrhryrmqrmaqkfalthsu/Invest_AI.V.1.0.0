@@ -1,0 +1,33 @@
+"""KINGMAKER dashboard API wrapper with live candidate-only display override.
+
+This module imports the normal aftermarket dashboard app, then replaces
+/api/live/central_candidates so candidate-only BUY mode is shown first and capped
+to 8 rows.  It does not alter /api/real/* isolation.
+"""
+from __future__ import annotations
+
+import api_server_aftermarket as _aftermarket
+from engine.live.live_candidate_display_routes import install_live_candidate_display_routes
+from engine.live.real_dashboard_alpaca_exit_oco_fix import install_real_dashboard_alpaca_exit_oco_fix
+from engine.live.real_dashboard_alpaca_exit_orders_patch import install_real_dashboard_alpaca_exit_order_routes
+from engine.live.real_dashboard_alpaca_exit_orders_visibility_patch import install_real_dashboard_alpaca_exit_order_visibility_patch
+from engine.live.real_dashboard_alpaca_history_patch import install_real_dashboard_alpaca_history_routes
+from engine.live.real_dashboard_candidate20_patch import install_real_dashboard_candidate20_patch
+from engine.live.real_dashboard_exit_zone_position_patch import install_real_dashboard_exit_zone_position_patch
+from engine.live.real_dashboard_holding_days_patch import install_real_dashboard_holding_days_patch
+from engine.live.real_dashboard_live_chart_patch import install_real_dashboard_live_chart_patch
+from engine.live.real_dashboard_readability_patch import install_real_dashboard_readability_patch
+from engine.live.real_dashboard_realtime_metrics_patch import install_real_dashboard_realtime_metrics_patch
+
+app = _aftermarket.app
+install_live_candidate_display_routes(app, _aftermarket._base, max_candidates=8)
+install_real_dashboard_holding_days_patch()
+install_real_dashboard_live_chart_patch()
+install_real_dashboard_readability_patch()
+install_real_dashboard_realtime_metrics_patch()
+install_real_dashboard_alpaca_exit_order_routes(app)
+install_real_dashboard_alpaca_exit_oco_fix(app)
+install_real_dashboard_alpaca_exit_order_visibility_patch()
+install_real_dashboard_exit_zone_position_patch()
+install_real_dashboard_alpaca_history_routes(app)
+install_real_dashboard_candidate20_patch()

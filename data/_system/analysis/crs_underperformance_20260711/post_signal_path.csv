@@ -1,0 +1,11 @@
+sequence,timestamp_utc,timestamp_et,price_or_level,return_from_signal_pct,source,observation
+1,2026-07-09T17:20:33.590054+00:00,2026-07-09T13:20:33.590054-04:00,600.8599853515625,0.0,data/_system/live_slots_state.json::first_seen_signals,"stored first signal; exact quote source not persisted"
+2,2026-07-09T17:21:00+00:00,2026-07-09T13:21:00-04:00,600.85,-0.0016618433255510823,Alpaca IEX 1-minute bar,"nearest observed Alpaca print after signal"
+3,2026-07-09T18:11:00+00:00,2026-07-09T14:11:00-04:00,601.61,0.12482353072633678,Alpaca IEX 1-minute bar,"session high occurred about 50 minutes after signal"
+4,2026-07-09T19:40:00+00:00,2026-07-09T15:40:00-04:00,594.72,-1.0218662419282265,Alpaca IEX 1-minute bar,"first observed low at or below -1%; sparse IEX prints mean exact crossing may be earlier"
+5,2026-07-09T19:56:00+00:00,2026-07-09T15:56:00-04:00,588.545,-2.0495599060997627,Alpaca IEX 1-minute bar,"first observed low at or below -2%; deterioration concentrated near close"
+6,2026-07-09T19:59:00+00:00,2026-07-09T15:59:00-04:00,590.515,-1.7216965023073794,Alpaca IEX 1-minute bar,"last observed regular-session close print on signal day"
+7,2026-07-10T13:38:00+00:00,2026-07-10T09:38:00-04:00,574.16,-4.443628466279115,Alpaca IEX 1-minute bar,"first observed next-session print; clear overnight gap down"
+8,2026-07-10T13:40:00+00:00,2026-07-10T09:40:00-04:00,569.315,-5.249972725859841,Alpaca IEX 1-minute bar,"next-session low two minutes after first observed print"
+9,2026-07-10T18:17:00+00:00,2026-07-10T14:17:00-04:00,585.95,-2.4814408872374183,Alpaca IEX 1-minute bar,"partial intraday recovery did not regain signal price"
+10,2026-07-10T19:59:38.272913+00:00,2026-07-10T15:59:38.272913-04:00,579.14,-3.6148164099917834,Alpaca StockLatestTradeRequest,"latest available trade at investigation time; exchange code V"

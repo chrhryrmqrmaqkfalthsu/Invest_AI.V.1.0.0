@@ -1,0 +1,144 @@
+{
+  "stage": "all",
+  "summaries": [
+    {
+      "all3_pass_count": 0,
+      "all3_pass_hash_samples": [],
+      "config": {
+        "min_member_score": 10.0,
+        "min_trades": 5,
+        "qualify_min_expectancy_pct": 2.0,
+        "qualify_years": 3
+      },
+      "data_end": "2026-07-06",
+      "data_start": "2020-06-08",
+      "early_stop_reason": {
+        "evaluated_split_count": 1,
+        "reason": "required_split_has_zero_passing_candidates",
+        "split": "train_1"
+      },
+      "early_stopped": true,
+      "elapsed_seconds": 52.291210889816284,
+      "entry_execution_semantics": "entry_provisional_interval_break_d5_v2",
+      "fail_reason_metric_counts": {
+        "early_stop_zero_pass_split": 1
+      },
+      "fitness_cache": {
+        "enabled": false,
+        "hit_rate": 0.0,
+        "hits": 0,
+        "misses": 0,
+        "unique_keys": 0
+      },
+      "ga_summaries": [
+        {
+          "best_fitness": 31.58224922283417,
+          "best_hash": "1aee78255de3a9a744b8d252179d4d763f62cbc1b480d5202998d3e760fc1e04",
+          "entry_domain_sample_count": 251,
+          "fitness_cache": {
+            "enabled": false,
+            "hit_rate": 0.0,
+            "hits": 0,
+            "misses": 0,
+            "unique_keys": 0
+          },
+          "gene_scope": "entry",
+          "generations_run": 3,
+          "seed": 2026071302,
+          "split": {
+            "end": "2023-06-30",
+            "label": "train_1",
+            "start": "2022-07-01"
+          },
+          "technical_feature_lag_mode": "strict_entry_d5_v1",
+          "technical_feature_lag_trading_days": 5,
+          "top_count": 3
+        },
+        {
+          "best_fitness": 83.05745751968233,
+          "best_hash": "71d438e0b9bfcd4e8823c0de6189397300477849003f6de86e6044604accd12a",
+          "entry_domain_sample_count": 250,
+          "fitness_cache": {
+            "enabled": false,
+            "hit_rate": 0.0,
+            "hits": 0,
+            "misses": 0,
+            "unique_keys": 0
+          },
+          "gene_scope": "entry",
+          "generations_run": 3,
+          "seed": 2026071303,
+          "split": {
+            "end": "2024-06-30",
+            "label": "train_2",
+            "start": "2023-07-01"
+          },
+          "technical_feature_lag_mode": "strict_entry_d5_v1",
+          "technical_feature_lag_trading_days": 5,
+          "top_count": 3
+        },
+        {
+          "best_fitness": 65.08619655714813,
+          "best_hash": "25806c4a03645be9b775ee45b72ed0299e5392f5de4fe59755b2434f4d0afcb8",
+          "entry_domain_sample_count": 250,
+          "fitness_cache": {
+            "enabled": false,
+            "hit_rate": 0.0,
+            "hits": 0,
+            "misses": 0,
+            "unique_keys": 0
+          },
+          "gene_scope": "entry",
+          "generations_run": 3,
+          "seed": 2026071304,
+          "split": {
+            "end": "2025-06-30",
+            "label": "train_3",
+            "start": "2024-07-01"
+          },
+          "technical_feature_lag_mode": "strict_entry_d5_v1",
+          "technical_feature_lag_trading_days": 5,
+          "top_count": 3
+        }
+      ],
+      "market_context_lag_days": 1,
+      "member_score_stats": {
+        "train_1": {
+          "count": 9,
+          "max": 95.625,
+          "mean": 50.0,
+          "min": 3.75
+        }
+      },
+      "note": "D-5 entry-scope qualify with shifted fold empirical domains and provisional entry exits",
+      "periods": [
+        {
+          "end": "2023-06-30",
+          "label": "train_1",
+          "start": "2022-07-01"
+        },
+        {
+          "end": "2024-06-30",
+          "label": "train_2",
+          "start": "2023-07-01"
+        },
+        {
+          "end": "2025-06-30",
+          "label": "train_3",
+          "start": "2024-07-01"
+        }
+      ],
+      "qualified": false,
+      "seed_base": 2026071301,
+      "stage": "qualify",
+      "technical_feature_lag_mode": "strict_entry_d5_v1",
+      "technical_feature_lag_trading_days": 5,
+      "ticker": "AAP",
+      "unique_candidate_count": 9,
+      "year_pass_counts": {
+        "train_1": 0
+      }
+    }
+  ],
+  "ticker": "AAP"
+}

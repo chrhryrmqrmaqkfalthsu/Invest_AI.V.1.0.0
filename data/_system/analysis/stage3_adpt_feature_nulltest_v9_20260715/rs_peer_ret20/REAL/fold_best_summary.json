@@ -1,0 +1,133 @@
+{
+  "fold_best": {
+    "train_1": {
+      "fitness": 0.5000376302641572,
+      "trade_count": 15,
+      "trade_count_factor": 0.8125,
+      "primary_objective_pct_per_day": 2.5225557958055043,
+      "mae_penalty": 0.5247506617818289,
+      "realized_loss_penalty": 0.0,
+      "win_rate_pct": 100.0,
+      "effective_event_count": 2.272727272727273,
+      "eec_multiplier": 1.0,
+      "eec_target": 6.0,
+      "eec_floor": 0.5,
+      "eec_nonduplicate_event_count": 0,
+      "eec_event_cluster_count": 0,
+      "eec_max_cluster_trade_share": 0.0,
+      "primary_after_trade_count_factor_before_eec": 0.0,
+      "primary_after_eec_penalty": 0.0,
+      "final_fitness_before_eec": 0.0
+    },
+    "train_2": {
+      "fitness": 0.7221627335196512,
+      "trade_count": 17,
+      "trade_count_factor": 0.8875,
+      "primary_objective_pct_per_day": 2.3976309674154517,
+      "mae_penalty": 0.9047218504882075,
+      "realized_loss_penalty": 0.0,
+      "win_rate_pct": 94.11764705882352,
+      "effective_event_count": 4.587301587301587,
+      "eec_multiplier": 1.0,
+      "eec_target": 6.0,
+      "eec_floor": 0.5,
+      "eec_nonduplicate_event_count": 0,
+      "eec_event_cluster_count": 0,
+      "eec_max_cluster_trade_share": 0.0,
+      "primary_after_trade_count_factor_before_eec": 0.0,
+      "primary_after_eec_penalty": 0.0,
+      "final_fitness_before_eec": 0.0
+    },
+    "train_3": {
+      "fitness": 3.7689816322651457,
+      "trade_count": 17,
+      "trade_count_factor": 0.8875,
+      "primary_objective_pct_per_day": 4.601480503769383,
+      "mae_penalty": 0.23189598516087426,
+      "realized_loss_penalty": 0.08293632966930735,
+      "win_rate_pct": 88.23529411764706,
+      "effective_event_count": 8.757575757575756,
+      "eec_multiplier": 1.0,
+      "eec_target": 6.0,
+      "eec_floor": 0.5,
+      "eec_nonduplicate_event_count": 0,
+      "eec_event_cluster_count": 0,
+      "eec_max_cluster_trade_share": 0.0,
+      "primary_after_trade_count_factor_before_eec": 0.0,
+      "primary_after_eec_penalty": 0.0,
+      "final_fitness_before_eec": 0.0
+    }
+  },
+  "strict_and_joint_pass": {
+    "train_1": {
+      "strict_and_entry_eligible_day_count": 251,
+      "strict_and_joint_pass_day_count": 19,
+      "strict_and_joint_pass_dates": [
+        "2022-09-26",
+        "2022-09-27",
+        "2022-09-28",
+        "2022-09-29",
+        "2022-10-19",
+        "2022-10-20",
+        "2022-10-21",
+        "2022-10-28",
+        "2022-10-31",
+        "2023-05-05",
+        "2023-05-08",
+        "2023-05-15",
+        "2023-05-16",
+        "2023-05-17",
+        "2023-05-18",
+        "2023-05-19",
+        "2023-05-22",
+        "2023-05-24",
+        "2023-05-26"
+      ]
+    },
+    "train_2": {
+      "strict_and_entry_eligible_day_count": 250,
+      "strict_and_joint_pass_day_count": 17,
+      "strict_and_joint_pass_dates": [
+        "2023-07-10",
+        "2023-07-11",
+        "2023-07-18",
+        "2023-08-28",
+        "2023-08-29",
+        "2024-01-16",
+        "2024-01-17",
+        "2024-01-18",
+        "2024-01-31",
+        "2024-02-02",
+        "2024-02-05",
+        "2024-02-13",
+        "2024-02-14",
+        "2024-03-15",
+        "2024-03-19",
+        "2024-03-27",
+        "2024-04-05"
+      ]
+    },
+    "train_3": {
+      "strict_and_entry_eligible_day_count": 250,
+      "strict_and_joint_pass_day_count": 14,
+      "strict_and_joint_pass_dates": [
+        "2024-08-27",
+        "2024-09-24",
+        "2024-09-25",
+        "2024-10-17",
+        "2024-11-21",
+        "2024-11-22",
+        "2024-12-19",
+        "2025-01-16",
+        "2025-01-17",
+        "2025-04-04",
+        "2025-04-21",
+        "2025-04-22",
+        "2025-05-06",
+        "2025-05-07"
+      ]
+    }
+  },
+  "verdict_code": "FACTOR_RESTORE_SUCCESS",
+  "verdict_reason": "세 fold fold-best가 모두 12건을 벗어났고 최소 한 fold가 15건 이상으로 이동했다."
+}

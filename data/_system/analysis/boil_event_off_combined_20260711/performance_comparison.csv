@@ -1,0 +1,6 @@
+combined_classification,candidate_count,tickers,unrealized_returns_pct,reference_average_pct,observation_only
+SURVIVE_BOTH,11,"CRS|BCS|ALGT|BN|ADMA|BB|ANET|ARKW|CBRL|CRK|AEIS","CRS -3.6714 | BCS -0.6959 | ALGT +1.0273 | BN +0.5632 | ADMA -1.5727 | BB -0.6793 | ANET +13.6596 | ARKW +1.4940 | CBRL +2.8433 | CRK -0.6391 | AEIS +6.1251",1.6776361184918038,"mixed unrealized snapshots; no superiority inference"
+DROP_BY_EVENT,6,"BTBT|BMA|BMI|CMC|BWXT|ACMR","BTBT +3.3537 | BMA +3.4370 | BMI -1.8425 | CMC +1.7457 | BWXT -0.1584 | ACMR -3.7926",0.4571263975808629,"mixed unrealized snapshots; no superiority inference"
+DROP_BY_BOIL,0,"","",,"no candidates"
+DROP_BY_BOTH,1,BNTX,"BNTX -2.6862",-2.6861718360413844,"single observation only"
+BOIL_UNVERIFIABLE,0,"","",,"all 18 candidates mapped to prior dry-run"

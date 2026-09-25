@@ -1,0 +1,859 @@
+{
+  "created_at": "2026-07-10T13:54:31.627410+00:00",
+  "mode": "read-only identification; no deletion/move/source modification",
+  "entrypoints": {
+    "stage2_stage3_batch": [
+      "scripts/research/run_stage23_batch.py",
+      "scripts/research/run_stage2.py",
+      "scripts/research/run_stage3_aggressive.py"
+    ],
+    "live_candidate_generation": [
+      "scripts/research/build_stage3_live_pool.py",
+      "engine/live/elite_shadow_report.py",
+      "data/_system/ops/live_candidate_slots.py",
+      "scripts/export_real_dashboard_buy_candidates.py"
+    ],
+    "live_execution": [
+      "scripts/run_live.py"
+    ],
+    "dashboard_runtime": [
+      "api_server_candidate_only.py",
+      "api_server_aftermarket.py",
+      "scripts/dashboard_guard.sh",
+      "scripts/ensure_caddy_dashboard_route.py"
+    ],
+    "scheduled_ops": [
+      "scripts/live_candidate_slots_guard.sh",
+      "scripts/build_sentiment_history.py"
+    ]
+  },
+  "source_files_scanned": 395,
+  "active_dependency_files": 148,
+  "python_import_edges": 1009,
+  "literal_reference_targets": 81,
+  "parse_error_count": 0,
+  "parse_errors": {},
+  "inventory_rows": 2022,
+  "risk_row_counts": {
+    "KEEP": 406,
+    "REVIEW": 1571,
+    "SAFE_TO_DELETE": 45
+  },
+  "risk_represented_file_counts": {
+    "KEEP": 513527,
+    "REVIEW": 13402,
+    "SAFE_TO_DELETE": 343
+  },
+  "risk_represented_size_bytes": {
+    "KEEP": 129815368824,
+    "REVIEW": 2243118919,
+    "SAFE_TO_DELETE": 5150150
+  },
+  "risk_represented_size_human": {
+    "KEEP": "120.90GiB",
+    "REVIEW": "2.09GiB",
+    "SAFE_TO_DELETE": "4.91MiB"
+  },
+  "top_type_counts": {
+    "ONE_OFF_EXPERIMENT_ARTIFACT": 630,
+    "LOG_ARTIFACT": 310,
+    "UNREACHED_FILE": 206,
+    "PROTECTED_RULE_POOL_ARTIFACT": 175,
+    "LIVE_PIPELINE_DEPENDENCY": 129,
+    "UNREACHED_TEST_SUPPORT": 87,
+    "EXACT_DUPLICATE_REVIEW": 74,
+    "ONE_OFF_OR_RESEARCH_SCRIPT": 59,
+    "LOCK_OR_PID_ARTIFACT": 56,
+    "DEAD_OR_MANUAL_SCRIPT": 52,
+    "LIVE_LITERAL_RESOURCE": 47,
+    "DOCUMENTATION_OR_NOTE": 38,
+    "REGENERABLE_CACHE_DIRECTORY": 23,
+    "UNREACHED_ENGINE_MODULE": 23,
+    "EXPLICIT_BACKUP_COPY": 20,
+    "OPERATIONAL_STATE_BACKUP": 19,
+    "LIVE_REFERENCED_DIRECTORY": 18,
+    "PROTECTED_ARTIFACT": 17,
+    "SYSTEM_DATA_DIRECTORY": 15,
+    "PIPELINE_ENTRYPOINT": 14,
+    "STALE_ATOMIC_TEMP": 2,
+    "BACKUP_ARCHIVE_DIRECTORY": 2,
+    "SENSITIVE_CONFIGURATION": 2,
+    "MIXED_DIRECTORY_WITH_PROTECTED_ARTIFACTS": 2,
+    "PROTECTED_DIRECTORY": 2
+  },
+  "safe_rows": [
+    {
+      "path": ".pytest_cache",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 57527,
+      "file_count": 5,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'[none]': 3, '.md': 1, '.tag': 1}"
+    },
+    {
+      "path": "__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 52693,
+      "file_count": 3,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 3}"
+    },
+    {
+      "path": "api_server.py.bak.before_candidate_news_guard_20260629_113651",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 36896,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "api_server.py.bak.before_dashboard_metrics_20260629_114728",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 37010,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "api_server.py.bak.before_holding_early_exit_indicator_20260629_125912",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 39798,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "api_server.py.bak.before_nextopen_buy_button_label_20260629_112634",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 36898,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "api_server.py.bak.before_nextopen_candidate_dashboard_20260629_112332",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 31776,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "api_server.py.bak.before_prepost_20260629_052130",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 31150,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 55452,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_all_charts_kst_20260629_052130",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 80387,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_candidate_news_guard_20260629_113651",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 81171,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_candle_20260626_034648",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 60319,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_dashboard_metrics_20260629_114728",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 81755,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_entry_markers_20260626_032825",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 56504,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_frontend_20260628_125051",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 67699,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_frontend_20260628_130927",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 67699,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_holding_early_exit_indicator_20260629_125912",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 85944,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_nextopen_candidate_dashboard_20260629_112332",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 80563,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_nomarker_20260626_035446",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 61111,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_scale_20260626_035020",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 60653,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_sellomen_kst_20260629_012301",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 79870,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "dashboard_home.html.bak.before_summary_20260626_034111",
+      "path_kind": "file",
+      "type": "EXPLICIT_BACKUP_COPY",
+      "size_bytes": 57242,
+      "file_count": 1,
+      "decision_reason": "filename explicitly marks superseded backup; canonical source remains"
+    },
+    {
+      "path": "data/_system/.real_dashboard_buy_candidates.json.tmp.223994.20260709T161230Z",
+      "path_kind": "file",
+      "type": "STALE_ATOMIC_TEMP",
+      "size_bytes": 82392,
+      "file_count": 1,
+      "decision_reason": "atomic temp from non-running pid=223994; older than one hour"
+    },
+    {
+      "path": "data/_system/.real_dashboard_buy_candidates.json.tmp.224108.20260709T161407Z",
+      "path_kind": "file",
+      "type": "STALE_ATOMIC_TEMP",
+      "size_bytes": 93131,
+      "file_count": 1,
+      "decision_reason": "atomic temp from non-running pid=224108; older than one hour"
+    },
+    {
+      "path": "data/backups/manual_before_live_exit_activation_and_stop_guard_20260609T165055Z/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 16281,
+      "file_count": 1,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 1}"
+    },
+    {
+      "path": "engine/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 136,
+      "file_count": 1,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 1}"
+    },
+    {
+      "path": "engine/adapters/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 29736,
+      "file_count": 7,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 7}"
+    },
+    {
+      "path": "engine/ai/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 37397,
+      "file_count": 3,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 3}"
+    },
+    {
+      "path": "engine/central/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 184703,
+      "file_count": 15,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 15}"
+    },
+    {
+      "path": "engine/core/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 48225,
+      "file_count": 8,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 8}"
+    },
+    {
+      "path": "engine/learning/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 70745,
+      "file_count": 8,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 8}"
+    },
+    {
+      "path": "engine/live/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 971513,
+      "file_count": 59,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 59}"
+    },
+    {
+      "path": "engine/live/broker/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 65216,
+      "file_count": 7,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 7}"
+    },
+    {
+      "path": "engine/live/safety/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 22731,
+      "file_count": 3,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 3}"
+    },
+    {
+      "path": "engine/live/telegram/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 78919,
+      "file_count": 5,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 5}"
+    },
+    {
+      "path": "engine/market/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 47370,
+      "file_count": 4,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 4}"
+    },
+    {
+      "path": "engine/pipeline/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 103265,
+      "file_count": 11,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 11}"
+    },
+    {
+      "path": "engine/portfolio/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 99414,
+      "file_count": 5,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 5}"
+    },
+    {
+      "path": "engine/strategies/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 50592,
+      "file_count": 7,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 7}"
+    },
+    {
+      "path": "scripts/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 92531,
+      "file_count": 11,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 11}"
+    },
+    {
+      "path": "scripts/live/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 56040,
+      "file_count": 4,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 4}"
+    },
+    {
+      "path": "scripts/pipeline/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 88038,
+      "file_count": 5,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 5}"
+    },
+    {
+      "path": "scripts/research/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 592397,
+      "file_count": 39,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 39}"
+    },
+    {
+      "path": "tests/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 816140,
+      "file_count": 95,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 95}"
+    },
+    {
+      "path": "tests/central/__pycache__",
+      "path_kind": "directory",
+      "type": "REGENERABLE_CACHE_DIRECTORY",
+      "size_bytes": 203121,
+      "file_count": 15,
+      "decision_reason": "interpreter/test cache only; top_suffixes={'.pyc': 15}"
+    }
+  ],
+  "largest_review_rows": [
+    {
+      "path": "data/_system/condition_db_sell_omen_clean",
+      "path_kind": "directory",
+      "type": "SYSTEM_DATA_DIRECTORY",
+      "size_bytes": 129892573,
+      "file_count": 183,
+      "decision_reason": "dynamic filename access may exist; manual review required; top_suffixes={'.csv': 183}"
+    },
+    {
+      "path": "data/_system/pipeline",
+      "path_kind": "directory",
+      "type": "SYSTEM_DATA_DIRECTORY",
+      "size_bytes": 82632425,
+      "file_count": 4155,
+      "decision_reason": "dynamic filename access may exist; manual review required; top_suffixes={'.json': 3938, '.jsonl': 207, '.txt': 10}"
+    },
+    {
+      "path": "backup",
+      "path_kind": "directory",
+      "type": "BACKUP_ARCHIVE_DIRECTORY",
+      "size_bytes": 75940030,
+      "file_count": 4684,
+      "decision_reason": "recovery value cannot be determined automatically; top_suffixes={'.json': 2331, '.log': 2271, '.py': 24, '.gz': 23, '.csv': 17, '.pid': 8, '.html': 4, '.txt': 2}"
+    },
+    {
+      "path": "data/_system/condition_db_sell_omen_lr8d85",
+      "path_kind": "directory",
+      "type": "SYSTEM_DATA_DIRECTORY",
+      "size_bytes": 63017369,
+      "file_count": 85,
+      "decision_reason": "dynamic filename access may exist; manual review required; top_suffixes={'.csv': 85}"
+    },
+    {
+      "path": "data/_system/logs",
+      "path_kind": "directory",
+      "type": "SYSTEM_DATA_DIRECTORY",
+      "size_bytes": 61554242,
+      "file_count": 8,
+      "decision_reason": "dynamic filename access may exist; manual review required; top_suffixes={'.log': 5, '.pid': 3}"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_rolling_event2pct_20260704_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 50873078,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_rolling_event2pct_high_20260704_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 50846820,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_rolling_event2pct_low_20260704_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 50679652,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_rolling_hilo_mae_20260704_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 45999038,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_precision_event2pct_high_20260704_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 45399069,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_tpsl_tp2_sl1_20260704_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 44673340,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_mpc_range_predictor_stage2_v3_tpsl_tp2_sl1_20260704_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 44581269,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_mpc_range_predictor_stage2_v3_tponly_tp2_20260704_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 44533233,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_large_range_q70_20260704_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 44197865,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "logs/elite_strategy_sim_20260701_133052_entry_quality_reset.log",
+      "path_kind": "file",
+      "type": "LOG_ARTIFACT",
+      "size_bytes": 26509510,
+      "file_count": 1,
+      "decision_reason": "generated log not referenced by active path; retention policy required"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_high_only_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 24874053,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_low_only_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 24772159,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_dense_weights_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 24363908,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage23_smoke_3tickers/tickers/CRWD/stage2_retry2/rl_replay_trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 23756185,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage23_smoke_3/tickers/CRWD/stage2/trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 23654153,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage23_smoke_3tickers/tickers/CRWD/stage2_retry2/trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 23654153,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage23_smoke_3/tickers/CRWD/stage2/rl_replay_trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 23633895,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "logs/run_live_lr8d16_legacy_20260702_134511_chart_exit_tp_sl.log",
+      "path_kind": "file",
+      "type": "LOG_ARTIFACT",
+      "size_bytes": 22653348,
+      "file_count": 1,
+      "decision_reason": "generated log not referenced by active path; retention policy required"
+    },
+    {
+      "path": "data/logs/run_live_central_off_rollback.log",
+      "path_kind": "file",
+      "type": "LOG_ARTIFACT",
+      "size_bytes": 20457503,
+      "file_count": 1,
+      "decision_reason": "generated log not referenced by active path; retention policy required"
+    },
+    {
+      "path": "exp_batch_CE_multifeature_20260708/tickers/CE/stage2/rl_replay_trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 19929922,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_CE_multifeature_20260708/tickers/CE/stage2/trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 19908663,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_period_lockbox_audit_cw_stage2/trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 19608547,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_coarse3_stage2gate_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 19519844,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_coarse3_stage2gate_loose_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 19519244,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_period_lockbox_audit_cw_stage2/rl_replay_trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 19488020,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_safeoverflow_precision_stage2gate_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 18599512,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_pattern_detector_loose_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 18110308,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage123_2009_20260616_smoke10/tickers/A/stage2/rl_replay_trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 18103784,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage123_2009_20260616_smoke10/tickers/A/stage2/trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 18050432,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_low_danger17_safe03_open_gate_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 18014470,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_no_danger_learning_open_gate_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 17994564,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_low_danger2_safe02_open_gate_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 17974068,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_pattern_detector_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 17851220,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_true3_stage2gate_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 17830430,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_true3_stage2gate_fixed_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 17675882,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage23_smoke_3/tickers/CW/stage2/trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 17557669,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage23_smoke_3tickers/tickers/CW/stage2/trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 17557669,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage23_smoke_3tickers/tickers/CW/stage2/rl_replay_trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 17557255,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage23_smoke_3/tickers/CW/stage2/rl_replay_trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 17511727,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_fix_range_predictor_stage2_v3_original_stage2_multicond_dual_hilo_20260705_001/predictors_all.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 16409854,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_CE_multifeature_20260708/tickers/CE/stage3/rl_replay_trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 15932638,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_mpc_multiyear_20260612_2005/trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 15139689,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_CE_materials_retrain_20260708/tickers/CE/stage2/rl_replay_trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 14781034,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_CE_materials_retrain_20260708/tickers/CE/stage2/trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 14729522,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    },
+    {
+      "path": "exp_batch_stage23_smoke_3tickers/tickers/WELL/stage2/rl_replay_trades.jsonl",
+      "path_kind": "file",
+      "type": "ONE_OFF_EXPERIMENT_ARTIFACT",
+      "size_bytes": 14640320,
+      "file_count": 1,
+      "decision_reason": "outside confirmed current batch; research evidence may matter"
+    }
+  ],
+  "launch_evidence": {
+    "crontab": "0 10 * * * cd /home/g3000kkw/kingmaker && PYTHONPATH=. /home/g3000kkw/kingmaker/venv/bin/python3 scripts/build_sentiment_history.py >> /tmp/sentiment_cron.log 2>&1\n# KINGMAKER_DASHBOARD_GUARD_BEGIN\n* * * * * /usr/bin/flock -n /tmp/kingmaker_dashboard_guard.lock /home/g3000kkw/kingmaker/scripts/dashboard_guard.sh\n@reboot /usr/bin/flock -n /tmp/kingmaker_dashboard_guard.lock /home/g3000kkw/kingmaker/scripts/dashboard_guard.sh\n# KINGMAKER_DASHBOARD_GUARD_END\n# KINGMAKER_LIVE_CANDIDATE_SLOTS_GUARD_BEGIN\n* * * * * /usr/bin/flock -n /tmp/kingmaker_live_candidate_slots_guard.lock /home/g3000kkw/kingmaker/scripts/live_candidate_slots_guard.sh\n@reboot /usr/bin/flock -n /tmp/kingmaker_live_candidate_slots_guard.lock /home/g3000kkw/kingmaker/scripts/live_candidate_slots_guard.sh\n# KINGMAKER_LIVE_CANDIDATE_SLOTS_GUARD_END\n",
+    "kingmaker_service": "# /etc/systemd/system/kingmaker.service\n[Unit]\nDescription=Kingmaker Trading Bot\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=g3000kkw\nGroup=g3000kkw\nWorkingDirectory=/home/g3000kkw/kingmaker\nEnvironment=\"PYTHONPATH=/home/g3000kkw/kingmaker\"\nEnvironment=\"PYTHONUNBUFFERED=1\"\nExecStart=/home/g3000kkw/kingmaker/venv/bin/python scripts/run_live.py --mode real\nRestart=always\nRestartSec=10\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier=kingmaker\n\n# 메모리 보호 (e2-micro 958Mi 환경)\nMemoryMax=600M\n\n[Install]\nWantedBy=multi-user.target\n",
+    "running_project_processes": " 325259       1 Fri Jul 10 10:49:15 2026 /home/g3000kkw/kingmaker/venv/bin/python3 /home/g3000kkw/kingmaker/venv/bin/uvicorn api_server_candidate_only:app --host 0.0.0.0 --port 8001\n 337946       1 Fri Jul 10 13:30:03 2026 /home/g3000kkw/kingmaker/venv/bin/python /home/g3000kkw/kingmaker/data/_system/ops/live_candidate_slots.py daemon --interval 60\n"
+  },
+  "limitations": [
+    "Static reachability cannot exclude reflection, plugins, manual invocation, or external automation.",
+    "Large data/research/cache trees are represented as directory rows; REVIEW never authorizes recursive deletion.",
+    "A directory containing protected rule pools, exit_trades, frozen/audit artifacts is KEEP.",
+    "Unreachable tests/docs/research modules remain REVIEW unless explicitly backup/cache/temp."
+  ]
+}

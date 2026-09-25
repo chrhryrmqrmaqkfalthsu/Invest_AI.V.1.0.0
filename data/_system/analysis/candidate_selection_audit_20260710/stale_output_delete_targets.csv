@@ -1,0 +1,5 @@
+artifact,path_pattern,csv_path_count,actual_path_count,csv_size_bytes,actual_size_bytes,latest_modified_utc,preflight_status,skip_reason,skip_details
+Stage3 live pool,data/_system/central/stage3_live_pool/stage3_live_pool.jsonl,1,1,2206962,2206962,2026-06-26T05:14:26.209675+00:00,DELETE,,
+Stage3 live pool filtered,data/_system/central/stage3_live_pool/stage3_live_pool_filtered.jsonl,1,1,1775994,1775994,2026-06-26T12:49:09.254866+00:00,DELETE,,
+Stage3 live-pool rejected samples,data/_system/central/stage3_live_pool/rejected_sample*.jsonl,2,2,111776,111776,2026-06-26T12:49:09.257866+00:00,DELETE,,
+Stage3 live-pool summaries,data/_system/central/stage3_live_pool/*summary*.json,2,2,3733,3733,2026-06-26T12:49:09.258866+00:00,DELETE,,

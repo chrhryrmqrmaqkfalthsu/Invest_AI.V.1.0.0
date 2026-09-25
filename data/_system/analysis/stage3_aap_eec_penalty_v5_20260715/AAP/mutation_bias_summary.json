@@ -1,0 +1,132 @@
+{
+  "policy": "mutation hint only; excluded from fitness, win gate and qualify pass",
+  "local_search_cap_trading_days": 7,
+  "by_stage_fold": {
+    "qualify:train_1": {
+      "history_rows": 41,
+      "hint_direction_counts": {
+        "earlier": 168,
+        "later": 3932,
+        "none": 0
+      },
+      "applied_direction_counts": {
+        "earlier": 51,
+        "later": 3912,
+        "none": 137
+      },
+      "width_alignment": {
+        "earlier_total_feature_moves": 48,
+        "earlier_aligned_feature_moves": 30,
+        "later_total_feature_moves": 3336,
+        "later_aligned_feature_moves": 2796,
+        "earlier_alignment_rate": 0.625,
+        "later_alignment_rate": 0.8381294964028777
+      },
+      "mean_interval_width_first": {
+        "ma_trend": 7.1761076978320295,
+        "macd_hist": 1.877560881296053,
+        "rsi": 23.567320228521062,
+        "bb_position": 0.645323236901575,
+        "volume_ratio": 0.5298933069610035
+      },
+      "mean_interval_width_last": {
+        "ma_trend": 6.267150534593015,
+        "macd_hist": 1.3947163087513714,
+        "rsi": 25.376223714828292,
+        "bb_position": 0.7804920137335251,
+        "volume_ratio": 0.674600836316855
+      },
+      "mean_interval_width_change": {
+        "ma_trend": -0.9089571632390143,
+        "macd_hist": -0.4828445725446815,
+        "rsi": 1.80890348630723,
+        "bb_position": 0.13516877683195005,
+        "volume_ratio": 0.14470752935585152
+      }
+    },
+    "qualify:train_2": {
+      "history_rows": 41,
+      "hint_direction_counts": {
+        "earlier": 81,
+        "later": 4019,
+        "none": 0
+      },
+      "applied_direction_counts": {
+        "earlier": 39,
+        "later": 3916,
+        "none": 145
+      },
+      "width_alignment": {
+        "earlier_total_feature_moves": 32,
+        "earlier_aligned_feature_moves": 25,
+        "later_total_feature_moves": 3921,
+        "later_aligned_feature_moves": 3281,
+        "earlier_alignment_rate": 0.78125,
+        "later_alignment_rate": 0.8367763325682224
+      },
+      "mean_interval_width_first": {
+        "ma_trend": 14.49715745238027,
+        "macd_hist": 2.1058311802548086,
+        "rsi": 26.235814842570317,
+        "bb_position": 0.7089869547189044,
+        "volume_ratio": 0.5776268180101037
+      },
+      "mean_interval_width_last": {
+        "ma_trend": 13.54999834040673,
+        "macd_hist": 2.26611114959796,
+        "rsi": 42.497214253299234,
+        "bb_position": 0.9324004926232031,
+        "volume_ratio": 0.6310540471503905
+      },
+      "mean_interval_width_change": {
+        "ma_trend": -0.947159111973539,
+        "macd_hist": 0.16027996934315114,
+        "rsi": 16.261399410728917,
+        "bb_position": 0.22341353790429874,
+        "volume_ratio": 0.05342722914028675
+      }
+    },
+    "qualify:train_3": {
+      "history_rows": 41,
+      "hint_direction_counts": {
+        "earlier": 28,
+        "later": 4072,
+        "none": 0
+      },
+      "applied_direction_counts": {
+        "earlier": 6,
+        "later": 3959,
+        "none": 135
+      },
+      "width_alignment": {
+        "earlier_total_feature_moves": 5,
+        "earlier_aligned_feature_moves": 2,
+        "later_total_feature_moves": 3479,
+        "later_aligned_feature_moves": 3017,
+        "earlier_alignment_rate": 0.4,
+        "later_alignment_rate": 0.8672032193158954
+      },
+      "mean_interval_width_first": {
+        "ma_trend": 15.020008917940046,
+        "macd_hist": 1.9736183119931843,
+        "rsi": 22.541569570080288,
+        "bb_position": 0.6598603631706865,
+        "volume_ratio": 0.5354192134428782
+      },
+      "mean_interval_width_last": {
+        "ma_trend": 20.458023522292883,
+        "macd_hist": 2.3840354742256564,
+        "rsi": 29.78085659157578,
+        "bb_position": 0.9721625019290866,
+        "volume_ratio": 0.7072958077048301
+      },
+      "mean_interval_width_change": {
+        "ma_trend": 5.438014604352837,
+        "macd_hist": 0.41041716223247215,
+        "rsi": 7.2392870214954925,
+        "bb_position": 0.31230213875840007,
+        "volume_ratio": 0.1718765942619519
+      }
+    }
+  }
+}

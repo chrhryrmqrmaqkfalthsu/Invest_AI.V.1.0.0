@@ -1,0 +1,96 @@
+{
+  "created_at": "2026-07-08T06:20:00Z",
+  "mode": "dry_run_validation",
+  "switches": {
+    "master_enabled": false,
+    "auto_buy_enabled": false,
+    "auto_exit_enabled": false,
+    "real_orders_enabled": false,
+    "dry_run": true,
+    "entry_timing": "next_open",
+    "portfolio_K": 20,
+    "s2_take_profit_enabled": false,
+    "direct_order_env_enabled": false
+  },
+  "compile": {
+    "py_compile": "OK",
+    "files": [
+      "engine/core/exit_policy.py",
+      "engine/live/s2_auto_config.py",
+      "engine/live/s2_auto_trader.py",
+      "scripts/run_s2_auto_live.py"
+    ]
+  },
+  "account_capital_probe": {
+    "ok": true,
+    "capital_source": "available_cash",
+    "broker_mode": "alpaca_live",
+    "cash_usd": 650.37,
+    "total_value_usd": 650.37,
+    "holdings_count": 0,
+    "portfolio_K": 20,
+    "position_notional_usd": 32.5185,
+    "orders_submitted": 0
+  },
+  "dry_run_order_plan": {
+    "ok": true,
+    "candidate_id": "stage3:BMI:07d4ee0f7841",
+    "ticker": "BMI",
+    "entry_timing": "next_open",
+    "execution_session": "2026-07-09",
+    "price": 147.08,
+    "total_capital_usd": 650.37,
+    "portfolio_K": 20,
+    "position_notional_usd": 32.5185,
+    "shares": 0.221094,
+    "dry_run": true,
+    "real_orders_enabled": false,
+    "direct_order_env_enabled": false,
+    "would_submit_order": false,
+    "orders_submitted": 0,
+    "real_order_attempted": false
+  },
+  "normal_tick_with_all_switches_off": {
+    "ok": false,
+    "status": "BLOCKED",
+    "reason": "master_enabled_false",
+    "orders_submitted": 0,
+    "real_order_attempted": false
+  },
+  "account_read_failure_guard": {
+    "command": "plan-dry-run --ignore-switches --simulate-balance-failure --force-capital-refresh",
+    "ok": false,
+    "status": "BLOCKED",
+    "reason": "simulated_balance_failure",
+    "orders_submitted": 0,
+    "real_order_attempted": false
+  },
+  "exit_policy_no_tp_check": {
+    "fixed_strategy_target_bar_take_profit_enabled_false": {
+      "should_exit": false,
+      "reason": null,
+      "raw_target_hit": true,
+      "target_hit": false
+    },
+    "fixed_strategy_target_bar_take_profit_enabled_true": {
+      "should_exit": true,
+      "reason": "take_profit",
+      "raw_target_hit": true,
+      "target_hit": true
+    },
+    "s2_trigger_set_when_no_tp": [
+      "stop_loss",
+      "trailing",
+      "sell_omen",
+      "time_out",
+      "breakeven_stop"
+    ],
+    "excluded_trigger_when_s2_no_tp": "take_profit"
+  },
+  "state_files": {
+    "config": "data/_system/live_auto_config.json",
+    "state": "data/_system/live_auto_state.json",
+    "events": "data/_system/live_auto_events.jsonl",
+    "order_intents": "data/_system/live_auto_order_intents.jsonl"
+  }
+}

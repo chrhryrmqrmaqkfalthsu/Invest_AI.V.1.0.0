@@ -172,7 +172,7 @@ def policy_text(*, first_approval: bool = False, entry_cooldown_hours: int = 24,
 small_amount_safety:
   enabled: true
   max_shares_per_order: 100000
-  max_notional_per_order: 100000000
+  max_notional_ratio: 10.0
   max_total_notional: 100000000
   max_orders_per_day: 100
   require_first_order_approval: {str(first_approval).lower()}
@@ -260,9 +260,10 @@ def test_existing_position_general_buy_never_overwrites_snapshot() -> None:
         assert_true(runner.position_manager.register_calls == 0, "register_entry must not overwrite snapshot")
 
 
-def test_approved_add_buy_uses_add_to_position_only() -> None:
+def test_approved_add_buy_uses_add_to_position_only_when_legacy_approval_enabled() -> None:
     with tempfile.TemporaryDirectory() as td:
         runner, broker, _ = make_runner(Path(td), holdings={"AAPL": 1.0}, positions=True)
+        runner.safety.policy.setdefault("add_buy", {})["approval_enabled"] = True
         req = SimpleNamespace(ticker="AAPL", approved_krw=1000.0, request_id="req123456", status="approved", options_krw=[1000.0])
         runner._execute_approved(req)
         assert_true(len(broker.buy_orders) == 1, "valid add-buy approval must send one BUY")
@@ -274,6 +275,7 @@ def test_approved_add_buy_uses_add_to_position_only() -> None:
 def test_stale_add_buy_approval_does_not_create_new_position() -> None:
     with tempfile.TemporaryDirectory() as td:
         runner, broker, _ = make_runner(Path(td), holdings={}, positions=False)
+        runner.safety.policy.setdefault("add_buy", {})["approval_enabled"] = True
         req = SimpleNamespace(ticker="AAPL", approved_krw=1000.0, request_id="req123456", status="approved", options_krw=[1000.0])
         runner._execute_approved(req)
         assert_true(len(broker.buy_orders) == 0, "stale add-buy approval must not place order")
@@ -316,7 +318,7 @@ def run_all() -> None:
         test_general_buy_blocked_by_broker_holding_only,
         test_general_buy_blocked_by_position_manager_file_only,
         test_existing_position_general_buy_never_overwrites_snapshot,
-        test_approved_add_buy_uses_add_to_position_only,
+        test_approved_add_buy_uses_add_to_position_only_when_legacy_approval_enabled,
         test_stale_add_buy_approval_does_not_create_new_position,
         test_entry_cooldown_persists_across_restart,
         test_date_rollover_preserves_ticker_cooldown,

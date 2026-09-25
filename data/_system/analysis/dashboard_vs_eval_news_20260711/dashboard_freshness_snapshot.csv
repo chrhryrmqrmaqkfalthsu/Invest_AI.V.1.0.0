@@ -1,0 +1,8 @@
+ticker,dashboard_fetched_at,latest_article_time_published,article_count,fresh_at_snapshot,current_file_status_asof_2026_07_11,source
+ADMA,2026-07-08T16:49:42+00:00,2026-07-08T10:11:32+00:00,8,true,stale_now,alphavantage_real_focus_news
+ALGT,2026-07-08T16:49:43+00:00,2026-07-07T18:41:57+00:00,4,true,stale_now,alphavantage_real_focus_news
+BMA,2026-07-08T16:49:42+00:00,2026-07-07T00:10:31+00:00,1,true,stale_now,alphavantage_real_focus_news
+BMI,2026-07-08T16:49:41+00:00,2026-07-07T23:40:44+00:00,10,true,stale_now,alphavantage_real_focus_news
+BTBT,2026-07-08T16:49:42+00:00,2026-07-07T21:40:55+00:00,2,true,stale_now,alphavantage_real_focus_news
+CE,2026-07-08T16:49:34+00:00,,0,true,stale_now,alphavantage_real_focus_news
+CMC,2026-07-08T16:49:46+00:00,2026-07-08T13:02:37+00:00,3,true,stale_now,alphavantage_real_focus_news

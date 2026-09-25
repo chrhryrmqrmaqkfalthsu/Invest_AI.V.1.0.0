@@ -63,6 +63,7 @@ def make_position(strategy: str = "hybrid", target: float = 106.0) -> PositionEn
         trailing_distance=3.0,
         trailing_stop=97.0,
         highest_price=100.0,
+        lowest_price=100.0,
         exit_strategy=strategy,
         max_holding_days=20,
         rulebook_direction="long",
